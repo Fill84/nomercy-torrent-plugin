@@ -83,7 +83,8 @@ public class ReleaseFilter
             && !language.Required.Any(required =>
                 parsed.Languages.Contains(required, StringComparer.OrdinalIgnoreCase)))
             return FilterVerdict.Reject(
-                $"none of the required languages present: {string.Join(", ", language.Required)}"
+                $"language {string.Join("/", parsed.Languages)} is none of the required: "
+                    + string.Join(", ", language.Required)
             );
 
         if (language.RequireDualAudio && !parsed.IsDualAudio)
@@ -126,11 +127,11 @@ public class ReleaseFilter
     private static FilterVerdict CheckBlacklist(ReleaseInfo release, FilterContext context)
     {
         if (context.BlacklistedNormalisedTitles.Contains(TitleMatcher.Normalize(release.Title)))
-            return FilterVerdict.Reject("release is blacklisted for this episode");
+            return FilterVerdict.Reject("this release title is blacklisted for this episode");
 
         if (release.InfoHash is string hash
             && context.BlacklistedInfoHashes.Contains(hash.ToLowerInvariant()))
-            return FilterVerdict.Reject("release is blacklisted for this episode");
+            return FilterVerdict.Reject($"info hash {hash} is blacklisted for this episode");
 
         return FilterVerdict.Accept();
     }
