@@ -129,4 +129,33 @@ public class RssIndexerTests
 
         await act.Should().ThrowAsync<IndexerException>();
     }
+
+    [Fact]
+    public async Task SearchAsync_LetsCallerCancellationPropagate()
+    {
+        using CancellationTokenSource source = new();
+        await source.CancelAsync();
+
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Throwing(
+            new OperationCanceledException()
+        );
+
+        Func<Task> act = () =>
+            Indexer(handler).SearchAsync(new SearchQuery("Silo"), source.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task SearchAsync_WrapsATimeoutThatTheCallerDidNotRequest()
+    {
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Throwing(
+            new OperationCanceledException()
+        );
+
+        Func<Task> act = () =>
+            Indexer(handler).SearchAsync(new SearchQuery("Silo"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<IndexerException>();
+    }
 }
