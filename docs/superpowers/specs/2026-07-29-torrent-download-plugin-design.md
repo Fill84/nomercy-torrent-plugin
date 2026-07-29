@@ -733,3 +733,25 @@ files.
 3. Whether multi-user routing is wanted. `torrent-feed` routes different shows to different clients
    per user. This spec routes per show via the profile, which is the single-owner case. Multi-user is
    additive to `monitored_shows` if it turns out to be needed.
+4. **Daily shows are not matchable as specified, and this spec never said so.** Talk shows, news and
+   other daily series are released with a **date** rather than a season/episode marker — the captured
+   scene feed in `tests/fixtures/scnsrc-feed.xml` is full of them:
+
+   ```
+   The Kelly Clarkson Show 2026 07 22 Guest Host Andy Cohen 1080p WEB h264-DiRT
+   Jimmy Fallon 2026 07 23 Christopher Nolan 1080p WEB h264-JOAN
+   ```
+
+   §7.1 derives wanted episodes as season/episode slots, and §8.1's episode-slot filter requires the
+   parsed slot to equal the wanted one. A date-stamped title parses to no slot at all, so every such
+   release is rejected with "no episode or season number found in title". A library containing any
+   daily show would silently never download it. `torrent-feed` hit the same wall and skipped these
+   titles outright.
+
+   Closing it needs an air-date path: parse the date from the title, and match it against the wanted
+   episode's air date from `ILibraryQuery` (which already carries `AirDate`) rather than against its
+   numbering. That is a genuine feature with its own edge cases — timezone skew between the
+   indexer's date and the library's air date, and multi-part episodes sharing one date.
+
+   **Decision needed before Stage 0c**, since it changes what `WantedEpisode` must carry and adds a
+   second matching mode to the filter. Deferring it is defensible; shipping without knowing is not.
