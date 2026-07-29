@@ -681,6 +681,53 @@ the mechanism for #18.
 
 ---
 
+## 13a. Platform update — 2026-07-30, server v0.1.444
+
+**Seven of the eleven filed issues are closed, and the sections above are now partly out of date.**
+Recorded here rather than rewritten in place, so the original reasoning stays legible next to what
+actually happened.
+
+Closed: **#15** consent grant path, **#17** dynamic network allowlist, **#18** read-only library
+query, **#19** library write capability, **#20** plugin event contract, **#21** secret store,
+**#24** multi-job cron.
+
+Still open: **#14** shared-assembly seam, **#16** Phase 2 backend surface (REST, WS, `IUiPlugin`),
+**#22** nav section vocabulary, **#23** UI vocabulary additions, **#25** Phase 3 UI contract and SDK.
+
+Two things in the resolution matter more than the individual closures:
+
+- **Consent became a kind-and-value grant store rather than a boolean.** The upstream reasoning is
+  that "may this plugin run", "may it talk to this host" and "may it write to this library" are the
+  same question with a different subject, so they are one mechanism. That is a better answer than the
+  seven separate ones these issues asked for, and it means §10.3's interim self-enforced host
+  ledger is no longer needed — the platform now grants hosts at runtime with recorded consent.
+- **The contract ships as a package.** `NoMercy.Plugins.Abstractions` and `NoMercy.Events` are
+  attached to the release. This retires the clone-the-server-and-pack CI dance described in §16
+  entirely: the shell takes an ordinary `PackageReference`.
+
+### What this changes for this plugin
+
+| Section | Now says | Should say |
+| --- | --- | --- |
+| §4 "Not built" | lists the library query, secret store, events, cron as absent | all four exist; only the REST/WS/UI surface is still missing |
+| §10.2 Secrets | resolve `IDataProtector` via the `ExcludeAssets="runtime"` trick | use the platform secret store |
+| §10.3 Network | self-enforced host ledger as an interim | platform grants hosts at runtime |
+| §11 Scheduling | one cron expression, internal `CycleScheduler` to work around it | multi-job registration exists; the internal scheduler may be unnecessary |
+| §13 | eleven open issues | four open, all UI-facing |
+| §14 Stage 1 | gated on #18 and #21 | **unblocked** |
+| §16 CI | clone and pack the server | `PackageReference` to the released package |
+
+**Stage 1 — the plugin shell — is now startable, and is a larger unlock than finishing Stage 0b.**
+Stage 0b gives the plugin somewhere to search; Stage 1 is what makes it a plugin that runs at all.
+Stages 2 and 3 remain blocked on #16 and #25.
+
+Before starting Stage 1, read the actual shipped contract rather than assuming it matches the ports
+in §5.3 — `ILibraryQuery` was written as a guess at what the platform would expose, and the real
+`IPluginLibraryQuery` will differ in naming and probably in shape. The port exists precisely so that
+mismatch costs one adapter file.
+
+---
+
 ## 14. Build order
 
 | Stage | Work | Gated by |
