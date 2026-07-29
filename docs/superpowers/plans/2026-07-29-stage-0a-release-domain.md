@@ -1012,6 +1012,15 @@ public class LanguageTagExtractorTests
             .BeEquivalentTo(["English"]);
     }
 
+    [Theory]
+    [InlineData("Greek.S01E01.1080p.WEB.H264-GROUP")]
+    [InlineData("Russian.Doll.S01E01.1080p.NF.WEB-DL-NTG")]
+    [InlineData("Premier.League.PL.Matchday10.S01E01.1080p")]
+    public void Extract_IgnoresLanguageWordsInTheShowName(string title)
+    {
+        LanguageTagExtractor.Extract(title).Languages.Should().BeEquivalentTo(["English"]);
+    }
+
     [Fact]
     public void Parse_FillsLanguageFieldsOnParsedRelease()
     {
@@ -1154,9 +1163,10 @@ public static partial class LanguageTagExtractor
     public static LanguageTags Extract(string? title)
     {
         string text = title ?? string.Empty;
+        string scope = ScopeAfterEpisodeMarker(text);
         List<string> languages = [];
 
-        foreach (Match token in TokenPattern().Matches(text))
+        foreach (Match token in TokenPattern().Matches(scope))
         {
             if (Markers.TryGetValue(token.Value, out string? language) && !languages.Contains(language))
                 languages.Add(language);
@@ -1164,15 +1174,21 @@ public static partial class LanguageTagExtractor
 
         foreach ((Regex pattern, string language) in EpisodeWordHints)
         {
-            if (pattern.IsMatch(text) && !languages.Contains(language))
+            if (pattern.IsMatch(scope) && !languages.Contains(language))
                 languages.Add(language);
         }
 
         if (languages.Count == 0)
             languages.Add(English);
 
-        return new LanguageTags(languages, DualAudioPattern().IsMatch(text));
+        return new LanguageTags(languages, DualAudioPattern().IsMatch(scope));
     }
+
+    // Tags follow the episode marker; the show name precedes it. Scanning the whole title
+    // makes a show called "Greek" or "Russian Doll" report that language and then fail an
+    // English-required profile, so the episode is never grabbed.
+    private static string ScopeAfterEpisodeMarker(string text) =>
+        ReleaseNameParser.EpisodeMarkerIndex(text) is int index ? text[index..] : text;
 }
 ```
 
@@ -1205,7 +1221,7 @@ In `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/ReleaseNameParser.cs`, re
 - [ ] **Step 6: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter LanguageTagExtractorTests`
-Expected: PASS, 21 cases (suite total 92).
+Expected: PASS, 24 cases (suite total 95).
 
 - [ ] **Step 7: Run the whole suite to check nothing regressed**
 
@@ -1456,7 +1472,7 @@ public static partial class TitleMatcher
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter TitleMatcherTests`
-Expected: PASS, 20 cases (suite total 112).
+Expected: PASS, 20 cases (suite total 115).
 
 - [ ] **Step 5: Commit**
 
@@ -1728,7 +1744,7 @@ public record ReleaseProfile
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter QualityLadderTests`
-Expected: PASS, 6 cases (suite total 118).
+Expected: PASS, 6 cases (suite total 121).
 
 - [ ] **Step 6: Commit**
 
@@ -2258,7 +2274,7 @@ public class ReleaseFilter
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseFilterTests`
-Expected: PASS, 18 cases (suite total 136).
+Expected: PASS, 18 cases (suite total 139).
 
 - [ ] **Step 6: Commit**
 
@@ -2567,7 +2583,7 @@ public class ReleaseScorer
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseScorerTests`
-Expected: PASS, 9 cases (suite total 145).
+Expected: PASS, 9 cases (suite total 148).
 
 - [ ] **Step 6: Commit**
 
@@ -2814,7 +2830,7 @@ public class ReleaseDecider
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter DecisionTests`
-Expected: PASS, 6 cases (suite total 151).
+Expected: PASS, 6 cases (suite total 154).
 
 - [ ] **Step 5: Run the whole suite**
 
