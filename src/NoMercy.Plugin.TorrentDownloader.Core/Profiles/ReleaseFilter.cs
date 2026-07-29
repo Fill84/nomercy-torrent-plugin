@@ -108,16 +108,23 @@ public class ReleaseFilter
         return FilterVerdict.Accept();
     }
 
+    // Reason strings are logged and compared verbatim regardless of the host's locale, so
+    // the GB figures are formatted invariant rather than with the current culture's
+    // decimal separator.
     private static FilterVerdict CheckSize(ReleaseInfo release, ReleaseProfile profile)
     {
         if (profile.MaxSizeBytes is long max && release.SizeBytes > max)
             return FilterVerdict.Reject(
-                $"size {release.SizeBytes / Gigabyte:F1} GB over limit {max / Gigabyte:F1} GB"
+                FormattableString.Invariant(
+                    $"size {release.SizeBytes / Gigabyte:F1} GB over limit {max / Gigabyte:F1} GB"
+                )
             );
 
         if (profile.MinSizeBytes is long min && release.SizeBytes > 0 && release.SizeBytes < min)
             return FilterVerdict.Reject(
-                $"size {release.SizeBytes / Gigabyte:F1} GB under floor {min / Gigabyte:F1} GB"
+                FormattableString.Invariant(
+                    $"size {release.SizeBytes / Gigabyte:F1} GB under floor {min / Gigabyte:F1} GB"
+                )
             );
 
         return FilterVerdict.Accept();

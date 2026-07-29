@@ -87,7 +87,7 @@ public class ReleaseFilterTests
         );
 
         verdict.Accepted.Should().BeFalse();
-        verdict.Reason.Should().Contain("S03E04");
+        verdict.Reason.Should().Be("release is S03E05, not the wanted S03E04");
     }
 
     [Fact]
@@ -96,7 +96,7 @@ public class ReleaseFilterTests
         FilterVerdict verdict = Evaluate(Release("Silo.S03.1080p.WEB-DL.H264-CAKES"), Context());
 
         verdict.Accepted.Should().BeFalse();
-        verdict.Reason.Should().Contain("season pack");
+        verdict.Reason.Should().Be("season pack not allowed by profile");
     }
 
     [Fact]
@@ -284,7 +284,34 @@ public class ReleaseFilterTests
         );
 
         verdict.Accepted.Should().BeFalse();
-        verdict.Reason.Should().Contain("size");
+        verdict.Reason.Should().Be("size 40.0 GB over limit 10.0 GB");
+    }
+
+    [Fact]
+    public void Evaluate_RejectsAReleaseUnderTheSizeFloor()
+    {
+        ReleaseProfile profile = Profile() with { MinSizeBytes = 1L * 1024 * 1024 * 1024 };
+
+        FilterVerdict verdict = Evaluate(
+            Release("Silo.S03E04.1080p.WEB-DL.H264-CAKES", size: 500L * 1024 * 1024),
+            Context(profile)
+        );
+
+        verdict.Accepted.Should().BeFalse();
+        verdict.Reason.Should().Be("size 0.5 GB under floor 1.0 GB");
+    }
+
+    [Fact]
+    public void Evaluate_AllowsAnUnknownSizeThroughTheFloorCheck()
+    {
+        ReleaseProfile profile = Profile() with { MinSizeBytes = 1L * 1024 * 1024 * 1024 };
+
+        FilterVerdict verdict = Evaluate(
+            Release("Silo.S03E04.1080p.WEB-DL.H264-CAKES", size: 0),
+            Context(profile)
+        );
+
+        verdict.Accepted.Should().BeTrue();
     }
 
     [Fact]

@@ -82,7 +82,7 @@ public class DecisionTests
             v.Release.Title.Contains("S03E05", StringComparison.Ordinal)
         );
         wrongEpisode.Verdict.Accepted.Should().BeFalse();
-        wrongEpisode.Verdict.Reason.Should().Contain("S03E04");
+        wrongEpisode.Verdict.Reason.Should().Be("release is S03E05, not the wanted S03E04");
 
         CandidateVerdict lowSeed = verdicts.Single(v =>
             v.Release.Title.Contains("LOWSEED", StringComparison.Ordinal)

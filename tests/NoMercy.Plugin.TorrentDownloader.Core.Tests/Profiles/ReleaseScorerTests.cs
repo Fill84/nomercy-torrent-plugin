@@ -152,6 +152,33 @@ public class ReleaseScorerTests
     }
 
     [Fact]
+    public void Score_RewardsAReleaseCarryingAPreferredLanguage()
+    {
+        ReleaseProfile profile = Profile() with
+        {
+            Language = new LanguageProfile(["English"], ["French"], [], false),
+        };
+        ScoreContext context = new(profile, null);
+
+        int withPreferred = Score(Release("Silo.S03E04.FRENCH.1080p.WEB.H264-A"), context);
+        int withoutPreferred = Score(Release("Silo.S03E04.1080p.WEB.H264-A"), context);
+
+        withPreferred.Should().BeGreaterThan(withoutPreferred);
+    }
+
+    [Fact]
+    public void Score_RewardsAMatchingCodecWhenTheProfileNamesOne()
+    {
+        ReleaseProfile profile = Profile() with { Codec = VideoCodec.H264 };
+        ScoreContext context = new(profile, null);
+
+        int matching = Score(Release("Silo.S03E04.1080p.WEB.H264-A"), context);
+        int nonMatching = Score(Release("Silo.S03E04.1080p.WEB.x265-A"), context);
+
+        matching.Should().BeGreaterThan(nonMatching);
+    }
+
+    [Fact]
     public void Score_RewardsHigherIndexerPriority()
     {
         ScoreContext context = new(Profile(), null);

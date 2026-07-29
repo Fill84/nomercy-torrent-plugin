@@ -94,6 +94,6 @@ public class LanguageTagExtractorTests
         ParsedRelease parsed = ReleaseNameParser.Parse("Frieren S01E01 1080p WEB Dual Audio-Group");
 
         parsed.IsDualAudio.Should().BeTrue();
-        parsed.Languages.Should().NotBeEmpty();
+        parsed.Languages.Should().BeEquivalentTo(["English"]);
     }
 }

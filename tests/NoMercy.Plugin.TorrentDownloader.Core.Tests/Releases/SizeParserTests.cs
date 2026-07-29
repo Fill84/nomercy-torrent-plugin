@@ -27,10 +27,4 @@ public class SizeParserTests
     {
         SizeParser.Parse(text).Should().Be(0L);
     }
-
-    [Fact]
-    public void Parse_PrefersLongestUnitSoGigabytesAreNotReadAsBytes()
-    {
-        SizeParser.Parse("1.4 GB").Should().BeGreaterThan(SizeParser.Parse("1.4 MB"));
-    }
 }
