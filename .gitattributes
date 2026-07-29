@@ -2,3 +2,7 @@
 *.sln text eol=crlf
 *.png binary
 *.torrent binary
+
+# Captured indexer responses are evidence, not source. Preserve them byte-exact:
+# normalising line endings would silently edit the record of what a site returned.
+tests/fixtures/** -text
