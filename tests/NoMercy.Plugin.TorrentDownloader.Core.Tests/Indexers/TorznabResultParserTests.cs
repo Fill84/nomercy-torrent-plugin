@@ -98,6 +98,37 @@ public class TorznabResultParserTests
     }
 
     [Fact]
+    public void Parse_ReadsSizeFromTheAttributeWhenThereIsNoSizeElement()
+    {
+        string attrSize = """
+            <rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+              <channel><item>
+                <title>Silo S03E04 1080p WEB H264-CAKES</title>
+                <torznab:attr name="size" value="1503238553" />
+              </item></channel>
+            </rss>
+            """;
+
+        TorznabResultParser.Parse(attrSize, "x", 0).Single().SizeBytes.Should().Be(1503238553L);
+    }
+
+    [Fact]
+    public void Parse_PrefersTheSizeElementWhenBothArePresent()
+    {
+        string both = """
+            <rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+              <channel><item>
+                <title>Silo S03E04 1080p WEB H264-CAKES</title>
+                <size>111</size>
+                <torznab:attr name="size" value="222" />
+              </item></channel>
+            </rss>
+            """;
+
+        TorznabResultParser.Parse(both, "x", 0).Single().SizeBytes.Should().Be(111L);
+    }
+
+    [Fact]
     public void Parse_ThrowsIndexerExceptionOnAnErrorDocument()
     {
         string error = """
