@@ -798,21 +798,26 @@ public sealed partial class RssIndexer(
 
     private async Task<string> FetchAsync(CancellationToken ct)
     {
-        HttpResponseMessage response;
-
         try
         {
-            response = await http.GetAsync(feedUrl, ct);
+            HttpResponseMessage response = await http.GetAsync(feedUrl, ct);
+
+            if (!response.IsSuccessStatusCode)
+                throw new IndexerException($"{name}: feed returned HTTP {(int)response.StatusCode}");
+
+            return await response.Content.ReadAsStringAsync(ct);
         }
-        catch (Exception error) when (error is HttpRequestException or TaskCanceledException)
+        // A transport failure can surface while the body streams, not only while connecting, and
+        // the aggregator catches only IndexerException — an escaped HttpRequestException would
+        // abort the whole cycle rather than degrading this one indexer.
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException)
         {
             throw new IndexerException($"{name}: feed request failed: {error.Message}", error);
         }
-
-        if (!response.IsSuccessStatusCode)
-            throw new IndexerException($"{name}: feed returned HTTP {(int)response.StatusCode}");
-
-        return await response.Content.ReadAsStringAsync(ct);
     }
 
     private bool InConfiguredCategories(RssItem item) =>
@@ -1319,22 +1324,27 @@ public sealed class TorznabIndexer(
     public async Task<IReadOnlyList<ReleaseInfo>> SearchAsync(SearchQuery query, CancellationToken ct)
     {
         Uri url = BuildUrl(query);
-        HttpResponseMessage response;
 
         try
         {
-            response = await http.GetAsync(url, ct);
+            HttpResponseMessage response = await http.GetAsync(url, ct);
+
+            if (!response.IsSuccessStatusCode)
+                throw new IndexerException($"{name}: search returned HTTP {(int)response.StatusCode}");
+
+            string body = await response.Content.ReadAsStringAsync(ct);
+            return TorznabResultParser.Parse(body, name, priority);
         }
-        catch (Exception error) when (error is HttpRequestException or TaskCanceledException)
+        // Same reason as RssIndexer: a body-stream failure must not escape as a raw
+        // HttpRequestException, or one bad indexer aborts the whole aggregation cycle.
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException)
         {
             throw new IndexerException($"{name}: search request failed: {error.Message}", error);
         }
-
-        if (!response.IsSuccessStatusCode)
-            throw new IndexerException($"{name}: search returned HTTP {(int)response.StatusCode}");
-
-        string body = await response.Content.ReadAsStringAsync(ct);
-        return TorznabResultParser.Parse(body, name, priority);
     }
 
     private Uri BuildUrl(SearchQuery query)
