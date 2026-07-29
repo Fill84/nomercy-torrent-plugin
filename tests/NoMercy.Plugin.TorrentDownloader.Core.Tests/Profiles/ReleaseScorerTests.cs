@@ -142,6 +142,21 @@ public class ReleaseScorerTests
     }
 
     [Fact]
+    public void Score_NeverLetsPreferencesOutrankAQualityStep()
+    {
+        ReleaseProfile profile = Profile() with
+        {
+            PreferredGroups = [new GroupPreference("HUGE", 500)],
+        };
+        ScoreContext context = new(profile, null);
+
+        int lowerQualityPreferredGroup = Score(Release("Silo.S03E04.720p.WEB.H264-HUGE"), context);
+        int higherQualityOtherGroup = Score(Release("Silo.S03E04.1080p.WEB.H264-OTHER"), context);
+
+        higherQualityOtherGroup.Should().BeGreaterThan(lowerQualityPreferredGroup);
+    }
+
+    [Fact]
     public void Score_HandlesAQualityNotOnTheLadderWithoutThrowing()
     {
         ScoreContext context = new(Profile(), null);
