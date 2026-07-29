@@ -346,6 +346,12 @@ public class ReleaseNameParserEpisodeTests
     }
 
     [Fact]
+    public void ParseSeasonPack_DoesNotTreatASpaceSeparatedEpisodeMarkerAsAPack()
+    {
+        ReleaseNameParser.ParseSeasonPack("Show S03 E04 1080p").Should().BeNull();
+    }
+
+    [Fact]
     public void EpisodeMarkerIndex_PointsAtTheStartOfTheMarker()
     {
         ReleaseNameParser.EpisodeMarkerIndex("Silo S03E04 1080p").Should().Be(5);
@@ -397,7 +403,9 @@ public static partial class ReleaseNameParser
     [GeneratedRegex(@"season\s*(\d{1,2})\s*episode\s*(\d{1,3})", RegexOptions.IgnoreCase)]
     private static partial Regex VerbosePattern();
 
-    [GeneratedRegex(@"s(\d{1,2})(?!\s*e?\d)", RegexOptions.IgnoreCase)]
+    // The trailing \b is load-bearing: without it the digit group backtracks to a
+    // single digit and the lookahead passes against the second one.
+    [GeneratedRegex(@"\bs(\d{1,2})\b(?!\s*e\d)", RegexOptions.IgnoreCase)]
     private static partial Regex SeasonPackPattern();
 
     [GeneratedRegex(@"season\s*(\d{1,2})", RegexOptions.IgnoreCase)]
