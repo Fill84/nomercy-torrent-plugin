@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Releases;
@@ -17,8 +19,9 @@ public static partial class TitleMatcher
         "ZA",
     };
 
-    // Bounds the name scope on a season-pack title. The season-pack pattern in
-    // ReleaseNameParser is not reusable here: its lookahead rejects "S02 1080p".
+    // Bounds the name scope on a season-pack title. ReleaseNameParser's season-pack
+    // pattern is not reusable here: it is private, and its public wrapper returns a
+    // season number rather than the index this needs to slice the scope.
     [GeneratedRegex(@"\bs\d{1,2}\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeasonTokenPattern();
 
@@ -32,7 +35,25 @@ public static partial class TitleMatcher
     private static partial Regex NonAlphanumericPattern();
 
     public static string Normalize(string? text) =>
-        NonAlphanumericPattern().Replace((text ?? string.Empty).ToLowerInvariant(), string.Empty);
+        NonAlphanumericPattern()
+            .Replace(FoldDiacritics(text ?? string.Empty).ToLowerInvariant(), string.Empty);
+
+    // Scene releases strip diacritics, so "Élite" arrives as "Elite". Without folding,
+    // the ASCII-only separator class treats the accent itself as a separator and splits
+    // "Pokémon" into "Pok" and "mon", which matches nothing.
+    private static string FoldDiacritics(string text)
+    {
+        string decomposed = text.Normalize(NormalizationForm.FormD);
+        StringBuilder builder = new(decomposed.Length);
+
+        foreach (char character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                builder.Append(character);
+        }
+
+        return builder.ToString().Normalize(NormalizationForm.FormC);
+    }
 
     public static bool Matches(string? title, string? showName)
     {
@@ -66,7 +87,7 @@ public static partial class TitleMatcher
 
     private static string[] Tokenize(string? text) =>
         TokenSeparatorPattern()
-            .Split(text ?? string.Empty)
+            .Split(FoldDiacritics(text ?? string.Empty))
             .Where(token => token.Length > 0)
             .ToArray();
 
