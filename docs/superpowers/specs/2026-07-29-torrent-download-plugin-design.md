@@ -332,8 +332,9 @@ Any one of these rejects a candidate, and the reason string is retained for the 
 | Language forbidden | No forbidden language tag present. |
 | Dual audio | If `RequireDualAudio`, the release must carry a dual-audio marker. |
 | Blocked groups | Release group not in the blocklist. |
-| Required terms | All required terms/regexes present. |
+| Required terms | All required terms/regexes present. Patterns are user-authored, so an invalid or pathological one is caught and treated as not matching rather than being allowed to abort the search cycle. |
 | Forbidden terms | No forbidden term present. |
+| Codec, when tagged | A release whose title carries a codec tag that differs from the profile's is rejected. An **untagged** release is not — it passes the filter and is ranked by the soft codec preference instead. Rejecting untagged releases loses a large share of private-tracker and season-pack titles; accepting them risks getting HEVC when h264 was wanted. `RequireCodecTag` (default off) restores the strict behaviour for anyone who prefers that trade. |
 | Quality | Parsed quality is in the profile's allowed set. |
 | Size | Within the profile's bounds for that quality. |
 | Seeders | At or above the profile's floor. |
