@@ -13,7 +13,9 @@ public static partial class ReleaseNameParser
     [GeneratedRegex(@"season\s*(\d{1,2})\s*episode\s*(\d{1,3})", RegexOptions.IgnoreCase)]
     private static partial Regex VerbosePattern();
 
-    [GeneratedRegex(@"s(\d{1,2})(?!e?\d)", RegexOptions.IgnoreCase)]
+    // The trailing \b is load-bearing: without it the digit group backtracks to a
+    // single digit and the lookahead passes against the second one.
+    [GeneratedRegex(@"\bs(\d{1,2})\b(?!\s*e\d)", RegexOptions.IgnoreCase)]
     private static partial Regex SeasonPackPattern();
 
     [GeneratedRegex(@"season\s*(\d{1,2})", RegexOptions.IgnoreCase)]
