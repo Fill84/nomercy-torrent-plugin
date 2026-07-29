@@ -4,21 +4,21 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Releases;
 
 public static partial class ReleaseNameParser
 {
-    [GeneratedRegex(@"s(\d{1,2})e(\d{1,3})", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"s(\d{1,2})e(\d{1,3})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeasonEpisodePattern();
 
-    [GeneratedRegex(@"(?<!\d)(\d{1,2})x(\d{1,3})(?!\d)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?<!\d)(\d{1,2})x(\d{1,3})(?!\d)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CrossPattern();
 
-    [GeneratedRegex(@"season\s*(\d{1,2})\s*episode\s*(\d{1,3})", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"season\s*(\d{1,2})\s*episode\s*(\d{1,3})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex VerbosePattern();
 
     // The trailing \b is load-bearing: without it the digit group backtracks to a
     // single digit and the lookahead passes against the second one.
-    [GeneratedRegex(@"\bs(\d{1,2})\b(?!\s*e\d)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bs(\d{1,2})\b(?!\s*e\d)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeasonPackPattern();
 
-    [GeneratedRegex(@"season\s*(\d{1,2})", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"season\s*(\d{1,2})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex VerboseSeasonPackPattern();
 
     private static Match? EarliestEpisodeMatch(string? title)

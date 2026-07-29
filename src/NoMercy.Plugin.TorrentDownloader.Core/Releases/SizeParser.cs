@@ -14,7 +14,7 @@ public static partial class SizeParser
         ["TB"] = 1024L * 1024L * 1024L * 1024L,
     };
 
-    [GeneratedRegex(@"([\d.,]+)\s*(TB|GB|MB|KB|B)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"([\d.,]+)\s*(TB|GB|MB|KB|B)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SizePattern();
 
     public static long Parse(string? text)
