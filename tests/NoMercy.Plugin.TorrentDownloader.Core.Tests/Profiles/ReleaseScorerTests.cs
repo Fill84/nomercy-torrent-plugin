@@ -178,12 +178,27 @@ public class ReleaseScorerTests
     }
 
     [Fact]
-    public void Score_HandlesAQualityNotOnTheLadderWithoutThrowing()
+    public void Score_TreatsAnOffLadderQualityAsTheBottomRung()
     {
         ScoreContext context = new(Profile(), null);
 
-        Action act = () => Score(Release("Silo.S03E04.2160p.WEB.H264-A"), context);
+        int score = Score(Release("Silo.S03E04.2160p.WEB.H264-A"), context);
 
-        act.Should().NotThrow();
+        score.Should().BeLessThan(10_000);
+    }
+
+    [Fact]
+    public void Score_DoesNotOverflowWhenAGroupScoreIsHugeEnoughToWrapAnInt()
+    {
+        ReleaseProfile profile = Profile() with
+        {
+            PreferredGroups = [new GroupPreference("HUGE", 30_000_000)],
+        };
+        ScoreContext context = new(profile, null);
+
+        int preferred = Score(Release("Silo.S03E04.1080p.WEB.H264-HUGE"), context);
+        int neutral = Score(Release("Silo.S03E04.1080p.WEB.H264-NEUTRAL"), context);
+
+        preferred.Should().BeGreaterThan(neutral);
     }
 }

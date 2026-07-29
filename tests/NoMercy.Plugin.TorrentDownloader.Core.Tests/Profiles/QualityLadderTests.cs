@@ -67,4 +67,34 @@ public class QualityLadderTests
     {
         Ladder().MeetsCutoff(new Quality(Resolution.Uhd2160, ReleaseSource.WebDl)).Should().BeFalse();
     }
+
+    [Fact]
+    public void Constructor_ThrowsWhenTheCutoffNameMatchesNoRung()
+    {
+        Action act = () =>
+            new QualityLadder(
+                [
+                    new QualityDefinition("WEB-720p", Resolution.Hd720, ReleaseSource.Unknown),
+                    new QualityDefinition("WEB-1080p", Resolution.Fhd1080, ReleaseSource.Unknown),
+                ],
+                "WEB-4K"
+            );
+
+        act.Should().Throw<ArgumentException>().WithMessage("*WEB-4K*");
+    }
+
+    [Fact]
+    public void Constructor_AcceptsACutoffNameThatMatchesARung()
+    {
+        Action act = () =>
+            new QualityLadder(
+                [
+                    new QualityDefinition("WEB-720p", Resolution.Hd720, ReleaseSource.Unknown),
+                    new QualityDefinition("WEB-1080p", Resolution.Fhd1080, ReleaseSource.Unknown),
+                ],
+                "WEB-1080p"
+            );
+
+        act.Should().NotThrow();
+    }
 }

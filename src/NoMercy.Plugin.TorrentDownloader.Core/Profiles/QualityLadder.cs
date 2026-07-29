@@ -4,6 +4,23 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Profiles;
 
 public record QualityLadder(IReadOnlyList<QualityDefinition> Ordered, string CutoffName)
 {
+    // Validated eagerly so a typo'd cutoff fails at profile-load time with the bad value
+    // and the available rungs named, instead of silently disabling MeetsCutoff for every
+    // quality via CutoffRank's int.MaxValue fallback.
+    public string CutoffName { get; init; } = ValidateCutoffName(Ordered, CutoffName);
+
+    private static string ValidateCutoffName(IReadOnlyList<QualityDefinition> ordered, string cutoffName)
+    {
+        if (ordered.Any(definition => string.Equals(definition.Name, cutoffName, StringComparison.OrdinalIgnoreCase)))
+            return cutoffName;
+
+        string available = string.Join(", ", ordered.Select(definition => definition.Name));
+        throw new ArgumentException(
+            $"CutoffName \"{cutoffName}\" matches no rung on the ladder. Available rungs: {available}",
+            nameof(cutoffName)
+        );
+    }
+
     public int RankOf(Quality quality)
     {
         int specific = -1;

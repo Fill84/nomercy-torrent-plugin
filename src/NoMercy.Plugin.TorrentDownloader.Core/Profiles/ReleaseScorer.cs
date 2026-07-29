@@ -47,31 +47,31 @@ public class ReleaseScorer
             : 0;
     }
 
-    private static int GroupScore(ParsedRelease parsed, ReleaseProfile profile)
+    private static long GroupScore(ParsedRelease parsed, ReleaseProfile profile)
     {
         if (parsed.ReleaseGroup is not string group)
             return 0;
 
-        int total = 0;
+        long total = 0;
         foreach (GroupPreference preference in profile.PreferredGroups)
         {
             if (string.Equals(preference.Group, group, StringComparison.OrdinalIgnoreCase))
-                total += preference.Score * GroupScoreScale;
+                total += (long)preference.Score * GroupScoreScale;
         }
 
         return total;
     }
 
-    private static int TermScore(string title, ReleaseProfile profile)
+    private static long TermScore(string title, ReleaseProfile profile)
     {
-        int total = 0;
+        long total = 0;
         foreach (TermRule term in profile.Terms)
         {
             if (term.Kind != TermKind.Preferred)
                 continue;
 
             if (TermMatcher.IsMatch(title, term.Pattern))
-                total += term.Score * TermScoreScale;
+                total += (long)term.Score * TermScoreScale;
         }
 
         return total;
