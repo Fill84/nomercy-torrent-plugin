@@ -61,12 +61,31 @@ public static partial class TorznabResultParser
             MagnetUri = isMagnet ? link : null,
             DownloadUrl = isMagnet ? null : link,
             InfoHash = infoHash?.ToLowerInvariant(),
-            SizeBytes = Long(item.Element("size")),
+            SizeBytes = ParseSize(item),
             Seeders = seeders,
             Leechers = Math.Max(peers - seeders, 0),
             IndexerPriority = priority,
             PublishedAt = Date(item.Element("pubDate")),
         };
+    }
+
+    // Torznab permits size as either a <size> element or a torznab:attr, and an endpoint that
+    // uses only the attr form would otherwise report every release as zero bytes — silently
+    // wrong rather than visibly broken, since the size filter would still run against it.
+    private static long ParseSize(XElement item)
+    {
+        long element = Long(item.Element("size"));
+        if (element > 0L)
+            return element;
+
+        return long.TryParse(
+            AttrText(item, "size"),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out long attribute
+        )
+            ? attribute
+            : 0L;
     }
 
     private static string? AttrText(XElement item, string name) =>
