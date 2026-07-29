@@ -241,6 +241,18 @@ episode. Cheap, fast, and it is how new episodes are caught shortly after releas
 **Search tier.** Walks the wanted list and queries every enabled indexer per episode. Slower, and it
 is what backfills everything the feed missed or that predates the plugin's installation.
 
+**Discovery-only items must not reach the decision step as grab candidates.** A scene feed reports
+no seeders, so a `ReleaseInfo` derived from one carries `Seeders = 0`. §8.1's seeder floor rejects
+those outright, and `MinSeeders` is a setting any sensible profile sets. So if the aggregator merges
+feed items into the same candidate list the filter scores, **every feed item is silently discarded**
+and the feed tier contributes nothing — while appearing to work.
+
+The two tiers are doing different jobs and the shape has to say so. A feed item's value is its
+*title*: it names an episode to go and search for. Only the search tier's results are grab
+candidates. `IndexerAggregator` must therefore keep the two apart rather than concatenating them —
+either by partitioning on "has neither a magnet nor a download URL", or by the feed tier not going
+through the aggregator at all.
+
 Both tiers hand a candidate list to the same decision step. An indexer failing is survivable: the
 aggregator degrades coverage rather than aborting a cycle, and logs the failure.
 
