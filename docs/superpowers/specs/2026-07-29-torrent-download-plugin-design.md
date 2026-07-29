@@ -705,6 +705,43 @@ Two things in the resolution matter more than the individual closures:
   attached to the release. This retires the clone-the-server-and-pack CI dance described in §16
   entirely: the shell takes an ordinary `PackageReference`.
 
+### The shipped contract, read at v0.1.445
+
+Packages are attached to the GitHub release (`NoMercy.Plugins.Abstractions.0.1.445.nupkg` and
+`NoMercy.Events`, with symbol packages), not published to nuget.org. Seven new files in Abstractions:
+`IPluginLibraryQuery`, `IPluginLibraryWriter`, `IPluginSecretStore`, `IPluginGrants`,
+`PluginGrantKind`, `PluginUiSection`, `PluginRestartRequirement`.
+
+`IPluginContext` gained `PluginId`, `Secrets`, `Library`, `LibraryWriter?`, `Grants`, and a publish
+method that wraps a plugin event in an envelope the host can subscribe to — which is the answer to
+§7.6's problem that a plugin's own event class cannot cross the load-context boundary.
+
+**How it maps onto §5.3's ports:**
+
+| My port | Shipped | Verdict |
+| --- | --- | --- |
+| `ILibraryQuery.GetEpisodesAsync` | `IPluginLibraryQuery.GetEpisodesAsync` | **Better than mine.** It returns episodes with no file, `HasFile` false rather than omitted, explicitly so a plugin can compute the gaps. That retires the separate file-join my `WantedEpisodeCalculator` needed. |
+| `ILibraryQuery.GetShowsAsync` | `GetShowsAsync(libraryId?)` | Superset — adds library scoping, and `GetLibrariesAsync` alongside. |
+| `ILibraryQuery.GetFilesAsync` | `GetShowFilesAsync` | Rename only. |
+| `ILibraryQuery.GetShowFolderAsync` | **no counterpart** | **Open question.** §7.4.1 needs a show's folder to route the intake path. Check whether `PluginLibraryShow` carries it before assuming a gap. |
+| `ISecretProtector` | `IPluginSecretStore` | Exact match plus `KeysAsync`. Retires §10.2's `IDataProtector` + `ExcludeAssets="runtime"` trick entirely. |
+
+**Two things the platform did better than this spec:**
+
+- **`IPluginGrants.RequestAsync(kind, value, reason)`** — a grant request carries a *reason*, so the
+  owner sees why a plugin wants a host before agreeing. §10.3's self-enforced host ledger is
+  obsolete, and this is a better answer than the "bypass with a user-visible ledger" that section
+  settled for. `PluginGrant.Everything` is a literal `*`, recorded deliberately so an empty grant
+  list denies and keeps denying.
+- **`IPluginLibraryWriter.RecycleAsync`** exists, alongside `MoveAsync`, `DeleteAsync` and
+  `CanWriteAsync`, with `PluginLibraryAccessDeniedException` and jailing to granted libraries. That
+  is exactly the recycle-bin semantics §8.4 designed and then deferred for want of a capability —
+  **so upgrade-replace is now shippable**, and the platform owns the recycle bin rather than this
+  plugin reimplementing one. `IPluginContext.LibraryWriter` is **null** when the capability was not
+  declared or no library was granted, so absence is checkable rather than a call that throws.
+
+Goal 6 and §8.4 should be revisited on that basis: the reason upgrade-replace was cut no longer holds.
+
 ### What this changes for this plugin
 
 | Section | Now says | Should say |
