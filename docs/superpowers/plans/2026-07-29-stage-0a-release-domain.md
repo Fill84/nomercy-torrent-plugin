@@ -15,7 +15,10 @@
 - **No useless comments.** Default is zero. Comment only a hidden constraint a reader could not infer from the code. Rationale belongs in the commit message.
 - **No license header in this repo.** The NoMercy proprietary header belongs to media-server source. This repo is separate and MIT, matching `nomercy-radiostation-plugin`.
 - **`[GeneratedRegex]` for every constant pattern.** Requires the containing class and the method to be `partial` and the method `static`.
-- **Every case-insensitive pattern must carry `RegexOptions.IgnoreCase | RegexOptions.CultureInvariant`.** `IgnoreCase` alone folds case using the *ambient* culture, and the host process's culture is not ours to control. Measured: under `tr-TR`, `"SILO SEASON 3 EPISODE 4"` fails to match `season\s*(\d{1,2})\s*episode\s*(\d{1,3})` with `IgnoreCase` alone, because uppercase `I` folds to dotless `ı`. It matches once `CultureInvariant` is added. Release names are machine text from arbitrary sources, so this is a live correctness bug, not a theoretical one. Patterns using only explicit character ranges (`[A-Za-z0-9]`) do no case folding and need neither option.
+- **Every case-insensitive pattern carries `RegexOptions.IgnoreCase | RegexOptions.CultureInvariant`.** The two cases differ and the distinction is worth knowing:
+  - **Runtime-constructed regexes** — `Regex.IsMatch(input, pattern, options)` and `new Regex(...)`, used in Tasks 8 and 9 for user-supplied term patterns — resolve casing against the *ambient culture*. `CultureInvariant` is **required** there. Measured on `net10.0`: under `tr-TR`, `"SILO SEASON 3 EPISODE 4"` does not match `season\s*(\d{1,2})\s*episode\s*(\d{1,3})` with `IgnoreCase` alone, because uppercase `I` folds to dotless `ı`. Adding `CultureInvariant` makes it match.
+  - **`[GeneratedRegex]`** bakes its case-folding table at compile time, so it already matches invariantly and the same measurement returns `True` either way. Declaring `CultureInvariant` there is **not** a bug fix — it is an explicit statement of intent that also removes any dependence on the build machine's culture. Keep it for uniformity, but do not write a test asserting a culture difference for a generated pattern: there is none to observe, and a test that cannot fail is worse than no test.
+  - Patterns using only explicit character ranges (`[A-Za-z0-9]`) do no case folding and need neither option.
 - **`Core` has zero reference to `NoMercy.Plugins.Abstractions`, `NoMercy.Events`, or any NoMercy assembly.** This is the property that keeps the test loop free of the abstractions-packing CI dance. A PR that adds one is wrong.
 - **No I/O in `Core.Releases` or `Core.Profiles`.** No `HttpClient`, no `File`, no `DateTime.Now`. These namespaces are pure.
 - **FluentAssertions pinned to `[7.0.0,8.0.0)`.** Version 8 changed to a commercial licence. Do not let a restore float past it.
@@ -2211,7 +2214,7 @@ public class ReleaseFilter
     {
         foreach (TermRule term in profile.Terms)
         {
-            bool present = Regex.IsMatch(title, term.Pattern, RegexOptions.IgnoreCase);
+            bool present = Regex.IsMatch(title, term.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
             if (term.Kind == TermKind.Required && !present)
                 return FilterVerdict.Reject($"required term missing: {term.Pattern}");
@@ -2530,7 +2533,7 @@ public class ReleaseScorer
             if (term.Kind != TermKind.Preferred)
                 continue;
 
-            if (Regex.IsMatch(title, term.Pattern, RegexOptions.IgnoreCase))
+            if (Regex.IsMatch(title, term.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
                 total += term.Score * TermScoreScale;
         }
 
