@@ -57,6 +57,23 @@ public class TitleMatcherTests
     }
 
     [Theory]
+    [InlineData("Elite S01E01 1080p WEB", "Élite")]
+    [InlineData("Pokemon S01E01 1080p WEB", "Pokémon")]
+    public void Matches_AcceptsAReleaseThatStrippedDiacriticsFromTheShowName(
+        string title,
+        string showName
+    )
+    {
+        TitleMatcher.Matches(title, showName).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Normalize_FoldsDiacritics()
+    {
+        TitleMatcher.Normalize("Pokémon").Should().Be("pokemon");
+    }
+
+    [Theory]
     [InlineData("Silo S03E04 1080p WEB H264-CAKES", "silos03e041080pwebh264cakes")]
     [InlineData("Lucky Hank", "luckyhank")]
     [InlineData("", "")]
