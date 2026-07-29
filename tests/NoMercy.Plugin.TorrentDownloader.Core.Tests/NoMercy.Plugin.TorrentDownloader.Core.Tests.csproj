@@ -19,4 +19,11 @@
         <ProjectReference Include="..\..\src\NoMercy.Plugin.TorrentDownloader.Core\NoMercy.Plugin.TorrentDownloader.Core.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+        <None Include="..\..\tests\fixtures\**\*">
+            <Link>fixtures\%(RecursiveDir)%(Filename)%(Extension)</Link>
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
 </Project>
