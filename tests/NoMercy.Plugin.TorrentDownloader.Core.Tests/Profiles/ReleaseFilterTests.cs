@@ -276,6 +276,50 @@ public class ReleaseFilterTests
     }
 
     [Fact]
+    public void Evaluate_AcceptsAnUntaggedCodecWhenTheProfileDoesNotRequireATag()
+    {
+        ReleaseProfile profile = Profile() with { Codec = VideoCodec.H264, RequireCodecTag = false };
+
+        FilterVerdict verdict = Evaluate(
+            Release("Silo.S03E04.1080p.WEB-DL-CAKES"),
+            Context(profile)
+        );
+
+        verdict.Accepted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Evaluate_RejectsAnUntaggedCodecWhenTheProfileRequiresATag()
+    {
+        ReleaseProfile profile = Profile() with { Codec = VideoCodec.H264, RequireCodecTag = true };
+
+        FilterVerdict verdict = Evaluate(
+            Release("Silo.S03E04.1080p.WEB-DL-CAKES"),
+            Context(profile)
+        );
+
+        verdict.Accepted.Should().BeFalse();
+        verdict.Reason.Should().Contain("untagged");
+        verdict.Reason.Should().Contain("requires");
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Evaluate_RejectsAnExplicitlyWrongCodecRegardlessOfRequireCodecTag(bool requireCodecTag)
+    {
+        ReleaseProfile profile = Profile() with { Codec = VideoCodec.H264, RequireCodecTag = requireCodecTag };
+
+        FilterVerdict verdict = Evaluate(
+            Release("Silo.S03E04.1080p.WEB-DL.x265-CAKES"),
+            Context(profile)
+        );
+
+        verdict.Accepted.Should().BeFalse();
+        verdict.Reason.Should().Contain("codec");
+    }
+
+    [Fact]
     public void Evaluate_RejectsAReleaseOverTheSizeLimit()
     {
         FilterVerdict verdict = Evaluate(

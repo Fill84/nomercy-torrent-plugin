@@ -8,6 +8,7 @@ public record ReleaseProfile
     public required QualityLadder Quality { get; init; }
     public LanguageProfile Language { get; init; } = LanguageProfile.EnglishOnly;
     public VideoCodec Codec { get; init; } = VideoCodec.Unknown;
+    public bool RequireCodecTag { get; init; }
     public IReadOnlyList<string> BlockedGroups { get; init; } = [];
     public IReadOnlyList<GroupPreference> PreferredGroups { get; init; } = [];
     public IReadOnlyList<TermRule> Terms { get; init; } = [];

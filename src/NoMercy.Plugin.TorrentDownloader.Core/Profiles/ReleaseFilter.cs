@@ -32,8 +32,9 @@ public class ReleaseFilter
         if (!profile.Quality.IsAllowed(parsed.Quality))
             return FilterVerdict.Reject($"quality {parsed.Quality} is not on the {profile.Name} ladder");
 
-        if (profile.Codec != VideoCodec.Unknown && parsed.Codec != profile.Codec)
-            return FilterVerdict.Reject($"codec {parsed.Codec} is not the wanted {profile.Codec}");
+        FilterVerdict codecVerdict = CheckCodec(parsed, profile);
+        if (!codecVerdict.Accepted)
+            return codecVerdict;
 
         FilterVerdict sizeVerdict = CheckSize(release, profile);
         if (!sizeVerdict.Accepted)
@@ -68,6 +69,24 @@ public class ReleaseFilter
         }
 
         return FilterVerdict.Reject("no episode or season number found in title");
+    }
+
+    private static FilterVerdict CheckCodec(ParsedRelease parsed, ReleaseProfile profile)
+    {
+        if (profile.Codec == VideoCodec.Unknown)
+            return FilterVerdict.Accept();
+
+        if (parsed.Codec == VideoCodec.Unknown)
+            return profile.RequireCodecTag
+                ? FilterVerdict.Reject(
+                    $"release is untagged for codec and the {profile.Name} profile requires a codec tag ({profile.Codec})"
+                )
+                : FilterVerdict.Accept();
+
+        if (parsed.Codec != profile.Codec)
+            return FilterVerdict.Reject($"codec {parsed.Codec} is not the wanted {profile.Codec}");
+
+        return FilterVerdict.Accept();
     }
 
     private static FilterVerdict CheckLanguage(ParsedRelease parsed, LanguageProfile language)
