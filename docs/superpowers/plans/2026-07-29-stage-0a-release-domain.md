@@ -1324,6 +1324,23 @@ public class TitleMatcherTests
     }
 
     [Theory]
+    [InlineData("Elite S01E01 1080p WEB", "Élite")]
+    [InlineData("Pokemon S01E01 1080p WEB", "Pokémon")]
+    public void Matches_AcceptsAReleaseThatStrippedDiacriticsFromTheShowName(
+        string title,
+        string showName
+    )
+    {
+        TitleMatcher.Matches(title, showName).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Normalize_FoldsDiacritics()
+    {
+        TitleMatcher.Normalize("Pokémon").Should().Be("pokemon");
+    }
+
+    [Theory]
     [InlineData("Silo S03E04 1080p WEB H264-CAKES", "silos03e041080pwebh264cakes")]
     [InlineData("Lucky Hank", "luckyhank")]
     [InlineData("", "")]
@@ -1345,6 +1362,8 @@ Expected: FAIL — `TitleMatcher` does not exist.
 Create `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/TitleMatcher.cs`:
 
 ```csharp
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Releases;
@@ -1364,8 +1383,9 @@ public static partial class TitleMatcher
         "ZA",
     };
 
-    // Bounds the name scope on a season-pack title. The season-pack pattern in
-    // ReleaseNameParser is not reusable here: its lookahead rejects "S02 1080p".
+    // Bounds the name scope on a season-pack title. ReleaseNameParser's season-pack
+    // pattern is not reusable here: it is private, and its public wrapper returns a
+    // season number rather than the index this needs to slice the scope.
     [GeneratedRegex(@"\bs\d{1,2}\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeasonTokenPattern();
 
@@ -1379,7 +1399,25 @@ public static partial class TitleMatcher
     private static partial Regex NonAlphanumericPattern();
 
     public static string Normalize(string? text) =>
-        NonAlphanumericPattern().Replace((text ?? string.Empty).ToLowerInvariant(), string.Empty);
+        NonAlphanumericPattern()
+            .Replace(FoldDiacritics(text ?? string.Empty).ToLowerInvariant(), string.Empty);
+
+    // Scene releases strip diacritics, so "Élite" arrives as "Elite". Without folding,
+    // the ASCII-only separator class treats the accent itself as a separator and splits
+    // "Pokémon" into "Pok" and "mon", which matches nothing.
+    private static string FoldDiacritics(string text)
+    {
+        string decomposed = text.Normalize(NormalizationForm.FormD);
+        StringBuilder builder = new(decomposed.Length);
+
+        foreach (char character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) != UnicodeCategory.NonSpacingMark)
+                builder.Append(character);
+        }
+
+        return builder.ToString().Normalize(NormalizationForm.FormC);
+    }
 
     public static bool Matches(string? title, string? showName)
     {
@@ -1413,7 +1451,7 @@ public static partial class TitleMatcher
 
     private static string[] Tokenize(string? text) =>
         TokenSeparatorPattern()
-            .Split(text ?? string.Empty)
+            .Split(FoldDiacritics(text ?? string.Empty))
             .Where(token => token.Length > 0)
             .ToArray();
 
@@ -1472,7 +1510,7 @@ public static partial class TitleMatcher
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter TitleMatcherTests`
-Expected: PASS, 20 cases (suite total 115).
+Expected: PASS, 23 cases (suite total 118).
 
 - [ ] **Step 5: Commit**
 
@@ -1744,7 +1782,7 @@ public record ReleaseProfile
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter QualityLadderTests`
-Expected: PASS, 6 cases (suite total 121).
+Expected: PASS, 6 cases (suite total 124).
 
 - [ ] **Step 6: Commit**
 
@@ -2274,7 +2312,7 @@ public class ReleaseFilter
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseFilterTests`
-Expected: PASS, 18 cases (suite total 139).
+Expected: PASS, 18 cases (suite total 142).
 
 - [ ] **Step 6: Commit**
 
@@ -2583,7 +2621,7 @@ public class ReleaseScorer
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseScorerTests`
-Expected: PASS, 9 cases (suite total 148).
+Expected: PASS, 9 cases (suite total 151).
 
 - [ ] **Step 6: Commit**
 
@@ -2830,7 +2868,7 @@ public class ReleaseDecider
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter DecisionTests`
-Expected: PASS, 6 cases (suite total 154).
+Expected: PASS, 6 cases (suite total 157).
 
 - [ ] **Step 5: Run the whole suite**
 
