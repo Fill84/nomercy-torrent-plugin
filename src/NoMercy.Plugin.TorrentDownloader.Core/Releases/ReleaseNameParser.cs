@@ -166,4 +166,49 @@ public static partial class ReleaseNameParser
             return VideoCodec.Av1;
         return VideoCodec.Unknown;
     }
+
+    [GeneratedRegex(@"^\[([^\]]+)\]")]
+    private static partial Regex FansubGroupPattern();
+
+    [GeneratedRegex(@"-([A-Za-z0-9_]+)\s*$")]
+    private static partial Regex SceneGroupPattern();
+
+    [GeneratedRegex(@"\bproper\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ProperPattern();
+
+    [GeneratedRegex(@"\brepack\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex RepackPattern();
+
+    public static string? ParseGroup(string? title)
+    {
+        string text = (title ?? string.Empty).Trim();
+
+        Match fansub = FansubGroupPattern().Match(text);
+        if (fansub.Success)
+            return fansub.Groups[1].Value;
+
+        Match scene = SceneGroupPattern().Match(text);
+        return scene.Success ? scene.Groups[1].Value : null;
+    }
+
+    public static bool IsProper(string? title) => ProperPattern().IsMatch(title ?? string.Empty);
+
+    public static bool IsRepack(string? title) => RepackPattern().IsMatch(title ?? string.Empty);
+
+    public static ParsedRelease Parse(string? title)
+    {
+        string text = title ?? string.Empty;
+
+        return new ParsedRelease
+        {
+            Title = text,
+            Episode = ParseEpisode(text),
+            SeasonPack = ParseSeasonPack(text),
+            Quality = ParseQuality(text),
+            Codec = ParseCodec(text),
+            ReleaseGroup = ParseGroup(text),
+            IsProper = IsProper(text),
+            IsRepack = IsRepack(text),
+        };
+    }
 }
