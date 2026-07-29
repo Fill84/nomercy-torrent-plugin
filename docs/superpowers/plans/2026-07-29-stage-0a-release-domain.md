@@ -15,6 +15,7 @@
 - **No useless comments.** Default is zero. Comment only a hidden constraint a reader could not infer from the code. Rationale belongs in the commit message.
 - **No license header in this repo.** The NoMercy proprietary header belongs to media-server source. This repo is separate and MIT, matching `nomercy-radiostation-plugin`.
 - **`[GeneratedRegex]` for every constant pattern.** Requires the containing class and the method to be `partial` and the method `static`.
+- **Every case-insensitive pattern must carry `RegexOptions.IgnoreCase | RegexOptions.CultureInvariant`.** `IgnoreCase` alone folds case using the *ambient* culture, and the host process's culture is not ours to control. Measured: under `tr-TR`, `"SILO SEASON 3 EPISODE 4"` fails to match `season\s*(\d{1,2})\s*episode\s*(\d{1,3})` with `IgnoreCase` alone, because uppercase `I` folds to dotless `ı`. It matches once `CultureInvariant` is added. Release names are machine text from arbitrary sources, so this is a live correctness bug, not a theoretical one. Patterns using only explicit character ranges (`[A-Za-z0-9]`) do no case folding and need neither option.
 - **`Core` has zero reference to `NoMercy.Plugins.Abstractions`, `NoMercy.Events`, or any NoMercy assembly.** This is the property that keeps the test loop free of the abstractions-packing CI dance. A PR that adds one is wrong.
 - **No I/O in `Core.Releases` or `Core.Profiles`.** No `HttpClient`, no `File`, no `DateTime.Now`. These namespaces are pure.
 - **FluentAssertions pinned to `[7.0.0,8.0.0)`.** Version 8 changed to a commercial licence. Do not let a restore float past it.
@@ -233,7 +234,7 @@ public static partial class SizeParser
         ["TB"] = 1024L * 1024L * 1024L * 1024L,
     };
 
-    [GeneratedRegex(@"([\d.,]+)\s*(TB|GB|MB|KB|B)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"([\d.,]+)\s*(TB|GB|MB|KB|B)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SizePattern();
 
     public static long Parse(string? text)
@@ -394,21 +395,21 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Releases;
 
 public static partial class ReleaseNameParser
 {
-    [GeneratedRegex(@"s(\d{1,2})e(\d{1,3})", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"s(\d{1,2})e(\d{1,3})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeasonEpisodePattern();
 
-    [GeneratedRegex(@"(?<!\d)(\d{1,2})x(\d{1,3})(?!\d)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?<!\d)(\d{1,2})x(\d{1,3})(?!\d)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CrossPattern();
 
-    [GeneratedRegex(@"season\s*(\d{1,2})\s*episode\s*(\d{1,3})", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"season\s*(\d{1,2})\s*episode\s*(\d{1,3})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex VerbosePattern();
 
     // The trailing \b is load-bearing: without it the digit group backtracks to a
     // single digit and the lookahead passes against the second one.
-    [GeneratedRegex(@"\bs(\d{1,2})\b(?!\s*e\d)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bs(\d{1,2})\b(?!\s*e\d)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeasonPackPattern();
 
-    [GeneratedRegex(@"season\s*(\d{1,2})", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"season\s*(\d{1,2})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex VerboseSeasonPackPattern();
 
     private static Match? EarliestEpisodeMatch(string? title)
@@ -614,52 +615,52 @@ public enum VideoCodec
 Append to `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/ReleaseNameParser.cs`, inside the existing class:
 
 ```csharp
-    [GeneratedRegex(@"\b(2160p|4k|uhd)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(2160p|4k|uhd)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Uhd2160Pattern();
 
-    [GeneratedRegex(@"\b1080[pi]\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b1080[pi]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Fhd1080Pattern();
 
-    [GeneratedRegex(@"\b720[pi]\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b720[pi]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Hd720Pattern();
 
-    [GeneratedRegex(@"\b576[pi]\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b576[pi]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Sd576Pattern();
 
-    [GeneratedRegex(@"\b480[pi]\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b480[pi]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Sd480Pattern();
 
-    [GeneratedRegex(@"\bremux\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bremux\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RemuxPattern();
 
-    [GeneratedRegex(@"\b(blu[\s._-]?ray|bdrip|brrip|bdremux)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(blu[\s._-]?ray|bdrip|brrip|bdremux)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex BluRayPattern();
 
-    [GeneratedRegex(@"\bweb[\s._-]?dl\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bweb[\s._-]?dl\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex WebDlPattern();
 
-    [GeneratedRegex(@"\b(web[\s._-]?rip|web)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(web[\s._-]?rip|web)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex WebRipPattern();
 
-    [GeneratedRegex(@"\b(hdtv|pdtv|sdtv)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(hdtv|pdtv|sdtv)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex HdtvPattern();
 
-    [GeneratedRegex(@"\bdvd[\s._-]?rip\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bdvd[\s._-]?rip\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DvdRipPattern();
 
-    [GeneratedRegex(@"\b(telesync|\bts\b)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(telesync|\bts\b)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TelesyncPattern();
 
-    [GeneratedRegex(@"\b(cam|camrip)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(cam|camrip)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CamPattern();
 
-    [GeneratedRegex(@"\b(x[\s.]?265|h[\s.]?265|hevc)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(x[\s.]?265|h[\s.]?265|hevc)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex HevcPattern();
 
-    [GeneratedRegex(@"\b(x[\s.]?264|h[\s.]?264|avc)\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\b(x[\s.]?264|h[\s.]?264|avc)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex H264Pattern();
 
-    [GeneratedRegex(@"\bav1\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bav1\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex Av1Pattern();
 
     public static Quality ParseQuality(string? title)
@@ -856,10 +857,10 @@ Append to the `ReleaseNameParser` class:
     [GeneratedRegex(@"-([A-Za-z0-9_]+)\s*$")]
     private static partial Regex SceneGroupPattern();
 
-    [GeneratedRegex(@"\bproper\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bproper\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ProperPattern();
 
-    [GeneratedRegex(@"\brepack\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\brepack\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex RepackPattern();
 
     public static string? ParseGroup(string? title)
@@ -1122,29 +1123,29 @@ public static partial class LanguageTagExtractor
     [GeneratedRegex(@"[A-Za-z0-9]+")]
     private static partial Regex TokenPattern();
 
-    [GeneratedRegex(@"\bdual([\s._-]?audio)?\b|\bmulti\d?\b|\bdubbed\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bdual([\s._-]?audio)?\b|\bmulti\d?\b|\bdubbed\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DualAudioPattern();
 
     // "cap" must be followed by a number so it never matches "Captain".
-    [GeneratedRegex(@"\bcap\.?\s*\d|\bcapitulo\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bcap\.?\s*\d|\bcapitulo\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CapituloPattern();
 
-    [GeneratedRegex(@"\bepisodio\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bepisodio\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex EpisodioPattern();
 
-    [GeneratedRegex(@"\bfolge\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bfolge\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex FolgePattern();
 
-    [GeneratedRegex(@"\bstaffel\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bstaffel\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex StaffelPattern();
 
-    [GeneratedRegex(@"\bodcinek\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bodcinek\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex OdcinekPattern();
 
-    [GeneratedRegex(@"\bseizoen\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bseizoen\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeizoenPattern();
 
-    [GeneratedRegex(@"\bsaison\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bsaison\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SaisonPattern();
 
     public static LanguageTags Extract(string? title)
@@ -1346,7 +1347,7 @@ public static partial class TitleMatcher
 
     // Bounds the name scope on a season-pack title. The season-pack pattern in
     // ReleaseNameParser is not reusable here: its lookahead rejects "S02 1080p".
-    [GeneratedRegex(@"\bs\d{1,2}\b", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\bs\d{1,2}\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeasonTokenPattern();
 
     [GeneratedRegex(@"^(19|20)\d{2}$")]
