@@ -1,0 +1,122 @@
+using System.Text.RegularExpressions;
+
+namespace NoMercy.Plugin.TorrentDownloader.Core.Releases;
+
+public static partial class TitleMatcher
+{
+    // Kept short on purpose. Every entry here is a token the show name is
+    // allowed to absorb, so a loose list reopens false matches.
+    private static readonly HashSet<string> CountryCodes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "US",
+        "UK",
+        "AU",
+        "CA",
+        "NZ",
+        "IE",
+        "ZA",
+    };
+
+    // Bounds the name scope on a season-pack title. The season-pack pattern in
+    // ReleaseNameParser is not reusable here: its lookahead rejects "S02 1080p".
+    [GeneratedRegex(@"\bs\d{1,2}\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SeasonTokenPattern();
+
+    [GeneratedRegex(@"^(19|20)\d{2}$")]
+    private static partial Regex YearPattern();
+
+    [GeneratedRegex(@"[^A-Za-z0-9]+")]
+    private static partial Regex TokenSeparatorPattern();
+
+    [GeneratedRegex("[^a-z0-9]")]
+    private static partial Regex NonAlphanumericPattern();
+
+    public static string Normalize(string? text) =>
+        NonAlphanumericPattern().Replace((text ?? string.Empty).ToLowerInvariant(), string.Empty);
+
+    public static bool Matches(string? title, string? showName)
+    {
+        string text = title ?? string.Empty;
+        string[] want = Tokenize(showName);
+        if (want.Length == 0)
+            return false;
+
+        string[] have = Tokenize(ScopeBeforeMarker(text));
+        if (have.Length == 0)
+            return false;
+
+        if (LeadsWithQualifiersOnly(have, want))
+            return true;
+
+        if (EndsWith(have, want))
+            return true;
+
+        return GluedLeadingMatch(have, want);
+    }
+
+    private static string ScopeBeforeMarker(string title)
+    {
+        int? markerIndex = ReleaseNameParser.EpisodeMarkerIndex(title);
+        if (markerIndex is int index)
+            return title[..index];
+
+        Match season = SeasonTokenPattern().Match(title);
+        return season.Success ? title[..season.Index] : title;
+    }
+
+    private static string[] Tokenize(string? text) =>
+        TokenSeparatorPattern()
+            .Split(text ?? string.Empty)
+            .Where(token => token.Length > 0)
+            .ToArray();
+
+    private static bool IsQualifier(string token) =>
+        YearPattern().IsMatch(token) || CountryCodes.Contains(token);
+
+    private static bool LeadsWithQualifiersOnly(string[] have, string[] want)
+    {
+        if (have.Length < want.Length)
+            return false;
+
+        for (int index = 0; index < want.Length; index++)
+        {
+            if (!string.Equals(have[index], want[index], StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        for (int index = want.Length; index < have.Length; index++)
+        {
+            if (!IsQualifier(have[index]))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool EndsWith(string[] have, string[] want)
+    {
+        if (have.Length < want.Length)
+            return false;
+
+        int offset = have.Length - want.Length;
+        for (int index = 0; index < want.Length; index++)
+        {
+            if (!string.Equals(have[offset + index], want[index], StringComparison.OrdinalIgnoreCase))
+                return false;
+        }
+
+        return true;
+    }
+
+    private static bool GluedLeadingMatch(string[] have, string[] want)
+    {
+        string joined = Normalize(string.Concat(have));
+        string wanted = Normalize(string.Concat(want));
+
+        if (wanted.Length == 0 || !joined.StartsWith(wanted, StringComparison.Ordinal))
+            return false;
+
+        string remainder = joined[wanted.Length..];
+        return remainder.Length == 0 || IsQualifier(remainder);
+    }
+}
