@@ -41,7 +41,11 @@ public sealed partial class RssIndexer(
         {
             response = await http.GetAsync(feedUrl, ct);
         }
-        catch (Exception error) when (error is HttpRequestException or TaskCanceledException)
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception error) when (error is HttpRequestException or OperationCanceledException)
         {
             throw new IndexerException($"{name}: feed request failed: {error.Message}", error);
         }
@@ -49,6 +53,9 @@ public sealed partial class RssIndexer(
         if (!response.IsSuccessStatusCode)
             throw new IndexerException($"{name}: feed returned HTTP {(int)response.StatusCode}");
 
+        // GetAsync defaults to HttpCompletionOption.ResponseContentRead, so the body is already
+        // buffered when it returns and a transport failure surfaces inside the try above. This
+        // call only decodes an in-memory buffer, which is why it needs no guard of its own.
         return await response.Content.ReadAsStringAsync(ct);
     }
 
