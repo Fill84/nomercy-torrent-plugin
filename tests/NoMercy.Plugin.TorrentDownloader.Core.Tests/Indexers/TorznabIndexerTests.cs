@@ -77,7 +77,10 @@ public class TorznabIndexerTests
         await Indexer(handler)
             .SearchAsync(new SearchQuery("It's Always Sunny"), CancellationToken.None);
 
-        handler.Requests.Single().ToString().Should().NotContain(" ");
+        // AbsoluteUri, not ToString(): ToString() returns a display form that unescapes %20 back
+        // to a literal space, so asserting on it would fail against correctly escaped output.
+        handler.Requests.Single().AbsoluteUri.Should().NotContain(" ");
+        handler.Requests.Single().AbsoluteUri.Should().Contain("%20");
     }
 
     [Fact]

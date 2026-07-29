@@ -48,8 +48,8 @@ public sealed class TorznabIndexer(
         List<string> parameters =
         [
             $"t={(query.Slot is null ? "search" : "tvsearch")}",
-            $"apikey={EscapeQueryValue(apiKey)}",
-            $"q={EscapeQueryValue(query.ShowName)}",
+            $"apikey={Uri.EscapeDataString(apiKey)}",
+            $"q={Uri.EscapeDataString(query.ShowName)}",
         ];
 
         if (query.Slot is EpisodeSlot slot)
@@ -66,12 +66,4 @@ public sealed class TorznabIndexer(
 
         return new Uri($"{baseUrl.ToString().TrimEnd('/')}?{string.Join("&", parameters)}");
     }
-
-    // Uri.EscapeDataString encodes a space as %20, but Uri.ToString() unescapes %20 back to a
-    // literal space when the escaped Uri is later stringified (AbsoluteUri keeps it escaped;
-    // ToString() does not). That round-trip would put a raw space back into the request URL, so
-    // spaces are encoded as '+' instead, which is the conventional query-string form and is not
-    // touched by that unescaping.
-    private static string EscapeQueryValue(string value) =>
-        Uri.EscapeDataString(value).Replace("%20", "+");
 }
