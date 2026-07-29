@@ -748,6 +748,35 @@ public class RssIndexerTests
 
         await act.Should().ThrowAsync<IndexerException>();
     }
+
+    [Fact]
+    public async Task SearchAsync_LetsCallerCancellationPropagate()
+    {
+        using CancellationTokenSource source = new();
+        await source.CancelAsync();
+
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Throwing(
+            new OperationCanceledException()
+        );
+
+        Func<Task> act = () =>
+            Indexer(handler).SearchAsync(new SearchQuery("Silo"), source.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task SearchAsync_WrapsATimeoutThatTheCallerDidNotRequest()
+    {
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Throwing(
+            new OperationCanceledException()
+        );
+
+        Func<Task> act = () =>
+            Indexer(handler).SearchAsync(new SearchQuery("Silo"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<IndexerException>();
+    }
 }
 ```
 
@@ -855,7 +884,7 @@ Seeders and leechers stay zero: a plain RSS feed does not report them. That matt
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter RssIndexerTests`
-Expected: PASS, 7 cases (suite total 201).
+Expected: PASS, 9 cases (suite total 203).
 
 - [ ] **Step 5: Commit**
 
@@ -1151,7 +1180,7 @@ public static partial class TorznabResultParser
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter TorznabResultParserTests`
-Expected: PASS, 11 cases (suite total 212).
+Expected: PASS, 11 cases (suite total 214).
 
 - [ ] **Step 5: Commit**
 
@@ -1380,7 +1409,7 @@ The exception messages carry only the indexer name and the status or transport e
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter TorznabIndexerTests`
-Expected: PASS, 6 cases (suite total 218).
+Expected: PASS, 6 cases (suite total 220).
 
 - [ ] **Step 5: Commit**
 
@@ -1715,7 +1744,7 @@ public sealed class IndexerPacer(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter IndexerPacerTests`
-Expected: PASS, 9 cases (suite total 227).
+Expected: PASS, 9 cases (suite total 229).
 
 - [ ] **Step 5: Commit**
 
@@ -1990,12 +2019,12 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter IndexerAggregatorTests`
-Expected: PASS, 7 cases (suite total 234).
+Expected: PASS, 7 cases (suite total 236).
 
 - [ ] **Step 5: Run the whole suite and a Release build**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests`
-Expected: PASS, 234 cases.
+Expected: PASS, 236 cases.
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" build nomercy-torrent-plugin.sln -c Release`
 Expected: 0 warnings, 0 errors.
