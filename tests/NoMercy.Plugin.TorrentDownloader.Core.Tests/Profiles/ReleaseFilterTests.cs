@@ -272,7 +272,7 @@ public class ReleaseFilterTests
         );
 
         verdict.Accepted.Should().BeFalse();
-        verdict.Reason.Should().Contain("blacklist");
+        verdict.Reason.Should().Contain("release title is blacklisted");
     }
 
     [Fact]
@@ -286,7 +286,7 @@ public class ReleaseFilterTests
         );
 
         verdict.Accepted.Should().BeFalse();
-        verdict.Reason.Should().Contain("blacklist");
+        verdict.Reason.Should().Contain("info hash ABC123 is blacklisted");
     }
 
     [Fact]
