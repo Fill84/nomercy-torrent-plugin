@@ -515,6 +515,26 @@ That turns "documented bypass" into "bypass with a user-visible ledger", which i
 different thing, and it is the only honest version of this until #17 lands. When it does, the ledger
 becomes the input to the platform's dynamic allowlist rather than a substitute for it.
 
+#### Plugin-scoped User-Agent (upstream, decided 2026-07-29)
+
+The host will append a plugin-scoped identifier to the `User-Agent` of requests made through
+`IPluginContext.HttpClient`, so a tracker admin asking "why is this server hammering me" can see
+which plugin is responsible. Three properties of that decision bear on this plugin directly:
+
+- **It is append-only, and never touches a request that already sets a `User-Agent`.** That matters
+  here more than for most plugins: Cloudflare-fronted indexers expect a *browser* UA, and private
+  trackers ban on UA mismatch. So the FlareSolverr path in Stage 0b-2 must set its UA explicitly and
+  can rely on the host leaving it alone. The RSS and Torznab clients set none, and should not — they
+  want the attribution.
+- **The identifier is the plugin id, not the user or device.** It is identical across every install,
+  so it fingerprints the plugin rather than the person running it.
+- **It is attribution, not enforcement.** A plugin runs in-process and can always construct its own
+  `HttpClient`. This is the same honest boundary as the allowlist above, and for the same reason:
+  it makes well-behaved traffic identifiable, it does not constrain hostile traffic.
+
+Nothing in `Core` needs to change for it. `Core`'s clients take an injected `HttpClient` and never
+construct one, so whichever client the shell supplies carries whatever the host has configured.
+
 Interim behaviour: the plugin routes its own outbound calls through a `DelegatingHandler` enforcing
 the **user-configured** host list with identical glob semantics. The plugin is self-restricted and
 auditable rather than unrestricted, and swapping to platform enforcement when it exists is one
