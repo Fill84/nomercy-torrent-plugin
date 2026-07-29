@@ -64,4 +64,106 @@ public static partial class ReleaseNameParser
         Match compact = SeasonPackPattern().Match(text);
         return compact.Success ? int.Parse(compact.Groups[1].Value) : null;
     }
+
+    [GeneratedRegex(@"\b(2160p|4k|uhd)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Uhd2160Pattern();
+
+    [GeneratedRegex(@"\b1080[pi]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Fhd1080Pattern();
+
+    [GeneratedRegex(@"\b720[pi]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Hd720Pattern();
+
+    [GeneratedRegex(@"\b576[pi]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Sd576Pattern();
+
+    [GeneratedRegex(@"\b480[pi]\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Sd480Pattern();
+
+    [GeneratedRegex(@"\bremux\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex RemuxPattern();
+
+    [GeneratedRegex(@"\b(blu[\s._-]?ray|bdrip|brrip|bdremux)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex BluRayPattern();
+
+    [GeneratedRegex(@"\bweb[\s._-]?dl\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex WebDlPattern();
+
+    [GeneratedRegex(@"\b(web[\s._-]?rip|web)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex WebRipPattern();
+
+    [GeneratedRegex(@"\b(hdtv|pdtv|sdtv)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HdtvPattern();
+
+    [GeneratedRegex(@"\bdvd[\s._-]?rip\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DvdRipPattern();
+
+    [GeneratedRegex(@"\b(telesync|\bts\b)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex TelesyncPattern();
+
+    [GeneratedRegex(@"\b(cam|camrip)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex CamPattern();
+
+    [GeneratedRegex(@"\b(x[\s.]?265|h[\s.]?265|hevc)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex HevcPattern();
+
+    [GeneratedRegex(@"\b(x[\s.]?264|h[\s.]?264|avc)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex H264Pattern();
+
+    [GeneratedRegex(@"\bav1\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex Av1Pattern();
+
+    public static Quality ParseQuality(string? title)
+    {
+        string text = title ?? string.Empty;
+        return new Quality(ParseResolution(text), ParseSource(text));
+    }
+
+    private static Resolution ParseResolution(string text)
+    {
+        if (Uhd2160Pattern().IsMatch(text))
+            return Resolution.Uhd2160;
+        if (Fhd1080Pattern().IsMatch(text))
+            return Resolution.Fhd1080;
+        if (Hd720Pattern().IsMatch(text))
+            return Resolution.Hd720;
+        if (Sd576Pattern().IsMatch(text))
+            return Resolution.Sd576;
+        if (Sd480Pattern().IsMatch(text))
+            return Resolution.Sd480;
+        return Resolution.Unknown;
+    }
+
+    private static ReleaseSource ParseSource(string text)
+    {
+        if (RemuxPattern().IsMatch(text))
+            return ReleaseSource.Remux;
+        if (BluRayPattern().IsMatch(text))
+            return ReleaseSource.BluRay;
+        if (WebDlPattern().IsMatch(text))
+            return ReleaseSource.WebDl;
+        if (WebRipPattern().IsMatch(text))
+            return ReleaseSource.WebRip;
+        if (HdtvPattern().IsMatch(text))
+            return ReleaseSource.Hdtv;
+        if (DvdRipPattern().IsMatch(text))
+            return ReleaseSource.DvdRip;
+        if (TelesyncPattern().IsMatch(text))
+            return ReleaseSource.Telesync;
+        if (CamPattern().IsMatch(text))
+            return ReleaseSource.Cam;
+        return ReleaseSource.Unknown;
+    }
+
+    public static VideoCodec ParseCodec(string? title)
+    {
+        string text = title ?? string.Empty;
+        if (HevcPattern().IsMatch(text))
+            return VideoCodec.H265;
+        if (H264Pattern().IsMatch(text))
+            return VideoCodec.H264;
+        if (Av1Pattern().IsMatch(text))
+            return VideoCodec.Av1;
+        return VideoCodec.Unknown;
+    }
 }
