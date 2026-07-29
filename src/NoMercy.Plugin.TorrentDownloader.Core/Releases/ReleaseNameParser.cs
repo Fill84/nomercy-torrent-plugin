@@ -198,6 +198,7 @@ public static partial class ReleaseNameParser
     public static ParsedRelease Parse(string? title)
     {
         string text = title ?? string.Empty;
+        LanguageTags tags = LanguageTagExtractor.Extract(text);
 
         return new ParsedRelease
         {
@@ -209,6 +210,8 @@ public static partial class ReleaseNameParser
             ReleaseGroup = ParseGroup(text),
             IsProper = IsProper(text),
             IsRepack = IsRepack(text),
+            Languages = tags.Languages,
+            IsDualAudio = tags.IsDualAudio,
         };
     }
 }
