@@ -723,7 +723,7 @@ method that wraps a plugin event in an envelope the host can subscribe to — wh
 | `ILibraryQuery.GetEpisodesAsync` | `IPluginLibraryQuery.GetEpisodesAsync` | **Better than mine.** It returns episodes with no file, `HasFile` false rather than omitted, explicitly so a plugin can compute the gaps. That retires the separate file-join my `WantedEpisodeCalculator` needed. |
 | `ILibraryQuery.GetShowsAsync` | `GetShowsAsync(libraryId?)` | Superset — adds library scoping, and `GetLibrariesAsync` alongside. |
 | `ILibraryQuery.GetFilesAsync` | `GetShowFilesAsync` | Rename only. |
-| `ILibraryQuery.GetShowFolderAsync` | **no counterpart** | **Open question.** §7.4.1 needs a show's folder to route the intake path. Check whether `PluginLibraryShow` carries it before assuming a gap. |
+| `ILibraryQuery.GetShowFolderAsync` | `PluginLibraryShow.Folder` | **Better than mine.** The folder arrives on the show record, so §7.4.1 needs no extra call — the wanted calculation is already enumerating shows and would otherwise round-trip once per show. |
 | `ISecretProtector` | `IPluginSecretStore` | Exact match plus `KeysAsync`. Retires §10.2's `IDataProtector` + `ExcludeAssets="runtime"` trick entirely. |
 
 **Two things the platform did better than this spec:**
@@ -741,6 +741,22 @@ method that wraps a plugin event in an envelope the host can subscribe to — wh
   declared or no library was granted, so absence is checkable rather than a call that throws.
 
 Goal 6 and §8.4 should be revisited on that basis: the reason upgrade-replace was cut no longer holds.
+
+**The record set answers two more things this spec had left open**, both by carrying data I had
+assumed I would have to derive:
+
+- **`PluginLibraryEpisode.AirDate` closes the daily-shows blocker (§18 open question 4).** Talk shows
+  and news are released with a date rather than a `SxxExx`, and the reason that could not be matched
+  was that the wanted-episode model had only slot numbers to compare against. An air date per episode
+  is exactly the missing half. It remains a real feature with real edge cases — timezone skew between
+  an indexer's date and the library's air date, and multi-part episodes sharing one date — but it is
+  no longer blocked on data that does not exist.
+- **`PluginLibraryFile.Quality` is a resolved quality string per file.** §8.4's upgrade detection
+  compares an existing file's quality against the ladder cutoff, and I had assumed that meant parsing
+  it back out of the filename. It does not.
+
+`PluginLibraryShow.EpisodeCount` and `HaveEpisodeCount` also come for free, so the panel's wanted
+count needs no episode enumeration.
 
 ### What this changes for this plugin
 
