@@ -2488,6 +2488,21 @@ public class ReleaseScorerTests
     }
 
     [Fact]
+    public void Score_NeverLetsPreferencesOutrankAQualityStep()
+    {
+        ReleaseProfile profile = Profile() with
+        {
+            PreferredGroups = [new GroupPreference("HUGE", 500)],
+        };
+        ScoreContext context = new(profile, null);
+
+        int lowerQualityPreferredGroup = Score(Release("Silo.S03E04.720p.WEB.H264-HUGE"), context);
+        int higherQualityOtherGroup = Score(Release("Silo.S03E04.1080p.WEB.H264-OTHER"), context);
+
+        higherQualityOtherGroup.Should().BeGreaterThan(lowerQualityPreferredGroup);
+    }
+
+    [Fact]
     public void Score_HandlesAQualityNotOnTheLadderWithoutThrowing()
     {
         ScoreContext context = new(Profile(), null);
@@ -2537,22 +2552,26 @@ public class ReleaseScorer
     private const int CodecMatchBonus = 250;
     private const int IndexerPriorityScale = 50;
     private const double SeederScale = 25d;
+    private const int MaxSoftScore = QualityStep - 1;
 
     public int Score(ReleaseInfo release, ParsedRelease parsed, ScoreContext context)
     {
         ReleaseProfile profile = context.Profile;
-        int score = Math.Max(profile.Quality.RankOf(parsed.Quality), 0) * QualityStep;
+        int quality = Math.Max(profile.Quality.RankOf(parsed.Quality), 0);
 
-        score += SceneScore(release, context);
-        score += GroupScore(parsed, profile);
-        score += TermScore(release.Title, profile);
-        score += FlagScore(parsed);
-        score += LanguageScore(parsed, profile);
-        score += CodecScore(parsed, profile);
-        score += release.IndexerPriority * IndexerPriorityScale;
-        score += (int)(Math.Log(1d + Math.Max(release.Seeders, 0)) * SeederScale);
+        long soft = SceneScore(release, context);
+        soft += GroupScore(parsed, profile);
+        soft += TermScore(release.Title, profile);
+        soft += FlagScore(parsed);
+        soft += LanguageScore(parsed, profile);
+        soft += CodecScore(parsed, profile);
+        soft += release.IndexerPriority * IndexerPriorityScale;
+        soft += (int)(Math.Log(1d + Math.Max(release.Seeders, 0)) * SeederScale);
 
-        return score;
+        // Group and term scores are user-supplied and unbounded, and are multiplied by 100.
+        // Clamping the whole soft total is what keeps "one quality step outranks every other
+        // signal combined" true by construction rather than by convention.
+        return quality * QualityStep + (int)Math.Clamp(soft, -MaxSoftScore, MaxSoftScore);
     }
 
     private static int SceneScore(ReleaseInfo release, ScoreContext context)
@@ -2622,7 +2641,7 @@ public class ReleaseScorer
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseScorerTests`
-Expected: PASS, 9 cases (suite total 151).
+Expected: PASS, 10 cases (suite total 152).
 
 - [ ] **Step 6: Commit**
 
@@ -2869,7 +2888,7 @@ public class ReleaseDecider
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter DecisionTests`
-Expected: PASS, 6 cases (suite total 157).
+Expected: PASS, 6 cases (suite total 158).
 
 - [ ] **Step 5: Run the whole suite**
 
