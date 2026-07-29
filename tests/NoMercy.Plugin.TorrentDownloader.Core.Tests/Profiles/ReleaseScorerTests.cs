@@ -100,6 +100,27 @@ public class ReleaseScorerTests
     }
 
     [Fact]
+    public void Score_AwardsNoBonusForAnInvalidPreferredTermPattern()
+    {
+        ReleaseProfile profile = Profile() with
+        {
+            Terms = [new TermRule("*HDR*", TermKind.Preferred, 5)],
+        };
+        ScoreContext context = new(profile, null);
+
+        Action act = () => Score(Release("Silo.S03E04.1080p.WEB.H264-A"), context);
+        act.Should().NotThrow();
+
+        int withInvalidTerm = Score(Release("Silo.S03E04.1080p.WEB.H264-A"), context);
+        int withoutTerm = Score(
+            Release("Silo.S03E04.1080p.WEB.H264-A"),
+            new ScoreContext(Profile(), null)
+        );
+
+        withInvalidTerm.Should().Be(withoutTerm);
+    }
+
+    [Fact]
     public void Score_RewardsProperAndRepack()
     {
         ScoreContext context = new(Profile(), null);

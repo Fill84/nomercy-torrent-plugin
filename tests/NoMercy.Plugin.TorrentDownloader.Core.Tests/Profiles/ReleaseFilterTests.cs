@@ -195,6 +195,44 @@ public class ReleaseFilterTests
     }
 
     [Fact]
+    public void Evaluate_TreatsAnInvalidForbiddenTermPatternAsNotPresent()
+    {
+        ReleaseProfile profile = Profile() with
+        {
+            Terms = [new TermRule("*HDR*", TermKind.Forbidden, 0)],
+        };
+
+        Action act = () =>
+            Evaluate(Release("Silo.S03E04.1080p.WEB-DL.H264-CAKES"), Context(profile));
+
+        act.Should().NotThrow();
+        Evaluate(Release("Silo.S03E04.1080p.WEB-DL.H264-CAKES"), Context(profile))
+            .Accepted.Should()
+            .BeTrue();
+    }
+
+    [Fact]
+    public void Evaluate_RejectsWithTheBadPatternWhenARequiredTermPatternIsInvalid()
+    {
+        ReleaseProfile profile = Profile() with
+        {
+            Terms = [new TermRule("*HDR*", TermKind.Required, 0)],
+        };
+
+        Action act = () =>
+            Evaluate(Release("Silo.S03E04.1080p.WEB-DL.H264-CAKES"), Context(profile));
+        act.Should().NotThrow();
+
+        FilterVerdict verdict = Evaluate(
+            Release("Silo.S03E04.1080p.WEB-DL.H264-CAKES"),
+            Context(profile)
+        );
+
+        verdict.Accepted.Should().BeFalse();
+        verdict.Reason.Should().Be("required term missing: *HDR*");
+    }
+
+    [Fact]
     public void Evaluate_RejectsAReleaseCarryingAForbiddenTerm()
     {
         ReleaseProfile profile = Profile() with
@@ -287,6 +325,20 @@ public class ReleaseFilterTests
 
         verdict.Accepted.Should().BeFalse();
         verdict.Reason.Should().Contain("info hash ABC123 is blacklisted");
+    }
+
+    [Fact]
+    public void Evaluate_RejectsAnUppercaseStoredHashAgainstALowercaseCandidate()
+    {
+        HashSet<string> hashes = ["ABC123"];
+
+        FilterVerdict verdict = Evaluate(
+            Release("Silo.S03E04.1080p.WEB-DL.H264-CAKES", infoHash: "abc123"),
+            Context(hashes: hashes)
+        );
+
+        verdict.Accepted.Should().BeFalse();
+        verdict.Reason.Should().Contain("info hash abc123 is blacklisted");
     }
 
     [Fact]

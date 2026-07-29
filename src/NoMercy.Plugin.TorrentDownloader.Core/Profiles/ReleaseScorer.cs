@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using NoMercy.Plugin.TorrentDownloader.Core.Releases;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Profiles;
@@ -71,7 +70,7 @@ public class ReleaseScorer
             if (term.Kind != TermKind.Preferred)
                 continue;
 
-            if (Regex.IsMatch(title, term.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+            if (TermMatcher.IsMatch(title, term.Pattern))
                 total += term.Score * TermScoreScale;
         }
 

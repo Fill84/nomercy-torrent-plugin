@@ -1,4 +1,3 @@
-using System.Text.RegularExpressions;
 using NoMercy.Plugin.TorrentDownloader.Core.Releases;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Profiles;
@@ -97,7 +96,7 @@ public class ReleaseFilter
     {
         foreach (TermRule term in profile.Terms)
         {
-            bool present = Regex.IsMatch(title, term.Pattern, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            bool present = TermMatcher.IsMatch(title, term.Pattern);
 
             if (term.Kind == TermKind.Required && !present)
                 return FilterVerdict.Reject($"required term missing: {term.Pattern}");
@@ -130,7 +129,7 @@ public class ReleaseFilter
             return FilterVerdict.Reject("this release title is blacklisted for this episode");
 
         if (release.InfoHash is string hash
-            && context.BlacklistedInfoHashes.Contains(hash.ToLowerInvariant()))
+            && context.BlacklistedInfoHashes.Contains(hash, StringComparer.OrdinalIgnoreCase))
             return FilterVerdict.Reject($"info hash {hash} is blacklisted for this episode");
 
         return FilterVerdict.Accept();
