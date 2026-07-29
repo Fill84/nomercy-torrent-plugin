@@ -1014,6 +1014,40 @@ public class TorznabResultParserTests
     }
 
     [Fact]
+    public void Parse_ReadsSizeFromTheAttributeWhenThereIsNoSizeElement()
+    {
+        string attrSize = """
+            <rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+              <channel><item>
+                <title>Silo S03E04 1080p WEB H264-CAKES</title>
+                <torznab:attr name="size" value="1503238553" />
+              </item></channel>
+            </rss>
+            """;
+
+        TorznabResultParser.Parse(attrSize, "x", 0).Single().SizeBytes.Should().Be(1503238553L);
+    }
+
+    [Fact]
+    public void Parse_PrefersTheSizeElementWhenBothArePresent()
+    {
+        string both = """
+            <rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+              <channel><item>
+                <title>Silo S03E04 1080p WEB H264-CAKES</title>
+                <size>111</size>
+                <torznab:attr name="size" value="222" />
+              </item></channel>
+            </rss>
+            """;
+
+        TorznabParserSize(both).Should().Be(111L);
+    }
+
+    private static long TorznabParserSize(string xml) =>
+        TorznabResultParser.Parse(xml, "x", 0).Single().SizeBytes;
+
+    [Fact]
     public void Parse_ThrowsIndexerExceptionOnAnErrorDocument()
     {
         string error = """
@@ -1127,12 +1161,31 @@ public static partial class TorznabResultParser
             MagnetUri = isMagnet ? link : null,
             DownloadUrl = isMagnet ? null : link,
             InfoHash = infoHash?.ToLowerInvariant(),
-            SizeBytes = Long(item.Element("size")),
+            SizeBytes = ParseSize(item),
             Seeders = seeders,
             Leechers = Math.Max(peers - seeders, 0),
             IndexerPriority = priority,
             PublishedAt = Date(item.Element("pubDate")),
         };
+    }
+
+    // Torznab permits size as either a <size> element or a torznab:attr, and an endpoint that
+    // uses only the attr form would otherwise report every release as zero bytes — silently
+    // wrong rather than visibly broken, since the size filter would still run against it.
+    private static long ParseSize(XElement item)
+    {
+        long element = Long(item.Element("size"));
+        if (element > 0L)
+            return element;
+
+        return long.TryParse(
+            AttrText(item, "size"),
+            NumberStyles.Integer,
+            CultureInfo.InvariantCulture,
+            out long attribute
+        )
+            ? attribute
+            : 0L;
     }
 
     private static string? AttrText(XElement item, string name) =>
@@ -1180,7 +1233,7 @@ public static partial class TorznabResultParser
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter TorznabResultParserTests`
-Expected: PASS, 11 cases (suite total 214).
+Expected: PASS, 13 cases (suite total 216).
 
 - [ ] **Step 5: Commit**
 
@@ -1409,7 +1462,7 @@ The exception messages carry only the indexer name and the status or transport e
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter TorznabIndexerTests`
-Expected: PASS, 6 cases (suite total 220).
+Expected: PASS, 6 cases (suite total 222).
 
 - [ ] **Step 5: Commit**
 
@@ -1744,7 +1797,7 @@ public sealed class IndexerPacer(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter IndexerPacerTests`
-Expected: PASS, 9 cases (suite total 229).
+Expected: PASS, 9 cases (suite total 231).
 
 - [ ] **Step 5: Commit**
 
@@ -2019,12 +2072,12 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter IndexerAggregatorTests`
-Expected: PASS, 7 cases (suite total 236).
+Expected: PASS, 7 cases (suite total 238).
 
 - [ ] **Step 5: Run the whole suite and a Release build**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests`
-Expected: PASS, 236 cases.
+Expected: PASS, 238 cases.
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" build nomercy-torrent-plugin.sln -c Release`
 Expected: 0 warnings, 0 errors.
