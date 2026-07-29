@@ -97,4 +97,14 @@ public class QualityLadderTests
 
         act.Should().NotThrow();
     }
+
+    [Fact]
+    public void WithExpression_RejectsACutoffNameThatNamesNoRung()
+    {
+        QualityLadder ladder = Ladder();
+
+        Action act = () => _ = ladder with { CutoffName = "NOPE-DOES-NOT-EXIST" };
+
+        act.Should().Throw<ArgumentException>();
+    }
 }

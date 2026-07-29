@@ -4,10 +4,18 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Profiles;
 
 public record QualityLadder(IReadOnlyList<QualityDefinition> Ordered, string CutoffName)
 {
-    // Validated eagerly so a typo'd cutoff fails at profile-load time with the bad value
-    // and the available rungs named, instead of silently disabling MeetsCutoff for every
-    // quality via CutoffRank's int.MaxValue fallback.
-    public string CutoffName { get; init; } = ValidateCutoffName(Ordered, CutoffName);
+    private readonly string _cutoffName = ValidateCutoffName(Ordered, CutoffName);
+
+    // Validated in the init accessor (not a property initializer) so every construction path
+    // runs the check: both `new QualityLadder(...)` and `with { CutoffName = ... }` invoke this
+    // accessor. The compiler-generated copy constructor behind `with` copies backing fields
+    // directly and does not call this accessor for properties a `with` expression leaves
+    // untouched, but it does call it for CutoffName whenever a `with` sets that property.
+    public string CutoffName
+    {
+        get => _cutoffName;
+        init => _cutoffName = ValidateCutoffName(Ordered, value);
+    }
 
     private static string ValidateCutoffName(IReadOnlyList<QualityDefinition> ordered, string cutoffName)
     {
@@ -41,6 +49,11 @@ public record QualityLadder(IReadOnlyList<QualityDefinition> Ordered, string Cut
         return specific >= 0 ? specific : agnostic;
     }
 
+    // This fallback is defence in depth, not a validation guarantee: it only protects against
+    // a `with { Ordered = ... }` that drops the rung CutoffName still names (CutoffName's own
+    // init accessor validates against the Ordered value at the time CutoffName is set, so it
+    // cannot see a later, independent change to Ordered). In that case MeetsCutoff silently
+    // returns false for every quality instead of throwing.
     public int CutoffRank
     {
         get
