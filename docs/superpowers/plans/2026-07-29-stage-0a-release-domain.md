@@ -78,7 +78,7 @@ One type per file. `Releases/` knows nothing about `Profiles/`; the dependency r
 
 ---
 
-## Task 1: Solution scaffold and SizeParser
+## Task 1:1 Solution scaffold and SizeParser
 
 **Files:**
 - Create: `nomercy-torrent-plugin.sln`
@@ -258,7 +258,7 @@ public static partial class SizeParser
 - [ ] **Step 7: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests`
-Expected: PASS, 11 cases.
+Expected: PASS, 11 cases (suite total 11).
 
 - [ ] **Step 8: Commit**
 
@@ -269,7 +269,7 @@ git commit -m "feat(core): scaffold Core and Tests projects with SizeParser"
 
 ---
 
-## Task 2: Episode and season-pack parsing
+## Task 2:2 Episode and season-pack parsing
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/EpisodeSlot.cs`
@@ -464,7 +464,7 @@ public static partial class ReleaseNameParser
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseNameParserEpisodeTests`
-Expected: PASS, 15 cases.
+Expected: PASS, 18 cases (suite total 29).
 
 - [ ] **Step 6: Commit**
 
@@ -475,7 +475,7 @@ git commit -m "feat(core): parse season, episode and season-pack markers from re
 
 ---
 
-## Task 3: Quality and codec parsing
+## Task 3:3 Quality and codec parsing
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/Quality.cs`
@@ -724,7 +724,7 @@ Append to `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/ReleaseNameParser.
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseNameParserQualityTests`
-Expected: PASS, 29 cases.
+Expected: PASS, 29 cases (suite total 58).
 
 - [ ] **Step 6: Commit**
 
@@ -735,7 +735,7 @@ git commit -m "feat(core): parse resolution, source and video codec from release
 
 ---
 
-## Task 4: Release group, PROPER/REPACK, and ParsedRelease
+## Task 4:4 Release group, PROPER/REPACK, and ParsedRelease
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/ParsedRelease.cs`
@@ -903,7 +903,7 @@ Append to the `ReleaseNameParser` class:
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseNameParserGroupTests`
-Expected: PASS, 14 cases.
+Expected: PASS, 13 cases (suite total 71).
 
 - [ ] **Step 6: Commit**
 
@@ -914,7 +914,7 @@ git commit -m "feat(core): parse release group and proper/repack flags into Pars
 
 ---
 
-## Task 5: Language tag extraction
+## Task 5:5 Language tag extraction
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/LanguageTags.cs`
@@ -1205,7 +1205,7 @@ In `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/ReleaseNameParser.cs`, re
 - [ ] **Step 6: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter LanguageTagExtractorTests`
-Expected: PASS, 20 cases.
+Expected: PASS, 21 cases (suite total 92).
 
 - [ ] **Step 7: Run the whole suite to check nothing regressed**
 
@@ -1221,7 +1221,7 @@ git commit -m "feat(core): extract language tags and dual-audio markers from rel
 
 ---
 
-## Task 6: TitleMatcher
+## Task 6:6 TitleMatcher
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/TitleMatcher.cs`
@@ -1456,7 +1456,7 @@ public static partial class TitleMatcher
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter TitleMatcherTests`
-Expected: PASS, 20 cases.
+Expected: PASS, 20 cases (suite total 112).
 
 - [ ] **Step 5: Commit**
 
@@ -1467,7 +1467,7 @@ git commit -m "feat(core): match a release title to a show name by name-scope po
 
 ---
 
-## Task 7: Profile types and quality ladder
+## Task 7:7 Profile types and quality ladder
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Releases/ReleaseInfo.cs`
@@ -1728,7 +1728,7 @@ public record ReleaseProfile
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter QualityLadderTests`
-Expected: PASS, 6 cases.
+Expected: PASS, 6 cases (suite total 118).
 
 - [ ] **Step 6: Commit**
 
@@ -1739,7 +1739,7 @@ git commit -m "feat(core): add release profile types and the quality ladder"
 
 ---
 
-## Task 8: ReleaseFilter
+## Task 8:8 ReleaseFilter
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Profiles/FilterVerdict.cs`
@@ -2258,7 +2258,7 @@ public class ReleaseFilter
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseFilterTests`
-Expected: PASS, 18 cases.
+Expected: PASS, 18 cases (suite total 136).
 
 - [ ] **Step 6: Commit**
 
@@ -2269,7 +2269,7 @@ git commit -m "feat(core): add ReleaseFilter with a user-visible reason on every
 
 ---
 
-## Task 9: ReleaseScorer
+## Task 9:9 ReleaseScorer
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Profiles/ScoreContext.cs`
@@ -2567,7 +2567,7 @@ public class ReleaseScorer
 - [ ] **Step 5: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter ReleaseScorerTests`
-Expected: PASS, 9 cases.
+Expected: PASS, 9 cases (suite total 145).
 
 - [ ] **Step 6: Commit**
 
@@ -2578,7 +2578,7 @@ git commit -m "feat(core): add ReleaseScorer with quality-dominant weighting"
 
 ---
 
-## Task 10: The decision, end to end
+## Task 10:10 The decision, end to end
 
 **Files:**
 - Create: `src/NoMercy.Plugin.TorrentDownloader.Core/Profiles/ReleaseDecider.cs`
@@ -2814,7 +2814,7 @@ public class ReleaseDecider
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `dotnet test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter DecisionTests`
-Expected: PASS, 6 cases.
+Expected: PASS, 6 cases (suite total 151).
 
 - [ ] **Step 5: Run the whole suite**
 
