@@ -151,7 +151,7 @@ Replace `tests/NoMercy.Plugin.TorrentDownloader.Core.Tests/NoMercy.Plugin.Torren
 
 - [ ] **Step 3: Add `.gitignore`**
 
-Create `.gitignore`:
+**A `.gitignore` may already exist at the repo root.** If so, append these entries to it and preserve every line already there — do not overwrite the file.
 
 ```gitignore
 bin/
@@ -233,8 +233,6 @@ public static partial class SizeParser
         ["TB"] = 1024L * 1024L * 1024L * 1024L,
     };
 
-    // Units are ordered longest first: an alternation trying "B" before "GB"
-    // fails to match "1.4 GB" at all rather than matching the trailing B.
     [GeneratedRegex(@"([\d.,]+)\s*(TB|GB|MB|KB|B)\b", RegexOptions.IgnoreCase)]
     private static partial Regex SizePattern();
 
