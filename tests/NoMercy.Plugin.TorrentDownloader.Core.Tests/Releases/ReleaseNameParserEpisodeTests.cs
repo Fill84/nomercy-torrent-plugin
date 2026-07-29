@@ -58,6 +58,12 @@ public class ReleaseNameParserEpisodeTests
     }
 
     [Fact]
+    public void ParseSeasonPack_DoesNotTreatASpaceSeparatedEpisodeMarkerAsAPack()
+    {
+        ReleaseNameParser.ParseSeasonPack("Show S03 E04 1080p").Should().BeNull();
+    }
+
+    [Fact]
     public void EpisodeMarkerIndex_PointsAtTheStartOfTheMarker()
     {
         ReleaseNameParser.EpisodeMarkerIndex("Silo S03E04 1080p").Should().Be(5);
