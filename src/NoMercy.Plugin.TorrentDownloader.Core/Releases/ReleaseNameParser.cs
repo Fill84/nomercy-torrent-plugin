@@ -4,7 +4,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Releases;
 
 public static partial class ReleaseNameParser
 {
-    [GeneratedRegex(@"s(\d{1,2})e(\d{1,3})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"s(\d{1,2})[\s._-]?e(\d{1,3})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SeasonEpisodePattern();
 
     [GeneratedRegex(@"(?<!\d)(\d{1,2})x(\d{1,3})(?!\d)", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
@@ -20,6 +20,9 @@ public static partial class ReleaseNameParser
 
     [GeneratedRegex(@"season\s*(\d{1,2})", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex VerboseSeasonPackPattern();
+
+    [GeneratedRegex(@"\bs\d{1,2}\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex SeasonTokenPattern();
 
     private static Match? EarliestEpisodeMatch(string? title)
     {
@@ -37,6 +40,19 @@ public static partial class ReleaseNameParser
     }
 
     public static int? EpisodeMarkerIndex(string? title) => EarliestEpisodeMatch(title)?.Index;
+
+    // Shared by TitleMatcher (scopes the show name before this point) and
+    // LanguageTagExtractor (scopes language tags after it), so a season pack with no
+    // episode marker still separates the two: without the season-token fallback, both
+    // callers fall back to the whole title and can misread the show name.
+    public static int? NameScopeBoundaryIndex(string? title)
+    {
+        if (EpisodeMarkerIndex(title) is int episodeIndex)
+            return episodeIndex;
+
+        Match season = SeasonTokenPattern().Match(title ?? string.Empty);
+        return season.Success ? season.Index : null;
+    }
 
     public static EpisodeSlot? ParseEpisode(string? title)
     {
@@ -170,7 +186,7 @@ public static partial class ReleaseNameParser
     [GeneratedRegex(@"^\[([^\]]+)\]")]
     private static partial Regex FansubGroupPattern();
 
-    [GeneratedRegex(@"-([A-Za-z0-9_]+)\s*$")]
+    [GeneratedRegex(@"-([A-Za-z0-9_]+)(?:\[[^\]]*\])?\s*$")]
     private static partial Regex SceneGroupPattern();
 
     [GeneratedRegex(@"\bproper\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]

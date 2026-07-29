@@ -12,6 +12,7 @@ public class ReleaseNameParserGroupTests
     [InlineData("Some.Show.S01E01.1080p.WEB-DL-Group_Name", "Group_Name")]
     [InlineData("[SubsPlease] Frieren - 01 (1080p) [ABCD1234]", "SubsPlease")]
     [InlineData("[Erai-raws] Show - 12 [1080p]", "Erai-raws")]
+    [InlineData("Silo S03E04 1080p WEB h264-ETHEL[eztv.re]", "ETHEL")]
     public void ParseGroup_ReadsSceneAndFansubConventions(string title, string expected)
     {
         ReleaseNameParser.ParseGroup(title).Should().Be(expected);

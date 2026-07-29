@@ -80,6 +80,14 @@ public class LanguageTagExtractorTests
         LanguageTagExtractor.Extract(title).Languages.Should().BeEquivalentTo(["English"]);
     }
 
+    [Theory]
+    [InlineData("Russian.Doll.S02.1080p.NF.WEB-DL-NTb")]
+    [InlineData("Greek.S01.1080p.WEB.H264-GROUP")]
+    public void Extract_IgnoresLanguageWordsInTheShowNameOfASeasonPack(string title)
+    {
+        LanguageTagExtractor.Extract(title).Languages.Should().BeEquivalentTo(["English"]);
+    }
+
     [Fact]
     public void Parse_FillsLanguageFieldsOnParsedRelease()
     {

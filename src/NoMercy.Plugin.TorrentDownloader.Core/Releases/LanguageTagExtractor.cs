@@ -109,7 +109,7 @@ public static partial class LanguageTagExtractor
     public static LanguageTags Extract(string? title)
     {
         string text = title ?? string.Empty;
-        string scope = ScopeAfterEpisodeMarker(text);
+        string scope = ScopeAfterNameBoundary(text);
         List<string> languages = [];
 
         foreach (Match token in TokenPattern().Matches(scope))
@@ -130,9 +130,9 @@ public static partial class LanguageTagExtractor
         return new LanguageTags(languages, DualAudioPattern().IsMatch(scope));
     }
 
-    // Tags follow the episode marker; the show name precedes it. Scanning the whole title
-    // makes a show called "Greek" or "Russian Doll" report that language and then fail an
-    // English-required profile, so the episode is never grabbed.
-    private static string ScopeAfterEpisodeMarker(string text) =>
-        ReleaseNameParser.EpisodeMarkerIndex(text) is int index ? text[index..] : text;
+    // Tags follow the episode marker or season token; the show name precedes it. Scanning
+    // the whole title makes a show called "Greek" or "Russian Doll" report that language and
+    // then fail an English-required profile, so the episode (or season pack) is never grabbed.
+    private static string ScopeAfterNameBoundary(string text) =>
+        ReleaseNameParser.NameScopeBoundaryIndex(text) is int index ? text[index..] : text;
 }

@@ -19,12 +19,6 @@ public static partial class TitleMatcher
         "ZA",
     };
 
-    // Bounds the name scope on a season-pack title. ReleaseNameParser's season-pack
-    // pattern is not reusable here: it is private, and its public wrapper returns a
-    // season number rather than the index this needs to slice the scope.
-    [GeneratedRegex(@"\bs\d{1,2}\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
-    private static partial Regex SeasonTokenPattern();
-
     [GeneratedRegex(@"^(19|20)\d{2}$")]
     private static partial Regex YearPattern();
 
@@ -75,15 +69,8 @@ public static partial class TitleMatcher
         return GluedLeadingMatch(have, want);
     }
 
-    private static string ScopeBeforeMarker(string title)
-    {
-        int? markerIndex = ReleaseNameParser.EpisodeMarkerIndex(title);
-        if (markerIndex is int index)
-            return title[..index];
-
-        Match season = SeasonTokenPattern().Match(title);
-        return season.Success ? title[..season.Index] : title;
-    }
+    private static string ScopeBeforeMarker(string title) =>
+        ReleaseNameParser.NameScopeBoundaryIndex(title) is int index ? title[..index] : title;
 
     private static string[] Tokenize(string? text) =>
         TokenSeparatorPattern()

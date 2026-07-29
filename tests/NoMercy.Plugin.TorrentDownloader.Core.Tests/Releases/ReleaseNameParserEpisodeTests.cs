@@ -63,6 +63,20 @@ public class ReleaseNameParserEpisodeTests
         ReleaseNameParser.ParseSeasonPack("Show S03 E04 1080p").Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("Show S03 E04 1080p", 3, 4)]
+    [InlineData("Show S03.E04 1080p", 3, 4)]
+    [InlineData("Show S03_E04 1080p", 3, 4)]
+    [InlineData("Show S03-E04 1080p", 3, 4)]
+    public void ParseEpisode_AllowsASeparatorBetweenSeasonAndEpisode(
+        string title,
+        int season,
+        int episode
+    )
+    {
+        ReleaseNameParser.ParseEpisode(title).Should().Be(new EpisodeSlot(season, episode));
+    }
+
     [Fact]
     public void EpisodeMarkerIndex_PointsAtTheStartOfTheMarker()
     {
