@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
+
+using NoMercy.Plugin.TorrentDownloader.Core.Library;
+using NoMercy.Plugins.Abstractions;
+
+namespace NoMercy.Plugin.TorrentDownloader.Adapters;
+
+public sealed class PluginLibraryQueryAdapter(IPluginLibraryQuery library) : ILibraryQuery
+{
+    // The plugin's subject is episodic television, and the host models anime as its
+    // own library type. Both are shows with seasons and episodes here.
+    private static readonly string[] ShowLibraryTypes = ["tv", "anime"];
+
+    public async Task<IReadOnlyList<LibraryShow>> GetShowsAsync(CancellationToken ct)
+    {
+        IReadOnlyList<PluginLibrary> libraries = await library.GetLibrariesAsync(ct);
+        List<LibraryShow> shows = [];
+
+        foreach (PluginLibrary candidate in libraries)
+        {
+            if (!ShowLibraryTypes.Contains(candidate.Type, StringComparer.OrdinalIgnoreCase))
+                continue;
+
+            IReadOnlyList<PluginLibraryShow> found = await library.GetShowsAsync(candidate.Id, ct);
+            shows.AddRange(found.Select(ToShow));
+        }
+
+        return shows;
+    }
+
+    public async Task<IReadOnlyList<LibraryEpisode>> GetEpisodesAsync(int showId, CancellationToken ct)
+    {
+        IReadOnlyList<PluginLibraryEpisode> episodes = await library.GetEpisodesAsync(showId, ct);
+        return [.. episodes.Select(ToEpisode)];
+    }
+
+    public async Task<IReadOnlyList<LibraryFile>> GetFilesAsync(int showId, CancellationToken ct)
+    {
+        IReadOnlyList<PluginLibraryFile> files = await library.GetShowFilesAsync(showId, ct);
+        return [.. files.Select(ToFile)];
+    }
+
+    private static LibraryShow ToShow(PluginLibraryShow show) =>
+        new(
+            show.Id,
+            show.Title,
+            show.Year,
+            show.LibraryId,
+            show.Folder,
+            show.EpisodeCount,
+            show.HaveEpisodeCount
+        );
+
+    private static LibraryEpisode ToEpisode(PluginLibraryEpisode episode) =>
+        new(
+            episode.ShowId,
+            episode.SeasonNumber,
+            episode.EpisodeNumber,
+            episode.Title,
+            ToUtc(episode.AirDate),
+            episode.HasFile
+        );
+
+    private static LibraryFile ToFile(PluginLibraryFile file) =>
+        new(file.ShowId, file.SeasonNumber, file.EpisodeNumber, file.Path, file.Quality);
+
+    // The host's DateTime arrives with Kind Unspecified. Constructing a DateTimeOffset
+    // from it directly would apply the server's local offset and shift an air date by
+    // up to a day, which is exactly the comparison the daily-show path depends on.
+    private static DateTimeOffset? ToUtc(DateTime? value) =>
+        value is DateTime date
+            ? new DateTimeOffset(DateTime.SpecifyKind(date, DateTimeKind.Utc))
+            : null;
+}
