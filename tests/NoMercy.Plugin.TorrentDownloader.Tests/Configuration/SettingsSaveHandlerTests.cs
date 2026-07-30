@@ -65,6 +65,74 @@ public class SettingsSaveHandlerTests
         (await secrets.GetAsync("client:qBit:password", CancellationToken.None)).Should().Be("qbit-password");
     }
 
+    // The general form's data-loss case was covered; these two were not, and both mutants
+    // survived the whole suite: making the indexer branch drop every client, and the client
+    // branch drop every indexer, changed no test's result. Same hazard as the general form -
+    // a partial submission overwriting a section it never addressed - one section across.
+    [Fact]
+    public async Task HandleAsync_IndexerForm_LeavesEveryDownloadClientAndItsSecretIntact()
+    {
+        TorrentDownloaderSettings initial = new()
+        {
+            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" }],
+            Clients =
+            [
+                new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" },
+                new TorrentClientSettings { Name = "Deluge", Url = "https://deluge.local" },
+            ],
+        };
+        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
+            await SeededAsync(initial, ("client:qBit:password", "qbit-password"));
+
+        SaveSettingsRequest request = new()
+        {
+            IndexerName = "Prowlarr",
+            Name = "Prowlarr",
+            Url = "https://prowlarr.local:9696",
+        };
+
+        SaveSettingsOutcome outcome = await handler.HandleAsync(request, CancellationToken.None);
+
+        outcome.Succeeded.Should().BeTrue();
+        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
+        saved.Clients.Should().HaveCount(2);
+        saved.Clients.Should().Contain(client => client.Name == "qBit");
+        saved.Clients.Should().Contain(client => client.Name == "Deluge");
+        (await secrets.GetAsync("client:qBit:password", CancellationToken.None)).Should().Be("qbit-password");
+    }
+
+    [Fact]
+    public async Task HandleAsync_ClientForm_LeavesEveryIndexerAndItsSecretIntact()
+    {
+        TorrentDownloaderSettings initial = new()
+        {
+            Indexers =
+            [
+                new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" },
+                new IndexerSettings { Name = "Jackett", Url = "https://jackett.local" },
+            ],
+            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
+        };
+        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
+            await SeededAsync(initial, ("indexer:Prowlarr:apikey", "prowlarr-key"));
+
+        SaveSettingsRequest request = new()
+        {
+            ClientName = "qBit",
+            Name = "qBit",
+            Url = "https://qbit.local:8080",
+        };
+
+        SaveSettingsOutcome outcome = await handler.HandleAsync(request, CancellationToken.None);
+
+        outcome.Succeeded.Should().BeTrue();
+        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
+        saved.Indexers.Should().HaveCount(2);
+        saved.Indexers.Should().Contain(indexer => indexer.Name == "Prowlarr");
+        saved.Indexers.Should().Contain(indexer => indexer.Name == "Jackett");
+        (await secrets.GetAsync("indexer:Prowlarr:apikey", CancellationToken.None)).Should().Be("prowlarr-key");
+    }
+
     [Fact]
     public async Task HandleAsync_GeneralForm_UpdatesCronAndFolders()
     {
