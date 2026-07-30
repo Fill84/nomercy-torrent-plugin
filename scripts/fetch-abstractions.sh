@@ -33,13 +33,17 @@ if [ ! -d "$server" ]; then
     git clone --depth=1 --branch="${SERVER_BRANCH:-dev}" --filter=blob:none --no-checkout \
         https://github.com/NoMercy-Entertainment/nomercy-media-server.git "$server"
     git -C "$server" sparse-checkout init --cone
-    git -C "$server" sparse-checkout set src/NoMercy.Plugins.Abstractions src/NoMercy.Events
-    git -C "$server" fetch --depth=1 origin "$ref"
-    git -C "$server" checkout -q FETCH_HEAD
-else
-    git -C "$server" fetch --depth=1 origin "$ref"
-    git -C "$server" reset --hard FETCH_HEAD
 fi
+
+# Applied on every run, not only on the initial clone. Setting it once meant adding a project
+# to the list silently did nothing on a checkout that already existed - the pack then failed
+# with "project file does not exist" pointing at a path the sparse set had never been told to
+# materialise, which is a confusing way to learn that this script is not idempotent.
+git -C "$server" sparse-checkout set \
+    src/NoMercy.Plugins.Abstractions src/NoMercy.Events src/NoMercy.Plugins.Mvc
+
+git -C "$server" fetch --depth=1 origin "$ref"
+git -C "$server" reset --hard FETCH_HEAD
 
 mkdir -p "$feed"
 
@@ -48,6 +52,13 @@ mkdir -p "$feed"
 "$dotnet" pack "$server/src/NoMercy.Events/NoMercy.Events.csproj" -c Release -o "$feed"
 
 "$dotnet" pack "$server/src/NoMercy.Plugins.Abstractions/NoMercy.Plugins.Abstractions.csproj" -c Release -o "$feed"
+
+# Holds PluginControllerBase, which a plugin's REST controllers inherit. Its own assembly
+# rather than a type in Abstractions on purpose: the base class must keep one identity across
+# the load-context boundary, so it lives in the host's shared set, and putting it in
+# Abstractions would force a Microsoft.AspNetCore.App FrameworkReference on every plugin -
+# including the ones that never serve a request.
+"$dotnet" pack "$server/src/NoMercy.Plugins.Mvc/NoMercy.Plugins.Mvc.csproj" -c Release -o "$feed"
 
 find "$feed" -maxdepth 1 -name '*.nupkg' -print
 

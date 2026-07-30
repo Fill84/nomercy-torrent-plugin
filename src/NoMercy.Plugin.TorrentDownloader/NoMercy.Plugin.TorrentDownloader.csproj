@@ -31,6 +31,22 @@
             resolving the assembly at run time, and the tests would fail to load.
         -->
         <PackageReference Include="NoMercy.Plugins.Abstractions" Version="*" />
+
+        <!--
+            PluginControllerBase, which this plugin's REST controllers inherit. Also
+            host-owned and also in the shared set, for the same load-context reason: a
+            base class the host resolves must have exactly one identity.
+        -->
+        <PackageReference Include="NoMercy.Plugins.Mvc" Version="*" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <!--
+            Required by NoMercy.Plugins.Mvc, which derives from ControllerBase. The server is
+            an ASP.NET Core app and provides this at run time, so it is a FrameworkReference
+            rather than anything shipped beside the plugin.
+        -->
+        <FrameworkReference Include="Microsoft.AspNetCore.App" />
     </ItemGroup>
 
     <ItemGroup>
