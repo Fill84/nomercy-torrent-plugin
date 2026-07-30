@@ -1656,6 +1656,9 @@ public class IndexerPacerTests
         pacer.IsParked.Should().BeFalse();
     }
 
+    // Pins a guarantee this class relies on rather than provides: SemaphoreSlim's own constructor
+    // rejects a non-positive maxCount, so no explicit guard is needed here. The test exists so that
+    // clamping the cap instead of passing it through would be caught.
     [Fact]
     public void Constructor_RejectsAConcurrencyCapOfZero()
     {
@@ -1716,12 +1719,7 @@ public sealed class IndexerPacer(
     private static readonly TimeSpan BaseBackoff = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(2);
 
-    // maxConcurrency of zero would make SemaphoreSlim(0, 0) block every call forever, so a
-    // misconfiguration would silently wedge this indexer rather than fail loudly.
-    private readonly SemaphoreSlim _slots = new(
-        Positive(maxConcurrency, nameof(maxConcurrency)),
-        Positive(maxConcurrency, nameof(maxConcurrency))
-    );
+    private readonly SemaphoreSlim _slots = new(maxConcurrency, maxConcurrency);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _state = new();
 
@@ -1781,11 +1779,6 @@ public sealed class IndexerPacer(
             _gate.Release();
         }
     }
-
-    private static int Positive(int value, string name) =>
-        value > 0
-            ? value
-            : throw new ArgumentOutOfRangeException(name, value, "must be greater than zero");
 
     // Breaker state is touched by every concurrent caller up to the slot cap, so it is guarded.
     // The lock is never held across an await: the backoff is computed from a snapshot and
