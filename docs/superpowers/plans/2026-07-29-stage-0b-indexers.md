@@ -15,7 +15,14 @@ Identical to Stage 0a, repeated so this plan stands alone.
 - **Target framework `net10.0`.**
 - **Explicit types, never `var`.** Hard rule.
 - **No useless comments.** Default zero — comment only a constraint a reader could not infer.
-- **Every `.cs` file starts with the project licence header**, at line 1, followed by a blank line, then the `using` block. Copy it verbatim from any existing source file — it ends with `// Created by Phillippe Pelzer https://github.com/Fill84` and a rule line. A new file without it is incomplete.
+- **Every `.cs` file starts with this two-line header**, at line 1, then a blank line, then the `using` block:
+
+  ```csharp
+  // SPDX-License-Identifier: MIT
+  // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
+  ```
+
+  Do **not** use the NoMercy MediaServer proprietary header here. It asserts three things that are false in this repo: that the file is part of NoMercy MediaServer, that NoMercy Entertainment holds the copyright, and that distribution and commercial use are prohibited — the last of which contradicts this repo's MIT `LICENSE`. That header belongs only on files contributed upstream to `nomercy-media-server`.
 - **`[GeneratedRegex]` for every constant pattern**, `partial` class, `partial static` method. Case-insensitive patterns carry `RegexOptions.IgnoreCase | RegexOptions.CultureInvariant`. Runtime-constructed regexes over user-supplied patterns go through `TermMatcher`.
 - **`Core` keeps zero reference to `NoMercy.Plugins.Abstractions`, `NoMercy.Events`, or any NoMercy assembly.**
 - **Parsers do no I/O.** `Core.Indexers.Parsing` is pure: no `HttpClient`, no `File`, no `DateTime.Now`. Only the client classes in `Core.Indexers` hold an `HttpClient`, and it is **injected**, never constructed — the plugin shell supplies the host's allowlisted client.

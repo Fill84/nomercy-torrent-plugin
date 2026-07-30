@@ -13,7 +13,14 @@
 - **Target framework `net10.0`.** Matches the media server's `Directory.Build.props`.
 - **Explicit types, never `var`.** Hard rule, carried from the host repo's conventions.
 - **No useless comments.** Default is zero. Comment only a hidden constraint a reader could not infer from the code. Rationale belongs in the commit message.
-- **Every `.cs` file starts with the project licence header**, at line 1, followed by a blank line, then the `using` block. Copy it verbatim from any existing source file — it ends with `// Created by Phillippe Pelzer https://github.com/Fill84` and a rule line. A new file without it is incomplete.
+- **Every `.cs` file starts with this two-line header**, at line 1, then a blank line, then the `using` block:
+
+  ```csharp
+  // SPDX-License-Identifier: MIT
+  // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
+  ```
+
+  Do **not** use the NoMercy MediaServer proprietary header here. It asserts three things that are false in this repo: that the file is part of NoMercy MediaServer, that NoMercy Entertainment holds the copyright, and that distribution and commercial use are prohibited — the last of which contradicts this repo's MIT `LICENSE`. That header belongs only on files contributed upstream to `nomercy-media-server`.
 - **`[GeneratedRegex]` for every constant pattern.** Requires the containing class and the method to be `partial` and the method `static`.
 - **Every case-insensitive pattern carries `RegexOptions.IgnoreCase | RegexOptions.CultureInvariant`.** The two cases differ and the distinction is worth knowing:
   - **Runtime-constructed regexes** — `Regex.IsMatch(input, pattern, options)` and `new Regex(...)`, used in Tasks 8 and 9 for user-supplied term patterns — resolve casing against the *ambient culture*. `CultureInvariant` is **required** there. Measured on `net10.0`: under `tr-TR`, `"SILO SEASON 3 EPISODE 4"` does not match `season\s*(\d{1,2})\s*episode\s*(\d{1,3})` with `IgnoreCase` alone, because uppercase `I` folds to dotless `ı`. Adding `CultureInvariant` makes it match.
