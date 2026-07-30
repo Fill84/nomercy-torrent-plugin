@@ -32,14 +32,19 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
                     );
                     harvested[index] = [.. found];
                 }
-                catch (IndexerException error)
+                catch (Exception error) when (error is not OperationCanceledException || !ct.IsCancellationRequested)
                 {
                     harvested[index] = [];
+                    string reason = error is IndexerException
+                        ? error.Message
+                        : $"{error.GetType().Name}: {error.Message}";
+
                     lock (failures)
                     {
-                        failures.Add(new IndexerFailure(paced.Indexer.Name, error.Message));
+                        failures.Add(new IndexerFailure(paced.Indexer.Name, reason));
                     }
-                    log?.Invoke($"{paced.Indexer.Name}: {error.Message}");
+
+                    log?.Invoke($"{paced.Indexer.Name}: {reason}");
                 }
             })
         );
@@ -49,21 +54,53 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
 
     private static IReadOnlyList<ReleaseInfo> Deduplicate(IEnumerable<List<ReleaseInfo>> harvested)
     {
-        Dictionary<string, ReleaseInfo> best = [];
+        Dictionary<string, int> slots = [];
+        List<ReleaseInfo> best = [];
 
         foreach (ReleaseInfo release in harvested.SelectMany(list => list))
         {
-            string key = release.InfoHash is string hash
-                ? "h:" + hash.ToLowerInvariant()
-                : "t:" + TitleMatcher.Normalize(release.Title);
+            string titleKey = "t:" + TitleMatcher.Normalize(release.Title);
+            string? hashKey = release.InfoHash is string hash ? "h:" + hash.ToLowerInvariant() : null;
 
-            if (
-                !best.TryGetValue(key, out ReleaseInfo? existing)
-                || release.IndexerPriority > existing.IndexerPriority
-            )
-                best[key] = release;
+            int? existingSlot = null;
+
+            if (hashKey is not null && slots.TryGetValue(hashKey, out int fromHash))
+                existingSlot = fromHash;
+            else if (slots.TryGetValue(titleKey, out int fromTitle))
+                existingSlot = fromTitle;
+
+            int slot;
+
+            if (existingSlot is int found)
+            {
+                slot = found;
+                if (Prefer(release, best[slot]))
+                    best[slot] = release;
+            }
+            else
+            {
+                slot = best.Count;
+                best.Add(release);
+            }
+
+            slots[titleKey] = slot;
+            if (hashKey is not null)
+                slots[hashKey] = slot;
         }
 
-        return [.. best.Values];
+        return best;
     }
+
+    private static bool Prefer(ReleaseInfo candidate, ReleaseInfo existing)
+    {
+        bool candidateGrabbable = IsGrabbable(candidate);
+        bool existingGrabbable = IsGrabbable(existing);
+
+        return candidateGrabbable != existingGrabbable
+            ? candidateGrabbable
+            : candidate.IndexerPriority > existing.IndexerPriority;
+    }
+
+    private static bool IsGrabbable(ReleaseInfo release) =>
+        release.MagnetUri is not null || release.DownloadUrl is not null;
 }
