@@ -114,4 +114,18 @@ public class TorznabIndexerTests
         (await act.Should().ThrowAsync<IndexerException>()).And.Message.Should()
             .NotContain("SECRETKEY");
     }
+
+    [Fact]
+    public async Task SearchAsync_ThrowsIndexerExceptionOnAMalformedCharset()
+    {
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Returning(
+            Empty,
+            contentType: "text/xml; charset=utf8"
+        );
+
+        Func<Task> act = () =>
+            Indexer(handler).SearchAsync(new SearchQuery("Silo"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<IndexerException>();
+    }
 }

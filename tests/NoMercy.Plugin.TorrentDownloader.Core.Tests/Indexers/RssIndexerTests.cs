@@ -134,6 +134,20 @@ public class RssIndexerTests
     }
 
     [Fact]
+    public async Task SearchAsync_ThrowsIndexerExceptionOnAMalformedCharset()
+    {
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Returning(
+            Fixtures.Text("scnsrc-feed.xml"),
+            contentType: "text/xml; charset=utf8"
+        );
+
+        Func<Task> act = () =>
+            Indexer(handler).SearchAsync(new SearchQuery("Silo"), CancellationToken.None);
+
+        await act.Should().ThrowAsync<IndexerException>();
+    }
+
+    [Fact]
     public async Task SearchAsync_LetsCallerCancellationPropagate()
     {
         using CancellationTokenSource source = new();

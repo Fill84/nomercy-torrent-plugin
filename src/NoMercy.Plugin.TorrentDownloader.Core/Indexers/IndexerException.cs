@@ -8,6 +8,11 @@ public class IndexerException : Exception
     public IndexerException(string message)
         : base(message) { }
 
+    public IndexerException(string message, int statusCode)
+        : base(message) => StatusCode = statusCode;
+
     public IndexerException(string message, Exception inner)
         : base(message, inner) { }
+
+    public int? StatusCode { get; }
 }
