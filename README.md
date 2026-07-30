@@ -8,8 +8,9 @@ for them, picks one release per episode against a quality/language/group profile
 torrent client, tracks the download, and hands the finished file to the server's import pipeline.
 Downloads can also be added and removed by hand, by magnet link or `.torrent` file.
 
-> **Status: in development.** The domain core is built and tested. The plugin shell is blocked on
-> upstream platform work — see [What it is waiting on](#what-it-is-waiting-on).
+> **Status: in development.** The domain core and the indexer layer are built and tested. The
+> plugin shell — the part that actually loads into the server — is next, and no longer blocked:
+> see [Upstream platform work](#upstream-platform-work).
 
 ## What works today
 
@@ -23,7 +24,9 @@ server at all. It builds and tests standalone.
 | Release profiles | quality ladder with a cutoff, language profile including dual-audio, preferred and blocked groups, term rules, size and seeder bounds |
 | Filtering | hard accept/reject, every rejection carrying a reason a user can act on |
 | Scoring | soft ranking where a quality step outranks every other signal combined |
-| Indexers | `IIndexer` contract, RSS and scene-feed reading (in progress) |
+| Indexers | `IIndexer` contract, RSS and scene-feed reading, Torznab for Jackett and Prowlarr |
+| Rate limiting | per-indexer minimum interval, concurrency cap, exponential backoff on a rate limit, circuit breaker that parks a failing indexer |
+| Aggregation | fan-out across indexers, one failing indexer never takes the search down, dedupe by infohash and title preferring the copy that can actually be downloaded |
 
 ## Design
 
@@ -62,21 +65,23 @@ dotnet test
 `Core` and its tests have no external dependency. The plugin shell, once it exists, will need the
 server's `NoMercy.Plugins.Abstractions` — see the radiostation plugin's CI for the pattern.
 
-## What it is waiting on
+## Upstream platform work
 
-The plugin shell depends on platform capabilities the media server does not have yet. These are
-filed upstream:
+The plugin shell needed twelve platform capabilities the media server did not have. They were filed
+as [issues #15–#25](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues) and all
+shipped by **v0.1.446** — consent granting, the Phase 2 backend surface, a network allowlist that
+can express user-configured hosts, a read-only library contract, capability-gated library writes,
+events, a secret store, navigation, UI vocabulary, cron, and the UI SDK.
 
-| Issue | Blocks |
-| --- | --- |
-| [#15](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/15) | First run — an elevated plugin cannot be enabled, because nothing calls `GrantConsent` |
-| [#16](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/16) | Everything — the Phase 2 backend surface is unbuilt |
-| [#17](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/17) | Grabbing — the static network allowlist cannot express user-configured hosts |
-| [#18](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/18) | Missing-episode detection — no sanctioned way to read the library |
-| [#19](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/19) | Quality upgrades — no capability gates writing or deleting in a user's library |
-| [#20](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/20)–[#25](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/25) | Events, secrets, nav, UI vocabulary, cron, and the UI SDK |
+Two of those decisions are worth recording, because they shaped this plugin:
 
-None of them block `Core`, which is why it was built first.
+- The library is read through a **narrow read-only contract**, not the server's EF `MediaContext`.
+  Sharing the EF model would have made it a public ABI, and every migration a plugin break.
+- Secrets go through the server's secret store and its data protector. **Never an environment
+  variable, never plaintext on disk.**
+
+`Core` deliberately depends on none of it, which is why it was built first and why its tests run
+without cloning the server.
 
 ## Prior art
 
