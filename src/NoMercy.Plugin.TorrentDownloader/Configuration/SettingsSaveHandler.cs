@@ -4,26 +4,38 @@
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 
 // SettingsView renders three kinds of form - general, one per indexer, one per client -
-// and each posts here as its own SaveSettings call. SaveAsync treats whatever LoadedSettings
-// it is handed as the complete world: it writes the whole settings object to configuration,
-// and it deletes every stored secret whose entry is not present in what it was handed. A
-// form only ever carries part of that world, so this class' entire job is to load the
+// and each posts to its own entry point (see TorrentDownloaderSettingsController): the
+// general form to HandleGeneralAsync, an indexer form at render index i to
+// HandleIndexerAsync(i, ...), a client form at render index i to HandleClientAsync(i, ...).
+// A form only ever carries part of the settings world, so each method's job is to load the
 // current one, apply just the part this submission addresses, and hand SaveAsync the
 // merged result - never the submitted fields alone. Reconstructing settings from the
 // submitted fields and saving that directly would wipe every indexer, every client and
 // every stored credential the moment the owner saves the general form.
+//
+// The index, not the submitted name, is what identifies the row: the name is the value
+// the owner is editing, so a rename means the submitted name and the entry's current name
+// legitimately differ. The index is stable across that edit, which is also what makes the
+// old name recoverable below for the secret carry-forward, rather than by accident.
 public sealed class SettingsSaveHandler(SettingsGateway gateway)
 {
-    public async Task<SaveSettingsOutcome> HandleAsync(SaveSettingsRequest request, CancellationToken ct = default)
+    public async Task<SaveSettingsOutcome> HandleGeneralAsync(SaveSettingsRequest request, CancellationToken ct = default) =>
+        await PersistIfSucceededAsync(ApplyGeneral(await gateway.LoadAsync(ct), request), ct);
+
+    public async Task<SaveSettingsOutcome> HandleIndexerAsync(int index, SaveSettingsRequest request, CancellationToken ct = default)
     {
         LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyIndexer(current, index, request), ct);
+    }
 
-        SaveSettingsOutcome outcome = request.IndexerName is not null
-            ? ApplyIndexer(current, request)
-            : request.ClientName is not null
-                ? ApplyClient(current, request)
-                : ApplyGeneral(current, request);
+    public async Task<SaveSettingsOutcome> HandleClientAsync(int index, SaveSettingsRequest request, CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyClient(current, index, request), ct);
+    }
 
+    private async Task<SaveSettingsOutcome> PersistIfSucceededAsync(SaveSettingsOutcome outcome, CancellationToken ct)
+    {
         if (!outcome.Succeeded)
         {
             return outcome;
@@ -72,21 +84,20 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway)
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
     }
 
-    // A rename (name != IndexerName, the identity the form was built with) is honoured
-    // rather than refused: the entry moves to a new key under SaveAsync's orphan sweep
-    // because the key derives from the name, so the one deliberate step here is carrying
-    // the secret forward to the NEW name whenever the owner did not also submit a new one -
-    // otherwise the old key falls out of the live set and SaveAsync deletes it, silently
-    // losing the credential on what looked like an ordinary edit.
-    private static SaveSettingsOutcome ApplyIndexer(LoadedSettings current, SaveSettingsRequest request)
+    // A rename (name != the entry's current name) is honoured rather than refused: the
+    // entry moves to a new key under SaveAsync's orphan sweep because the key derives from
+    // the name, so the one deliberate step here is carrying the secret forward to the NEW
+    // name whenever the owner did not also submit a new one - otherwise the old key falls
+    // out of the live set and SaveAsync deletes it, silently losing the credential on what
+    // looked like an ordinary edit.
+    private static SaveSettingsOutcome ApplyIndexer(LoadedSettings current, int index, SaveSettingsRequest request)
     {
-        string oldName = request.IndexerName!;
-        int index = current.Settings.Indexers.FindIndex(indexer => indexer.Name == oldName);
-
-        if (index < 0)
+        if (index < 0 || index >= current.Settings.Indexers.Count)
         {
-            return SaveSettingsOutcome.Failure($"Indexer '{oldName}' was not found.");
+            return SaveSettingsOutcome.Failure($"No indexer at index {index}.");
         }
+
+        string oldName = current.Settings.Indexers[index].Name;
 
         if (!IsAbsoluteUrl(request.Url))
         {
@@ -123,15 +134,14 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway)
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, indexerSecrets, []));
     }
 
-    private static SaveSettingsOutcome ApplyClient(LoadedSettings current, SaveSettingsRequest request)
+    private static SaveSettingsOutcome ApplyClient(LoadedSettings current, int index, SaveSettingsRequest request)
     {
-        string oldName = request.ClientName!;
-        int index = current.Settings.Clients.FindIndex(client => client.Name == oldName);
-
-        if (index < 0)
+        if (index < 0 || index >= current.Settings.Clients.Count)
         {
-            return SaveSettingsOutcome.Failure($"Download client '{oldName}' was not found.");
+            return SaveSettingsOutcome.Failure($"No download client at index {index}.");
         }
+
+        string oldName = current.Settings.Clients[index].Name;
 
         if (!IsAbsoluteUrl(request.Url))
         {

@@ -11,10 +11,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 
 // PluginRouteConvention prefixes every route below with api/plugins/{this plugin's id},
 // taken from the assembly the controller came from - not something this class can see or
-// choose. [HttpPost(SettingsView.SaveSettingsMethod)] is the other half of the agreement:
-// SettingsView's forms all call CallPlugin(SettingsView.SaveSettingsMethod, ...), so the
-// same constant is what makes that method string resolve to this action instead of two
-// literals that could quietly drift apart.
+// choose. Each [HttpPost] below is the other half of an agreement with SettingsView: its
+// general form calls CallPlugin(SettingsView.SaveSettingsMethod), and its indexer/client
+// forms call CallPlugin($"{SaveIndexerMethod}/{index}") / CallPlugin($"{SaveClientMethod}
+// /{index}") - the client interpolates that method straight into the request path and never
+// forwards an action intent's payload, so the entry's index has to travel in the route
+// rather than the body. The shared constants are what keep the method strings SettingsView
+// builds and the routes below from drifting into two different literals.
 //
 // IPluginManager is the sanctioned way to reach the live plugin: it is registered as a
 // singleton for the whole host by PluginServiceCollectionExtensions.AddPluginSystem, and
@@ -28,14 +31,25 @@ namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 public sealed class TorrentDownloaderSettingsController(IPluginManager pluginManager) : PluginControllerBase
 {
     [HttpPost(SettingsView.SaveSettingsMethod)]
-    public async Task<IActionResult> SaveSettings([FromBody] SaveSettingsRequest request, CancellationToken ct)
+    public Task<IActionResult> SaveSettings([FromBody] SaveSettingsRequest request, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.SaveSettingsAsync(request, ct));
+
+    [HttpPost(SettingsView.SaveIndexerRouteTemplate)]
+    public Task<IActionResult> SaveIndexer(int index, [FromBody] SaveSettingsRequest request, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.SaveIndexerAsync(index, request, ct));
+
+    [HttpPost(SettingsView.SaveClientRouteTemplate)]
+    public Task<IActionResult> SaveClient(int index, [FromBody] SaveSettingsRequest request, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.SaveClientAsync(index, request, ct));
+
+    private async Task<IActionResult> RespondAsync(Func<TorrentDownloaderPlugin, Task<SaveSettingsOutcome>> save)
     {
         if (pluginManager.GetPluginInstance(PluginId) is not TorrentDownloaderPlugin plugin)
         {
             return NotFound();
         }
 
-        SaveSettingsOutcome outcome = await plugin.SaveSettingsAsync(request, ct);
+        SaveSettingsOutcome outcome = await save(plugin);
 
         return outcome.Succeeded
             ? Status<object?>(null, message: "Settings saved.")

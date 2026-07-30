@@ -3,20 +3,19 @@
 
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 
-// What SaveSettings actually receives: one of three forms, distinguished by which
-// identity field is present. IndexerName/ClientName is never a field the owner
-// edits - it is the action payload SettingsView attaches to a form so the handler
-// knows which existing entry (if any) this submission is about, separate from the
-// "name" field the owner CAN edit and which may therefore differ from it (a rename).
+// What one of the three forms actually posts. Which entry (if any) this submission is
+// about is no longer carried in here - a PluginForm's submit discards whatever payload
+// the action intent was built with, so an indexer/client identity field placed on this
+// request would never arrive (that was the defect). The entry's identity now lives in
+// the URL instead - SaveIndexer/{index} and SaveClient/{index} - which is the one part
+// of the request a form's submit cannot strip, so SettingsSaveHandler's per-entry
+// methods take it as a parameter rather than reading it off this type.
 //
 // Nullable throughout rather than defaulted, because a missing indexer/client field
 // still needs to read as "not supplied" so the merge can fall back to the entry's
 // current value - only the general form's own fields are always present together.
 public sealed class SaveSettingsRequest
 {
-    public string? IndexerName { get; init; }
-    public string? ClientName { get; init; }
-
     // General form.
     public string? TransfersCron { get; init; }
     public string? FeedCron { get; init; }

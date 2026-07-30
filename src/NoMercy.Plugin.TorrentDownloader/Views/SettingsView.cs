@@ -15,11 +15,27 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 public static class SettingsView
 {
     // Internal rather than private so TorrentDownloaderSettingsController's [HttpPost] route
-    // attribute and this view's CallPlugin payload read the same literal instead of two
-    // copies that could drift apart - the host combines the controller's route with the
-    // plugin's own prefix, so this string is what makes CallPlugin("SaveSettings", ...)
-    // actually resolve to something.
+    // attributes and this view's CallPlugin calls read the same literals instead of copies
+    // that could drift apart - the host combines a controller's route with the plugin's own
+    // prefix, so these strings are what make CallPlugin(...) actually resolve to something.
+    //
+    // The client interpolates CallPlugin's method straight into the request path
+    // (plugins/{pluginId}/{method}) and posts the form's own fields as the body, discarding
+    // anything else the action intent carried - a PluginForm's submit never forwards the
+    // intent's payload. So an indexer/client form's identity cannot ride in the payload (that
+    // was the defect); it rides in the method string instead, as "SaveIndexer/{index}" /
+    // "SaveClient/{index}", which is why SaveIndexerMethod/SaveClientMethod are the shared
+    // route stems rather than full method names.
     internal const string SaveSettingsMethod = "SaveSettings";
+    internal const string SaveIndexerMethod = "SaveIndexer";
+    internal const string SaveClientMethod = "SaveClient";
+
+    // Route templates the controller attaches its [HttpPost] to. Built from the same method
+    // constants above at compile time, so the "{method}/{index}" shape used when building a
+    // per-entry action and the "{method}/{index:int}" route the controller listens on cannot
+    // drift into two different stems.
+    internal const string SaveIndexerRouteTemplate = SaveIndexerMethod + "/{index:int}";
+    internal const string SaveClientRouteTemplate = SaveClientMethod + "/{index:int}";
 
     private const string SaveLabel = "Save";
 
@@ -137,7 +153,7 @@ public static class SettingsView
         return PluginViews.Form(
             $"settings-indexer-{index}-form",
             SaveLabel,
-            PluginActionIntent.CallPlugin(SaveSettingsMethod, new Dictionary<string, object?> { ["indexerName"] = indexer.Name }),
+            PluginActionIntent.CallPlugin($"{SaveIndexerMethod}/{index}"),
             fields
         );
     }
@@ -159,7 +175,7 @@ public static class SettingsView
         return PluginViews.Form(
             $"settings-client-{index}-form",
             SaveLabel,
-            PluginActionIntent.CallPlugin(SaveSettingsMethod, new Dictionary<string, object?> { ["clientName"] = client.Name }),
+            PluginActionIntent.CallPlugin($"{SaveClientMethod}/{index}"),
             fields
         );
     }

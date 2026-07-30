@@ -62,17 +62,27 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     // The controller's only way in: it resolves this plugin through IPluginManager (see
     // TorrentDownloaderSettingsController), which hands back the live instance rather than a
-    // fresh one, and this is the one member on it a REST call is allowed to reach. Guarded the
-    // same way GetViewAsync is - a request racing Dispose gets a clean failure instead of an
-    // exception thrown into ASP.NET Core's pipeline from a plugin the host is mid-teardown on.
-    public Task<SaveSettingsOutcome> SaveSettingsAsync(SaveSettingsRequest request, CancellationToken ct = default)
+    // fresh one, and these are the three members on it a REST call is allowed to reach - one
+    // per entry point the controller exposes. Each is guarded the same way GetViewAsync is -
+    // a request racing Dispose gets a clean failure instead of an exception thrown into
+    // ASP.NET Core's pipeline from a plugin the host is mid-teardown on.
+    public Task<SaveSettingsOutcome> SaveSettingsAsync(SaveSettingsRequest request, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleGeneralAsync(request, ct));
+
+    public Task<SaveSettingsOutcome> SaveIndexerAsync(int index, SaveSettingsRequest request, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleIndexerAsync(index, request, ct));
+
+    public Task<SaveSettingsOutcome> SaveClientAsync(int index, SaveSettingsRequest request, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleClientAsync(index, request, ct));
+
+    private Task<SaveSettingsOutcome> SaveAsync(Func<SettingsSaveHandler, Task<SaveSettingsOutcome>> handle)
     {
         if (_disposed)
         {
             return Task.FromResult(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
         }
 
-        return new SettingsSaveHandler(SettingsGateway).HandleAsync(request, ct);
+        return handle(new SettingsSaveHandler(SettingsGateway));
     }
 
     // The single legacy cadence a host that reads CronExpression instead of Jobs still

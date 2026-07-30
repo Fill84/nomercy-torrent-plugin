@@ -242,4 +242,67 @@ public class SettingsViewTests
         Flatten(view.Components!).Should().Contain(component => component.Component == PluginComponentType.EmptyState);
         AllFormFields(view.Components!).Should().NotContain(field => field.Name == "apiKey");
     }
+
+    // The general form's action carries a method the client can resolve without help: no
+    // identifying field, no payload of its own.
+    [Fact]
+    public void Build_GeneralFormsActionIsPlainSaveSettingsWithNoPayload()
+    {
+        TorrentDownloaderSettings settings = new();
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        PluginComponent form = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "settings-general-form").Which;
+        form.Action!.Payload["method"].Should().Be("SaveSettings");
+        form.Action.Payload["payload"].Should().BeNull();
+    }
+
+    // The fix in one assertion: an indexer/client form's identity has to survive the
+    // client's PluginForm, which discards the intent's payload on submit and posts only
+    // the method plus the form's own field values. Putting the render index in the method
+    // string itself - not in a payload dictionary - is what a PluginForm submit cannot
+    // strip away.
+    [Fact]
+    public void Build_IndexerFormsActionEncodesTheEntrysRenderIndexInTheMethodNotThePayload()
+    {
+        TorrentDownloaderSettings settings = new()
+        {
+            Indexers = [new IndexerSettings { Name = "Prowlarr" }, new IndexerSettings { Name = "Jackett" }],
+        };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        List<PluginComponent> forms =
+        [
+            .. Flatten(view.Components!).Where(component => component.Id.StartsWith("settings-indexer-", StringComparison.Ordinal)),
+        ];
+        forms.Should().HaveCount(2);
+        for (int i = 0; i < forms.Count; i++)
+        {
+            forms[i].Action!.Payload["method"].Should().Be($"SaveIndexer/{i}");
+            forms[i].Action!.Payload["payload"].Should().BeNull();
+        }
+    }
+
+    [Fact]
+    public void Build_ClientFormsActionEncodesTheEntrysRenderIndexInTheMethodNotThePayload()
+    {
+        TorrentDownloaderSettings settings = new()
+        {
+            Clients = [new TorrentClientSettings { Name = "qBit" }, new TorrentClientSettings { Name = "Transmission" }],
+        };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        List<PluginComponent> forms =
+        [
+            .. Flatten(view.Components!).Where(component => component.Id.StartsWith("settings-client-", StringComparison.Ordinal)),
+        ];
+        forms.Should().HaveCount(2);
+        for (int i = 0; i < forms.Count; i++)
+        {
+            forms[i].Action!.Payload["method"].Should().Be($"SaveClient/{i}");
+            forms[i].Action!.Payload["payload"].Should().BeNull();
+        }
+    }
 }
