@@ -681,6 +681,33 @@ the mechanism for #18.
 
 ---
 
+## 13b. Platform update — 2026-07-30, server v0.1.446: all twelve issues closed
+
+**Every filed issue is now closed, including the four §13a listed as outstanding** — #16 the Phase 2
+backend surface, #22 the nav section vocabulary, #23 the UI vocabulary additions, #25 the Phase 3
+contract and SDK, and #14 the shared-assembly seam.
+
+So §13's dependency table blocks nothing. Stage 1 (the shell), Stage 2 (REST and WS) and Stage 3
+(the dashboard panel) are all viable, and §14's build order no longer has a gated column.
+
+Two consequences worth stating rather than leaving implicit:
+
+- **Stage 4 is no longer last.** It was ordered last because upgrade-replace needed a capability
+  that did not exist. `IPluginLibraryWriter.RecycleAsync` now exists (see §13a), so the ordering
+  between it and the UI work is a free choice rather than a dependency.
+- **The UI vocabulary additions requested in #23 — table, progress, badge, file field, checkbox,
+  destructive-confirm — landed.** §12.4 argued for asking rather than reaching for the webview
+  escape hatch. Read the shipped vocabulary before designing the panel; it will name things
+  differently from that section's wish list.
+
+The one thing still unwritten is not a platform gap. A third-party plugin author has no written
+statement that a plugin is their own work under their own licence, and that referencing
+`NoMercy.Plugins.Abstractions` does not change that. Linking against a source-available library does
+not transfer copyright, but nobody should have to infer that from first principles — this repo's own
+licence header got it wrong for exactly that reason (§13c). It needs a sentence in the plugin docs.
+
+---
+
 ## 13a. Platform update — 2026-07-30, server v0.1.444
 
 **Seven of the eleven filed issues are closed, and the sections above are now partly out of date.**
@@ -778,6 +805,23 @@ Before starting Stage 1, read the actual shipped contract rather than assuming i
 in §5.3 — `ILibraryQuery` was written as a guess at what the platform would expose, and the real
 `IPluginLibraryQuery` will differ in naming and probably in shape. The port exists precisely so that
 mismatch costs one adapter file.
+
+---
+
+## 13c. Licence header — corrected 2026-07-30
+
+The NoMercy MediaServer proprietary header was briefly stamped on every `.cs` file here and has been
+removed. It asserted three things that are false in this repo: that the file is part of NoMercy
+MediaServer, that NoMercy Entertainment holds the copyright, and that distribution and commercial
+use are prohibited — the last contradicting this repo's MIT `LICENSE`. Two conflicting licence
+statements in one tree is worse than either alone, because the ambiguity gets resolved
+unpredictably later and not necessarily in the author's favour.
+
+Every `.cs` file now carries two lines: `SPDX-License-Identifier: MIT` and a copyright line naming
+the author. That keeps authorship on each file, which was the point, without claiming anything untrue.
+
+The proprietary header belongs only on files contributed upstream to `nomercy-media-server`, where
+NoMercy does hold the copyright.
 
 ---
 
