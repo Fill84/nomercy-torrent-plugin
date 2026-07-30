@@ -150,22 +150,40 @@ public interface ILibraryQuery
     Task<IReadOnlyList<LibraryShow>> GetShowsAsync(CancellationToken ct);
     Task<IReadOnlyList<LibraryEpisode>> GetEpisodesAsync(int showId, CancellationToken ct);
     Task<IReadOnlyList<LibraryFile>> GetFilesAsync(int showId, CancellationToken ct);
-    Task<string?> GetShowFolderAsync(int showId, CancellationToken ct);
 }
 ```
 
 `LibraryShow`, `LibraryEpisode` and `LibraryFile` are plugin-owned DTOs carrying only what the engine
 needs: identifiers, titles, season/episode numbers, air dates, file paths and resolved quality.
 
-**The implementation is deliberately not decided inside `Core`.** The shell supplies it. The intended
-implementation is a narrow read-only query contract exposed by the server in
-`NoMercy.Plugins.Abstractions` (upstream issue #18). A REST-backed adapter against the server's own API
-is the fallback if that contract is slow to land.
+**The implementation is deliberately not decided inside `Core`.** The shell supplies it. `Core` keeps
+its own port so it stays free of any NoMercy reference and its tests need no server clone.
 
 Making `MediaContext` a shared assembly was considered and **rejected**: it would turn the EF model
 into public plugin ABI, so every migration becomes a potential plugin break, which collides head-on
 with the never-break-self-hosted-users rule. A narrow read-only contract is the correct boundary and
 it is the one this port already describes.
+
+**Resolved at v0.1.446 (issue #18).** `IPluginLibraryQuery` shipped with exactly that shape, and the
+shell's adapter is a near-mechanical mapping:
+
+| `ILibraryQuery` | `IPluginLibraryQuery` |
+| --- | --- |
+| `GetShowsAsync` | `GetShowsAsync(libraryId?)` — filter to `Type == "tv"` (and `"anime"`) via `GetLibrariesAsync` |
+| `GetEpisodesAsync` | `GetEpisodesAsync(showId)` — returns episodes with **no** file too, `HasFile == false`, which is the gap the engine looks for |
+| `GetFilesAsync` | `GetShowFilesAsync(showId)` — carries `Path` and the server's own `Quality` label |
+| `GetShowFolderAsync` | **not needed** — `PluginLibraryShow.Folder` is already on the show record |
+
+`GetShowFolderAsync` is therefore **dropped from the port**. It was the one open question left after
+the contract landed, and the answer is that it never needed to be a call: the folder arrives with the
+show, relative to its library root. One fewer round trip and one fewer method to adapt.
+
+Two details of the shipped contract that the engine must respect:
+
+- `PluginLibraryShow.Id` is **the provider's show id**, and it is what the rest of the contract keys
+  on. It is not a local database row id, so it is safe to persist in the plugin's own store.
+- `PluginLibraryShow.Folder` is nullable. A show with no folder cannot be a download target, and the
+  engine must skip it with a reason rather than composing a path from null.
 
 ### 5.4 Shell responsibilities
 
@@ -385,17 +403,40 @@ This is what makes "dual audio anime, prefer this fansub group" expressible rath
 A `QualityLadder` is an ordered list with a `CutoffQuality`. An episode whose existing file ranks
 below the cutoff is wanted with `Reason = Upgrade`.
 
-**Replacing the old file is not shipped in v1.** When an upgrade imports, the previous file must be
-removed or the library holds two copies — but `PluginHookCapability` has six constants
-(`mediaSource`, `metadata`, `scheduledTask`, `auth`, `encoder`, `ui`) and **none of them covers
-writing or deleting in a user's library**. An ungated file delete is precisely the hole the
-trust-on-install model cannot have.
+**Replace is back in scope, at v0.1.446 (issue #19).** It was cut because
+`PluginHookCapability` had six constants and none covered writing in a user's library, and an ungated
+file delete is precisely the hole the trust-on-install model cannot have. That gap is closed:
+`PluginHookCapability.LibraryWrite` exists, it is in `PluginHookCapability.Elevated` so it can never
+arrive through a baseline auto-enable, and `IPluginLibraryWriter` is jailed to the libraries the owner
+granted by id, with every path resolved through the storage facade.
 
-Until a capability exists to gate it (upstream issue #19), upgrade grabs are downloaded and imported,
-and the old file is **left in place with a warning surfaced in the panel**. When the capability
-lands, the designed behaviour is: wait for the new `VideoFile` to appear via `ILibraryQuery`, then
-move — never hard-delete — the old file to a plugin-owned recycle bin with configurable retention,
-routed through the storage facade and jailed to library roots.
+The shipped behaviour is therefore the designed one:
+
+1. The upgrade grab imports as normal.
+2. The engine waits for the new file to appear via `ILibraryQuery` — **it never removes the old file
+   on the strength of its own bookkeeping.** No new file, no removal.
+3. The old file is passed to `IPluginLibraryWriter.RecycleAsync`, which moves it to the server's own
+   recycle area where the owner can still get it back.
+
+`RecycleAsync` — never `DeleteAsync`. The contract says outright that `RecycleAsync` "is what a
+well-behaved plugin calls instead of `DeleteAsync`", and this plugin never calls `DeleteAsync` at all.
+Removing a user's media irreversibly on the basis of a quality comparison is not a trade this plugin
+gets to make on their behalf.
+
+Three consequences for the shell:
+
+- `IPluginContext.LibraryWriter` is **null** unless the plugin declared `libraryWrite` *and* the owner
+  granted at least one library. The absence is checkable by design — so the null is the "upgrades are
+  off" state, surfaced in the panel as a prompt to grant, not an error and never a throw.
+- Every writer method **throws** `PluginLibraryAccessDeniedException` when the plugin holds no grant
+  for that library or the path escapes its root. Deliberately not a false return, so the engine must
+  let it propagate to the activity log rather than swallowing it.
+- `CanWriteAsync` exists for checking before acting, which is what the panel uses to show whether
+  upgrades are actually live for a given library.
+
+If the grant is absent, behaviour falls back to the old plan: import the upgrade and leave the
+previous file in place with a warning in the panel. That path stays, because a user who declines the
+grant still gets working upgrades.
 
 ### 8.5 Season packs
 
@@ -544,23 +585,32 @@ adapter. This is documented honestly as a bypass of the platform allowlist, beca
 
 ## 11. Scheduling
 
-`IScheduledTaskPlugin` exposes exactly one `CronExpression` per plugin. The plugin therefore
-registers its **fastest** cadence and gates slower work inside the tick — the registered expression
-is the ceiling.
+**Revised at v0.1.446 — issue #24 shipped, and it removes a component.** `IScheduledTaskPlugin` now
+carries `IReadOnlyList<PluginScheduledJob> Jobs` alongside the single `CronExpression`, plus
+`ExecuteAsync(string jobName, CancellationToken)`. Each job registers separately and appears in the
+server's job list under `plugin:{id}:{name}`, where the owner can see, time and disable it on its own.
 
-`CronExpression => "* * * * *"`. `ExecuteAsync` is a single tick driving `CycleScheduler`, which owns
-four independent cadences with next-due timestamps persisted in `cycle_state`, plus a re-entrancy
-guard so a long search never overlaps itself.
+The plugin declares four jobs and routes on the name:
 
-| Cycle | Default | Work |
+| Job | Default cron | Work |
 | --- | --- | --- |
-| `transfers` | 1 min | Poll clients, detect completion and stalls, emit events and hub frames |
-| `feed` | 15 min | Poll RSS/scene feeds, resolve named episodes |
-| `search` | 6 h | Backfill wanted episodes across indexers |
-| `maintenance` | 24 h | Prune magnet cache, rotate the activity log, expire blacklist entries |
+| `transfers` | `* * * * *` | Poll clients, detect completion and stalls, emit events and hub frames |
+| `feed` | `*/15 * * * *` | Poll RSS/scene feeds, resolve named episodes |
+| `search` | `0 */6 * * *` | Backfill wanted episodes across indexers |
+| `maintenance` | `0 4 * * *` | Prune magnet cache, rotate the activity log, expire blacklist entries |
 
-All cadences are user-configurable. One minute is the floor, since cron has no sub-minute resolution.
-Multi-job registration is upstream issue #24; nothing waits on it.
+`PluginScheduledJob.AllowConcurrent` defaults to false, which is the re-entrancy guard the plugin
+would otherwise hand-roll: a search cycle overrunning six hours skips its next tick rather than
+piling up.
+
+**What this deletes.** The original design registered `* * * * *` as a ceiling and drove an internal
+`CycleScheduler` owning four next-due timestamps in a `cycle_state` table. That component and that
+table are both gone — a plugin-side scheduler existed only because the platform had one slot, and
+it also showed the server one opaque every-minute job in place of the four real ones. Cadences stay
+user-configurable; the values above are defaults, and changing one is a manifest-independent config
+change that re-registers the job.
+
+One minute remains the floor, since cron has no sub-minute resolution.
 
 ---
 
@@ -570,10 +620,17 @@ The plugin declares `rest`, `ws`, `network` and `ui`, which makes it **elevated*
 installs `Disabled` and requires recorded consent before it can be enabled. That is correct
 behaviour, and the panel presents "installed, pending consent" as a normal state, not an error.
 
-There is currently **no way to grant that consent**: `POST /api/v1/dashboard/plugins/{id}/consent` is
-unbuilt, `IPluginConsentService.GrantConsent` has no HTTP caller, and the dashboard has no
-pending-consent state to present. This blocks first run and is the highest-priority upstream ask
-(issue #15).
+**Resolved at v0.1.446 (issue #15).** Consent granting is built, and the dashboard presents the
+pending-consent state. "Installed, pending consent" is a normal first-run state the panel explains
+rather than a dead end.
+
+Grants are finer-grained than the original one-boolean-per-plugin model. `PluginGrantKind` carries
+three kinds, and this plugin needs all three: `capability` (may it run at all),
+`network.host` (one outbound host, requested at runtime because the manifest cannot know which
+indexer or client the user will configure), and `library.write` (per library id, for
+upgrade-replace). `IPluginGrants.RequestAsync` records a request and **returns immediately** — it
+never blocks a plugin waiting on a human, so every code path that needs a host must tolerate not
+having it yet and say so in the UI rather than hanging or throwing.
 
 ### 12.1 Views (`IUiPlugin`)
 
@@ -825,18 +882,98 @@ NoMercy does hold the copyright.
 
 ---
 
+## 13d. Contract verified against the shipped assembly — 2026-07-30
+
+§13a read the contract from documentation. This section records it read from **the assembly itself**,
+cloned and compiled locally at `nomercy-media-server@dev` (`2d40b48`). Everything §13a expected is
+present; the differences below are the ones that change plugin code.
+
+### How the abstractions are actually obtained
+
+**`NoMercy.Plugins.Abstractions` is not on nuget.org.** The csproj is `IsPackable` and carries package
+metadata precisely because "a plugin author outside this repository has no other way to get it", but
+nothing publishes it yet. The working pattern — taken from the radiostation plugin's CI, which is the
+only other third-party plugin — is to clone the server at build time and pack to a local file feed:
+
+```bash
+git clone --depth=1 --branch=dev https://github.com/NoMercy-Entertainment/nomercy-media-server.git _server
+dotnet pack _server/src/NoMercy.Events/NoMercy.Events.csproj                       -c Release -o _nupkgs
+dotnet pack _server/src/NoMercy.Plugins.Abstractions/NoMercy.Plugins.Abstractions.csproj -c Release -o _nupkgs
+```
+
+Then a `nuget.config` beside the shell project adds `_nupkgs` as a source, and the shell takes
+`<PackageReference Include="NoMercy.Plugins.Abstractions" Version="*" />`.
+
+Three things this pins down:
+
+- **`NoMercy.Events` must be packed too.** It is a `ProjectReference` of the abstractions, so packing
+  only the abstractions produces a package whose dependency cannot resolve.
+- **A sparse checkout is enough** — `src/NoMercy.Plugins.Abstractions`, `src/NoMercy.Events`, and the
+  root `Directory.Build.props` / `Directory.Packages.props` (which supply `TargetFramework` and the
+  central package versions; the abstractions csproj sets neither).
+- The pack emits `warning MSB9008` about a missing `NoMercy.Analyzers` project under a sparse
+  checkout. Harmless — it is an analyzer reference, and the package builds correctly without it.
+
+The packed version is `0.1.404`, which is the assembly version in `Directory.Build.props` and lags the
+`v0.1.446` release tag. Version the reference as `*` and do not key anything on that number.
+
+**Consequence for `Core`:** none, and that is the point. `Core` has no reference to any of this, so its
+257 tests keep running without a server clone. Only the shell needs the feed.
+
+### Corrections to §13a
+
+| §13a said | The assembly says |
+| --- | --- |
+| The library port needs a `GetShowFolderAsync` | `PluginLibraryShow.Folder` arrives with the show. Method dropped (§5.3). |
+| Multi-job cron "is issue #24, nothing waits on it" | Shipped. It deletes the plugin's `CycleScheduler` and the `cycle_state` table (§11). |
+| Upgrade-replace waits on a capability | Shipped as `libraryWrite` + `IPluginLibraryWriter.RecycleAsync` (§8.4). |
+| Network hosts wait on a manifest change | `IPluginGrants.RequestAsync` requests one host at runtime, and `IPluginContext.HttpClient` is already bounded by grants (§10.3). |
+
+### Details worth writing down before the shell is built
+
+- **`IPlugin.Initialize(IPluginContext)` is synchronous and returns `void`.** No async initialisation
+  hook exists, so opening the SQLite store, running migrations and reading secrets cannot be awaited
+  there. `Initialize` must capture the context and do nothing that can block or throw; the first job
+  tick does the real work. A plugin that throws from `Initialize` fails to load.
+- **`IPluginContext.HttpClient` is a single shared instance bounded by granted hosts.** The plugin must
+  use it and never construct its own — which also means the `HttpClient` injected into every 0b
+  indexer comes from here, and the "always injected" rule in `Core` was the right call.
+- **`IPluginSecretStore` namespaces keys by plugin id itself.** Do not prefix keys with the plugin id;
+  the implementation does it, and a caller-chosen prefix cannot widen scope anyway.
+- **`IPluginConfiguration` is whole-object JSON on disk.** Never put a password in it — that is exactly
+  what the secret store is for. Settings and secrets are two stores, and the panel must write each to
+  the right one.
+- **`IPluginGrants.RequestAsync` never blocks.** It records a request and returns. Asking twice is not
+  an error and does not queue a second prompt, so a job tick can safely re-request every cycle while a
+  host is still ungranted.
+- **`PluginGrant.Everything` is the literal `"*"`.** An empty grant list denies, so absence must never
+  be read as permission.
+
+---
+
 ## 14. Build order
 
-| Stage | Work | Gated by |
-| --- | --- | --- |
-| **0** | `Core`: release parser, title matcher, filter, scorer, profiles, SQLite store, indexer clients with rate limiting, torrent clients, completion handoff, cycle scheduler. Fully unit-tested. | **Nothing. Starts immediately.** |
-| 1 | Shell: `IPlugin`, `IScheduledTaskPlugin`, `ILibraryQuery` adapter, secret protection, manifest, CI | #18, #21 |
-| 2 | REST + WS surface | #15, #16, #17, #14 |
-| 3 | UI views | #25, #22, #23 |
-| 4 | Upgrade-replace with recycle bin | #19 |
+**Revised 2026-07-30.** All twelve upstream issues closed, so nothing is gated any more and the order
+is driven by what each stage needs from the one before. Stage 0 was also larger than one stage: it
+split once the indexers turned out to be a body of work in their own right.
 
-Stage 0 is the majority of the work and the part where correctness is hardest, so the upstream
-dependencies gate the surface, not the substance.
+| Stage | Work | Status |
+| --- | --- | --- |
+| **0a** | `Core` release domain: size and name parsing, title matcher, quality/language/group profiles, hard filters, soft scoring, decider | **Done** — 180 tests |
+| **0b** | `Core` indexers: `IIndexer`, RSS/scene feeds, Torznab, per-indexer pacer, aggregator | **Done** — 257 tests total |
+| **1** | **Shell:** `IPlugin`, `IScheduledTaskPlugin` with the four jobs, `ILibraryQuery` adapter over `IPluginLibraryQuery`, settings and secrets, manifest, CI against the local feed. The plugin loads, appears in the dashboard, and is configurable. | **Next** |
+| 2 | `Core` store: plugin-owned SQLite over Dapper — monitored shows, wanted episodes, grabs, transfers, blacklist | |
+| 3 | `Core` `ITorrentClient`: qBittorrent first, then Transmission and Deluge | |
+| 4 | `Core` orchestrator: the six-stage loop, plus the completion handoff and its move-into-intake | |
+| 5 | REST + WS surface, then UI views | |
+| 6 | Upgrade-replace via `RecycleAsync`, and the daily-show air-date path (§18.5) | |
+| 0b-2 | Deferred indexer work: TorrentBay and LimeTorrents scrapers, FlareSolverr, bencode verification, `ResolveMagnetAsync`, `Retry-After` | |
+
+Stage 1 comes before the store and the client deliberately. It is the first stage that produces
+something a user can install, and it is the one that proves the platform integration — the part no
+amount of `Core` testing can tell us is right. Stages 2-4 then have a real host to run inside.
+
+The substance is still `Core`, and it is still where correctness is hardest.
 
 ---
 
@@ -893,8 +1030,8 @@ files.
 | Upstream Phase 2/3 slips | Stage 0 is the majority of the work and is unblocked. The plugin is useful the moment #18 and #17 land, even without a panel. |
 | `ExcludeAssets="runtime"` binding is implicit and version-fragile | Confined to two references (data protection, and the library contract if it ships as a package). Both behind ports, both replaceable in one file. |
 | Indexer scrapers break when a site changes markup | Expected. `IndexerAggregator` degrades rather than failing, RSS and Torznab are unaffected, and fixtures make a fix a small change. |
-| Deleting a user's media file | Not shipped until a capability gates it. Never a hard delete when it is. |
-| The plugin bypasses the platform network allowlist in the interim | Self-restricted to a user-configured list with identical semantics, surfaced as a user-visible host ledger (§10.3), and removed the moment #17 lands. |
+| Deleting a user's media file | Gated by `libraryWrite`, which is elevated and per-library. Only ever `RecycleAsync`; `DeleteAsync` is never called. Removal only after the replacement file is confirmed present via `ILibraryQuery` (§8.4). |
+| The plugin bypasses the platform network allowlist | No longer applicable. `IPluginContext.HttpClient` is bounded by granted hosts, and user-configured hosts are requested at runtime through `IPluginGrants.RequestAsync` (§10.3). The plugin never constructs its own `HttpClient`. |
 | Wrong release grabbed and episode marked done | The episode-slot hard filter exists specifically for this, and it is one of the first tests written. |
 | Getting an indexer account banned by a backfill | Per-indexer pacing, concurrency cap, backoff and circuit breaker in `IndexerAggregator` (§9.1). Conservative defaults. |
 | Partial files or scene extras offered to the import pipeline | Downloads never touch a watched path. Only a selected, complete video file is moved into intake (§7.4.1). |
@@ -903,13 +1040,19 @@ files.
 
 ## 18. Open questions
 
-1. The nav-mount `section` value for a downloader (upstream #22).
-2. Whether the library query contract (#18) ships as part of `NoMercy.Plugins.Abstractions` or as its
-   own package — affects one `PackageReference` in the shell, nothing else.
+1. ~~The nav-mount `section` value for a downloader (upstream #22).~~ **Resolved** — `PluginNavEntry`
+   shipped; the value is read off the shipped vocabulary, not guessed.
+2. ~~Whether the library query contract (#18) ships as part of `NoMercy.Plugins.Abstractions` or as its
+   own package.~~ **Resolved** — it is `IPluginLibraryQuery` inside `NoMercy.Plugins.Abstractions`,
+   so the shell takes one `PackageReference`. `NoMercy.Events` travels with it as a transitive
+   dependency, and both are in the host's shared-assembly set.
 3. Whether multi-user routing is wanted. `torrent-feed` routes different shows to different clients
    per user. This spec routes per show via the profile, which is the single-owner case. Multi-user is
-   additive to `monitored_shows` if it turns out to be needed.
-4. **Daily shows are not matchable as specified, and this spec never said so.** Talk shows, news and
+   additive to `monitored_shows` if it turns out to be needed. **Still open** — needs a user decision,
+   but it is additive and blocks nothing.
+4. ~~How the shell learns a show's folder (`GetShowFolderAsync`).~~ **Resolved** — see §5.3.
+   `PluginLibraryShow.Folder` arrives with the show, so the method is dropped from the port.
+5. **Daily shows are not matchable as specified, and this spec never said so.** Talk shows, news and
    other daily series are released with a **date** rather than a season/episode marker — the captured
    scene feed in `tests/fixtures/scnsrc-feed.xml` is full of them:
 
@@ -925,9 +1068,14 @@ files.
    titles outright.
 
    Closing it needs an air-date path: parse the date from the title, and match it against the wanted
-   episode's air date from `ILibraryQuery` (which already carries `AirDate`) rather than against its
-   numbering. That is a genuine feature with its own edge cases — timezone skew between the
-   indexer's date and the library's air date, and multi-part episodes sharing one date.
+   episode's air date rather than against its numbering. That is a genuine feature with its own edge
+   cases — timezone skew between the indexer's date and the library's air date, and multi-part
+   episodes sharing one date.
 
-   **Decision needed before Stage 0c**, since it changes what `WantedEpisode` must carry and adds a
-   second matching mode to the filter. Deferring it is defensible; shipping without knowing is not.
+   **Now unblocked on the platform side:** `PluginLibraryEpisode.AirDate` shipped, so the air date is
+   available per episode without any further upstream work. What remains is the plugin-side decision —
+   it changes what `WantedEpisode` must carry and adds a second matching mode to the filter.
+
+   **Decision needed before the orchestrator stage**, which is the first stage that turns wanted
+   episodes into searches. Deferring it is defensible; shipping without knowing is not, because the
+   failure is silent: a library with daily shows would simply never download them.
