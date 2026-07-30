@@ -89,7 +89,12 @@ jobs:
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          set -eux
+          # NO `set -x` IN THIS STEP. The auth header is the base64 of the token, and
+          # the runner's secret masking only redacts the token's literal text - it
+          # cannot recognise an encoded form of it. With xtrace on, the assignment
+          # below is echoed verbatim and the token lands in the build log in full,
+          # which for a public repo means a publicly readable credential.
+          set -eu
           : "${TOKEN:?missing GITHUB_TOKEN}"
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           cd "$GITHUB_WORKSPACE"
@@ -97,9 +102,18 @@ jobs:
           rm -rf -- *
           git init -q .
           git remote add origin "${PUBLIC_FORGEJO_URL}/${GITHUB_REPOSITORY}.git"
-          AUTH_B64=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
-          git -c "http.extraheader=Authorization: basic ${AUTH_B64}" \
-              fetch --depth=1 origin "$GITHUB_SHA"
+
+          # Written to a file rather than passed with `git -c`: an argument is visible
+          # in the process list to anything else running on the host, and would be
+          # echoed by any later xtrace. Removed immediately afterwards.
+          umask 077
+          printf 'Authorization: basic %s\n' \
+            "$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" > /tmp/gh-auth
+          git config --local http.extraHeader "$(cat /tmp/gh-auth)"
+          rm -f /tmp/gh-auth
+
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git config --local --unset-all http.extraHeader
           git checkout -q FETCH_HEAD
           git log --oneline -1
 
