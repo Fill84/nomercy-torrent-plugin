@@ -180,22 +180,43 @@ jobs:
             exit 1
           fi
 
-          # The staged file list is an allowlist, so a dependency added in a later stage
-          # would be named in deps.json, absent from the zip, and the plugin would fail
-          # to load with a FileNotFoundException while CI went green. Compare the two.
+          # The staged list is an allowlist, so an assembly added in a later stage would be
+          # named in deps.json, missing from the zip, and the plugin would fail to load with
+          # a FileNotFoundException while CI went green. Check for that.
+          #
+          # Scoped to assemblies built from THIS repo, which deps.json distinguishes for us:
+          # a project reference gets a bare filename key, a package gets a path key like
+          # lib/net10.0/Foo.dll. Only the first group is ours to ship. The rest are either
+          # host-provided (NoMercy.*, Microsoft.Extensions.*, Ulid - all present in the
+          # server) or genuine third-party packages, and this step cannot tell those apart
+          # without knowing the host's shared-assembly set. So it asserts what it can prove
+          # and prints the rest for a human, rather than guessing and failing the build on a
+          # dependency that was never ours to carry.
+          # Without this, a missing jq makes the loop below iterate an empty list and the
+          # check reports success having verified nothing - the same silently-passing guard
+          # this step exists to replace.
+          command -v jq >/dev/null 2>&1 || { echo "jq is required for the artifact checks" >&2; exit 1; }
+
+          PROJECT_ASSEMBLIES=$(jq -r '.targets[] | to_entries[] | .value.runtime // {} | keys[]' \
+                                "$STAGING/$PLUGIN_DIR.deps.json" | grep -v '/' | sort -u)
+          if [ -z "$PROJECT_ASSEMBLIES" ]; then
+            echo "deps.json listed no project-built assemblies - the query or the file shape changed" >&2
+            exit 1
+          fi
+
           MISSING=""
-          for dep in $(jq -r '.targets[] | to_entries[] | .value.runtime // {} | keys[]' \
-                        "$STAGING/$PLUGIN_DIR.deps.json" 2>/dev/null | sort -u); do
-            case "$dep" in
-              NoMercy.Plugins.Abstractions.dll|NoMercy.Events.dll) continue ;;
-            esac
+          for dep in $PROJECT_ASSEMBLIES; do
             [ -f "$STAGING/$dep" ] || MISSING="$MISSING $dep"
           done
           if [ -n "$MISSING" ]; then
-            echo "deps.json names runtime assemblies that are not in the artifact:$MISSING" >&2
+            echo "deps.json names project-built assemblies missing from the artifact:$MISSING" >&2
             echo "add them to the staging list above, or the plugin will fail to load" >&2
             exit 1
           fi
+
+          echo "package-sourced runtime assemblies, NOT shipped (host must provide these):"
+          jq -r '.targets[] | to_entries[] | .value.runtime // {} | keys[]' \
+            "$STAGING/$PLUGIN_DIR.deps.json" | grep '/' | sed 's|.*/||' | sort -u | sed 's/^/  /'
 
           REF="${GITHUB_REF_NAME:-}"
           case "$REF" in
