@@ -29,6 +29,13 @@ public sealed class SettingsGateway(IPluginConfiguration configuration, IPluginS
     private const string IndexerKind = "indexer";
     private const string ClientKind = "client";
 
+    // Exposed so SettingsView can ask "is this entry's secret stored?" against the exact
+    // key LoadAsync/SaveAsync use, rather than a second copy of the kind:name:field format
+    // drifting out of step with this one.
+    public static string IndexerSecretKey(string name) => SecretKeyFor(IndexerKind, name);
+
+    public static string ClientSecretKey(string name) => SecretKeyFor(ClientKind, name);
+
     public async Task<LoadedSettings> LoadAsync(CancellationToken ct = default)
     {
         TorrentDownloaderSettings settings = configuration.HasConfiguration()

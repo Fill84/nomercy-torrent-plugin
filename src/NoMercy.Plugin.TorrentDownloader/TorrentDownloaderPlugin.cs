@@ -4,6 +4,7 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
+using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader;
@@ -172,11 +173,23 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             },
         ];
 
-    // Task 6 replaces this call with the real settings tree; the seam is this one
-    // delegation point so that swap touches only the body, not GetViewAsync's signature.
-    public Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
+    // The one route this stage has. A client asking for anything else is not a bug worth
+    // failing the request over - the empty state is the honest answer for a route this
+    // version does not have.
+    public async Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
     {
-        return Task.FromResult(new PluginView());
+        if (request.Route != "/settings")
+        {
+            return PluginViews.Declarative(PluginViews.EmptyState("settings-unknown-route", "Nothing here"));
+        }
+
+        IPluginContext context = Context;
+        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
+        HostGrants hostGrants = new(context.Grants);
+        IReadOnlyList<string> ungrantedHosts = await hostGrants.EnsureAsync(loaded.Settings, ct);
+        IReadOnlyList<string> storedSecretKeys = await context.Secrets.KeysAsync(ct);
+
+        return SettingsView.Build(loaded.Settings, ungrantedHosts, new HashSet<string>(storedSecretKeys, StringComparer.Ordinal));
     }
 
     // Null-safe before Initialize (the host may dispose a plugin whose load failed) and
