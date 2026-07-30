@@ -9,3 +9,4 @@ TestResults/
 .claude/*
 _server/
 _nupkgs/
+_stage/
