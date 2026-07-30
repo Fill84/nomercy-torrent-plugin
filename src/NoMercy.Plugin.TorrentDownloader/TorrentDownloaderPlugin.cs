@@ -60,6 +60,21 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private SettingsGateway SettingsGateway =>
         _settingsGateway ??= new SettingsGateway(Context.Configuration, Context.Secrets);
 
+    // The controller's only way in: it resolves this plugin through IPluginManager (see
+    // TorrentDownloaderSettingsController), which hands back the live instance rather than a
+    // fresh one, and this is the one member on it a REST call is allowed to reach. Guarded the
+    // same way GetViewAsync is - a request racing Dispose gets a clean failure instead of an
+    // exception thrown into ASP.NET Core's pipeline from a plugin the host is mid-teardown on.
+    public Task<SaveSettingsOutcome> SaveSettingsAsync(SaveSettingsRequest request, CancellationToken ct = default)
+    {
+        if (_disposed)
+        {
+            return Task.FromResult(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
+        }
+
+        return new SettingsSaveHandler(SettingsGateway).HandleAsync(request, ct);
+    }
+
     // The single legacy cadence a host that reads CronExpression instead of Jobs still
     // sees. Kept identical to the transfers job - the fastest of the four - so either path
     // schedules the same cadence.

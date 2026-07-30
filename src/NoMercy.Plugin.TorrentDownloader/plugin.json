@@ -10,7 +10,7 @@
   "autoEnabled": false,
   "capabilities": {
     "hooks": ["scheduledTask", "ui"],
-    "rest": false,
+    "rest": true,
     "ws": false,
     "ui": {
       "mounts": [

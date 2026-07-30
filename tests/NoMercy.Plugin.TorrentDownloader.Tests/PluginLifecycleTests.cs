@@ -138,6 +138,38 @@ public class PluginLifecycleTests
     }
 
     [Fact]
+    public async Task SaveSettingsAsync_AfterDisposeReturnsFailureWithoutThrowingOrTouchingTheStore()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings();
+        plugin.Initialize(context);
+        plugin.Dispose();
+
+        SaveSettingsRequest request = new()
+        {
+            TransfersCron = "*/5 * * * *",
+            FeedCron = "*/15 * * * *",
+            SearchCron = "0 */6 * * *",
+            MaintenanceCron = "0 4 * * *",
+        };
+        Func<Task<SaveSettingsOutcome>> act = () => plugin.SaveSettingsAsync(request, CancellationToken.None);
+
+        SaveSettingsOutcome outcome = (await act.Should().NotThrowAsync()).Which;
+
+        // A request racing Dispose is treated the same as GetViewAsync's race, not as
+        // ExecuteAsync's (which throws): the request may legitimately overlap teardown, so it
+        // gets a clean failure rather than an exception into ASP.NET Core's pipeline, and
+        // nothing it submitted reaches configuration. The request above is otherwise a
+        // perfectly valid general-form submission, so the only thing that can fail it is the
+        // disposed guard - asserting on its specific message (not just "failed") is what keeps
+        // this from passing for an unrelated validation reason.
+        outcome.Succeeded.Should().BeFalse();
+        outcome.Error.Should().Be("Torrent Downloader is unavailable.");
+        context.Configuration.SavedObjects.Should().BeEmpty();
+    }
+
+    [Fact]
     public async Task GetViewAsync_WhenConfigurationReadThrows_RendersErrorViewInsteadOfThrowing()
     {
         TorrentDownloaderPlugin plugin = new();

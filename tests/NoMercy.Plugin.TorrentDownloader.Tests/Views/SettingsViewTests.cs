@@ -199,27 +199,27 @@ public class SettingsViewTests
     }
 
     [Fact]
-    public void Build_SaysUpFrontThatItCannotSave()
+    public void Build_EveryFormUsesAnOrdinarySaveLabelAndCarriesNoReadOnlyNotice()
     {
-        TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
+        TorrentDownloaderSettings settings = new()
+        {
+            Indexers = [new IndexerSettings { Name = "Prowlarr" }],
+            Clients = [new TorrentClientSettings { Name = "qBittorrent" }],
+        };
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
-        // The page offers password fields while having no working save path, so a user could
-        // type a credential in and reasonably believe it was stored. The warning has to be
-        // there before the fields are, and the submit button must not read "Save".
         IReadOnlyList<PluginComponent> flattened = [.. Flatten(view.Components!)];
-        flattened.Should().Contain(component => component.Id == "settings-readonly-notice");
+
+        // Saving now has a REST endpoint behind it (TorrentDownloaderSettingsController), so
+        // nothing on this page should still tell the owner otherwise.
+        flattened.Should().NotContain(component => component.Id == "settings-readonly-notice");
+        flattened.Should().NotContain(component => component.Id == "settings-readonly-badge");
 
         IReadOnlyList<PluginComponent> forms =
             [.. flattened.Where(component => component.Component == PluginComponentType.Form)];
-        forms.Should().NotBeEmpty();
-        forms.Should()
-            .AllSatisfy(form =>
-                form.Props["submitLabel"]
-                    .Should()
-                    .Be("Saving is not available in this version")
-            );
+        forms.Should().HaveCount(3, "one general form plus one per configured indexer and client");
+        forms.Should().AllSatisfy(form => form.Props["submitLabel"].Should().Be("Save"));
     }
 
     [Fact]

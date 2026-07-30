@@ -14,8 +14,9 @@ Downloads can also be added and removed by hand, by magnet link or `.torrent` fi
 > [What works today](#what-works-today) for the honest line, and [Roadmap](#roadmap) for the order.
 >
 > **Do not install this expecting downloads.** It will load, appear in the dashboard, register its
-> four jobs and read your library. Its settings page is read-only for now — saving is not wired up
-> until the REST surface lands.
+> four jobs, read your library, and let you configure its cron schedules, indexers and download
+> clients through its settings page. There is nothing yet that acts on that configuration to
+> actually fetch an episode.
 
 ## What works today
 
@@ -23,7 +24,7 @@ Downloads can also be added and removed by hand, by magnet link or `.torrent` fi
 server at all. It builds and tests standalone. Plus `NoMercy.Plugin.TorrentDownloader`, the shell
 that plugs it into the server.
 
-322 tests, no warnings.
+355 tests, no warnings.
 
 | | |
 | --- | --- |
@@ -37,6 +38,7 @@ that plugs it into the server.
 | Aggregation | fan-out across indexers, one failing indexer never takes the search down, dedupe by infohash and title preferring the copy that can actually be downloaded |
 | Plugin shell | loads into the server, four independently scheduled jobs the owner can see and time separately, reads the library through the host's read-only contract |
 | Settings storage | configuration and secrets in their two separate stores — a password can never reach the plaintext config, because the type handed to it has nowhere to put one |
+| Settings page | reads and saves cron schedules, folders, indexers and download clients through the plugin's own REST endpoint; a blank cron or a non-absolute URL is rejected, a blank secret field leaves the stored one alone, and renaming an indexer or client carries its secret to the new name |
 | Network grants | user-configured indexer and client hosts requested from the owner at runtime, since a manifest cannot know them |
 
 ## Roadmap
@@ -46,10 +48,10 @@ that plugs it into the server.
 | ✅ Release parsing, matching, profiles, filtering, scoring | done |
 | ✅ Indexers: RSS/scene feeds, Torznab, per-indexer pacing, aggregation | done |
 | ✅ Plugin shell: loads, four scheduled jobs, reads the library, settings + secrets storage | done |
+| ✅ REST surface: the settings page saves | done |
 | ⬜ Download database (SQLite) | next |
 | ⬜ Torrent clients: qBittorrent, then Transmission and Deluge | |
 | ⬜ The loop: wanted → search → decide → grab → track → import | |
-| ⬜ REST + WebSocket surface, so the settings page can actually save | |
 | ⬜ Quality upgrades that replace the old file, and daily-show matching | |
 
 ## Design

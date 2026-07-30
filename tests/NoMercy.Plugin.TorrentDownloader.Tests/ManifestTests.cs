@@ -110,12 +110,16 @@ public class ManifestTests
         hooks.Should().NotContain(hook => PluginHookCapability.Elevated.Contains(hook));
     }
 
+    // Rest flipped true with this stage's REST surface (TorrentDownloaderSettingsController).
+    // Ws stays false: nothing in this stage implements IPluginHubHandler, and turning it on
+    // with no handler behind it would be the same false promise this manifest used to make
+    // about saving.
     [Fact]
-    public void Manifest_DeclaresNeitherRestNorWsUntilTheyAreImplemented()
+    public void Manifest_DeclaresRestNowThatItHasAControllerButNotWs()
     {
         PluginManifest manifest = LoadManifest();
 
-        manifest.Capabilities!.Rest.Should().BeFalse();
+        manifest.Capabilities!.Rest.Should().BeTrue();
         manifest.Capabilities.Ws.Should().BeFalse();
     }
 

@@ -7,10 +7,10 @@ This is the README that ships **inside the plugin package**. The repository's ow
 building and contributing.
 
 > **This build loads but does not download.** The release parsing, matching and indexer layers are
-> built and tested, and the plugin loads and registers its jobs. The download database, the torrent
-> clients and the loop connecting them are not built yet. The settings page is **read-only** until
-> the plugin's REST surface lands, so there is nothing to configure. Install it to confirm it loads
-> and reads your library — not to fetch episodes.
+> built and tested, and the plugin loads, registers its jobs, and lets you configure its schedules,
+> indexers and download clients from its settings page. The download database, the torrent clients
+> and the loop connecting them are not built yet, so nothing acts on that configuration. Install it
+> to confirm it loads, reads your library and saves its settings — not to fetch episodes.
 
 ## Install
 
@@ -43,7 +43,8 @@ cast error far from its cause. CI asserts they never ship.
 | --- | --- |
 | `scheduledTask` | four jobs on separate cadences — `transfers`, `feed`, `search`, `maintenance` — each visible and individually timeable in the server's job list |
 | `ui` | one page under plugin settings |
-| `rest` / `ws` | **not declared.** They arrive with the REST surface; declaring a capability the plugin does not exercise asks for power it does not use |
+| `rest` | **declared.** The settings page saves through it — one endpoint, reachable only for this plugin's own controller |
+| `ws` | **not declared.** No hub handler exists yet; declaring a capability the plugin does not exercise asks for power it does not use |
 | `network.hosts` | **empty by design.** Your indexer and client addresses are configuration a manifest written at package time cannot know, so the plugin asks for each host at runtime through the grant system and the dashboard shows you the request |
 | `libraryWrite` | **not declared.** It arrives with quality upgrades that replace a file. It is an elevated capability, so declaring it early would prompt you to approve deleting media for a feature that does not exist |
 
