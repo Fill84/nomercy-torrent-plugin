@@ -14,11 +14,9 @@ Downloads can also be added and removed by hand, by magnet link or `.torrent` fi
 > [What works today](#what-works-today) for the honest line, and [Roadmap](#roadmap) for the order.
 >
 > **Do not install this expecting downloads.** It will load, appear in the dashboard, register its
-> four jobs, read your library and render its settings page. Two things it will not do yet: act on
-> that configuration to fetch an episode, and **save** the settings — the save endpoint is built and
-> tested but unreachable until
-> [media-server#26](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/26) lands,
-> because the server mounts plugin controllers unversioned while the client posts to `api/v1`.
+> four jobs, read your library, and let you configure its schedules, indexers and download clients
+> from its settings page. What is missing is anything that acts on that configuration to actually
+> fetch an episode.
 
 ## What works today
 
@@ -41,7 +39,7 @@ that plugs it into the server.
 | Plugin shell | loads into the server, four independently scheduled jobs the owner can see and time separately, reads the library through the host's read-only contract |
 | Settings storage | configuration and secrets in their two separate stores — a password can never reach the plaintext config, because the type handed to it has nowhere to put one |
 | Settings page | renders cron schedules, folders, indexers and download clients, never echoing a stored secret back |
-| Saving | built and tested — rejects a blank cron or non-absolute URL, leaves a stored secret alone when the field is submitted blank, carries a secret across a rename, and never lets one form's submission overwrite a section it did not address. **Currently unreachable from the dashboard**, see [media-server#26](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/26) |
+| Saving | rejects a blank cron or non-absolute URL, leaves a stored secret alone when the field is submitted blank, carries a secret across a rename, and never lets one form's submission overwrite a section it did not address |
 | Network grants | user-configured indexer and client hosts requested from the owner at runtime, since a manifest cannot know them |
 
 ## Roadmap
@@ -51,7 +49,7 @@ that plugs it into the server.
 | ✅ Release parsing, matching, profiles, filtering, scoring | done |
 | ✅ Indexers: RSS/scene feeds, Torznab, per-indexer pacing, aggregation | done |
 | ✅ Plugin shell: loads, four scheduled jobs, reads the library, settings + secrets storage | done |
-| ⚠️ REST surface: built and tested, blocked upstream by [media-server#26](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/26) | blocked |
+| ✅ REST surface: the settings page saves | done |
 | ⬜ Download database (SQLite) | next |
 | ⬜ Torrent clients: qBittorrent, then Transmission and Deluge | |
 | ⬜ The loop: wanted → search → decide → grab → track → import | |
