@@ -17,9 +17,19 @@ public sealed class FakeSecretStore : IPluginSecretStore
     // load path.
     public int Reads { get; private set; }
 
+    // Opt-in fault: the real IPluginSecretStore reads through the host's data protector,
+    // which throws CryptographicException on a rotated key ring or a corrupt payload.
+    // Nothing exercised that path before this field existed.
+    public Exception? ThrowOnGet { get; set; }
+
     public Task<string?> GetAsync(string key, CancellationToken ct = default)
     {
         Reads++;
+        if (ThrowOnGet is not null)
+        {
+            throw ThrowOnGet;
+        }
+
         return Task.FromResult(Values.TryGetValue(key, out string? value) ? value : null);
     }
 

@@ -244,6 +244,26 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             )
         );
 
+    // This page is the plugin's only diagnostic surface, so letting a load failure throw
+    // through it hides its own cause - the owner sees a broken settings page instead of
+    // learning their key ring rotated or their config file is truncated. Secret reads go
+    // through the host's data protector, which throws CryptographicException on a rotated
+    // key ring or a corrupt payload; a truncated config throws JsonException the same way
+    // Fix 1 guards against on the registration path. Rendered text and the log message both
+    // name what failed, never the exception detail, the settings, or a stored secret.
+    private static PluginView SettingsErrorView() =>
+        PluginViews.Declarative(
+            PluginViews.Container(
+                "settings-error",
+                PluginViews.Badge("settings-error-badge", "Unavailable", PluginBadgeVariant.Danger),
+                PluginViews.EmptyState(
+                    "settings-error-empty",
+                    "Settings could not be loaded",
+                    "Check the server log for Torrent Downloader, and confirm its encryption key has not changed."
+                )
+            )
+        );
+
     // The one route this stage has. A client asking for anything else is not a bug worth
     // failing the request over - the empty state is the honest answer for a route this
     // version does not have.
@@ -260,12 +280,25 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
 
         IPluginContext context = Context;
-        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
-        HostGrants hostGrants = new(context.Grants);
-        IReadOnlyList<string> ungrantedHosts = await hostGrants.EnsureAsync(loaded.Settings, ct);
-        IReadOnlyList<string> storedSecretKeys = await context.Secrets.KeysAsync(ct);
 
-        return SettingsView.Build(loaded.Settings, ungrantedHosts, new HashSet<string>(storedSecretKeys, StringComparer.Ordinal));
+        try
+        {
+            LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
+            HostGrants hostGrants = new(context.Grants);
+            IReadOnlyList<string> ungrantedHosts = await hostGrants.EnsureAsync(loaded.Settings, ct);
+            IReadOnlyList<string> storedSecretKeys = await context.Secrets.KeysAsync(ct);
+
+            return SettingsView.Build(loaded.Settings, ungrantedHosts, new HashSet<string>(storedSecretKeys, StringComparer.Ordinal));
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            context.Logger.LogError(exception, "Torrent Downloader could not build its settings view.");
+            return SettingsErrorView();
+        }
     }
 
     // Null-safe before Initialize (the host may dispose a plugin whose load failed) and

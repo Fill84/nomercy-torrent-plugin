@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
+using System.Security.Cryptography;
 using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
@@ -13,6 +14,21 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests;
 
 public class PluginLifecycleTests
 {
+    // Matches SettingsViewTests' own Flatten: GetViewAsync's error path nests its EmptyState
+    // inside a container, so a top-level-only check would miss it just as it would there.
+    private static IEnumerable<PluginComponent> Flatten(IEnumerable<PluginComponent> components)
+    {
+        foreach (PluginComponent component in components)
+        {
+            yield return component;
+
+            foreach (PluginComponent descendant in Flatten(component.Items))
+            {
+                yield return descendant;
+            }
+        }
+    }
+
     [Fact]
     public void Initialize_DoesNotThrow()
     {
@@ -119,6 +135,42 @@ public class PluginLifecycleTests
         // the ordinary settings tree happens to contain (which, with no indexers configured,
         // also has an EmptyState and would pass without the guard this test exists to prove).
         view.Components.Should().Contain(component => component.Id == "settings-unavailable");
+    }
+
+    [Fact]
+    public async Task GetViewAsync_WhenConfigurationReadThrows_RendersErrorViewInsteadOfThrowing()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        RecordingLogger logger = new();
+        context.Logger = logger;
+        context.Configuration.Stored = new TorrentDownloaderSettings();
+        context.Configuration.ThrowOnRead = new JsonException("truncated settings file");
+        plugin.Initialize(context);
+
+        Func<Task<PluginView>> act = () => plugin.GetViewAsync(new PluginViewRequest { Route = "/settings" }, CancellationToken.None);
+
+        PluginView view = (await act.Should().NotThrowAsync()).Which;
+        Flatten(view.Components!).Should().Contain(component => component.Component == PluginComponentType.EmptyState);
+        logger.Levels.Should().Contain(LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task GetViewAsync_WhenSecretReadThrows_RendersErrorViewInsteadOfThrowing()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        RecordingLogger logger = new();
+        context.Logger = logger;
+        context.Configuration.Stored = new TorrentDownloaderSettings { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
+        context.Secrets.ThrowOnGet = new CryptographicException("key ring rotated");
+        plugin.Initialize(context);
+
+        Func<Task<PluginView>> act = () => plugin.GetViewAsync(new PluginViewRequest { Route = "/settings" }, CancellationToken.None);
+
+        PluginView view = (await act.Should().NotThrowAsync()).Which;
+        Flatten(view.Components!).Should().Contain(component => component.Component == PluginComponentType.EmptyState);
+        logger.Levels.Should().Contain(LogLevel.Error);
     }
 
     [Fact]
