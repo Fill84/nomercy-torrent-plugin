@@ -101,6 +101,29 @@ public class ManifestTests
         hooks.Should().OnlyContain(hook => KnownHooks.Contains(hook));
     }
 
+    // autoEnabled is NOT the consent gate, which is the easy misreading and was the bug:
+    // PluginConsentService.IsBaseline returns false as soon as a plugin declares rest, ws or
+    // network, so the server holds this plugin at Disabled until the owner consents no matter
+    // what autoEnabled says. What autoEnabled actually controls is whether it comes back by
+    // itself afterwards - PluginLoader computes
+    //     mayAutoEnable = manifest.AutoEnabled && (IsBaseline(caps) || HasConsent(id))
+    // so with false the plugin drops back to Disabled on every restart and the owner has to
+    // re-enable it each time, having already granted consent once. Verified against a real
+    // install: consent was granted, the server restarted, and it did not come back.
+    [Fact]
+    public void Manifest_AutoEnablesSoConsentSurvivesARestart()
+    {
+        PluginManifest manifest = LoadManifest();
+
+        manifest.AutoEnabled.Should().BeTrue();
+
+        // The safety this plugin needs comes from being non-baseline, not from autoEnabled.
+        // If rest is ever dropped, autoEnabled: true would start meaning "run on install with
+        // no prompt" - so the two are asserted together.
+        manifest.Capabilities!.Rest.Should()
+            .BeTrue("rest is what makes this plugin elevated, and therefore consent-gated");
+    }
+
     [Fact]
     public void Manifest_DeclaresNoElevatedHook()
     {

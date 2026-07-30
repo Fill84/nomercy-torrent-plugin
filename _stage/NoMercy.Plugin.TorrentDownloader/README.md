@@ -19,10 +19,8 @@ building and contributing.
 2. Restart the server.
 3. Enable the plugin in the dashboard, and grant consent when prompted.
 
-It still installs **disabled** and asks first. That is not `autoEnabled` doing the work — declaring
-`rest` makes the plugin non-baseline, so the server holds it at Disabled until you consent, whatever
-the manifest says. `autoEnabled: true` is what lets it come back by itself after a restart once you
-have consented; `false` would make you re-enable it every time the server starts.
+It installs disabled (`autoEnabled: false`) and asks before it runs, which for something that will
+eventually write to your library and reach the internet is the right default.
 
 ## What ships in the package
 

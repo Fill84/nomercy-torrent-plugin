@@ -1,0 +1,128 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "NoMercy.Plugin.TorrentDownloader/0.1.0": {
+        "dependencies": {
+          "NoMercy.Plugin.TorrentDownloader.Core": "1.0.0",
+          "NoMercy.Plugins.Abstractions": "0.1.404",
+          "NoMercy.Plugins.Mvc": "0.1.404"
+        },
+        "runtime": {
+          "NoMercy.Plugin.TorrentDownloader.dll": {}
+        }
+      },
+      "Newtonsoft.Json/13.0.4": {
+        "runtime": {
+          "lib/net6.0/Newtonsoft.Json.dll": {
+            "assemblyVersion": "13.0.0.0",
+            "fileVersion": "13.0.4.30916"
+          }
+        }
+      },
+      "NoMercy.Events/0.1.404": {
+        "dependencies": {
+          "Ulid": "1.4.1"
+        },
+        "runtime": {
+          "lib/net10.0/NoMercy.Events.dll": {
+            "assemblyVersion": "0.1.404.0",
+            "fileVersion": "0.1.404.0"
+          }
+        }
+      },
+      "NoMercy.Plugins.Abstractions/0.1.404": {
+        "dependencies": {
+          "NoMercy.Events": "0.1.404",
+          "Ulid": "1.4.1"
+        },
+        "runtime": {
+          "lib/net10.0/NoMercy.Plugins.Abstractions.dll": {
+            "assemblyVersion": "0.1.404.0",
+            "fileVersion": "0.1.404.0"
+          }
+        }
+      },
+      "NoMercy.Plugins.Mvc/0.1.404": {
+        "dependencies": {
+          "Newtonsoft.Json": "13.0.4",
+          "NoMercy.Plugins.Abstractions": "0.1.404",
+          "Ulid": "1.4.1"
+        },
+        "runtime": {
+          "lib/net10.0/NoMercy.Plugins.Mvc.dll": {
+            "assemblyVersion": "0.1.404.0",
+            "fileVersion": "0.1.404.0"
+          }
+        }
+      },
+      "Ulid/1.4.1": {
+        "runtime": {
+          "lib/net8.0/Ulid.dll": {
+            "assemblyVersion": "1.4.1.0",
+            "fileVersion": "1.4.1.0"
+          }
+        }
+      },
+      "NoMercy.Plugin.TorrentDownloader.Core/1.0.0": {
+        "runtime": {
+          "NoMercy.Plugin.TorrentDownloader.Core.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "NoMercy.Plugin.TorrentDownloader/0.1.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "Newtonsoft.Json/13.0.4": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-pdgNNMai3zv51W5aq268sujXUyx7SNdE2bj1wZcWjAQrKMFZV260lbqYop1d2GM67JI1huLRwxo9ZqnfF/lC6A==",
+      "path": "newtonsoft.json/13.0.4",
+      "hashPath": "newtonsoft.json.13.0.4.nupkg.sha512"
+    },
+    "NoMercy.Events/0.1.404": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-biVcYb4rej3tOZfQZ2Lq1sl6kml9aEAU431iFCUwsdTpUxVOsC2o8XU6bTnMK/LDHxtU7kgYzE8UTtLUqy2M8g==",
+      "path": "nomercy.events/0.1.404",
+      "hashPath": "nomercy.events.0.1.404.nupkg.sha512"
+    },
+    "NoMercy.Plugins.Abstractions/0.1.404": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-/Rpmi9q5VPwPXvNEUA4Jy6mdGYHFIQh0FbJ1z709sOcwLhvPhWGn4ui5YErtVCDtWPxP755G4gpnMiDL02aIKg==",
+      "path": "nomercy.plugins.abstractions/0.1.404",
+      "hashPath": "nomercy.plugins.abstractions.0.1.404.nupkg.sha512"
+    },
+    "NoMercy.Plugins.Mvc/0.1.404": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-Cn+OrbeA7iYL6OGGEpmQp3S3o6Ayn2I/fQ1lOl0x7ug/DSVOLz7dY6FtbBHjaBDZpiEnQR+ttiXdZG/ScYhyng==",
+      "path": "nomercy.plugins.mvc/0.1.404",
+      "hashPath": "nomercy.plugins.mvc.0.1.404.nupkg.sha512"
+    },
+    "Ulid/1.4.1": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-V6crLJ8a29raWeNwxYGfH9RTKA3H0nR0D9LAGzN3KtEsbiiaWkUjDor6OT5Oz7pxCK+NaY2hu2FLoYEOa8oCkA==",
+      "path": "ulid/1.4.1",
+      "hashPath": "ulid.1.4.1.nupkg.sha512"
+    },
+    "NoMercy.Plugin.TorrentDownloader.Core/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}

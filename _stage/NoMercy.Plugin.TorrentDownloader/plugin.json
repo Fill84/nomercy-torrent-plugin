@@ -7,7 +7,7 @@
   "author": "Phillippe Pelzer",
   "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
   "assembly": "NoMercy.Plugin.TorrentDownloader.dll",
-  "autoEnabled": true,
+  "autoEnabled": false,
   "capabilities": {
     "hooks": ["scheduledTask", "ui"],
     "rest": true,
