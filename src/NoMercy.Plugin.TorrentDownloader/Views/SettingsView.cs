@@ -16,6 +16,17 @@ public static class SettingsView
 {
     private const string SaveSettingsMethod = "SaveSettings";
 
+    // Saving needs a REST endpoint: PluginActionIntent.CallPlugin dispatches over the
+    // transport named in its payload, which defaults to rest, and this version declares
+    // "rest": false with no controller behind it. So the submit action is declared but
+    // goes nowhere, and PluginViews.Form has no overload that omits one.
+    //
+    // Rather than let a user type an API key into a password box and press a button that
+    // silently does nothing - leaving them to believe the credential was stored - the
+    // page says so up front and the button says so too. Both go away with the REST
+    // surface, along with this comment.
+    private const string SaveUnavailableLabel = "Saving is not available in this version";
+
     public static PluginView Build(
         TorrentDownloaderSettings settings,
         IReadOnlyList<string> ungrantedHosts,
@@ -25,6 +36,14 @@ public static class SettingsView
         List<PluginComponent> children =
         [
             PluginViews.Text("settings-heading", "Torrent Downloader Settings", "heading"),
+            PluginViews.Badge("settings-readonly-badge", "Read-only", PluginBadgeVariant.Warning),
+            PluginViews.Text(
+                "settings-readonly-notice",
+                "This version can show its configuration but not change it — saving needs the "
+                    + "plugin's REST surface, which is not built yet. Anything you type here will "
+                    + "not be stored.",
+                "body"
+            ),
         ];
 
         if (ungrantedHosts.Count > 0)
@@ -54,9 +73,22 @@ public static class SettingsView
         }
 
         children.Add(PluginViews.Text("settings-clients-heading", "Download Clients", "subheading"));
-        for (int i = 0; i < settings.Clients.Count; i++)
+        if (settings.Clients.Count > 0)
         {
-            children.Add(BuildClientForm(i, settings.Clients[i], storedSecretKeys));
+            for (int i = 0; i < settings.Clients.Count; i++)
+            {
+                children.Add(BuildClientForm(i, settings.Clients[i], storedSecretKeys));
+            }
+        }
+        else
+        {
+            children.Add(
+                PluginViews.EmptyState(
+                    "settings-clients-empty",
+                    "No download client configured",
+                    "Add a torrent client so Torrent Downloader has somewhere to send what it finds."
+                )
+            );
         }
 
         return PluginViews.Declarative(0, PluginViews.Container("settings-root", [.. children]));
@@ -89,7 +121,7 @@ public static class SettingsView
             new() { Name = "intakeFolder", Label = "Intake folder", Value = settings.IntakeFolder },
         ];
 
-        return PluginViews.Form("settings-general-form", "Save", PluginActionIntent.CallPlugin(SaveSettingsMethod), fields);
+        return PluginViews.Form("settings-general-form", SaveUnavailableLabel, PluginActionIntent.CallPlugin(SaveSettingsMethod), fields);
     }
 
     private static PluginComponent BuildIndexerForm(int index, IndexerSettings indexer, IReadOnlySet<string> storedSecretKeys)
@@ -116,7 +148,7 @@ public static class SettingsView
 
         return PluginViews.Form(
             $"settings-indexer-{index}-form",
-            "Save",
+            SaveUnavailableLabel,
             PluginActionIntent.CallPlugin(SaveSettingsMethod, new Dictionary<string, object?> { ["indexerName"] = indexer.Name }),
             fields
         );
@@ -138,7 +170,7 @@ public static class SettingsView
 
         return PluginViews.Form(
             $"settings-client-{index}-form",
-            "Save",
+            SaveUnavailableLabel,
             PluginActionIntent.CallPlugin(SaveSettingsMethod, new Dictionary<string, object?> { ["clientName"] = client.Name }),
             fields
         );

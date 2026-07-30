@@ -190,7 +190,46 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
-        Flatten(view.Components!).Should().NotContain(component => component.Component == PluginComponentType.Badge);
+        // Identified by id, not by "the tree contains no badge at all". The broader version
+        // stood in for this one until the page gained a second, unrelated badge - and then
+        // failed while the grant warning it was named for was correctly absent.
+        Flatten(view.Components!)
+            .Should()
+            .NotContain(component => component.Id.StartsWith("settings-grant-warning", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void Build_SaysUpFrontThatItCannotSave()
+    {
+        TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        // The page offers password fields while having no working save path, so a user could
+        // type a credential in and reasonably believe it was stored. The warning has to be
+        // there before the fields are, and the submit button must not read "Save".
+        IReadOnlyList<PluginComponent> flattened = [.. Flatten(view.Components!)];
+        flattened.Should().Contain(component => component.Id == "settings-readonly-notice");
+
+        IReadOnlyList<PluginComponent> forms =
+            [.. flattened.Where(component => component.Component == PluginComponentType.Form)];
+        forms.Should().NotBeEmpty();
+        forms.Should()
+            .AllSatisfy(form =>
+                form.Props["submitLabel"]
+                    .Should()
+                    .Be("Saving is not available in this version")
+            );
+    }
+
+    [Fact]
+    public void Build_ShowsAnEmptyStateWhenNoDownloadClientIsConfigured()
+    {
+        TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        Flatten(view.Components!).Should().Contain(component => component.Id == "settings-clients-empty");
     }
 
     [Fact]

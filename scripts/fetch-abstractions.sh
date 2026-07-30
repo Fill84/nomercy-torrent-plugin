@@ -24,16 +24,20 @@ fi
 root=$(cd "$(dirname "$0")/.." && pwd)
 server="$root/_server"
 feed="$root/_nupkgs"
-branch="${SERVER_BRANCH:-dev}"
+# A release must be rebuildable. SERVER_REF pins the contract to one commit; it
+# defaults to a branch for day-to-day work, but CI sets it to a SHA for a tag build
+# so the artifact is reproducible instead of "whatever dev happened to be".
+ref="${SERVER_REF:-${SERVER_BRANCH:-dev}}"
 
 if [ ! -d "$server" ]; then
-    git clone --depth=1 --branch="$branch" --filter=blob:none --no-checkout \
+    git clone --depth=1 --branch="${SERVER_BRANCH:-dev}" --filter=blob:none --no-checkout \
         https://github.com/NoMercy-Entertainment/nomercy-media-server.git "$server"
     git -C "$server" sparse-checkout init --cone
     git -C "$server" sparse-checkout set src/NoMercy.Plugins.Abstractions src/NoMercy.Events
-    git -C "$server" checkout "$branch"
+    git -C "$server" fetch --depth=1 origin "$ref"
+    git -C "$server" checkout -q FETCH_HEAD
 else
-    git -C "$server" fetch --depth=1 origin "$branch"
+    git -C "$server" fetch --depth=1 origin "$ref"
     git -C "$server" reset --hard FETCH_HEAD
 fi
 
@@ -46,3 +50,5 @@ mkdir -p "$feed"
 "$dotnet" pack "$server/src/NoMercy.Plugins.Abstractions/NoMercy.Plugins.Abstractions.csproj" -c Release -o "$feed"
 
 find "$feed" -maxdepth 1 -name '*.nupkg' -print
+
+echo "contract packed from nomercy-media-server $(git -C "$server" rev-parse HEAD)"

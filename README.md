@@ -8,14 +8,22 @@ for them, picks one release per episode against a quality/language/group profile
 torrent client, tracks the download, and hands the finished file to the server's import pipeline.
 Downloads can also be added and removed by hand, by magnet link or `.torrent` file.
 
-> **Status: in development.** The domain core and the indexer layer are built and tested. The
-> plugin shell — the part that actually loads into the server — is next, and no longer blocked:
-> see [Upstream platform work](#upstream-platform-work).
+> **Status: in development — it loads, it does not download yet.** The domain core, the indexer
+> layer and the plugin shell are built and tested. What is missing is the engine between them: the
+> download database, the torrent-client clients, and the loop that ties searching to grabbing. See
+> [What works today](#what-works-today) for the honest line, and [Roadmap](#roadmap) for the order.
+>
+> **Do not install this expecting downloads.** It will load, appear in the dashboard, register its
+> four jobs and read your library. Its settings page is read-only for now — saving is not wired up
+> until the REST surface lands.
 
 ## What works today
 
 `NoMercy.Plugin.TorrentDownloader.Core` — the decision engine, with no dependency on the media
-server at all. It builds and tests standalone.
+server at all. It builds and tests standalone. Plus `NoMercy.Plugin.TorrentDownloader`, the shell
+that plugs it into the server.
+
+322 tests, no warnings.
 
 | | |
 | --- | --- |
@@ -27,6 +35,22 @@ server at all. It builds and tests standalone.
 | Indexers | `IIndexer` contract, RSS and scene-feed reading, Torznab for Jackett and Prowlarr |
 | Rate limiting | per-indexer minimum interval, concurrency cap, exponential backoff on a rate limit, circuit breaker that parks a failing indexer |
 | Aggregation | fan-out across indexers, one failing indexer never takes the search down, dedupe by infohash and title preferring the copy that can actually be downloaded |
+| Plugin shell | loads into the server, four independently scheduled jobs the owner can see and time separately, reads the library through the host's read-only contract |
+| Settings storage | configuration and secrets in their two separate stores — a password can never reach the plaintext config, because the type handed to it has nowhere to put one |
+| Network grants | user-configured indexer and client hosts requested from the owner at runtime, since a manifest cannot know them |
+
+## Roadmap
+
+| | |
+| --- | --- |
+| ✅ Release parsing, matching, profiles, filtering, scoring | done |
+| ✅ Indexers: RSS/scene feeds, Torznab, per-indexer pacing, aggregation | done |
+| ✅ Plugin shell: loads, four scheduled jobs, reads the library, settings + secrets storage | done |
+| ⬜ Download database (SQLite) | next |
+| ⬜ Torrent clients: qBittorrent, then Transmission and Deluge | |
+| ⬜ The loop: wanted → search → decide → grab → track → import | |
+| ⬜ REST + WebSocket surface, so the settings page can actually save | |
+| ⬜ Quality upgrades that replace the old file, and daily-show matching | |
 
 ## Design
 
@@ -35,8 +59,9 @@ Two projects, and the split is the point:
 - **`Core`** — pure domain logic. No reference to any NoMercy assembly, no I/O outside the indexer
   clients, no reading of the system clock. It compiles and its tests run without cloning the media
   server, which keeps the test loop fast and the logic honest.
-- **The plugin shell** (not yet built) — the only part that touches the host. It implements the
-  plugin interfaces and supplies `Core` with its ports.
+- **The plugin shell** — the only part that touches the host. It implements the plugin interfaces and
+  supplies `Core` with its ports. It is the only project that references
+  `NoMercy.Plugins.Abstractions`, which is what keeps `Core` testable without a server.
 
 The full design is in [`docs/superpowers/specs/`](docs/superpowers/specs/), and the implementation
 plans in [`docs/superpowers/plans/`](docs/superpowers/plans/). They are written to be read: the
@@ -57,13 +82,26 @@ parser.
 
 Requires the **.NET 10 SDK** (matches the server's target framework).
 
+The plugin shell builds against `NoMercy.Plugins.Abstractions`, which is **not published to
+nuget.org**, so fetch it first. The script clones the server (sparse, shallow) and packs the contract
+into a local feed that the committed `nuget.config` already points at:
+
 ```bash
+./scripts/fetch-abstractions.sh      # or: pwsh scripts/fetch-abstractions.ps1
 dotnet build
 dotnet test
 ```
 
-`Core` and its tests have no external dependency. The plugin shell, once it exists, will need the
-server's `NoMercy.Plugins.Abstractions` — see the radiostation plugin's CI for the pattern.
+To build against a specific contract commit rather than the tip of `dev` — which is what a release
+build does, so the artifact can be rebuilt later:
+
+```bash
+SERVER_REF=<sha> ./scripts/fetch-abstractions.sh
+```
+
+`Core` needs none of this: it has no external dependency and no reference to any NoMercy assembly,
+so `dotnet build src/NoMercy.Plugin.TorrentDownloader.Core` and its 257 tests work on a clean clone
+with no server present.
 
 ## Upstream platform work
 
