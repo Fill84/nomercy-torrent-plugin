@@ -83,6 +83,10 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
                 best.Add(release);
             }
 
+            // Registering the title on every iteration, not only on a new slot, is what lets a
+            // hashless copy find a release an earlier indexer reported with a hash. It also makes
+            // each title an alias for the content: two rows sharing an infohash but named
+            // differently register both names, so a third row under either name merges too.
             slots[titleKey] = slot;
             if (hashKey is not null)
                 slots[hashKey] = slot;

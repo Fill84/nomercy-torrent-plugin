@@ -122,7 +122,13 @@ public sealed class IndexerPacer(
                 _rateLimitHits++;
                 int exponent = Math.Min(_rateLimitHits - 1, MaxBackoffExponent);
                 TimeSpan computed = BaseBackoff * Math.Pow(2, exponent);
-                _backoffUntil = clock.UtcNow + (computed < MaxBackoff ? computed : MaxBackoff);
+                TimeSpan backoff = computed < MaxBackoff ? computed : MaxBackoff;
+
+                // The interval is added rather than compared against. Both windows would otherwise
+                // start at this same failure, so the backoff would be absorbed whenever it was
+                // shorter than the interval and the indexer would see no extra spacing at all —
+                // which is the whole point of backing off after it asked us to slow down.
+                _backoffUntil = clock.UtcNow + minimumInterval + backoff;
             }
 
             if (_consecutiveFailures >= failureThreshold)

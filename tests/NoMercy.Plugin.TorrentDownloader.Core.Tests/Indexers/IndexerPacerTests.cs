@@ -190,22 +190,64 @@ public class IndexerPacerTests
         pacer.IsParked.Should().BeTrue();
     }
 
+    // Cancellation has to happen while the work delegate is running, not before the call. A token
+    // that is already cancelled on entry makes _slots.WaitAsync throw ahead of the try, so the
+    // catch filter this test is about would never be reached and the test would pass no matter what
+    // that filter said.
     [Fact]
     public async Task RunAsync_CallerCancellationDoesNotCountTowardThePark()
     {
         FakeClock clock = new(DateTimeOffset.UnixEpoch);
         IndexerPacer pacer = Pacer(clock);
-        using CancellationTokenSource source = new();
-        await source.CancelAsync();
 
         for (int attempt = 0; attempt < 5; attempt++)
         {
+            using CancellationTokenSource source = new();
             Func<Task> act = () =>
-                pacer.RunAsync<int>(_ => throw new OperationCanceledException(), source.Token);
+                pacer.RunAsync<int>(
+                    async token =>
+                    {
+                        await source.CancelAsync();
+                        token.ThrowIfCancellationRequested();
+                        return 0;
+                    },
+                    source.Token
+                );
             await act.Should().ThrowAsync<OperationCanceledException>();
         }
 
         pacer.IsParked.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task RunAsync_AddsTheBackoffOnTopOfTheMinimumIntervalRatherThanAbsorbingIt()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+        IndexerPacer pacer = new(
+            clock,
+            TimeSpan.FromSeconds(15),
+            maxConcurrency: 2,
+            failureThreshold: 99,
+            cooldown: TimeSpan.FromMinutes(5)
+        );
+
+        Func<Task> rateLimited = () =>
+            pacer.RunAsync<int>(
+                _ => throw new IndexerException("x: search returned HTTP 429", 429),
+                CancellationToken.None
+            );
+        await rateLimited.Should().ThrowAsync<IndexerException>();
+
+        // A 2s backoff shorter than the 15s interval must still buy spacing. Comparing the two
+        // instead of adding them would leave the indexer free again at 15s.
+        clock.Advance(TimeSpan.FromSeconds(15));
+        Func<Task> tooSoon = () => pacer.RunAsync(_ => Task.FromResult(1), CancellationToken.None);
+        (await tooSoon.Should().ThrowAsync<IndexerException>()).Which.Message.Should()
+            .Contain("backing off");
+
+        clock.Advance(TimeSpan.FromSeconds(3));
+        int result = await pacer.RunAsync(_ => Task.FromResult(42), CancellationToken.None);
+        result.Should().Be(42);
     }
 
     [Fact]
