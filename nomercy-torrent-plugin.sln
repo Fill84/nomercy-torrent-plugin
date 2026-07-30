@@ -11,6 +11,10 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{0AB3BF05
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercy.Plugin.TorrentDownloader.Core.Tests", "tests\NoMercy.Plugin.TorrentDownloader.Core.Tests\NoMercy.Plugin.TorrentDownloader.Core.Tests.csproj", "{FAF472C4-53F3-4C34-9F4A-EA1AF4CC969E}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercy.Plugin.TorrentDownloader", "src\NoMercy.Plugin.TorrentDownloader\NoMercy.Plugin.TorrentDownloader.csproj", "{06A89E1D-BCDF-4A73-80D7-48046A3C9549}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "NoMercy.Plugin.TorrentDownloader.Tests", "tests\NoMercy.Plugin.TorrentDownloader.Tests\NoMercy.Plugin.TorrentDownloader.Tests.csproj", "{90974384-4D86-452B-B2EA-833EBAE1ECC4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -45,6 +49,30 @@ Global
 		{FAF472C4-53F3-4C34-9F4A-EA1AF4CC969E}.Release|x64.Build.0 = Release|Any CPU
 		{FAF472C4-53F3-4C34-9F4A-EA1AF4CC969E}.Release|x86.ActiveCfg = Release|Any CPU
 		{FAF472C4-53F3-4C34-9F4A-EA1AF4CC969E}.Release|x86.Build.0 = Release|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Debug|x64.Build.0 = Debug|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Debug|x86.Build.0 = Debug|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Release|Any CPU.Build.0 = Release|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Release|x64.ActiveCfg = Release|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Release|x64.Build.0 = Release|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Release|x86.ActiveCfg = Release|Any CPU
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549}.Release|x86.Build.0 = Release|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Debug|x64.Build.0 = Debug|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Debug|x86.Build.0 = Debug|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Release|Any CPU.Build.0 = Release|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Release|x64.ActiveCfg = Release|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Release|x64.Build.0 = Release|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Release|x86.ActiveCfg = Release|Any CPU
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -52,5 +80,7 @@ Global
 	GlobalSection(NestedProjects) = preSolution
 		{E7C8DDE0-9228-4601-9615-748EFC3C173F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{FAF472C4-53F3-4C34-9F4A-EA1AF4CC969E} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+		{06A89E1D-BCDF-4A73-80D7-48046A3C9549} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{90974384-4D86-452B-B2EA-833EBAE1ECC4} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 	EndGlobalSection
 EndGlobal

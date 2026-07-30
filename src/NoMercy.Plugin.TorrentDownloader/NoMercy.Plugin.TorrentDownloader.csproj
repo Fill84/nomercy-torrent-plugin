@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+        <AssemblyName>NoMercy.Plugin.TorrentDownloader</AssemblyName>
+        <RootNamespace>NoMercy.Plugin.TorrentDownloader</RootNamespace>
+        <Version>0.1.0</Version>
+        <Authors>Phillippe Pelzer</Authors>
+        <Description>Keeps a TV library complete by downloading missing episodes over BitTorrent.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="NoMercy.Plugins.Abstractions" Version="*" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\NoMercy.Plugin.TorrentDownloader.Core\NoMercy.Plugin.TorrentDownloader.Core.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Update="plugin.json">
+            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+        </None>
+    </ItemGroup>
+
+</Project>
