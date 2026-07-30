@@ -48,24 +48,164 @@ public class IndexerPacerTests
         clock.Delays.Should().BeEmpty();
     }
 
+    // The backoff is no longer awaited (Fix 4), so it no longer shows up as growing entries in
+    // clock.Delays; it is now observable only through the "backing off" gate on the next call.
+    // Classification also moved from message substring-matching to IndexerException.StatusCode
+    // (Fix 5), so the thrown exceptions must carry a real status code.
     [Fact]
     public async Task RunAsync_BacksOffExponentiallyOnRateLimitResponses()
     {
         FakeClock clock = new(DateTimeOffset.UnixEpoch);
         IndexerPacer pacer = new(clock, TimeSpan.Zero, 2, failureThreshold: 99, cooldown: TimeSpan.FromMinutes(5));
+        List<string> backoffMessages = [];
 
         for (int attempt = 0; attempt < 3; attempt++)
         {
+            Func<Task> work = () =>
+                pacer.RunAsync<int>(
+                    _ => throw new IndexerException("x: search returned HTTP 429", 429),
+                    CancellationToken.None
+                );
+            await work.Should().ThrowAsync<IndexerException>();
+
+            Func<Task> gated = () => pacer.RunAsync<int>(_ => Task.FromResult(1), CancellationToken.None);
+            IndexerException blocked = (await gated.Should().ThrowAsync<IndexerException>()).Which;
+            blocked.Message.Should().Contain("backing off");
+            backoffMessages.Add(blocked.Message);
+
+            clock.Advance(TimeSpan.FromMinutes(3));
+        }
+
+        backoffMessages[0].Should().Contain("2s");
+        backoffMessages[1].Should().Contain("4s");
+        backoffMessages[2].Should().Contain("8s");
+    }
+
+    [Fact]
+    public async Task RunAsync_RateLimitedFailureDoesNotAwaitTheBackoff()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+        IndexerPacer pacer = new(clock, TimeSpan.Zero, 2, failureThreshold: 99, cooldown: TimeSpan.FromMinutes(5));
+
+        Func<Task> act = () =>
+            pacer.RunAsync<int>(
+                _ => throw new IndexerException("x: search returned HTTP 429", 429),
+                CancellationToken.None
+            );
+        await act.Should().ThrowAsync<IndexerException>();
+
+        clock.Delays.Should().BeEmpty();
+
+        Func<Task> next = () => pacer.RunAsync<int>(_ => Task.FromResult(1), CancellationToken.None);
+        (await next.Should().ThrowAsync<IndexerException>()).Which.Message.Should().Contain("backing off");
+    }
+
+    [Fact]
+    public async Task RunAsync_ClassifiesRateLimitsByStatusCodeNotMessageText()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+        IndexerPacer pacer = new(clock, TimeSpan.Zero, 2, failureThreshold: 99, cooldown: TimeSpan.FromMinutes(5));
+
+        Func<Task> act = () =>
+            pacer.RunAsync<int>(
+                _ => throw new IndexerException(
+                    "x: feed failed: Unexpected end of file. Line 503, position 15."
+                ),
+                CancellationToken.None
+            );
+        await act.Should().ThrowAsync<IndexerException>();
+
+        clock.Delays.Should().BeEmpty();
+
+        int result = await pacer.RunAsync(_ => Task.FromResult(42), CancellationToken.None);
+        result.Should().Be(42);
+    }
+
+    [Fact]
+    public async Task RunAsync_ClampsTheBackoffAtMaxBackoff()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+        IndexerPacer pacer = new(clock, TimeSpan.Zero, 2, failureThreshold: 1000, cooldown: TimeSpan.FromMinutes(5));
+
+        for (int attempt = 0; attempt < 10; attempt++)
+        {
+            clock.Advance(TimeSpan.FromMinutes(3));
             Func<Task> act = () =>
                 pacer.RunAsync<int>(
-                    _ => throw new IndexerException("x: search returned HTTP 429"),
+                    _ => throw new IndexerException("x: search returned HTTP 429", 429),
                     CancellationToken.None
                 );
             await act.Should().ThrowAsync<IndexerException>();
         }
 
-        clock.Delays.Should().HaveCountGreaterThan(1);
-        clock.Delays[^1].Should().BeGreaterThan(clock.Delays[0]);
+        Func<Task> gated = () => pacer.RunAsync<int>(_ => Task.FromResult(1), CancellationToken.None);
+        IndexerException blocked = (await gated.Should().ThrowAsync<IndexerException>()).Which;
+
+        double seconds = double.Parse(blocked.Message.Split("another ")[1].Split("s after")[0]);
+        seconds.Should().BeLessThanOrEqualTo(120);
+    }
+
+    // The measured overflow: BaseBackoff * Math.Pow(2, hits - 1) overflows TimeSpan around hits=40
+    // when the exponent is not clamped before the multiplication. failureThreshold is set high
+    // enough that the park gate never trips, since a park rejection does not go through OnFailure
+    // and would stop rateLimitHits from growing. The clock is advanced past MaxBackoff (2 minutes)
+    // before every attempt so each call actually reaches the failing work instead of being turned
+    // away by its own backing-off gate — that is what lets 45 *rate-limited* hits accumulate rather
+    // than 45 gate rejections.
+    [Fact]
+    public async Task RunAsync_DoesNotOverflowAfter45ConsecutiveRateLimitedFailures()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+        IndexerPacer pacer = new(clock, TimeSpan.Zero, 2, failureThreshold: 1000, cooldown: TimeSpan.FromMinutes(5));
+
+        for (int attempt = 0; attempt < 45; attempt++)
+        {
+            clock.Advance(TimeSpan.FromMinutes(3));
+            Func<Task> act = () =>
+                pacer.RunAsync<int>(
+                    _ => throw new IndexerException("x: search returned HTTP 429", 429),
+                    CancellationToken.None
+                );
+            (await act.Should().ThrowAsync<IndexerException>()).Which.Message.Should()
+                .Be("x: search returned HTTP 429");
+        }
+    }
+
+    [Fact]
+    public async Task RunAsync_ANonIndexerExceptionFromWorkStillCountsTowardThePark()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+        IndexerPacer pacer = Pacer(clock);
+
+        for (int attempt = 0; attempt < 3; attempt++)
+        {
+            Func<Task> act = () =>
+                pacer.RunAsync<int>(
+                    _ => throw new InvalidOperationException("boom"),
+                    CancellationToken.None
+                );
+            await act.Should().ThrowAsync<InvalidOperationException>();
+        }
+
+        pacer.IsParked.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task RunAsync_CallerCancellationDoesNotCountTowardThePark()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+        IndexerPacer pacer = Pacer(clock);
+        using CancellationTokenSource source = new();
+        await source.CancelAsync();
+
+        for (int attempt = 0; attempt < 5; attempt++)
+        {
+            Func<Task> act = () =>
+                pacer.RunAsync<int>(_ => throw new OperationCanceledException(), source.Token);
+            await act.Should().ThrowAsync<OperationCanceledException>();
+        }
+
+        pacer.IsParked.Should().BeFalse();
     }
 
     [Fact]

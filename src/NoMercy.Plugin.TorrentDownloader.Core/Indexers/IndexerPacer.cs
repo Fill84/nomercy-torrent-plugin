@@ -14,6 +14,8 @@ public sealed class IndexerPacer(
     private static readonly TimeSpan BaseBackoff = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(2);
 
+    private const int MaxBackoffExponent = 20;
+
     private readonly SemaphoreSlim _slots = new(maxConcurrency, maxConcurrency);
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly object _state = new();
@@ -22,16 +24,22 @@ public sealed class IndexerPacer(
     private int _consecutiveFailures;
     private int _rateLimitHits;
     private DateTimeOffset? _parkedUntil;
+    private DateTimeOffset? _backoffUntil;
 
     public bool IsParked => RemainingPark() is not null;
 
-    public TimeSpan? ParkedUntil => RemainingPark();
+    public TimeSpan? ParkRemaining => RemainingPark();
 
     public async Task<T> RunAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct)
     {
         if (RemainingPark() is TimeSpan remaining)
             throw new IndexerException(
                 $"indexer is parked for another {remaining.TotalSeconds:F0}s after repeated failures"
+            );
+
+        if (RemainingBackoff() is TimeSpan backingOff)
+            throw new IndexerException(
+                $"indexer is backing off for another {backingOff.TotalSeconds:F0}s after a rate limit"
             );
 
         await _slots.WaitAsync(ct);
@@ -43,9 +51,9 @@ public sealed class IndexerPacer(
             OnSuccess();
             return result;
         }
-        catch (IndexerException error)
+        catch (Exception error) when (error is not OperationCanceledException || !ct.IsCancellationRequested)
         {
-            await OnFailureAsync(error, ct);
+            OnFailure(error);
             throw;
         }
         finally
@@ -82,6 +90,16 @@ public sealed class IndexerPacer(
         }
     }
 
+    private TimeSpan? RemainingBackoff()
+    {
+        lock (_state)
+        {
+            return _backoffUntil is DateTimeOffset until && clock.UtcNow < until
+                ? until - clock.UtcNow
+                : null;
+        }
+    }
+
     private void OnSuccess()
     {
         lock (_state)
@@ -89,43 +107,31 @@ public sealed class IndexerPacer(
             _consecutiveFailures = 0;
             _rateLimitHits = 0;
             _parkedUntil = null;
+            _backoffUntil = null;
         }
     }
 
-    private async Task OnFailureAsync(IndexerException error, CancellationToken ct)
+    private void OnFailure(Exception error)
     {
-        bool rateLimited = IsRateLimited(error);
-        TimeSpan? backoff = null;
-        int consecutiveFailures;
-
         lock (_state)
         {
             _consecutiveFailures++;
-            consecutiveFailures = _consecutiveFailures;
 
-            if (rateLimited)
+            if (IsRateLimited(error))
             {
                 _rateLimitHits++;
-                TimeSpan computed = BaseBackoff * Math.Pow(2, _rateLimitHits - 1);
-                backoff = computed < MaxBackoff ? computed : MaxBackoff;
+                int exponent = Math.Min(_rateLimitHits - 1, MaxBackoffExponent);
+                TimeSpan computed = BaseBackoff * Math.Pow(2, exponent);
+                _backoffUntil = clock.UtcNow + (computed < MaxBackoff ? computed : MaxBackoff);
             }
-        }
 
-        if (backoff is TimeSpan delay)
-            await clock.DelayAsync(delay, ct);
-
-        if (consecutiveFailures >= failureThreshold)
-        {
-            lock (_state)
-            {
+            if (_consecutiveFailures >= failureThreshold)
                 _parkedUntil = clock.UtcNow + cooldown;
-            }
         }
     }
 
-    private static bool IsRateLimited(IndexerException error) =>
-        error.Message.Contains("429", StringComparison.Ordinal)
-        || error.Message.Contains("503", StringComparison.Ordinal);
+    private static bool IsRateLimited(Exception error) =>
+        error is IndexerException { StatusCode: 429 or 503 or 509 };
 
     public void Dispose()
     {
