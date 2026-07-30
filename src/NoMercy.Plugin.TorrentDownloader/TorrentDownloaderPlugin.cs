@@ -56,7 +56,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     // The single legacy cadence a host that reads CronExpression instead of Jobs still
     // sees. Kept identical to the transfers job - the fastest of the four - so either path
     // schedules the same cadence.
-    public string CronExpression => ReadSettingsOrDefault().TransfersCron;
+    public string CronExpression => CronOrDefault(ReadSettingsOrDefault().TransfersCron, DefaultSettings.TransfersCron);
 
     // Read synchronously (the sync overload exists on IPluginConfiguration precisely
     // because this property cannot await) and tolerates a missing context on purpose: the
@@ -73,16 +73,58 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
             return
             [
-                new PluginScheduledJob(JobNames.Transfers, settings.TransfersCron),
-                new PluginScheduledJob(JobNames.Feed, settings.FeedCron),
-                new PluginScheduledJob(JobNames.Search, settings.SearchCron),
-                new PluginScheduledJob(JobNames.Maintenance, settings.MaintenanceCron),
+                new PluginScheduledJob(JobNames.Transfers, CronOrDefault(settings.TransfersCron, DefaultSettings.TransfersCron)),
+                new PluginScheduledJob(JobNames.Feed, CronOrDefault(settings.FeedCron, DefaultSettings.FeedCron)),
+                new PluginScheduledJob(JobNames.Search, CronOrDefault(settings.SearchCron, DefaultSettings.SearchCron)),
+                new PluginScheduledJob(JobNames.Maintenance, CronOrDefault(settings.MaintenanceCron, DefaultSettings.MaintenanceCron)),
             ];
         }
     }
 
-    private TorrentDownloaderSettings ReadSettingsOrDefault() =>
-        _context?.Configuration.GetConfiguration<TorrentDownloaderSettings>() ?? new TorrentDownloaderSettings();
+    // TorrentDownloaderSettings' own field initializers, read fresh each call rather than
+    // cached, so this stays the one place the four cadence defaults are named - CronOrDefault
+    // below and every caller reach through here instead of a literal that could drift from
+    // the settings class.
+    private static TorrentDownloaderSettings DefaultSettings => new();
+
+    // System.Text.Json ignores nullability annotations by default, so a stored
+    // {"transfersCron": null} deserializes straight past TransfersCron's non-nullable
+    // declaration and its initializer, and a blank string is no more a valid cron than null
+    // is. Neither should reach the host's cron parser, which this plugin does not validate
+    // and is not about to start doing here - falling back to the documented default is the
+    // whole fix.
+    private static string CronOrDefault(string? cron, string fallback) => string.IsNullOrWhiteSpace(cron) ? fallback : cron;
+
+    // Jobs is a property the host reads repeatedly - at registration and again on every
+    // cadence change - so a read that throws here does not fail once, it fails registration
+    // outright every time. IPluginConfiguration is whole-object JSON on disk: a server killed
+    // mid-write or a full disk leaves truncated JSON, and Deserialize throws JsonException on
+    // that. Catching broadly (short of OperationCanceledException, which is a real
+    // cancellation and must propagate) and falling back to defaults is what keeps this
+    // plugin's four cadences registered no matter what shape the file on disk is in. The
+    // warning names the failure so the owner can see why their configured cadences were
+    // ignored; it never carries the configuration's contents.
+    private TorrentDownloaderSettings ReadSettingsOrDefault()
+    {
+        if (_context is null)
+        {
+            return new TorrentDownloaderSettings();
+        }
+
+        try
+        {
+            return _context.Configuration.GetConfiguration<TorrentDownloaderSettings>() ?? new TorrentDownloaderSettings();
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            _context.Logger.LogWarning(exception, "Torrent Downloader could not read its configuration; using the default schedules.");
+            return new TorrentDownloaderSettings();
+        }
+    }
 
     public Task ExecuteAsync(CancellationToken ct = default) => ExecuteAsync(JobNames.Transfers, ct);
 

@@ -12,6 +12,11 @@ public sealed class RecordingLogger : ILogger
 {
     public List<string> Messages { get; } = [];
 
+    // Parallel to Messages (same index), added so a test can assert a failure was logged
+    // at the level the fix promises - Warning for a swallowed configuration read, Error for
+    // a failed settings view - without a second double duplicating Log's plumbing.
+    public List<LogLevel> Levels { get; } = [];
+
     public IDisposable? BeginScope<TState>(TState state)
         where TState : notnull
     {
@@ -31,6 +36,7 @@ public sealed class RecordingLogger : ILogger
         Func<TState, Exception?, string> formatter
     )
     {
+        Levels.Add(logLevel);
         Messages.Add(formatter(state, exception));
     }
 }

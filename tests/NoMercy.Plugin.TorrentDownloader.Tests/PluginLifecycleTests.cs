@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
+using System.Text.Json;
 using FluentAssertions;
+using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugins.Abstractions;
@@ -111,6 +113,63 @@ public class PluginLifecycleTests
         jobs.Single(job => job.Name == JobNames.Transfers).CronExpression.Should().Be("*/2 * * * *");
         jobs.Single(job => job.Name == JobNames.Feed).CronExpression.Should().Be("*/20 * * * *");
         jobs.Single(job => job.Name == JobNames.Search).CronExpression.Should().Be("0 */3 * * *");
+        jobs.Single(job => job.Name == JobNames.Maintenance).CronExpression.Should().Be("0 5 * * *");
+    }
+
+    [Fact]
+    public void Jobs_WhenConfigurationReadThrows_ReturnsDefaultJobsAndDoesNotThrow()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        RecordingLogger logger = new();
+        context.Logger = logger;
+        context.Configuration.ThrowOnRead = new JsonException("truncated settings file");
+        plugin.Initialize(context);
+
+        TorrentDownloaderSettings defaults = new();
+        Func<IReadOnlyList<PluginScheduledJob>> act = () => plugin.Jobs;
+
+        IReadOnlyList<PluginScheduledJob> jobs = act.Should().NotThrow().Which;
+        jobs.Single(job => job.Name == JobNames.Transfers).CronExpression.Should().Be(defaults.TransfersCron);
+        jobs.Single(job => job.Name == JobNames.Feed).CronExpression.Should().Be(defaults.FeedCron);
+        jobs.Single(job => job.Name == JobNames.Search).CronExpression.Should().Be(defaults.SearchCron);
+        jobs.Single(job => job.Name == JobNames.Maintenance).CronExpression.Should().Be(defaults.MaintenanceCron);
+        logger.Levels.Should().Contain(LogLevel.Warning);
+    }
+
+    [Fact]
+    public void Jobs_WhenTransfersCronIsNull_UsesDefaultForThatFieldOnly()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings
+        {
+            TransfersCron = null!,
+            FeedCron = "*/20 * * * *",
+        };
+        plugin.Initialize(context);
+
+        IReadOnlyList<PluginScheduledJob> jobs = plugin.Jobs;
+
+        jobs.Single(job => job.Name == JobNames.Transfers).CronExpression.Should().Be(new TorrentDownloaderSettings().TransfersCron);
+        jobs.Single(job => job.Name == JobNames.Feed).CronExpression.Should().Be("*/20 * * * *");
+    }
+
+    [Fact]
+    public void Jobs_WhenSearchCronIsWhitespace_UsesDefaultForThatFieldOnly()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings
+        {
+            SearchCron = "   ",
+            MaintenanceCron = "0 5 * * *",
+        };
+        plugin.Initialize(context);
+
+        IReadOnlyList<PluginScheduledJob> jobs = plugin.Jobs;
+
+        jobs.Single(job => job.Name == JobNames.Search).CronExpression.Should().Be(new TorrentDownloaderSettings().SearchCron);
         jobs.Single(job => job.Name == JobNames.Maintenance).CronExpression.Should().Be("0 5 * * *");
     }
 
