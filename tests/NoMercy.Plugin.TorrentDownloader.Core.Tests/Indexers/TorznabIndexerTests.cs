@@ -18,6 +18,23 @@ public class TorznabIndexerTests
         </rss>
         """;
 
+    private const string Response = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:torznab="http://torznab.com/schemas/2015/feed">
+          <channel>
+            <item>
+              <title>Silo S03E04 1080p WEB H264-CAKES</title>
+              <guid>https://indexer.example/details/1</guid>
+              <size>1503238553</size>
+              <link>https://indexer.example/download/1.torrent</link>
+              <torznab:attr name="seeders" value="42" />
+              <torznab:attr name="peers" value="50" />
+              <torznab:attr name="infohash" value="ABCDEF0123456789ABCDEF0123456789ABCDEF01" />
+            </item>
+          </channel>
+        </rss>
+        """;
+
     private static TorznabIndexer Indexer(
         StubHttpMessageHandler handler,
         IReadOnlyList<int>? categories = null
@@ -113,6 +130,59 @@ public class TorznabIndexerTests
 
         (await act.Should().ThrowAsync<IndexerException>()).And.Message.Should()
             .NotContain("SECRETKEY");
+    }
+
+    [Fact]
+    public async Task SearchAsync_ReturnsTheReleasesParsedFromARealResponse()
+    {
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Returning(Response);
+
+        ReleaseInfo release = (
+            await Indexer(handler).SearchAsync(new SearchQuery("Silo"), CancellationToken.None)
+        ).Single();
+
+        release.Title.Should().Be("Silo S03E04 1080p WEB H264-CAKES");
+        release.Seeders.Should().Be(42);
+        release.DownloadUrl.Should().Be("https://indexer.example/download/1.torrent");
+        release.IndexerName.Should().Be("prowlarr");
+        release.IndexerPriority.Should().Be(9);
+    }
+
+    [Fact]
+    public async Task SearchAsync_LetsCallerCancellationPropagate()
+    {
+        using CancellationTokenSource source = new();
+        await source.CancelAsync();
+
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Throwing(
+            new OperationCanceledException()
+        );
+
+        Func<Task> act = () =>
+            Indexer(handler).SearchAsync(new SearchQuery("Silo"), source.Token);
+
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task SearchAsync_ReplacesAnExistingQueryOnTheBaseUrlInsteadOfAppendingToIt()
+    {
+        StubHttpMessageHandler handler = StubHttpMessageHandler.Returning(Empty);
+        TorznabIndexer indexer = new(
+            "prowlarr",
+            9,
+            new Uri("https://jackett.local/api/v2.0/indexers/x/results/torznab/?apikey=OLD"),
+            "NEW",
+            handler.Client()
+        );
+
+        await indexer.SearchAsync(new SearchQuery("Silo"), CancellationToken.None);
+
+        string url = handler.Requests.Single().AbsoluteUri;
+        url.Count(c => c == '?').Should().Be(1);
+        url.Split("apikey=").Length.Should().Be(2);
+        url.Should().Contain("apikey=NEW");
+        url.Should().Contain("t=search");
     }
 
     [Fact]

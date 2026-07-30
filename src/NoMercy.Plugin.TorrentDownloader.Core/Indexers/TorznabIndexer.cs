@@ -48,6 +48,7 @@ public sealed class TorznabIndexer(
                     + string.Join(",", categories.Select(c => c.ToString(CultureInfo.InvariantCulture)))
             );
 
-        return new Uri($"{baseUrl.ToString().TrimEnd('/')}?{string.Join("&", parameters)}");
+        UriBuilder builder = new(baseUrl) { Query = string.Join("&", parameters) };
+        return builder.Uri;
     }
 }
