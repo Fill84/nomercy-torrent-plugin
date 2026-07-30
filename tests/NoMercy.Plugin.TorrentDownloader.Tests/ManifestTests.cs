@@ -21,7 +21,10 @@ public class ManifestTests
         PluginHookCapability.LibraryWrite,
     };
 
-    private static PluginManifest LoadManifest()
+    // Internal so DiscoveryContractTests reads the manifest the same way rather than
+    // duplicating the load - two readers that could disagree about which file is the real one
+    // would defeat the point of asserting they agree.
+    internal static PluginManifest LoadManifest()
     {
         string path = Path.Combine(AppContext.BaseDirectory, "plugin.json");
         string json = File.ReadAllText(path);

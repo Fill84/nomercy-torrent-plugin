@@ -161,7 +161,11 @@ jobs:
           cp "$BIN/$PLUGIN_DIR.deps.json"                        "$STAGING/"
           cp "$BIN/NoMercy.Plugin.TorrentDownloader.Core.dll"    "$STAGING/"
           cp "src/$PLUGIN_DIR/plugin.json"                       "$STAGING/"
-          cp README.md LICENSE                                   "$STAGING/"
+          # The plugin's own README, not the repository's. The repo README is for someone
+          # building or contributing; what belongs beside an installed DLL is what the thing
+          # does, what it declares and how it treats your credentials.
+          cp "src/$PLUGIN_DIR/README.md"                         "$STAGING/"
+          cp LICENSE                                             "$STAGING/"
 
           # Deliberately NOT shipped: NoMercy.Plugins.Abstractions.dll and
           # NoMercy.Events.dll. Both are the host's and live in its shared-assembly
