@@ -111,16 +111,44 @@ public class SettingsViewTests
     }
 
     [Fact]
-    public void Build_NeverPutsASecretValueInTheTree()
+    // Asserts on every password field in the tree, not on one named field, and not by
+    // looking for a secret string that Build is never handed in the first place. An
+    // absent-value assertion against a value the code under test never receives cannot
+    // fail, so it would look like this guard while checking nothing: the moment someone
+    // adds a secret field - a client password, a second indexer credential - or starts
+    // pre-filling one, that version passes and this one does not.
+    public void Build_NeverPutsAValueInAnySecretField()
     {
-        const string apiKey = "super-secret-api-key-that-must-never-leak";
-        TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
-        HashSet<string> storedSecretKeys = new(StringComparer.Ordinal) { SettingsGateway.IndexerSecretKey("Prowlarr") };
+        TorrentDownloaderSettings settings = new()
+        {
+            Indexers =
+            [
+                new IndexerSettings { Name = "Prowlarr" },
+                new IndexerSettings { Name = "Jackett" },
+            ],
+            Clients = [new TorrentClientSettings { Name = "qBit", Username = "admin" }],
+        };
+        HashSet<string> storedSecretKeys = new(StringComparer.Ordinal)
+        {
+            SettingsGateway.IndexerSecretKey("Prowlarr"),
+            SettingsGateway.ClientSecretKey("qBit"),
+        };
 
         PluginView view = SettingsView.Build(settings, [], storedSecretKeys);
 
-        string json = JsonSerializer.Serialize(view);
-        json.Should().NotContain(apiKey);
+        IReadOnlyList<PluginFormField> secretFields =
+        [
+            .. AllFormFields(view.Components!)
+                .Where(field => field.Type == PluginFormFieldType.Password),
+        ];
+
+        secretFields.Should().HaveCount(3, "every indexer and client gets one secret field");
+        secretFields.Should()
+            .AllSatisfy(field =>
+                (field.Value as string ?? string.Empty)
+                    .Should()
+                    .BeEmpty("a stored secret is never echoed back to the client")
+            );
     }
 
     [Fact]
