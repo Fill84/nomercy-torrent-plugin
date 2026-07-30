@@ -38,17 +38,37 @@ env:
 
 jobs:
   build:
-    runs-on: docker
-    container:
-      image: ubuntu:latest
+    runs-on: ubuntu-latest
     steps:
+      # Runs on a host runner rather than in a container, so root is not a given and
+      # the image may already carry these. Install only what is actually missing,
+      # and only if we can - a runner that already has the tools should not fail
+      # here just because apt-get needs a privilege we do not have.
       - name: Install base tooling
         run: |
-          set -eux
-          apt-get update -y
-          apt-get install -y --no-install-recommends \
-            git curl ca-certificates zip unzip jq libicu-dev
-          rm -rf /var/lib/apt/lists/*
+          set -eu
+          missing=""
+          for tool in git curl zip unzip jq; do
+            command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+          done
+
+          if [ -z "$missing" ]; then
+            echo "all required tools present"
+            exit 0
+          fi
+
+          echo "missing:$missing"
+          if [ "$(id -u)" = "0" ]; then
+            SUDO=""
+          elif command -v sudo >/dev/null 2>&1; then
+            SUDO="sudo"
+          else
+            echo "cannot install$missing - not root and no sudo available" >&2
+            exit 1
+          fi
+
+          $SUDO apt-get update -y
+          $SUDO apt-get install -y --no-install-recommends ca-certificates libicu-dev $missing
 
       - name: Install .NET SDK ${{ env.DOTNET_CHANNEL }}
         run: |
