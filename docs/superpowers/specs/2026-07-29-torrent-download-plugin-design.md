@@ -1040,8 +1040,11 @@ files.
 
 ## 18. Open questions
 
-1. ~~The nav-mount `section` value for a downloader (upstream #22).~~ **Resolved** — `PluginNavEntry`
-   shipped; the value is read off the shipped vocabulary, not guessed.
+1. ~~The nav-mount `section` value for a downloader (upstream #22).~~ **Resolved** — `PluginUiSection`
+   names the values, and `Tools` is documented as being for exactly this: "utilities that are not tied
+   to one media type — a downloader, an importer, a maintenance panel". So the downloads panel mounts
+   at `tools` and the configuration page at `settings`. An unknown section is not rejected but falls
+   back to `tools`, so a guess would have been silent rather than an error.
 2. ~~Whether the library query contract (#18) ships as part of `NoMercy.Plugins.Abstractions` or as its
    own package.~~ **Resolved** — it is `IPluginLibraryQuery` inside `NoMercy.Plugins.Abstractions`,
    so the shell takes one `PackageReference`. `NoMercy.Events` travels with it as a transitive
