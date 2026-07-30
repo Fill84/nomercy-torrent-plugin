@@ -14,6 +14,22 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <!--
+            The host owns this assembly at runtime: it is in the server's shared-assembly
+            set, so the plugin load context deliberately resolves it to the host's copy
+            rather than to one sitting next to the plugin.
+
+            This is a library, so NuGet runtime assets are not copied to the output
+            directory and the built folder is already free of it. Do NOT set
+            CopyLocalLockFileAssemblies=true here to "gather dependencies" for packaging:
+            it would drop NoMercy.Plugins.Abstractions.dll and NoMercy.Events.dll beside
+            the plugin, and the load context would then hold two incompatible identities
+            of the same types. That failure surfaces as an unrelated-looking cast error
+            far from its cause. The CI packaging step asserts neither assembly ships.
+
+            ExcludeAssets="runtime" is also wrong: it would stop the test project from
+            resolving the assembly at run time, and the tests would fail to load.
+        -->
         <PackageReference Include="NoMercy.Plugins.Abstractions" Version="*" />
     </ItemGroup>
 

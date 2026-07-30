@@ -12,17 +12,18 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 // prompt to the owner - see IPluginGrants.RequestAsync.
 public sealed class HostGrants(IPluginGrants grants)
 {
-    private const string ReasonFormat = "Torrent Downloader needs to reach the indexer you configured at {0}.";
-
     public async Task<IReadOnlyList<string>> EnsureAsync(TorrentDownloaderSettings settings, CancellationToken ct = default)
     {
-        HashSet<string> hosts = [];
+        // The role is tracked per host, not just the host, because the reason string is shown to
+        // the owner and it should say what they are actually approving. One host can serve both an
+        // indexer and a client, so this is a set of roles rather than a single label.
+        Dictionary<string, SortedSet<string>> hosts = [];
 
         foreach (IndexerSettings indexer in settings.Indexers)
         {
             if (indexer.Enabled && TryGetHost(indexer.Url, out string indexerHost))
             {
-                hosts.Add(indexerHost);
+                AddRole(hosts, indexerHost, "an indexer");
             }
         }
 
@@ -30,7 +31,7 @@ public sealed class HostGrants(IPluginGrants grants)
         {
             if (client.Enabled && TryGetHost(client.Url, out string clientHost))
             {
-                hosts.Add(clientHost);
+                AddRole(hosts, clientHost, "a download client");
             }
         }
 
@@ -46,7 +47,7 @@ public sealed class HostGrants(IPluginGrants grants)
         }
 
         List<string> ungranted = [];
-        foreach (string host in hosts)
+        foreach ((string host, SortedSet<string> roles) in hosts)
         {
             bool granted = await grants.HasAsync(PluginGrantKind.NetworkHost, host, ct);
             if (granted)
@@ -54,12 +55,24 @@ public sealed class HostGrants(IPluginGrants grants)
                 continue;
             }
 
-            string reason = string.Format(ReasonFormat, host);
+            string reason =
+                $"Torrent Downloader needs to reach {host}, which you configured as {string.Join(" and ", roles)}.";
             await grants.RequestAsync(PluginGrantKind.NetworkHost, host, reason, ct);
             ungranted.Add(host);
         }
 
         return ungranted;
+    }
+
+    private static void AddRole(Dictionary<string, SortedSet<string>> hosts, string host, string role)
+    {
+        if (!hosts.TryGetValue(host, out SortedSet<string>? roles))
+        {
+            roles = new SortedSet<string>(StringComparer.Ordinal);
+            hosts[host] = roles;
+        }
+
+        roles.Add(role);
     }
 
     // A half-filled settings form must not break the tick: an empty, malformed, or

@@ -1,0 +1,193 @@
+name: build
+
+# Builds and tests the NoMercy Torrent Downloader plugin, then packages a
+# ready-to-drop plugin directory.
+#
+# The plugin is built against NoMercy.Plugins.Abstractions, which is NOT published
+# to nuget.org. scripts/fetch-abstractions.sh clones the server and packs it (plus
+# NoMercy.Events, which it depends on) into a local file feed that the committed
+# nuget.config points at. The script is shared with local development on purpose,
+# so CI and a developer's machine cannot drift.
+#
+# On a `v*` tag push, a Forgejo release is created and the packaged plugin zip is
+# attached. Build, test and release run in a single job so we don't need the
+# artifact upload/download API, which the act_runner routes through the internal
+# `forgejo:3000` hostname that the per-workflow Docker network can't resolve.
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:     [ 'v*' ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PLUGIN_DIR: NoMercy.Plugin.TorrentDownloader
+  SERVER_BRANCH: dev
+  DOTNET_CHANNEL: "10.0"
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  # Public Forgejo URL — used to clone this repo and hit the release API from
+  # inside the workflow container, because the runner's default
+  # GITHUB_SERVER_URL (http://forgejo:3000) isn't resolvable on the
+  # per-workflow Docker network.
+  PUBLIC_FORGEJO_URL: https://forgejo.phillippepelzer.me
+
+jobs:
+  build:
+    runs-on: docker
+    container:
+      image: ubuntu:latest
+    steps:
+      - name: Install base tooling
+        run: |
+          set -eux
+          apt-get update -y
+          apt-get install -y --no-install-recommends \
+            git curl ca-certificates zip unzip jq libicu-dev
+          rm -rf /var/lib/apt/lists/*
+
+      - name: Install .NET SDK ${{ env.DOTNET_CHANNEL }}
+        run: |
+          set -eux
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+          chmod +x /tmp/dotnet-install.sh
+          /tmp/dotnet-install.sh --channel "$DOTNET_CHANNEL" --install-dir "$HOME/.dotnet"
+          echo "DOTNET_ROOT=$HOME/.dotnet" >> "$GITHUB_ENV"
+          echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+          "$HOME/.dotnet/dotnet" --info
+
+      # Manual checkout instead of actions/checkout@v4: the action clones from
+      # $GITHUB_SERVER_URL, which the runner sets to an internal hostname the
+      # workflow container can't resolve. The public URL works for both private
+      # and public repos when the auto-generated GITHUB_TOKEN is passed via an
+      # HTTP basic-auth header.
+      - name: Checkout plugin (via public URL)
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -eux
+          : "${TOKEN:?missing GITHUB_TOKEN}"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          shopt -s dotglob nullglob
+          rm -rf -- *
+          git init -q .
+          git remote add origin "${PUBLIC_FORGEJO_URL}/${GITHUB_REPOSITORY}.git"
+          AUTH_B64=$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)
+          git -c "http.extraheader=Authorization: basic ${AUTH_B64}" \
+              fetch --depth=1 origin "$GITHUB_SHA"
+          git checkout -q FETCH_HEAD
+          git log --oneline -1
+
+      # Packs NoMercy.Plugins.Abstractions and NoMercy.Events into ./_nupkgs,
+      # which the committed nuget.config already lists as a package source.
+      - name: Pack the plugin contract to a local feed
+        run: |
+          set -eux
+          chmod +x scripts/fetch-abstractions.sh
+          ./scripts/fetch-abstractions.sh
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build -c Release --no-restore
+
+      # The whole point of running these here: a plugin that fails its own tests
+      # must not produce a release artifact. TreatWarningsAsErrors is passed on
+      # the command line to match how the projects are verified locally.
+      - name: Test (Release, warnings as errors)
+        run: dotnet test -c Release --no-build -p:TreatWarningsAsErrors=true --logger "console;verbosity=normal"
+
+      - name: Stage the plugin directory
+        id: stage
+        run: |
+          set -eux
+          BIN="src/$PLUGIN_DIR/bin/Release/net10.0"
+          STAGING="$PWD/_stage/$PLUGIN_DIR"
+          mkdir -p "$STAGING"
+
+          # The plugin assembly, its manifest, and the domain core it depends on.
+          # deps.json travels with them so the load context resolves Core.
+          cp "$BIN/$PLUGIN_DIR.dll"                              "$STAGING/"
+          cp "$BIN/$PLUGIN_DIR.deps.json"                        "$STAGING/"
+          cp "$BIN/NoMercy.Plugin.TorrentDownloader.Core.dll"    "$STAGING/"
+          cp "src/$PLUGIN_DIR/plugin.json"                       "$STAGING/"
+          cp README.md LICENSE                                   "$STAGING/"
+
+          # Deliberately NOT shipped: NoMercy.Plugins.Abstractions.dll and
+          # NoMercy.Events.dll. Both are the host's and live in its
+          # shared-assembly set. Shipping a copy is how a plugin ends up with two
+          # incompatible identities of the same type across the load-context
+          # boundary, and the failure looks like an unrelated cast error.
+          if ls "$STAGING" | grep -E 'NoMercy\.(Plugins\.Abstractions|Events)\.dll'; then
+            echo "host assembly leaked into the artifact" >&2
+            exit 1
+          fi
+
+          REF="${GITHUB_REF_NAME:-}"
+          case "$REF" in
+            v*) VERSION="${REF#v}" ;;
+            *)  VERSION="dev-${GITHUB_SHA:0:8}" ;;
+          esac
+
+          ZIP="$PLUGIN_DIR-$VERSION.zip"
+          (cd "$PWD/_stage" && zip -r "../$ZIP" "$PLUGIN_DIR")
+          ls -la "$ZIP"
+
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "zip=$ZIP"         >> "$GITHUB_OUTPUT"
+
+      - name: Create Forgejo release & attach asset
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          ZIP="${{ steps.stage.outputs.zip }}"
+          TAG="${GITHUB_REF_NAME}"
+          REPO="${GITHUB_REPOSITORY}"
+          # Public API URL — same reason as the checkout step.
+          API="${PUBLIC_FORGEJO_URL%/}/api/v1"
+
+          BODY=$(cat <<EOF
+          ## NoMercy Torrent Downloader — ${TAG}
+
+          Keeps a TV library complete by downloading missing episodes over BitTorrent.
+
+          ### Install
+          1. Extract \`${ZIP}\` into \`<server>/plugins/\`.
+          2. Restart the server.
+          3. Enable the plugin in the dashboard and grant consent when prompted.
+          4. Configure indexers and a download client on the plugin's settings page.
+
+          Requires NoMercy MediaServer with the plugin ABI 10.0 contract.
+
+          Built and tested automatically against
+          \`NoMercy-Entertainment/nomercy-media-server@${SERVER_BRANCH}\`.
+          EOF
+          )
+
+          echo "Creating release $TAG in $REPO"
+          REL_JSON=$(curl -fsSL -X POST \
+            -H "Authorization: token $TOKEN" \
+            -H "Content-Type: application/json" \
+            "$API/repos/$REPO/releases" \
+            -d "$(jq -n --arg tag "$TAG" --arg body "$BODY" \
+                  '{tag_name:$tag, name:$tag, body:$body, draft:false, prerelease:false}')")
+
+          REL_ID=$(echo "$REL_JSON" | jq -r '.id')
+          echo "release id = $REL_ID"
+
+          echo "Uploading asset $ZIP"
+          curl -fsSL -X POST \
+            -H "Authorization: token $TOKEN" \
+            -H "Content-Type: application/octet-stream" \
+            --data-binary "@$ZIP" \
+            "$API/repos/$REPO/releases/$REL_ID/assets?name=$(basename "$ZIP")"
+
+          echo "Release published: $TAG"

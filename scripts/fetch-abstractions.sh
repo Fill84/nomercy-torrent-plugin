@@ -10,7 +10,16 @@
 
 set -eu
 
-dotnet=dotnet
+# CI puts the right SDK on PATH. On a Windows dev machine the `dotnet` on PATH is
+# an older SDK that cannot build net10.0, and the usable one is a side-by-side
+# install under the user profile, so prefer that when it is there.
+if [ -x "${USERPROFILE:-}/.dotnet/dotnet.exe" ]; then
+    dotnet="${USERPROFILE}/.dotnet/dotnet.exe"
+elif [ -x "${HOME:-}/.dotnet/dotnet" ]; then
+    dotnet="${HOME}/.dotnet/dotnet"
+else
+    dotnet=dotnet
+fi
 
 root=$(cd "$(dirname "$0")/.." && pwd)
 server="$root/_server"
