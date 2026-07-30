@@ -70,6 +70,58 @@ public class PluginLifecycleTests
     }
 
     [Fact]
+    public async Task Dispose_CancelsATickStartedBeforeIt()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        TaskCompletionSource<bool> readGate = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings();
+        context.Configuration.ReadGate = readGate;
+        plugin.Initialize(context);
+
+        Task tick = plugin.ExecuteAsync(JobNames.Transfers, CancellationToken.None);
+        plugin.Dispose();
+        readGate.TrySetResult(true);
+
+        Func<Task> act = () => tick;
+        await act.Should().ThrowAsync<OperationCanceledException>();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AfterDisposeDoesNotRun()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        RecordingLogger logger = new();
+        context.Logger = logger;
+        plugin.Initialize(context);
+        plugin.Dispose();
+
+        Func<Task> act = () => plugin.ExecuteAsync(JobNames.Transfers, CancellationToken.None);
+
+        await act.Should().ThrowAsync<ObjectDisposedException>();
+        logger.Messages.Should().BeEmpty("a tick after Dispose must never reach the job body");
+    }
+
+    [Fact]
+    public async Task GetViewAsync_AfterDisposeDoesNotThrow()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        plugin.Initialize(new FakePluginContext());
+        plugin.Dispose();
+
+        Func<Task<PluginView>> act = () => plugin.GetViewAsync(new PluginViewRequest { Route = "/settings" }, CancellationToken.None);
+
+        PluginView view = (await act.Should().NotThrowAsync()).Which;
+
+        // Not merely "did not throw" - a disposed plugin must not run the live view at all,
+        // so this checks for the dedicated unavailable signal rather than accepting whatever
+        // the ordinary settings tree happens to contain (which, with no indexers configured,
+        // also has an EmptyState and would pass without the guard this test exists to prove).
+        view.Components.Should().Contain(component => component.Id == "settings-unavailable");
+    }
+
+    [Fact]
     public void Identity_MatchesPluginIdentity()
     {
         TorrentDownloaderPlugin plugin = new();

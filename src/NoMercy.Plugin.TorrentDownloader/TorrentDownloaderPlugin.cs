@@ -30,6 +30,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private SettingsGateway? _settingsGateway;
     private bool _disposed;
 
+    // Field-initialized rather than created in Initialize, so Dispose has something to
+    // cancel and dispose even when the host disposes a plugin whose load never happened -
+    // the same case the null-safe-before-Initialize contract already covers. Every tick
+    // links this into the token it runs under (see ExecuteAsync), so cancelling it here is
+    // what makes Dispose's "cancel in-flight work" promise real instead of aspirational.
+    private readonly CancellationTokenSource _lifecycleCts = new();
+
     public string Name => PluginIdentity.Name;
     public string Description => PluginIdentity.Description;
     public Guid Id => PluginIdentity.Id;
@@ -128,24 +135,32 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     public Task ExecuteAsync(CancellationToken ct = default) => ExecuteAsync(JobNames.Transfers, ct);
 
+    // A tick arriving after Dispose is the host calling a plugin it already tore down - that
+    // is a bug in the caller, not a state this method should quietly absorb, so it throws
+    // rather than returning as if the tick had run. Linking the host's token with the
+    // plugin's own lifecycle token means Dispose cancelling the latter reaches whichever job
+    // body is currently awaiting I/O, instead of only being checked at the top of this method.
     public async Task ExecuteAsync(string jobName, CancellationToken ct = default)
     {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+
         IPluginContext context = Context;
-        ct.ThrowIfCancellationRequested();
+        using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifecycleCts.Token);
+        linkedCts.Token.ThrowIfCancellationRequested();
 
         switch (jobName)
         {
             case JobNames.Transfers:
-                await RunTransfersAsync(context, ct);
+                await RunTransfersAsync(context, linkedCts.Token);
                 break;
             case JobNames.Feed:
-                await RunFeedAsync(context, ct);
+                await RunFeedAsync(context, linkedCts.Token);
                 break;
             case JobNames.Search:
-                await RunSearchAsync(context, ct);
+                await RunSearchAsync(context, linkedCts.Token);
                 break;
             case JobNames.Maintenance:
-                await RunMaintenanceAsync(context, ct);
+                await RunMaintenanceAsync(context, linkedCts.Token);
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(jobName), jobName, "Unknown job name.");
@@ -215,11 +230,30 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             },
         ];
 
+    // A view request after Dispose is not the caller's bug the way a tick is - the host may
+    // still be draining an in-flight page render while tearing the plugin down - so this
+    // answers with something renderable instead of throwing into the request pipeline. No
+    // I/O happens before this check, so there is nothing to cancel; the disposed case never
+    // reaches the try block below.
+    private static PluginView DisposedView() =>
+        PluginViews.Declarative(
+            PluginViews.EmptyState(
+                "settings-unavailable",
+                "Torrent Downloader is unavailable",
+                "This plugin is disabled or is being unloaded."
+            )
+        );
+
     // The one route this stage has. A client asking for anything else is not a bug worth
     // failing the request over - the empty state is the honest answer for a route this
     // version does not have.
     public async Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
     {
+        if (_disposed)
+        {
+            return DisposedView();
+        }
+
         if (request.Route != "/settings")
         {
             return PluginViews.Declarative(PluginViews.EmptyState("settings-unknown-route", "Nothing here"));
@@ -235,7 +269,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     // Null-safe before Initialize (the host may dispose a plugin whose load failed) and
-    // idempotent (a double dispose is not a bug worth throwing over).
+    // idempotent (a double dispose is not a bug worth throwing over). Cancelling before
+    // flipping _disposed matters no more than the reverse here - both fields are set on the
+    // same thread with nothing else observing the gap - but the order documents intent:
+    // stop new work first, then reach into whatever is already running.
     public void Dispose()
     {
         if (_disposed)
@@ -244,5 +281,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
 
         _disposed = true;
+        _lifecycleCts.Cancel();
+        _lifecycleCts.Dispose();
     }
 }
