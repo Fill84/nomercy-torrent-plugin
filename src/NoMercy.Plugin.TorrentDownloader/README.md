@@ -6,6 +6,12 @@ that keeps a TV library complete by downloading missing episodes over BitTorrent
 This is the README that ships **inside the plugin package**. The repository's own README covers
 building and contributing.
 
+> **Known blocker — saving settings needs an upstream fix.** The server mounts plugin controllers at
+> `api/plugins/{id}/…` while the web client posts plugin actions to `api/v1/plugins/{id}/…`, so every
+> plugin's REST action currently 404s. Filed as
+> [nomercy-media-server#26](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/26).
+> This plugin's controller is correct as written and needs no change once that lands.
+
 > **This build loads but does not download.** The release parsing, matching and indexer layers are
 > built and tested, and the plugin loads, registers its jobs, and lets you configure its schedules,
 > indexers and download clients from its settings page. The download database, the torrent clients
