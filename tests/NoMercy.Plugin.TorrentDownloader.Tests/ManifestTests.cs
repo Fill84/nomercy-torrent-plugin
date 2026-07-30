@@ -124,4 +124,16 @@ public class ManifestTests
 
         PluginUiSection.All.Should().Contain(mount.Section);
     }
+
+    [Fact]
+    public void Manifest_UiMountAgreesWithNavEntries()
+    {
+        PluginManifest manifest = LoadManifest();
+        PluginUiMount mount = manifest.Capabilities!.Ui!.Mounts[0];
+        TorrentDownloaderPlugin plugin = new();
+        PluginNavEntry navEntry = plugin.NavEntries.Should().ContainSingle().Which;
+
+        navEntry.Section.Should().Be(mount.Section);
+        navEntry.Route.Should().Be(mount.Route);
+    }
 }

@@ -12,8 +12,14 @@ public sealed class FakeSecretStore : IPluginSecretStore
 {
     public Dictionary<string, string> Values { get; } = [];
 
+    // Counts every call to GetAsync. Initialize must leave this at zero, for the same
+    // reason as FakeConfiguration.Reads: no I/O belongs on the synchronous, un-awaitable
+    // load path.
+    public int Reads { get; private set; }
+
     public Task<string?> GetAsync(string key, CancellationToken ct = default)
     {
+        Reads++;
         return Task.FromResult(Values.TryGetValue(key, out string? value) ? value : null);
     }
 

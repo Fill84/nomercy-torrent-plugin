@@ -15,15 +15,22 @@ public sealed class FakeConfiguration : IPluginConfiguration
 
     public List<object> SavedObjects { get; } = [];
 
+    // Counts every call to either GetConfiguration overload. Initialize must leave this
+    // at zero: the plugin has nowhere to await, so a config read there would either block
+    // or be silently skipped, and either is worse than deferring it to the first tick.
+    public int Reads { get; private set; }
+
     public T? GetConfiguration<T>()
         where T : class, new()
     {
+        Reads++;
         return Stored as T;
     }
 
     public Task<T?> GetConfigurationAsync<T>(CancellationToken ct = default)
         where T : class, new()
     {
+        Reads++;
         return Task.FromResult(Stored as T);
     }
 
