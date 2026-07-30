@@ -15,7 +15,7 @@ Identical to Stage 0a, repeated so this plan stands alone.
 - **Target framework `net10.0`.**
 - **Explicit types, never `var`.** Hard rule.
 - **No useless comments.** Default zero — comment only a constraint a reader could not infer.
-- **No license header in this repo.**
+- **Every `.cs` file starts with the project licence header**, at line 1, followed by a blank line, then the `using` block. Copy it verbatim from any existing source file — it ends with `// Created by Phillippe Pelzer https://github.com/Fill84` and a rule line. A new file without it is incomplete.
 - **`[GeneratedRegex]` for every constant pattern**, `partial` class, `partial static` method. Case-insensitive patterns carry `RegexOptions.IgnoreCase | RegexOptions.CultureInvariant`. Runtime-constructed regexes over user-supplied patterns go through `TermMatcher`.
 - **`Core` keeps zero reference to `NoMercy.Plugins.Abstractions`, `NoMercy.Events`, or any NoMercy assembly.**
 - **Parsers do no I/O.** `Core.Indexers.Parsing` is pure: no `HttpClient`, no `File`, no `DateTime.Now`. Only the client classes in `Core.Indexers` hold an `HttpClient`, and it is **injected**, never constructed — the plugin shell supplies the host's allowlisted client.
