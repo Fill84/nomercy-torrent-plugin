@@ -189,4 +189,18 @@ public class IndexerPacerTests
 
         peak.Should().BeLessThanOrEqualTo(2);
     }
+
+    // Pins a guarantee this class relies on rather than provides: SemaphoreSlim's own constructor
+    // rejects a non-positive maxCount, so no explicit guard is needed here. The test exists so that
+    // clamping the cap instead of passing it through would be caught.
+    [Fact]
+    public void Constructor_RejectsAConcurrencyCapOfZero()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+
+        Action act = () =>
+            _ = new IndexerPacer(clock, TimeSpan.Zero, 0, 3, TimeSpan.FromMinutes(5));
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
 }
