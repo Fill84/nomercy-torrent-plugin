@@ -1657,6 +1657,17 @@ public class IndexerPacerTests
     }
 
     [Fact]
+    public void Constructor_RejectsAConcurrencyCapOfZero()
+    {
+        FakeClock clock = new(DateTimeOffset.UnixEpoch);
+
+        Action act = () =>
+            _ = new IndexerPacer(clock, TimeSpan.Zero, 0, 3, TimeSpan.FromMinutes(5));
+
+        act.Should().Throw<ArgumentOutOfRangeException>();
+    }
+
+    [Fact]
     public async Task RunAsync_NeverRunsMoreThanTheConcurrencyCapAtOnce()
     {
         FakeClock clock = new(DateTimeOffset.UnixEpoch);
@@ -1705,24 +1716,32 @@ public sealed class IndexerPacer(
     private static readonly TimeSpan BaseBackoff = TimeSpan.FromSeconds(2);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromMinutes(2);
 
-    private readonly SemaphoreSlim _slots = new(maxConcurrency, maxConcurrency);
+    // maxConcurrency of zero would make SemaphoreSlim(0, 0) block every call forever, so a
+    // misconfiguration would silently wedge this indexer rather than fail loudly.
+    private readonly SemaphoreSlim _slots = new(
+        Positive(maxConcurrency, nameof(maxConcurrency)),
+        Positive(maxConcurrency, nameof(maxConcurrency))
+    );
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly object _state = new();
 
     private DateTimeOffset _lastStarted = DateTimeOffset.MinValue;
     private int _consecutiveFailures;
     private int _rateLimitHits;
     private DateTimeOffset? _parkedUntil;
 
-    public bool IsParked => _parkedUntil is DateTimeOffset until && clock.UtcNow < until;
+    public bool IsParked => RemainingPark() is not null;
 
-    public TimeSpan? ParkedUntil =>
-        _parkedUntil is DateTimeOffset until && clock.UtcNow < until ? until - clock.UtcNow : null;
+    public TimeSpan? ParkedUntil => RemainingPark();
 
     public async Task<T> RunAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct)
     {
-        if (IsParked)
+        // One read, not two. Asking IsParked and then ParkedUntil lets a concurrent success null
+        // the field between them, and Nullable.Value then throws InvalidOperationException — which
+        // the aggregator does not catch, so it would abort the cycle instead of degrading.
+        if (RemainingPark() is TimeSpan remaining)
             throw new IndexerException(
-                $"indexer is parked for another {ParkedUntil!.Value.TotalSeconds:F0}s after repeated failures"
+                $"indexer is parked for another {remaining.TotalSeconds:F0}s after repeated failures"
             );
 
         await _slots.WaitAsync(ct);
@@ -1763,26 +1782,63 @@ public sealed class IndexerPacer(
         }
     }
 
+    private static int Positive(int value, string name) =>
+        value > 0
+            ? value
+            : throw new ArgumentOutOfRangeException(name, value, "must be greater than zero");
+
+    // Breaker state is touched by every concurrent caller up to the slot cap, so it is guarded.
+    // The lock is never held across an await: the backoff is computed from a snapshot and
+    // awaited after releasing.
+    private TimeSpan? RemainingPark()
+    {
+        DateTimeOffset? until;
+
+        lock (_state)
+        {
+            until = _parkedUntil;
+        }
+
+        if (until is not DateTimeOffset value)
+            return null;
+
+        TimeSpan remaining = value - clock.UtcNow;
+        return remaining > TimeSpan.Zero ? remaining : null;
+    }
+
     private void OnSuccess()
     {
-        _consecutiveFailures = 0;
-        _rateLimitHits = 0;
-        _parkedUntil = null;
+        lock (_state)
+        {
+            _consecutiveFailures = 0;
+            _rateLimitHits = 0;
+            _parkedUntil = null;
+        }
     }
 
     private async Task OnFailureAsync(IndexerException error, CancellationToken ct)
     {
-        _consecutiveFailures++;
+        bool rateLimited = IsRateLimited(error);
+        int hits;
 
-        if (IsRateLimited(error))
+        lock (_state)
         {
-            _rateLimitHits++;
-            TimeSpan backoff = BaseBackoff * Math.Pow(2, _rateLimitHits - 1);
-            await clock.DelayAsync(backoff < MaxBackoff ? backoff : MaxBackoff, ct);
+            _consecutiveFailures++;
+
+            if (rateLimited)
+                _rateLimitHits++;
+
+            hits = _rateLimitHits;
+
+            if (_consecutiveFailures >= failureThreshold)
+                _parkedUntil = clock.UtcNow + cooldown;
         }
 
-        if (_consecutiveFailures >= failureThreshold)
-            _parkedUntil = clock.UtcNow + cooldown;
+        if (rateLimited)
+        {
+            TimeSpan backoff = BaseBackoff * Math.Pow(2, hits - 1);
+            await clock.DelayAsync(backoff < MaxBackoff ? backoff : MaxBackoff, ct);
+        }
     }
 
     private static bool IsRateLimited(IndexerException error) =>
@@ -1800,7 +1856,7 @@ public sealed class IndexerPacer(
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter IndexerPacerTests`
-Expected: PASS, 9 cases (suite total 231).
+Expected: PASS, 10 cases (suite total 232).
 
 - [ ] **Step 5: Commit**
 
@@ -2075,12 +2131,12 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests --filter IndexerAggregatorTests`
-Expected: PASS, 7 cases (suite total 238).
+Expected: PASS, 7 cases (suite total 239).
 
 - [ ] **Step 5: Run the whole suite and a Release build**
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" test tests/NoMercy.Plugin.TorrentDownloader.Core.Tests`
-Expected: PASS, 238 cases.
+Expected: PASS, 239 cases.
 
 Run: `& "$env:USERPROFILE\.dotnet\dotnet.exe" build nomercy-torrent-plugin.sln -c Release`
 Expected: 0 warnings, 0 errors.
