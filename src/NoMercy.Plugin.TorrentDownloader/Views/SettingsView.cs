@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
+using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugins.Abstractions;
 
@@ -30,12 +31,25 @@ public static class SettingsView
     internal const string SaveIndexerMethod = "SaveIndexer";
     internal const string SaveClientMethod = "SaveClient";
 
+    // Add carries no index - it targets no existing entry, so there is nothing for the
+    // route to parameterise. Remove needs one, for the same reason SaveIndexer/SaveClient
+    // do: the client's PluginButton dispatches its action's payload intact (unlike a
+    // form), but the index still rides in the method string for consistency with the save
+    // routes above, rather than one entry point reading the index from the route and its
+    // sibling reading it from the payload.
+    internal const string AddIndexerMethod = "AddIndexer";
+    internal const string AddClientMethod = "AddClient";
+    internal const string RemoveIndexerMethod = "RemoveIndexer";
+    internal const string RemoveClientMethod = "RemoveClient";
+
     // Route templates the controller attaches its [HttpPost] to. Built from the same method
     // constants above at compile time, so the "{method}/{index}" shape used when building a
     // per-entry action and the "{method}/{index:int}" route the controller listens on cannot
     // drift into two different stems.
     internal const string SaveIndexerRouteTemplate = SaveIndexerMethod + "/{index:int}";
     internal const string SaveClientRouteTemplate = SaveClientMethod + "/{index:int}";
+    internal const string RemoveIndexerRouteTemplate = RemoveIndexerMethod + "/{index:int}";
+    internal const string RemoveClientRouteTemplate = RemoveClientMethod + "/{index:int}";
 
     private const string SaveLabel = "Save";
 
@@ -48,6 +62,7 @@ public static class SettingsView
         List<PluginComponent> children =
         [
             PluginViews.Text("settings-heading", "Torrent Downloader Settings", "heading"),
+            PluginViews.Text("settings-last-saved", LastSavedLabel(settings.LastSavedAtUtc), "caption"),
         ];
 
         if (ungrantedHosts.Count > 0)
@@ -58,11 +73,13 @@ public static class SettingsView
         children.Add(BuildGeneralForm(settings));
 
         children.Add(PluginViews.Text("settings-indexers-heading", "Indexers", "subheading"));
+        children.Add(PluginViews.Button("settings-indexers-add", "Add indexer", PluginActionIntent.CallPlugin(AddIndexerMethod)));
         if (settings.Indexers.Count > 0)
         {
             for (int i = 0; i < settings.Indexers.Count; i++)
             {
                 children.Add(BuildIndexerForm(i, settings.Indexers[i], storedSecretKeys));
+                children.Add(BuildRemoveIndexerButton(i));
             }
         }
         else
@@ -77,11 +94,13 @@ public static class SettingsView
         }
 
         children.Add(PluginViews.Text("settings-clients-heading", "Download Clients", "subheading"));
+        children.Add(PluginViews.Button("settings-clients-add", "Add download client", PluginActionIntent.CallPlugin(AddClientMethod)));
         if (settings.Clients.Count > 0)
         {
             for (int i = 0; i < settings.Clients.Count; i++)
             {
                 children.Add(BuildClientForm(i, settings.Clients[i], storedSecretKeys));
+                children.Add(BuildRemoveClientButton(i));
             }
         }
         else
@@ -97,6 +116,39 @@ public static class SettingsView
 
         return PluginViews.Declarative(0, PluginViews.Container("settings-root", [.. children]));
     }
+
+    // Rendered with CultureInfo.InvariantCulture, same as Core's size formatting, so this
+    // does not shift shape by server locale - a comma-for-decimal locale reading the clock
+    // differently would otherwise make the same instant look like two different formats to
+    // two owners on two servers. The client discards a successful action's response body
+    // entirely and re-fetches the view itself afterward, so this line - not the response -
+    // is what tells the owner a save actually reached disk.
+    private static string LastSavedLabel(DateTimeOffset? lastSavedAtUtc) =>
+        lastSavedAtUtc is { } savedAt
+            ? $"Last saved {savedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC"
+            : "Not saved yet.";
+
+    // Ids live outside the "settings-indexer-"/"settings-client-" namespace the per-entry
+    // form uses (settings-indexer-{index}-form) - a component here landing inside that
+    // namespace would collide with tests that gather every component by that prefix and
+    // then treat every match as a form.
+    private static PluginComponent BuildRemoveIndexerButton(int index) =>
+        PluginViews.DestructiveButton(
+            $"indexer-{index}-remove",
+            "Remove indexer",
+            PluginActionIntent.CallPlugin($"{RemoveIndexerMethod}/{index}"),
+            "Remove this indexer?",
+            "This deletes the indexer and its saved API key. This cannot be undone."
+        );
+
+    private static PluginComponent BuildRemoveClientButton(int index) =>
+        PluginViews.DestructiveButton(
+            $"client-{index}-remove",
+            "Remove download client",
+            PluginActionIntent.CallPlugin($"{RemoveClientMethod}/{index}"),
+            "Remove this download client?",
+            "This deletes the client and its saved password. This cannot be undone."
+        );
 
     // A badge plus the sentence naming the hosts, so the owner knows a grant prompt they
     // may have missed is why nothing is downloading yet.

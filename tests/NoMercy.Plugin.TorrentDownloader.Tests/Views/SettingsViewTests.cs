@@ -305,4 +305,106 @@ public class SettingsViewTests
             forms[i].Action!.Payload["payload"].Should().BeNull();
         }
     }
+
+    [Fact]
+    public void Build_HidesTheIndexersEmptyStateOnceThereIsAtLeastOneIndexer()
+    {
+        TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "New Indexer 1" }] };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        Flatten(view.Components!).Should().NotContain(component => component.Id == "settings-indexers-empty");
+    }
+
+    [Fact]
+    public void Build_HidesTheClientsEmptyStateOnceThereIsAtLeastOneClient()
+    {
+        TorrentDownloaderSettings settings = new() { Clients = [new TorrentClientSettings { Name = "New Download Client 1" }] };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        Flatten(view.Components!).Should().NotContain(component => component.Id == "settings-clients-empty");
+    }
+
+    [Fact]
+    public void Build_AddIndexerButtonCallsAddIndexerWithNoConfirmationAndNoPayload()
+    {
+        TorrentDownloaderSettings settings = new();
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        PluginComponent addButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "settings-indexers-add").Which;
+        addButton.Component.Should().Be(PluginComponentType.Button);
+        addButton.Action!.Payload["method"].Should().Be("AddIndexer");
+        addButton.Action.Payload["payload"].Should().BeNull();
+        addButton.Action.Confirm.Should().BeNull();
+    }
+
+    [Fact]
+    public void Build_AddClientButtonCallsAddClientWithNoConfirmationAndNoPayload()
+    {
+        TorrentDownloaderSettings settings = new();
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        PluginComponent addButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "settings-clients-add").Which;
+        addButton.Component.Should().Be(PluginComponentType.Button);
+        addButton.Action!.Payload["method"].Should().Be("AddClient");
+        addButton.Action.Confirm.Should().BeNull();
+    }
+
+    // The confirmation is what stands between a misclick and losing a stored credential -
+    // asserted directly on the intent rather than inferred from the button's variant, since
+    // a plain Button given a red label would look identical to a DestructiveButton at a
+    // glance but carry no PluginConfirmation at all.
+    [Fact]
+    public void Build_RemoveIndexerButtonCallsRemoveIndexerWithTheRenderIndexAndAConfirmation()
+    {
+        TorrentDownloaderSettings settings = new()
+        {
+            Indexers = [new IndexerSettings { Name = "Prowlarr" }, new IndexerSettings { Name = "Jackett" }],
+        };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        PluginComponent removeButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "indexer-1-remove").Which;
+        removeButton.Component.Should().Be(PluginComponentType.Button);
+        removeButton.Action!.Payload["method"].Should().Be("RemoveIndexer/1");
+        removeButton.Action.Confirm.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Build_RemoveClientButtonCallsRemoveClientWithTheRenderIndexAndAConfirmation()
+    {
+        TorrentDownloaderSettings settings = new()
+        {
+            Clients = [new TorrentClientSettings { Name = "qBit" }],
+        };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        PluginComponent removeButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "client-0-remove").Which;
+        removeButton.Action!.Payload["method"].Should().Be("RemoveClient/0");
+        removeButton.Action.Confirm.Should().NotBeNull();
+    }
+
+    [Fact]
+    public void Build_RendersNotSavedYetWhenNoTimestampIsRecorded()
+    {
+        TorrentDownloaderSettings settings = new();
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        Flatten(view.Components!).Should().Contain(component => IsTextMentioning(component, "Not saved yet"));
+    }
+
+    [Fact]
+    public void Build_RendersTheSavedTimestampInInvariantCultureWhenSet()
+    {
+        TorrentDownloaderSettings settings = new() { LastSavedAtUtc = new DateTimeOffset(2026, 7, 31, 1, 59, 0, TimeSpan.Zero) };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        Flatten(view.Components!).Should().Contain(component => IsTextMentioning(component, "2026-07-31 01:59"));
+    }
 }

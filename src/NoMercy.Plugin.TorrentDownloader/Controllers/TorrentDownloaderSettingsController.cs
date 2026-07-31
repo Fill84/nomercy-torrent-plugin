@@ -42,6 +42,22 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
     public Task<IActionResult> SaveClient(int index, [FromBody] SaveSettingsRequest request, CancellationToken ct) =>
         RespondAsync(plugin => plugin.SaveClientAsync(index, request, ct));
 
+    [HttpPost(SettingsView.AddIndexerMethod)]
+    public Task<IActionResult> AddIndexer(CancellationToken ct) =>
+        RespondAsync(plugin => plugin.AddIndexerAsync(ct));
+
+    [HttpPost(SettingsView.AddClientMethod)]
+    public Task<IActionResult> AddClient(CancellationToken ct) =>
+        RespondAsync(plugin => plugin.AddClientAsync(ct));
+
+    [HttpPost(SettingsView.RemoveIndexerRouteTemplate)]
+    public Task<IActionResult> RemoveIndexer(int index, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.RemoveIndexerAsync(index, ct));
+
+    [HttpPost(SettingsView.RemoveClientRouteTemplate)]
+    public Task<IActionResult> RemoveClient(int index, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.RemoveClientAsync(index, ct));
+
     private async Task<IActionResult> RespondAsync(Func<TorrentDownloaderPlugin, Task<SaveSettingsOutcome>> save)
     {
         if (pluginManager.GetPluginInstance(PluginId) is not TorrentDownloaderPlugin plugin)

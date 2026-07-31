@@ -15,6 +15,12 @@ public class TorrentDownloaderSettings
 
     public List<IndexerSettings> Indexers { get; set; } = [];
     public List<TorrentClientSettings> Clients { get; set; } = [];
+
+    // Set by SettingsSaveHandler on every successful save/add/remove, never by a form
+    // field - it exists so the settings page has a visible sign a save actually reached
+    // disk, since the client discards a successful action's response body entirely and
+    // only re-fetches the view.
+    public DateTimeOffset? LastSavedAtUtc { get; set; }
 }
 
 // No ApiKey here. It goes to IPluginSecretStore under the key this entry's Name

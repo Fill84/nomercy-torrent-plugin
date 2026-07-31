@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
+using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
+
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 
 // SettingsView renders three kinds of form - general, one per indexer, one per client -
@@ -17,7 +19,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 // the owner is editing, so a rename means the submitted name and the entry's current name
 // legitimately differ. The index is stable across that edit, which is also what makes the
 // old name recoverable below for the secret carry-forward, rather than by accident.
-public sealed class SettingsSaveHandler(SettingsGateway gateway)
+public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
 {
     public async Task<SaveSettingsOutcome> HandleGeneralAsync(SaveSettingsRequest request, CancellationToken ct = default) =>
         await PersistIfSucceededAsync(ApplyGeneral(await gateway.LoadAsync(ct), request), ct);
@@ -34,6 +36,38 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway)
         return await PersistIfSucceededAsync(ApplyClient(current, index, request), ct);
     }
 
+    // No request body: SettingsView's "Add indexer" button carries only the method, so
+    // there is nothing here for a submitted field to collide with. See ApplyAddIndexer for
+    // why the new entry's name still has to be chosen carefully despite that.
+    public async Task<SaveSettingsOutcome> HandleAddIndexerAsync(CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyAddIndexer(current), ct);
+    }
+
+    public async Task<SaveSettingsOutcome> HandleAddClientAsync(CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyAddClient(current), ct);
+    }
+
+    public async Task<SaveSettingsOutcome> HandleRemoveIndexerAsync(int index, CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyRemoveIndexer(current, index), ct);
+    }
+
+    public async Task<SaveSettingsOutcome> HandleRemoveClientAsync(int index, CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyRemoveClient(current, index), ct);
+    }
+
+    // The one place every successful save/add/remove passes through, which is what makes
+    // it the one place worth stamping the timestamp - every Apply* method above only needs
+    // to get the entry data right, not remember to also touch the clock. Stamped on the
+    // merged settings, not the loaded ones, so a failed validation (which never reaches
+    // here) leaves the previously saved timestamp exactly as it was.
     private async Task<SaveSettingsOutcome> PersistIfSucceededAsync(SaveSettingsOutcome outcome, CancellationToken ct)
     {
         if (!outcome.Succeeded)
@@ -41,6 +75,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway)
             return outcome;
         }
 
+        outcome.Merged!.Settings.LastSavedAtUtc = clock.UtcNow;
         await gateway.SaveAsync(outcome.Merged!, ct);
         return outcome;
     }
@@ -174,6 +209,101 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway)
         List<ClientSecret> clientSecrets = string.IsNullOrEmpty(password) ? [] : [new ClientSecret(newName, password)];
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], clientSecrets));
+    }
+
+    // A new entry's Name starts blank on IndexerSettings/TorrentClientSettings, and two
+    // blank names would derive the exact same secret key (SettingsGateway.IndexerSecretKey
+    // hashes only the name) - the second Add would silently share, then clobber, the
+    // first entry's stored credential the moment either got an API key. Naming the entry
+    // here instead removes the collision at its source rather than validating for it
+    // later. Never persisted unedited forever - it is what the owner sees in the form's
+    // Name field and is expected to replace, same as any other default.
+    private static string NextDefaultName(string prefix, IReadOnlyCollection<string> existingNames)
+    {
+        HashSet<string> taken = new(existingNames, StringComparer.OrdinalIgnoreCase);
+
+        int suffix = existingNames.Count + 1;
+        string candidate = $"{prefix} {suffix}";
+        while (taken.Contains(candidate))
+        {
+            suffix++;
+            candidate = $"{prefix} {suffix}";
+        }
+
+        return candidate;
+    }
+
+    // No validation to fail here, unlike ApplyIndexer/ApplyClient: an added entry's Url is
+    // blank, which is expected - the owner fills it in and saves through the per-entry form
+    // afterward, the same form that does enforce an absolute URL. Secrets are passed through
+    // untouched ([], []) rather than carried forward explicitly, for the same reason
+    // ApplyGeneral does: every existing entry's name is unchanged in the merged settings, so
+    // SaveAsync's orphan sweep leaves their stored secrets alone on its own.
+    private static SaveSettingsOutcome ApplyAddIndexer(LoadedSettings current)
+    {
+        IndexerSettings added = new()
+        {
+            Name = NextDefaultName("New Indexer", [.. current.Settings.Indexers.Select(indexer => indexer.Name)]),
+        };
+
+        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
+        merged.Indexers = [.. current.Settings.Indexers, added];
+        merged.Clients = current.Settings.Clients;
+
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+    }
+
+    private static SaveSettingsOutcome ApplyAddClient(LoadedSettings current)
+    {
+        TorrentClientSettings added = new()
+        {
+            Name = NextDefaultName("New Download Client", [.. current.Settings.Clients.Select(client => client.Name)]),
+        };
+
+        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
+        merged.Indexers = current.Settings.Indexers;
+        merged.Clients = [.. current.Settings.Clients, added];
+
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+    }
+
+    // Deleting the entry from the merged settings is the whole fix: SaveAsync's orphan
+    // sweep deletes exactly the secrets whose entry's name is no longer live, and after
+    // this the removed entry's name is not live. No explicit secret deletion belongs here
+    // - that would be a second, competing way to reach the same result, and the two could
+    // drift (e.g. a rename in flight) in a way a single sweep cannot.
+    private static SaveSettingsOutcome ApplyRemoveIndexer(LoadedSettings current, int index)
+    {
+        if (index < 0 || index >= current.Settings.Indexers.Count)
+        {
+            return SaveSettingsOutcome.Failure($"No indexer at index {index}.");
+        }
+
+        List<IndexerSettings> indexers = [.. current.Settings.Indexers];
+        indexers.RemoveAt(index);
+
+        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
+        merged.Indexers = indexers;
+        merged.Clients = current.Settings.Clients;
+
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+    }
+
+    private static SaveSettingsOutcome ApplyRemoveClient(LoadedSettings current, int index)
+    {
+        if (index < 0 || index >= current.Settings.Clients.Count)
+        {
+            return SaveSettingsOutcome.Failure($"No download client at index {index}.");
+        }
+
+        List<TorrentClientSettings> clients = [.. current.Settings.Clients];
+        clients.RemoveAt(index);
+
+        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
+        merged.Indexers = current.Settings.Indexers;
+        merged.Clients = clients;
+
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
     }
 
     private static bool IsAbsoluteUrl(string? url) =>

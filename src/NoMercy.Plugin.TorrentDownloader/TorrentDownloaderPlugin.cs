@@ -3,6 +3,7 @@
 
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
@@ -29,6 +30,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private IPluginContext? _context;
     private SettingsGateway? _settingsGateway;
     private bool _disposed;
+
+    // The shell's own composition root for IClock: Activator.CreateInstance (see
+    // DiscoveryContractTests) requires this class to keep a public parameterless
+    // constructor, so there is no constructor parameter to inject a test double through -
+    // SettingsSaveHandler is where IClock actually gets exercised, and its own tests inject
+    // a fake there directly instead.
+    private readonly IClock _clock = new SystemClock();
 
     // Field-initialized rather than created in Initialize, so Dispose has something to
     // cancel and dispose even when the host disposes a plugin whose load never happened -
@@ -75,6 +83,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public Task<SaveSettingsOutcome> SaveClientAsync(int index, SaveSettingsRequest request, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleClientAsync(index, request, ct));
 
+    public Task<SaveSettingsOutcome> AddIndexerAsync(CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleAddIndexerAsync(ct));
+
+    public Task<SaveSettingsOutcome> AddClientAsync(CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleAddClientAsync(ct));
+
+    public Task<SaveSettingsOutcome> RemoveIndexerAsync(int index, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleRemoveIndexerAsync(index, ct));
+
+    public Task<SaveSettingsOutcome> RemoveClientAsync(int index, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleRemoveClientAsync(index, ct));
+
     private Task<SaveSettingsOutcome> SaveAsync(Func<SettingsSaveHandler, Task<SaveSettingsOutcome>> handle)
     {
         if (_disposed)
@@ -82,7 +102,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             return Task.FromResult(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
         }
 
-        return handle(new SettingsSaveHandler(SettingsGateway));
+        return handle(new SettingsSaveHandler(SettingsGateway, _clock));
     }
 
     // The single legacy cadence a host that reads CronExpression instead of Jobs still
