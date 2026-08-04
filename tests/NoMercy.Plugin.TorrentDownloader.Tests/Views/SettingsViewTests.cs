@@ -4,6 +4,7 @@
 using System.Text.Json;
 using FluentAssertions;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
 using Xunit;
@@ -28,19 +29,11 @@ public class SettingsViewTests
         }
     }
 
-    private static IEnumerable<PluginFormField> AllFormFields(IEnumerable<PluginComponent> components)
-    {
-        foreach (PluginComponent component in Flatten(components))
-        {
-            if (component.Props.TryGetValue("fields", out object? fields) && fields is IEnumerable<PluginFormField> formFields)
-            {
-                foreach (PluginFormField field in formFields)
-                {
-                    yield return field;
-                }
-            }
-        }
-    }
+    // A form's fields are components now, not a bag of PluginFormField on the form:
+    // the design system spends the authored field building an input, a toggle or a
+    // select, and the record never reaches the client. Reading them back through the
+    // rendered tree is the only version that still sees what a viewer gets.
+    private static List<PluginComponent> AllFormFields(PluginView view) => [.. PluginNodes.AllFields(view)];
 
     [Fact]
     public void Build_ReturnsADeclarativeTreeNotAWebView()
@@ -64,7 +57,7 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, ["prowlarr.local"], new HashSet<string>());
 
-        Flatten(view.Components!).Should().OnlyContain(component => PluginComponentType.All.Contains(component.Component));
+        Flatten(view.Components!).Should().OnlyContain(component => PluginNodes.KnownComponents.Contains(component.Component));
     }
 
     [Fact]
@@ -93,7 +86,7 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
-        AllFormFields(view.Components!).Should().OnlyContain(field => PluginFormFieldType.All.Contains(field.Type));
+        AllFormFields(view).Should().OnlyContain(field => PluginFormFieldType.All.Contains(PluginNodes.Type(field)));
     }
 
     [Fact]
@@ -103,11 +96,12 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
-        AllFormFields(view.Components!)
+        PluginComponent apiKeyField = AllFormFields(view)
             .Should()
-            .ContainSingle(field => field.Name == "apiKey")
-            .Which.Type.Should()
-            .Be(PluginFormFieldType.Password);
+            .ContainSingle(field => PluginNodes.Name(field) == "apiKey")
+            .Which;
+
+        PluginNodes.Type(apiKeyField).Should().Be(PluginFormFieldType.Password);
     }
 
     [Fact]
@@ -136,16 +130,16 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], storedSecretKeys);
 
-        IReadOnlyList<PluginFormField> secretFields =
+        IReadOnlyList<PluginComponent> secretFields =
         [
-            .. AllFormFields(view.Components!)
-                .Where(field => field.Type == PluginFormFieldType.Password),
+            .. AllFormFields(view)
+                .Where(field => PluginNodes.Type(field) == PluginFormFieldType.Password),
         ];
 
         secretFields.Should().HaveCount(3, "every indexer and client gets one secret field");
         secretFields.Should()
             .AllSatisfy(field =>
-                (field.Value as string ?? string.Empty)
+                (PluginNodes.Value(field) as string ?? string.Empty)
                     .Should()
                     .BeEmpty("a stored secret is never echoed back to the client")
             );
@@ -159,19 +153,19 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], storedSecretKeys);
 
-        PluginFormField apiKeyField = AllFormFields(view.Components!).Should().ContainSingle(field => field.Name == "apiKey").Which;
-        apiKeyField.Value.Should().BeNull();
-        apiKeyField.Placeholder.Should().NotBeNullOrEmpty();
-        apiKeyField.Placeholder.Should().Contain("already saved");
+        PluginComponent apiKeyField = AllFormFields(view)
+            .Should().ContainSingle(field => PluginNodes.Name(field) == "apiKey").Which;
+
+        PluginNodes.Value(apiKeyField).Should().BeNull();
+        PluginNodes.Placeholder(apiKeyField).Should().NotBeNullOrEmpty();
+        PluginNodes.Placeholder(apiKeyField).Should().Contain("already saved");
     }
 
-    private static bool IsTextMentioning(PluginComponent component, string text)
-    {
-        return component.Component == PluginComponentType.Text
-            && component.Props.TryGetValue("value", out object? value)
-            && value is string stringValue
-            && stringValue.Contains(text, StringComparison.Ordinal);
-    }
+    // Text is a leaf carrying "text" now, and a caption is an NMHelper carrying
+    // "helperText" - neither is the "value" prop a view used to author, so a search
+    // for that prop finds nothing on a page full of words.
+    private static bool Says(PluginView view, string text) =>
+        PluginNodes.Words(view).Any(word => word.Contains(text, StringComparison.Ordinal));
 
     [Fact]
     public void Build_ShowsUngrantedHostsWhenThereAreAny()
@@ -180,7 +174,7 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, ["prowlarr.local"], new HashSet<string>());
 
-        Flatten(view.Components!).Should().Contain(component => IsTextMentioning(component, "prowlarr.local"));
+        Says(view, "prowlarr.local").Should().BeTrue();
     }
 
     [Fact]
@@ -216,10 +210,14 @@ public class SettingsViewTests
         flattened.Should().NotContain(component => component.Id == "settings-readonly-notice");
         flattened.Should().NotContain(component => component.Id == "settings-readonly-badge");
 
-        IReadOnlyList<PluginComponent> forms =
-            [.. flattened.Where(component => component.Component == PluginComponentType.Form)];
+        // A form is no longer findable by tag - the design system draws it as the same
+        // NMCard as every other container, and the submit label it used to carry as a
+        // prop is now the button's own words. So a form is the card that owns a submit
+        // button, and the label is read off that button.
+        IReadOnlyList<PluginComponent> forms = [.. PluginNodes.Forms(view)];
         forms.Should().HaveCount(3, "one general form plus one per configured indexer and client");
-        forms.Should().AllSatisfy(form => form.Props["submitLabel"].Should().Be("Save"));
+        forms.Should().AllSatisfy(form =>
+            PluginNodes.Words(PluginNodes.Submit(form)).Should().Contain("Save"));
     }
 
     [Fact]
@@ -240,7 +238,7 @@ public class SettingsViewTests
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
         Flatten(view.Components!).Should().Contain(component => component.Component == PluginComponentType.EmptyState);
-        AllFormFields(view.Components!).Should().NotContain(field => field.Name == "apiKey");
+        AllFormFields(view).Should().NotContain(field => PluginNodes.Name(field) == "apiKey");
     }
 
     // The general form's action carries a method the client can resolve without help: no
@@ -272,9 +270,12 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
+        // The forms themselves, not everything under them: a field's id extends its
+        // form's, so a plain prefix match over the flattened tree counts one form once
+        // per control it draws.
         List<PluginComponent> forms =
         [
-            .. Flatten(view.Components!).Where(component => component.Id.StartsWith("settings-indexer-", StringComparison.Ordinal)),
+            .. PluginNodes.Forms(view).Where(form => form.Id.StartsWith("settings-indexer-", StringComparison.Ordinal)),
         ];
         forms.Should().HaveCount(2);
         for (int i = 0; i < forms.Count; i++)
@@ -294,9 +295,12 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
+        // The forms themselves, not everything under them: a field's id extends its
+        // form's, so a plain prefix match over the flattened tree counts one form once
+        // per control it draws.
         List<PluginComponent> forms =
         [
-            .. Flatten(view.Components!).Where(component => component.Id.StartsWith("settings-client-", StringComparison.Ordinal)),
+            .. PluginNodes.Forms(view).Where(form => form.Id.StartsWith("settings-client-", StringComparison.Ordinal)),
         ];
         forms.Should().HaveCount(2);
         for (int i = 0; i < forms.Count; i++)
@@ -395,7 +399,7 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
-        Flatten(view.Components!).Should().Contain(component => IsTextMentioning(component, "Not saved yet"));
+        Says(view, "Not saved yet").Should().BeTrue();
     }
 
     [Fact]
@@ -405,6 +409,6 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
-        Flatten(view.Components!).Should().Contain(component => IsTextMentioning(component, "2026-07-31 01:59"));
+        Says(view, "2026-07-31 01:59").Should().BeTrue();
     }
 }
