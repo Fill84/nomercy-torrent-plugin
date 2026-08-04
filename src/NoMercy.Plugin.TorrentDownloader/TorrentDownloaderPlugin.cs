@@ -47,7 +47,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     public string Name => PluginIdentity.Name;
     public string Description => PluginIdentity.Description;
-    public Guid Id => PluginIdentity.Id;
+    public Ulid Id => PluginIdentity.Id;
     public Version Version => PluginIdentity.Version;
 
     // Assigns the context and nothing else. No config read, no secret read, no I/O, no

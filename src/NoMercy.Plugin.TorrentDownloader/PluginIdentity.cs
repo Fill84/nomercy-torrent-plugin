@@ -9,7 +9,7 @@ namespace NoMercy.Plugin.TorrentDownloader;
 // sides read these constants and ManifestTests asserts they match the shipped json.
 public static class PluginIdentity
 {
-    public static Guid Id { get; } = new("395df423-3e2f-4a1c-bc5b-dbc41a9133ef");
+    public static Ulid Id { get; } = Ulid.Parse("1SBQT26FHF98EBRPYVRGD92CZF");
 
     public const string Name = "Torrent Downloader";
 

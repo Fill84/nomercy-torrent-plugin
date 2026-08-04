@@ -43,7 +43,7 @@ public sealed class FakePluginContext : IPluginContext
 
     public HttpClient HttpClient { get; }
 
-    public Guid PluginId { get; set; } = PluginIdentity.Id;
+    public Ulid PluginId { get; set; } = PluginIdentity.Id;
 
     public FakeSecretStore Secrets { get; } = new();
 
