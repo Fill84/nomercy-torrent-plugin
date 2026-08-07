@@ -30,14 +30,14 @@
             ExcludeAssets="runtime" is also wrong: it would stop the test project from
             resolving the assembly at run time, and the tests would fail to load.
         -->
-        <PackageReference Include="NoMercy.Plugins.Abstractions" Version="10.0.117" />
+        <PackageReference Include="NoMercy.Plugins.Abstractions" Version="*" />
 
         <!--
             PluginControllerBase, which this plugin's REST controllers inherit. Also
             host-owned and also in the shared set, for the same load-context reason: a
             base class the host resolves must have exactly one identity.
         -->
-        <PackageReference Include="NoMercy.Plugins.Mvc" Version="10.0.117" />
+        <PackageReference Include="NoMercy.Plugins.Mvc" Version="*" />
     </ItemGroup>
 
     <ItemGroup>
