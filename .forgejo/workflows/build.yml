@@ -121,6 +121,11 @@ jobs:
       # which the committed nuget.config already lists as a package source.
       - name: Pack the plugin contract to a local feed
         id: contract
+        # A developer keeps the server checkout beside this repo, which is the script's
+        # default. CI has no siblings worth keeping, so it is pinned back inside the
+        # workspace here - disposable with the rest of the run, and already gitignored.
+        env:
+          SERVER_DIR: _server
         run: |
           set -eu
           chmod +x scripts/fetch-abstractions.sh
@@ -129,7 +134,7 @@ jobs:
           # Recorded so a release names the exact contract it was built against. Building
           # a tag against a moving branch produces an artifact nobody can rebuild, and
           # "built against @dev" in release notes says nothing a year later.
-          SERVER_SHA=$(git -C _server rev-parse HEAD)
+          SERVER_SHA=$(git -C "$SERVER_DIR" rev-parse HEAD)
           echo "sha=$SERVER_SHA" >> "$GITHUB_OUTPUT"
           echo "contract: $SERVER_SHA"
 

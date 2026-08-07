@@ -44,7 +44,10 @@ if [ -z "${dotnet:-}" ]; then
 fi
 
 root=$(cd "$(dirname "$0")/.." && pwd)
-server="$root/_server"
+# The server checkout lives beside this repo, not inside it: it is a full clone of another
+# project and a sibling is where a developer expects to find one. SERVER_DIR overrides it,
+# which is how CI keeps the clone inside its own disposable workspace.
+server="${SERVER_DIR:-$(dirname "$root")/nomercy-media-server}"
 feed="$root/_nupkgs"
 # A release must be rebuildable. SERVER_REF pins the contract to one commit; it
 # defaults to a branch for day-to-day work, but CI sets it to a SHA for a tag build
