@@ -39,16 +39,27 @@ public sealed class PeerConnection : IAsyncDisposable
     /// Dials out. The BitTorrent handshake rides along as MSE's initial payload, which
     /// is what that field is for and saves a round trip on every connection.
     /// </summary>
-    public static async Task<PeerConnection> DialAsync(
+    public static Task<PeerConnection> DialAsync(
         Stream raw,
         TorrentMetadata metadata,
         byte[] localPeerId,
+        CancellationToken ct) =>
+        DialAsync(raw, metadata.InfoHash, localPeerId, ct);
+
+    /// <summary>
+    /// Dials knowing only which torrent this is. A magnet has no metadata until the
+    /// peers hand it over, and the handshake never needed more than the info hash.
+    /// </summary>
+    public static async Task<PeerConnection> DialAsync(
+        Stream raw,
+        byte[] infoHash,
+        byte[] localPeerId,
         CancellationToken ct)
     {
-        byte[] ours = Handshake.Write(metadata.InfoHash, localPeerId);
-        Stream encrypted = await MseHandshake.InitiateAsync(raw, metadata.InfoHash, ours, ct);
+        byte[] ours = Handshake.Write(infoHash, localPeerId);
+        Stream encrypted = await MseHandshake.InitiateAsync(raw, infoHash, ours, ct);
 
-        Handshake remote = await Handshake.ReadAsync(encrypted, metadata.InfoHash, ct);
+        Handshake remote = await Handshake.ReadAsync(encrypted, infoHash, ct);
 
         return new PeerConnection(encrypted, localPeerId, remote);
     }

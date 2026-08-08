@@ -27,6 +27,9 @@ public sealed record TorrentEngineOptions
 
     /// <summary>How long to keep trying before a torrent with no peers is called dead.</summary>
     public TimeSpan NoPeersTimeout { get; init; } = TimeSpan.FromMinutes(30);
+
+    /// <summary>How long to spend asking peers for a magnet's metadata. A swarm with peers answers in seconds.</summary>
+    public TimeSpan MetadataTimeout { get; init; } = TimeSpan.FromMinutes(5);
 }
 
 /// <summary>
@@ -49,6 +52,8 @@ public sealed class TorrentEngine(
     private readonly ConcurrentDictionary<string, RunningTorrent> _torrents = new();
     private readonly byte[] _peerId = Handshake.NewPeerId();
     private bool _disposed;
+
+    private MagnetResolver Resolver => new(trackers, dialer, _peerId);
 
     public async Task<string> AddAsync(TorrentRequest request, CancellationToken ct)
     {
@@ -154,11 +159,11 @@ public sealed class TorrentEngine(
             return WithExtraTrackers(parsed, request.ExtraTrackers);
         }
 
-        // A magnet names an info hash and nothing else. The piece lengths and file list
-        // live with the peers, and fetching them is the next slice - until then a magnet
-        // without a .torrent behind it is refused honestly rather than half-handled.
-        throw new NotSupportedException(
-            "resolving metadata from a magnet link needs the BEP 9 fetch loop, which is not wired into the engine yet");
+        // A magnet names an info hash and nothing else, so the rest comes from the peers
+        // over BEP 9 - and is refused unless it hashes to the hash the magnet named.
+        MagnetLink magnet = MagnetLink.Parse(request.Source);
+
+        return await Resolver.ResolveAsync(magnet, request.ExtraTrackers, options.MetadataTimeout, ct);
     }
 
     private static TorrentMetadata WithExtraTrackers(TorrentMetadata metadata, IReadOnlyList<string> extra)

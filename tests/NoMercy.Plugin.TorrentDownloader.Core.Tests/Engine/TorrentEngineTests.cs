@@ -41,7 +41,8 @@ public class TorrentEngineTests
         FakeTracker tracker,
         IPeerDialer dialer,
         byte[] torrentFile,
-        TimeSpan? noPeersTimeout = null) =>
+        TimeSpan? noPeersTimeout = null,
+        TimeSpan? metadataTimeout = null) =>
         new(
             [tracker],
             dialer,
@@ -51,6 +52,7 @@ public class TorrentEngineTests
                 DownloadFolder = downloads.Path,
                 StateFolder = state.Path,
                 NoPeersTimeout = noPeersTimeout ?? TimeSpan.FromMinutes(30),
+                MetadataTimeout = metadataTimeout ?? TimeSpan.FromMinutes(5),
             },
             () => _now);
 
@@ -88,19 +90,24 @@ public class TorrentEngineTests
     }
 
     [Fact]
-    public async Task AddAsync_RefusesAMagnetHonestlyRatherThanHalfHandlingIt()
+    public async Task AddAsync_GivesUpOnAMagnetNobodyWillDescribe()
     {
         using CancellationTokenSource deadline = Deadline();
         using TempFolder downloads = new();
         using TempFolder state = new();
 
-        await using TorrentEngine engine = Engine(downloads, state, new FakeTracker(), new RefusingDialer(), SeasonPack().Build());
+        await using TorrentEngine engine = Engine(
+            downloads, state, new FakeTracker(), new RefusingDialer(), SeasonPack().Build(),
+            metadataTimeout: TimeSpan.FromSeconds(2));
 
         Func<Task> add = () => engine.AddAsync(
             Request() with { Source = "magnet:?xt=urn:btih:123456789abcdef00020417e2d5f2e7aff010203" },
             deadline.Token);
 
-        await add.Should().ThrowAsync<NotSupportedException>().WithMessage("*BEP 9*");
+        // A magnet whose swarm nobody answers for cannot become a torrent, and saying so
+        // beats holding a download that will never start.
+        await add.Should().ThrowAsync<MetadataException>();
+        (await engine.TransfersAsync(deadline.Token)).Should().BeEmpty();
     }
 
     [Fact]
