@@ -1,8 +1,14 @@
-* text=auto eol=lf
-*.sln text eol=crlf
+# Git stores what is on disk, byte for byte, and hands it back unchanged.
+#
+# The previous setting was `* text=auto eol=lf`, which rewrote line endings on
+# the way in and announced it on every commit from a Windows machine. A file
+# should be what it is; normalising it is an edit nobody asked for.
+* -text
+
+# The one exception, and it is not cosmetic: CI runs these on Linux, where a
+# carriage return at the end of a shebang or a command makes bash fail with
+# something that reads as a missing command rather than a line-ending problem.
+*.sh text eol=lf
+
 *.png binary
 *.torrent binary
-
-# Captured indexer responses are evidence, not source. Preserve them byte-exact:
-# normalising line endings would silently edit the record of what a site returned.
-tests/fixtures/** -text
