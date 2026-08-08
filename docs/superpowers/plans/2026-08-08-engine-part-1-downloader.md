@@ -1581,7 +1581,17 @@ place before it is executed.
 | 11 — `SwarmPolicy` | done | 15 |
 | 10 — `PeerConnection` | done | 6 |
 | 12 — `TorrentCoordinator` | done | 16 |
-| 13-15 | not started | — |
+| 13 — `IPeerSource` and `HttpTracker` | done | 9 |
+| 14 — `TestSeeder` and the end-to-end download | done | 3 |
+| 15 — `TorrentSession`, resume across a restart | done | (covered by 14) |
+
+**Part 1 is complete.** 426 tests, no warnings. A multi-file torrent downloads byte for byte against
+an in-process seeder, resumes after a restart without refetching what it already held, and survives
+a peer that sends nothing but corrupt pieces.
+
+Task 15 merged into 14. Endgame was already in the coordinator from task 12, and resume needed the
+session to exist before it could be proved across a restart — so both landed in the same end-to-end
+tests rather than as a separate step.
 
 Two departures from the original list, both made while building rather than planned:
 
