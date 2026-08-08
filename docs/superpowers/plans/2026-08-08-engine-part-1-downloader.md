@@ -1561,14 +1561,29 @@ git commit -m "feat(engine): a verified piece lands in every file it covers, dur
 
 ## Remaining tasks
 
-Tasks 6 to 15 complete part 1 and are written out in the same shape — failing test, run it, minimal
+Tasks 8 to 15 complete part 1 and follow the same shape — failing test, run it, minimal
 implementation, run it, commit. They are listed here so the sequence is visible; each is expanded in
 place before it is executed.
 
+### Progress
+
+| Task | Status | Tests |
+| --- | --- | --- |
+| 1 — Bencode | done | 20 |
+| 2 — Metadata and info hash | done | 9 |
+| 3 — Piece layout | done | 8 |
+| 4 — Piece verification | done | 6 |
+| 5 — `FilePieceStore` | done | 7 |
+| 6 — `Bitfield` and `FileResumeStore` | done | 21 |
+| 7 — Peer messages and framing | done | 20 |
+| 8-15 | not started | — |
+
+`Bitfield` was not in the original task list. It landed with task 6 because three callers need it —
+our own progress, what a peer advertises, and the resume record — and giving each its own
+representation would have meant three chances to disagree about which bit is piece zero.
+
 | Task | Delivers | Key test |
 | --- | --- | --- |
-| 6 | `IResumeStore` / `FileResumeStore` — persist the bitfield, write it only after `FlushAsync` returns | A record written before a flush is never observed after a simulated crash |
-| 7 | `PeerMessage` and `PeerMessageCodec` — the ten wire messages, length-prefixed framing | A message split across three reads decodes identically to one arriving whole |
 | 8 | `Handshake` — the 68-byte BT handshake, info-hash and peer-id exchange | A handshake for the wrong info hash is rejected |
 | 9 | `Peers/Encryption/` — Diffie-Hellman, RC4, the MSE handshake, forced | An unencrypted peer is refused; two MSE ends agree on a key and exchange a message |
 | 10 | `PeerConnection` over a `Stream` — handshake, then messages in and out | Both ends of an in-memory duplex complete a handshake and trade bitfields |
