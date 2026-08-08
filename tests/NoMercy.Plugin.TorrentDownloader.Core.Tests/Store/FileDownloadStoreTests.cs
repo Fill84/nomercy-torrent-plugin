@@ -31,6 +31,34 @@ public class FileDownloadStoreDurabilityTests
         AirDate = new DateOnly(2026, 8, 1),
     };
 
+    // The state a real server was left holding: an older build wrote the same episode
+    // twice, and every refresh after that threw before it could replace anything, so the
+    // queue froze. Dedup on the way in does not reach a file that is already wrong -
+    // reading has to survive it too, or the only fix is deleting the file by hand.
+    [Fact]
+    public async Task RefreshWantedAsync_ReadsBackAFileThatAlreadyHoldsTheSameEpisodeTwice()
+    {
+        using TempFolder folder = new();
+        string path = folder.File("downloads.json");
+
+        await File.WriteAllTextAsync(
+            path,
+            """
+            {"Version":1,"Wanted":[
+              {"Key":{"ShowId":242867,"Season":2,"Episode":18},"ShowTitle":"Some Show","State":0,"SearchAttempts":0},
+              {"Key":{"ShowId":242867,"Season":2,"Episode":18},"ShowTitle":"Some Show","State":0,"SearchAttempts":0}
+            ],"Grabs":[],"Transfers":[],"Blacklist":[]}
+            """);
+
+        FileDownloadStore store = new(path);
+
+        Func<Task> refresh = () => store.RefreshWantedAsync([Episode(1)], CancellationToken.None);
+
+        await refresh.Should().NotThrowAsync();
+        (await store.WantedAsync(10, CancellationToken.None)).Should().ContainSingle()
+            .Which.Key.Should().Be(new EpisodeKey(1, 1, 1));
+    }
+
     [Fact]
     public async Task State_SurvivesBeingReopened()
     {

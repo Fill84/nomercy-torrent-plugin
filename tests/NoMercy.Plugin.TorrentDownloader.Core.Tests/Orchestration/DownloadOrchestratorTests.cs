@@ -142,6 +142,26 @@ public class DownloadOrchestratorTests
         refresh.Wanted.Should().Be(1);
     }
 
+    // The library handed the same episode twice on a real server - one show listed in two
+    // places, or two rows for one slot - and it went into the store twice, which is what
+    // wedged the feed job. Deduping here means the store is never asked to hold a set
+    // twice over in the first place.
+    [Fact]
+    public async Task RefreshWantedAsync_WantsAnEpisodeOnceEvenWhenTheLibraryListsItTwice()
+    {
+        _library.Add(showId: 1, "Doubled Show", folder: "/media/doubled", episodes:
+        [
+            (1, 1, HasFile: true),
+            (2, 18, HasFile: false),
+            (2, 18, HasFile: false),
+        ]);
+
+        WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(1);
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().ContainSingle();
+    }
+
     // A queue built under the old rules is not left standing: the refresh replaces the
     // list wholesale, so entries the new rules no longer want disappear on the next tick
     // rather than needing anyone to clear anything by hand.

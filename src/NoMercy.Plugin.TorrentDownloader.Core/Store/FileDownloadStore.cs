@@ -37,13 +37,25 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
     public async Task RefreshWantedAsync(IReadOnlyList<WantedEpisode> missing, CancellationToken ct) =>
         await MutateAsync(state =>
         {
-            Dictionary<EpisodeKey, WantedEpisode> known = state.Wanted.ToDictionary(episode => episode.Key);
+            // Indexed by hand rather than with ToDictionary, which throws on a repeated
+            // key. It threw on a real server: an older build had written the same episode
+            // twice, so every refresh after that died reading the file back and the queue
+            // froze at whatever it held when the duplicate landed. A store that cannot
+            // read its own state has no way out except deleting the file.
+            Dictionary<EpisodeKey, WantedEpisode> known = [];
 
-            state.Wanted = [.. missing.Select(episode => known.TryGetValue(episode.Key, out WantedEpisode? seen)
-                // Keep what was learned. Resetting the attempt count every refresh
-                // restarts the back-off, and the plugin hammers a dead release forever.
-                ? episode with { State = seen.State, LastSearchedAt = seen.LastSearchedAt, SearchAttempts = seen.SearchAttempts }
-                : episode)];
+            foreach (WantedEpisode episode in state.Wanted)
+                known[episode.Key] = episode;
+
+            // DistinctBy on the way in, so the file stops being able to reach that state
+            // at all. The wanted list is a set keyed by episode; two rows for one slot is
+            // not a smaller problem than failing to read them.
+            state.Wanted = [.. missing.DistinctBy(episode => episode.Key).Select(episode =>
+                known.TryGetValue(episode.Key, out WantedEpisode? seen)
+                    // Keep what was learned. Resetting the attempt count every refresh
+                    // restarts the back-off, and the plugin hammers a dead release forever.
+                    ? episode with { State = seen.State, LastSearchedAt = seen.LastSearchedAt, SearchAttempts = seen.SearchAttempts }
+                    : episode)];
         }, ct);
 
     public async Task<IReadOnlyList<WantedEpisode>> WantedAsync(int limit, CancellationToken ct) =>

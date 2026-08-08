@@ -36,6 +36,34 @@ public abstract class DownloadStoreContract
         GrabbedAt = Now,
     };
 
+    // A real server's feed job died on this every minute for an hour: the same episode
+    // arrived twice, went into the file twice, and every refresh after that threw reading
+    // its own state back - so the queue froze at the number it had when the duplicate
+    // landed. The wanted list is a set keyed by episode; it has to behave like one on the
+    // way in as well as on the way out.
+    [Fact]
+    public async Task RefreshWantedAsync_KeepsOneEntryWhenTheSameEpisodeArrivesTwice()
+    {
+        IDownloadStore store = Create();
+
+        await store.RefreshWantedAsync([Episode(2, 18), Episode(2, 18), Episode(2, 19)], CancellationToken.None);
+
+        IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(10, CancellationToken.None);
+        wanted.Should().HaveCount(2);
+        wanted.Select(episode => episode.Key).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task RefreshWantedAsync_SurvivesASecondRefreshAfterADuplicateArrived()
+    {
+        IDownloadStore store = Create();
+        await store.RefreshWantedAsync([Episode(2, 18), Episode(2, 18)], CancellationToken.None);
+
+        Func<Task> refreshAgain = () => store.RefreshWantedAsync([Episode(2, 18)], CancellationToken.None);
+
+        await refreshAgain.Should().NotThrowAsync();
+    }
+
     [Fact]
     public async Task RefreshWantedAsync_WantsWhatTheLibraryIsMissing()
     {

@@ -142,12 +142,21 @@ public sealed class DownloadOrchestrator(
 
             followed++;
 
+            // By key, because the library can hand the same slot twice - one show reachable
+            // through two libraries, or two rows for one episode. Left alone it reached the
+            // store as two entries for one episode, which is what wedged a real server's
+            // feed job. Deduping here means the store is never asked to hold it twice.
+            HashSet<EpisodeKey> seen = [];
+
             foreach (LibraryEpisode episode in episodes)
             {
                 if (episode.HasFile)
                     continue;
 
                 if (episode.SeasonNumber == 0 && !options.IncludeSpecials)
+                    continue;
+
+                if (!seen.Add(new EpisodeKey(show.ShowId, episode.SeasonNumber, episode.EpisodeNumber)))
                     continue;
 
                 missing.Add(new WantedEpisode
