@@ -34,16 +34,24 @@ public sealed class TorrentSession : IAsyncDisposable
     private bool _disposed;
     private Task? _brain;
 
+    private readonly PieceServer? _server;
+
     public TorrentSession(
         TorrentMetadata metadata,
         IPieceStore store,
         IResumeStore resume,
         Bitfield have,
-        SwarmPolicy policy)
+        SwarmPolicy policy,
+        PieceServer? server = null)
     {
         _metadata = metadata;
         _store = store;
         _resume = resume;
+
+        // Null for every public torrent, which is the default and the whole public
+        // path. A session without a server cannot answer a request at all.
+        _server = server;
+
         _coordinator = new TorrentCoordinator(metadata, have, policy);
 
         if (_coordinator.IsComplete)
@@ -143,8 +151,38 @@ public sealed class TorrentSession : IAsyncDisposable
             foreach (CoordinatorAction action in actions)
                 await PerformAsync(action, ct);
 
+            await AnswerAsync(next, ct);
+
             if (_coordinator.IsComplete && _completed.TrySetResult())
                 return;
+        }
+    }
+
+    /// <summary>
+    /// The only path by which a byte leaves this plugin, and it is closed unless a
+    /// PieceServer was supplied - which happens for exactly one case, a private
+    /// tracker the user configured to seed on.
+    /// </summary>
+    private async Task AnswerAsync(PeerEvent next, CancellationToken ct)
+    {
+        if (_server is null || !_server.CanUpload)
+            return;
+
+        switch (next.Message)
+        {
+            case Interested:
+                // Only ever sent when we are actually willing to serve. Unchoking a peer
+                // we will refuse wastes its slot and ours.
+                await SendAsync(new SendMessage(next.Peer, new Unchoke()), ct);
+                break;
+
+            case Request request:
+                PieceBlock? block = await _server.ServeAsync(request, ct);
+
+                if (block is not null)
+                    await SendAsync(new SendMessage(next.Peer, block), ct);
+
+                break;
         }
     }
 
