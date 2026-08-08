@@ -43,22 +43,42 @@ From the owner, verbatim in intent:
 6. **Complete means stopped.** On completion every connection closes and the torrent is done. The
    chain continues from there.
 7. **Resume across restarts.** A reboot mid-download does not start a 40 GB season pack over.
+8. **Public by default, everywhere at once.** Search across all public indexers and trackers; the
+   default path needs no account anywhere.
+9. **Merge trackers by info hash.** The same release is listed on many sites, each announcing a
+   different tracker set. One info hash means one torrent, and it gets the union of every tracker
+   any source named for it. A bigger swarm is a faster download, which is requirement 4 again.
+10. **Private trackers are separate and explicit.** A user adds one deliberately, with its own
+    credentials and settings. Nothing is private by accident.
+11. **Seeding is per private tracker.** Off globally and always off for public torrents. A private
+    tracker can be configured to seed to a ratio or time target, because a private tracker without
+    a ratio is an account that stops working.
+
+Requirement 11 narrows requirement 3 rather than contradicting it: the default is still pure leech,
+and uploading is something a user switches on for one named tracker with a stated target.
 
 ### Recorded consequences
 
 These follow from the requirements and are accepted, not open questions:
 
-- **Private trackers will ban the account.** Requirement 3 produces a ratio of zero. On the Torznab
-  path — which is the private tracker protocol — that ends in a ban. Public trackers do not care.
+- **A private tracker with seeding off will ban the account.** That is the user's choice to make per
+  tracker; the plugin's job is to make the consequence visible at the moment they configure it, not
+  to prevent it.
 - **Forced encryption costs a few peers.** Requirement 5 excludes peers that cannot speak MSE. In
   practice this is old or misconfigured clients only; it is the same setting as qBittorrent's
   "Require encryption". The loss is small and the throttling protection is worth it.
+- **Seeding contradicts "complete means stopped" for private torrents.** Requirement 6 holds for
+  public torrents. A private torrent that is seeding stays connected after completion until its
+  target is met, then stops. The completion handoff to intake still happens immediately — the file
+  is imported while seeding continues from the same bytes, which is why the hardlink the original
+  plan called for comes back for this case only.
 
 ## 3. Non-goals
 
-- **Seeding.** There is deliberately no component that serves pieces to other peers. The minimal
-  reciprocation requirement 3 allows lives in `SwarmPolicy` as a bounded exception, so it cannot
-  quietly grow into a general capability.
+- **Seeding by default.** Public torrents never serve pieces. `PieceServer` exists for requirement
+  11, but `SwarmPolicy` refuses to enable it unless the torrent came from a private tracker that is
+  configured to seed. The default answer to "may I upload this piece" is no, and the exception is
+  named and narrow rather than a general capability.
 - **Being a general-purpose torrent client.** No web UI of its own, no torrent creation, no RSS (the
   plugin already has indexers), no bandwidth scheduling.
 - **Replacing the intake pipeline.** The engine's job ends when the bytes are on disk and verified.
@@ -78,7 +98,9 @@ Everything else is either pure or owns nothing but itself.
 | `PieceVerifier` | Hashes a completed piece against its expected SHA-1 | no — pure |
 | `PieceStore` | Writes verified pieces into the multi-file layout, async | disk |
 | `ResumeStore` | Persists the bitfield, reloads it at startup | disk |
-| `SwarmPolicy` | How many peers, how much to give back, when to stop | no — pure |
+| `PieceServer` | Serves pieces to peers. Only ever reached for a private torrent with seeding on | no — reads through `PieceStore` |
+| `TrackerSet` | The union of tracker URLs known for one info hash, merged from every source that listed it | no — pure |
+| `SwarmPolicy` | How many peers, how much to give back, whether uploading is permitted at all, when to stop | no — pure |
 
 Above them one facade, `ITorrentEngine`: add by magnet or `.torrent`, remove, read progress, and an
 event on completion. That is the entire surface the orchestrator needs, which is why stage C will
@@ -108,6 +130,9 @@ are the starting point, not a ceiling discovered by measurement.
 | `MetadataTimeout` | 5 minutes | Magnet metadata via BEP 9. A swarm with peers should answer in seconds; this is the give-up point |
 | `MaxPieceFailuresPerPeer` | 3 | Ban threshold. One failure is luck, three is a pattern |
 | `EndgameThreshold` | 5% remaining | When to start requesting outstanding blocks from several peers at once |
+| `UploadPermitted` | false | The gate on `PieceServer`. Only a torrent from a private tracker configured to seed can flip it |
+| `SeedRatioTarget` | 1.0 | Per private tracker. Stop seeding once uploaded/downloaded reaches this |
+| `SeedTimeTarget` | 72 hours | Per private tracker. Stop seeding after this, whichever target lands first |
 
 ## 5. Concurrency model
 
@@ -275,6 +300,13 @@ layer that only does something at the end.
 | 7 | Magnet — BEP 10 extension protocol, BEP 9 metadata | A magnet link downloads with no `.torrent` |
 | 8 | DHT | Peers found with no working tracker |
 | 9 | `ITorrentEngine` facade and completion event | Stage C can consume it without knowing any protocol |
+| 10 | `TrackerSet` — merge tracker URLs by info hash | One release listed on four sites announces to every tracker all four named |
+| 11 | Private tracker configuration — a separate, explicit settings category | A private tracker is added deliberately, with its own credentials |
+| 12 | `PieceServer` and seeding to a ratio or time target, gated by `SwarmPolicy` | A public torrent never uploads; a private torrent configured to seed does, and stops at its target |
+
+Slice 10 also changes existing code. `IndexerAggregator.Deduplicate` currently groups by info hash
+and title and keeps the single best result, discarding the rest. It must keep the union of their
+tracker URLs instead: the duplicates are not noise, they are the reason the swarm gets bigger.
 
 ## 10. Where this sits
 
@@ -289,6 +321,8 @@ This is subsystem **A** of four. The plugin as a whole decomposes as:
 
 A and B are independent. Each gets its own spec, plan and implementation cycle.
 
-One simplification this design hands to C: the original plan moved completed files into intake by
-hardlink, "so seeding continues from the same bytes". With requirement 3 that reason is gone, so a
-plain move will do.
+The handoff to C depends on where the torrent came from. The original plan moved completed files
+into intake by hardlink, "so seeding continues from the same bytes". For a public torrent that
+reason is gone — nothing seeds, so a plain move is simpler and frees the disk immediately. For a
+private torrent that is still seeding, the hardlink is exactly right and the original reasoning
+stands unchanged. C chooses per torrent, on one flag the engine already carries.
