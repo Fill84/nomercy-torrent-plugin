@@ -9,7 +9,7 @@ using Xunit;
 namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Store;
 
 /// <summary>
-/// The behaviour every store must have. The SQLite one inherits this suite, so the
+/// The behaviour every store must have. The file store inherits this suite, so the
 /// in-memory store used by orchestrator tests cannot quietly drift from the real thing.
 /// </summary>
 public abstract class DownloadStoreContract
@@ -18,7 +18,7 @@ public abstract class DownloadStoreContract
 
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
 
-    private static WantedEpisode Episode(int season, int number, string show = "show-1") => new()
+    private static WantedEpisode Episode(int season, int number, int show = 1) => new()
     {
         Key = new EpisodeKey(show, season, number),
         ShowTitle = "Some Show",
@@ -77,13 +77,13 @@ public abstract class DownloadStoreContract
     {
         IDownloadStore store = Create();
         await store.RefreshWantedAsync([Episode(1, 1)], CancellationToken.None);
-        await store.MarkSearchedAsync(new EpisodeKey("show-1", 1, 1), Now, WantedState.Wanted, CancellationToken.None);
+        await store.MarkSearchedAsync(new EpisodeKey(1, 1, 1), Now, WantedState.Wanted, CancellationToken.None);
 
         await store.RefreshWantedAsync([Episode(1, 1)], CancellationToken.None);
 
         // A refresh that resets the attempt count restarts the back-off every cycle, and
         // the plugin hammers a release nobody is seeding forever.
-        WantedEpisode? episode = await store.FindWantedAsync(new EpisodeKey("show-1", 1, 1), CancellationToken.None);
+        WantedEpisode? episode = await store.FindWantedAsync(new EpisodeKey(1, 1, 1), CancellationToken.None);
         episode!.SearchAttempts.Should().Be(1);
         episode.LastSearchedAt.Should().Be(Now);
     }
@@ -94,8 +94,8 @@ public abstract class DownloadStoreContract
         IDownloadStore store = Create();
         await store.RefreshWantedAsync([Episode(1, 1), Episode(1, 2), Episode(1, 3)], CancellationToken.None);
 
-        await store.MarkSearchedAsync(new EpisodeKey("show-1", 1, 1), Now, WantedState.Grabbed, CancellationToken.None);
-        await store.MarkSearchedAsync(new EpisodeKey("show-1", 1, 2), Now, WantedState.Unavailable, CancellationToken.None);
+        await store.MarkSearchedAsync(new EpisodeKey(1, 1, 1), Now, WantedState.Grabbed, CancellationToken.None);
+        await store.MarkSearchedAsync(new EpisodeKey(1, 1, 2), Now, WantedState.Unavailable, CancellationToken.None);
 
         IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(10, CancellationToken.None);
 
@@ -108,7 +108,7 @@ public abstract class DownloadStoreContract
         IDownloadStore store = Create();
         await store.RefreshWantedAsync([Episode(1, 1), Episode(1, 2)], CancellationToken.None);
 
-        await store.MarkSearchedAsync(new EpisodeKey("show-1", 1, 1), Now, WantedState.Wanted, CancellationToken.None);
+        await store.MarkSearchedAsync(new EpisodeKey(1, 1, 1), Now, WantedState.Wanted, CancellationToken.None);
 
         // Episode 2 has never been searched, so it goes first. Otherwise a big backlog
         // means the same few rows are looked at every cycle and the rest never are.
@@ -131,7 +131,7 @@ public abstract class DownloadStoreContract
     public async Task AddGrabAsync_RecordsWhatWasChosenAndWhy()
     {
         IDownloadStore store = Create();
-        EpisodeKey key = new("show-1", 1, 1);
+        EpisodeKey key = new(1, 1, 1);
 
         await store.AddGrabAsync(Grab("abc123", key), CancellationToken.None);
 
@@ -146,7 +146,7 @@ public abstract class DownloadStoreContract
     public async Task UpdateGrabAsync_WalksAGrabThroughItsLifetime()
     {
         IDownloadStore store = Create();
-        await store.AddGrabAsync(Grab("abc123", new EpisodeKey("show-1", 1, 1)), CancellationToken.None);
+        await store.AddGrabAsync(Grab("abc123", new EpisodeKey(1, 1, 1)), CancellationToken.None);
 
         await store.UpdateGrabAsync("abc123", GrabState.Downloading, null, null, CancellationToken.None);
         (await store.FindGrabAsync("abc123", CancellationToken.None))!.State.Should().Be(GrabState.Downloading);
@@ -162,7 +162,7 @@ public abstract class DownloadStoreContract
     public async Task UpdateGrabAsync_KeepsTheReasonAFailureActuallyHad()
     {
         IDownloadStore store = Create();
-        await store.AddGrabAsync(Grab("abc123", new EpisodeKey("show-1", 1, 1)), CancellationToken.None);
+        await store.AddGrabAsync(Grab("abc123", new EpisodeKey(1, 1, 1)), CancellationToken.None);
 
         await store.UpdateGrabAsync("abc123", GrabState.Failed, "no peers after 30 minutes", Now, CancellationToken.None);
 
@@ -174,9 +174,9 @@ public abstract class DownloadStoreContract
     public async Task ActiveGrabsAsync_LeavesOutTheFinishedAndTheFailed()
     {
         IDownloadStore store = Create();
-        await store.AddGrabAsync(Grab("running", new EpisodeKey("show-1", 1, 1)), CancellationToken.None);
-        await store.AddGrabAsync(Grab("done", new EpisodeKey("show-1", 1, 2)), CancellationToken.None);
-        await store.AddGrabAsync(Grab("broken", new EpisodeKey("show-1", 1, 3)), CancellationToken.None);
+        await store.AddGrabAsync(Grab("running", new EpisodeKey(1, 1, 1)), CancellationToken.None);
+        await store.AddGrabAsync(Grab("done", new EpisodeKey(1, 1, 2)), CancellationToken.None);
+        await store.AddGrabAsync(Grab("broken", new EpisodeKey(1, 1, 3)), CancellationToken.None);
 
         await store.UpdateGrabAsync("done", GrabState.Imported, null, Now, CancellationToken.None);
         await store.UpdateGrabAsync("broken", GrabState.Failed, "gave up", Now, CancellationToken.None);

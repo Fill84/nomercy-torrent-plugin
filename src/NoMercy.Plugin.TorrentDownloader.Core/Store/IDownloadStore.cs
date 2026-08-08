@@ -4,7 +4,7 @@
 namespace NoMercy.Plugin.TorrentDownloader.Core.Store;
 
 /// <summary>Identifies one episode. The natural key everywhere in this plugin.</summary>
-public readonly record struct EpisodeKey(string ShowId, int Season, int Episode)
+public readonly record struct EpisodeKey(int ShowId, int Season, int Episode)
 {
     public override string ToString() => $"{ShowId} S{Season:D2}E{Episode:D2}";
 }

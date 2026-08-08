@@ -54,7 +54,7 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
                 // Least recently searched first. With a backlog of hundreds any other
                 // order means the same few rows are looked at every cycle.
                 .OrderBy(episode => episode.LastSearchedAt ?? DateTimeOffset.MinValue)
-                .ThenBy(episode => episode.Key.ShowId, StringComparer.Ordinal)
+                .ThenBy(episode => episode.Key.ShowId)
                 .ThenBy(episode => episode.Key.Season)
                 .ThenBy(episode => episode.Key.Episode)
                 .Take(limit),

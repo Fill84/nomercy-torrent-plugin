@@ -25,7 +25,7 @@ public class FileDownloadStoreDurabilityTests
 
     private static WantedEpisode Episode(int number) => new()
     {
-        Key = new EpisodeKey("show-1", 1, number),
+        Key = new EpisodeKey(1, 1, number),
         ShowTitle = "Some Show",
         EpisodeTitle = $"Episode {number}",
         AirDate = new DateOnly(2026, 8, 1),
@@ -39,11 +39,11 @@ public class FileDownloadStoreDurabilityTests
 
         FileDownloadStore first = new(path);
         await first.RefreshWantedAsync([Episode(1), Episode(2)], CancellationToken.None);
-        await first.MarkSearchedAsync(new EpisodeKey("show-1", 1, 1), Now, WantedState.Grabbed, CancellationToken.None);
+        await first.MarkSearchedAsync(new EpisodeKey(1, 1, 1), Now, WantedState.Grabbed, CancellationToken.None);
         await first.AddGrabAsync(new Grab
         {
             InfoHash = "abc123",
-            Key = new EpisodeKey("show-1", 1, 1),
+            Key = new EpisodeKey(1, 1, 1),
             ReleaseTitle = "Some.Show.S01E01.1080p",
             Indexer = "site-a",
             SizeBytes = 42,
@@ -52,7 +52,7 @@ public class FileDownloadStoreDurabilityTests
 
         FileDownloadStore reopened = new(path);
 
-        WantedEpisode? episode = await reopened.FindWantedAsync(new EpisodeKey("show-1", 1, 1), CancellationToken.None);
+        WantedEpisode? episode = await reopened.FindWantedAsync(new EpisodeKey(1, 1, 1), CancellationToken.None);
         episode!.State.Should().Be(WantedState.Grabbed);
         episode.SearchAttempts.Should().Be(1);
         episode.AirDate.Should().Be(new DateOnly(2026, 8, 1));
@@ -110,7 +110,7 @@ public class FileDownloadStoreDurabilityTests
         // The orchestrator will mark several episodes at once. A store that reads,
         // mutates and writes without a gate loses all but the last of them.
         await Task.WhenAll(Enumerable.Range(1, 50).Select(number =>
-            store.MarkSearchedAsync(new EpisodeKey("show-1", 1, number), Now, WantedState.Grabbed, CancellationToken.None)));
+            store.MarkSearchedAsync(new EpisodeKey(1, 1, number), Now, WantedState.Grabbed, CancellationToken.None)));
 
         (await store.WantedAsync(100, CancellationToken.None)).Should().BeEmpty();
     }
