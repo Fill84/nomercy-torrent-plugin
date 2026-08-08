@@ -15,7 +15,7 @@ Answered by the owner, and recorded so they are not guessed at later.
 | Question | Answer |
 | --- | --- |
 | Which shows are watched? | **Every show in the library, automatically.** No opt-in per show |
-| Where does state live? | **The plugin's own SQLite database**, in its data folder |
+| Where does state live? | **One file in the plugin's data folder**, written atomically. SQLite was chosen first and then withdrawn - see below |
 | Upgrade an episode when something better appears? | **No.** Once an episode is in, it is done |
 | When does it search? | Cron, on a library change, on a button in the UI, and around an expected air date |
 
@@ -29,19 +29,26 @@ a second opinion: **the queue is bounded.** A fixed number of grabs may be in fl
 wait. A first run becomes a steady stream over hours instead of several hundred simultaneous
 downloads competing for the same connection, the same disk, and the same swarm.
 
-### Where the database code lives
+### Why not SQLite, in the end
 
-`Core` has zero package references, and that is what lets 676 tests run with no host present. SQLite
-would be the first package.
+SQLite was the owner's choice, and it was withdrawn on a fact found while building: the host does
+not share `Microsoft.Data.Sqlite` with plugins. Its shared set is `NoMercy.Plugins.Abstractions`,
+`NoMercy.Plugins.Mvc`, `NoMercy.Events`, `NoMercy.Design`, logging, dependency injection and
+Newtonsoft - and nothing else.
 
-So the seam is: **`Core` owns the interface, the shell owns the implementation.**
+Using SQLite would therefore mean shipping a second `Microsoft.Data.Sqlite` and a second native
+`e_sqlite3.dll` into a process that already has the media server's. Separate load contexts make that
+*probably* fine. "Probably fine" is not a thing to be on somebody's media server for, in exchange
+for a query planner over a few thousand rows.
 
-- `Core/Store/IDownloadStore.cs` — what the orchestrator calls
-- `Core.Tests` — an in-memory implementation, which is also what every orchestrator test uses
-- The plugin project — `SqliteDownloadStore`, the only thing that knows SQL exists
+So the store is one file, held in memory and written atomically on change - the same pattern
+`FileResumeStore` already runs and which is already proven. It needs no package at all, which means
+it lives in `Core` rather than the shell, and `Core` keeps the zero-dependency property that lets
+every test run with no host present.
 
-The orchestrator is then testable without a database, the same way the engine is testable without a
-network. Nothing about a download decision needs a file on disk to be proved.
+The seam is still what matters: **`Core` owns `IDownloadStore`**, the orchestrator is written
+against it, and the test suite is written against the interface rather than either implementation -
+so the in-memory store every orchestrator test uses cannot drift from the real one.
 
 ## 2. What is stored
 
@@ -115,9 +122,9 @@ What not to try again.
 Same rule as everywhere else: the interface is in `Core` and the orchestrator is tested against an
 in-memory implementation, so no test needs a file.
 
-The SQLite implementation gets its own tests against a real temporary database, covering the things
-only a real database can get wrong: the natural key actually being unique, a state transition
-surviving a reopen, and a migration applying to a database written by the previous version.
+The file implementation gets its own tests on top, covering what only something touching disk can
+get wrong: state surviving a reopen, an unreadable file starting over instead of refusing to run,
+concurrent writes not losing each other, and no temporary file left behind.
 
 Every test must fail if the behaviour breaks.
 
@@ -130,5 +137,8 @@ Every test must fail if the behaviour breaks.
 | 3 | Wanted-episode refresh from a library snapshot | A deleted file is wanted again; a restored one is not |
 | 4 | Grab lifecycle and its invariant | `Imported` cannot be written before the file is in intake |
 | 5 | Blacklist with expiry | A failed release is skipped, and is retried once it expires |
-| 6 | `SqliteDownloadStore` in the plugin project | The same tests pass against a real database |
-| 7 | Schema creation and migration | A database from the previous version opens and upgrades |
+| 6 | `FileDownloadStore` in `Core` | The same contract suite passes against a real file |
+| 7 | Durability | State survives a reopen; an unreadable file starts over rather than refusing to run; concurrent writes do not lose each other |
+
+**Status 2026-08-08: all seven built and green.** The file carries a version number so a future
+change of shape has somewhere to branch on.
