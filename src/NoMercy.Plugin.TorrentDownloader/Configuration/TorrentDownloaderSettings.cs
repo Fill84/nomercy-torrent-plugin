@@ -13,6 +13,11 @@ public class TorrentDownloaderSettings
     public string IncompleteFolder { get; set; } = string.Empty;
     public string IntakeFolder { get; set; } = string.Empty;
 
+    // Season 0. Off, because specials sort to the front of a queue nothing has searched
+    // yet, so they would be the first thing this plugin ever downloaded - and they are
+    // where a library's metadata is loosest. See OrchestratorOptions.IncludeSpecials.
+    public bool IncludeSpecials { get; set; }
+
     public List<IndexerSettings> Indexers { get; set; } = [];
     public List<TorrentClientSettings> Clients { get; set; } = [];
 

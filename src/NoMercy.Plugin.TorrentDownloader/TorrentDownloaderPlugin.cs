@@ -4,6 +4,7 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
+using NoMercy.Plugin.TorrentDownloader.Core.Orchestration;
 using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -279,15 +280,29 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             context.Logger.LogInformation("Torrent Downloader handed {Count} finished download(s) to the intake.", imported);
     }
 
-    // The library is the list of what is watched, so refreshing it is the whole of
-    // "which shows do we follow": nothing is opted into.
+    // A show with at least one episode on the server is one its owner started watching,
+    // and that is what decides which shows this plugin follows - not the library's full
+    // catalogue, which on a real server was 1973 episodes of things nobody had ever put
+    // a file of on disk.
     private async Task RunFeedAsync(IPluginContext context, CancellationToken ct)
     {
         DownloadPipeline pipeline = await PipelineAsync(context, ct);
 
-        int wanted = await pipeline.Orchestrator.RefreshWantedAsync(ct);
+        WantedRefresh refresh = await pipeline.Orchestrator.RefreshWantedAsync(ct);
 
-        context.Logger.LogInformation("Torrent Downloader is missing {Count} episode(s) across the library.", wanted);
+        context.Logger.LogInformation(
+            "Torrent Downloader is missing {Count} episode(s) across {Shows} show(s) it follows.",
+            refresh.Wanted,
+            refresh.ShowsFollowed);
+
+        // Said out loud, because a plugin that quietly decides to want nothing is one the
+        // owner concludes is broken. This is the line that answers "why is it idle".
+        if (refresh.ShowsNotStarted > 0)
+        {
+            context.Logger.LogInformation(
+                "Torrent Downloader is leaving {Count} show(s) alone: nothing of them is on the server yet.",
+                refresh.ShowsNotStarted);
+        }
     }
 
     private async Task RunSearchAsync(IPluginContext context, CancellationToken ct)

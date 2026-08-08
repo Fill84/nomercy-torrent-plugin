@@ -50,8 +50,32 @@ public sealed record OrchestratorOptions
     /// <summary>How long a failed release is skipped before it is worth another try.</summary>
     public TimeSpan BlacklistDuration { get; init; } = TimeSpan.FromDays(14);
 
+    /// <summary>
+    /// Whether season 0 counts.
+    ///
+    /// <para>
+    /// Off, because specials are where a library's metadata is loosest - recaps,
+    /// behind-the-scenes reels, convention panels - and they sort to the front of an
+    /// unsearched queue, so the first thing the plugin would ever download is the thing
+    /// the owner wanted least. On a real library this was twenty-five Simpsons specials
+    /// ahead of every actual episode.
+    /// </para>
+    /// </summary>
+    public bool IncludeSpecials { get; init; }
+
     public required string DownloadFolder { get; init; }
 }
+
+/// <summary>
+/// What one refresh concluded.
+///
+/// <para>
+/// More than a count, because a plugin that decides to want nothing has to be able to
+/// say why. Without <see cref="ShowsNotStarted"/> an owner whose library is all
+/// unstarted shows sees "missing 0 episodes" and concludes the thing is broken.
+/// </para>
+/// </summary>
+public sealed record WantedRefresh(int Wanted, int ShowsFollowed, int ShowsNotStarted);
 
 /// <summary>
 /// The loop: notice what is missing, find something for it, hand it to the engine,
@@ -76,12 +100,27 @@ public sealed class DownloadOrchestrator(
     Func<DateTimeOffset> now)
 {
     /// <summary>
-    /// Brings the wanted list in line with the library. Everything is watched, so this
-    /// is the whole of "which shows do we follow": the library is the list.
+    /// Brings the wanted list in line with the library.
+    ///
+    /// <para>
+    /// Which shows are followed is decided here, and it is decided by the shelf rather
+    /// than by a list somebody maintains: a show with at least one episode on the server
+    /// is one its owner started, and the rest of it is worth completing. A show with
+    /// nothing is one the metadata provider knows about and nobody asked for. Without
+    /// that line the library's whole catalogue is a download queue - on a real server it
+    /// was 1973 episodes, which is not a backlog, it is a bill.
+    /// </para>
+    ///
+    /// <para>
+    /// The list is replaced, never merged, so a queue built under older rules is
+    /// re-decided on the next tick instead of outliving the rules that made it.
+    /// </para>
     /// </summary>
-    public async Task<int> RefreshWantedAsync(CancellationToken ct)
+    public async Task<WantedRefresh> RefreshWantedAsync(CancellationToken ct)
     {
         List<WantedEpisode> missing = [];
+        int followed = 0;
+        int notStarted = 0;
 
         foreach (LibraryShow show in await library.GetShowsAsync(ct))
         {
@@ -90,9 +129,25 @@ public sealed class DownloadOrchestrator(
             if (show.Folder is null)
                 continue;
 
-            foreach (LibraryEpisode episode in await library.GetEpisodesAsync(show.ShowId, ct))
+            IReadOnlyList<LibraryEpisode> episodes = await library.GetEpisodesAsync(show.ShowId, ct);
+
+            // Read from the episodes rather than the show's own have-count: both come
+            // from the host, and the one this loop already trusts to decide "missing"
+            // is the one that should decide "started", or the two can disagree.
+            if (!episodes.Any(episode => episode.HasFile))
+            {
+                notStarted++;
+                continue;
+            }
+
+            followed++;
+
+            foreach (LibraryEpisode episode in episodes)
             {
                 if (episode.HasFile)
+                    continue;
+
+                if (episode.SeasonNumber == 0 && !options.IncludeSpecials)
                     continue;
 
                 missing.Add(new WantedEpisode
@@ -107,7 +162,7 @@ public sealed class DownloadOrchestrator(
 
         await store.RefreshWantedAsync(missing, ct);
 
-        return missing.Count;
+        return new WantedRefresh(missing.Count, followed, notStarted);
     }
 
     /// <summary>Searches for what is wanted and grabs what is worth grabbing. Returns how many were handed to the engine.</summary>

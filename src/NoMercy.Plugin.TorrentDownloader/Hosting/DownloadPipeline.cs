@@ -84,7 +84,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new ProfileReleaseChooser(DefaultProfile),
             engine,
             new IntakeHandoff(intake),
-            new OrchestratorOptions { DownloadFolder = downloads },
+            new OrchestratorOptions { DownloadFolder = downloads, IncludeSpecials = settings.IncludeSpecials },
 
             // No private trackers in the settings shape yet, so everything is public and
             // nothing can upload. That is the safe direction for this default to fail in.

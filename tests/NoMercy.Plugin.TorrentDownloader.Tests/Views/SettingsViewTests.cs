@@ -241,6 +241,33 @@ public class SettingsViewTests
         AllFormFields(view).Should().NotContain(field => PluginNodes.Name(field) == "apiKey");
     }
 
+    // Specials are off by default and the owner has to be able to see that, and change it.
+    // A default that can only be changed by editing config.json is not a setting.
+    [Fact]
+    public void Build_OffersTheSpecialsToggleShowingWhatIsCurrentlySet()
+    {
+        PluginView view = SettingsView.Build(new TorrentDownloaderSettings(), [], new HashSet<string>());
+
+        PluginComponent field = AllFormFields(view).Should()
+            .ContainSingle(field => PluginNodes.Name(field) == "includeSpecials").Which;
+
+        PluginNodes.Type(field).Should().Be(PluginFormFieldType.Toggle);
+        PluginNodes.Checked(field).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Build_ShowsTheSpecialsToggleOnWhenItIsOn()
+    {
+        PluginView view = SettingsView.Build(
+            new TorrentDownloaderSettings { IncludeSpecials = true },
+            [],
+            new HashSet<string>());
+
+        PluginComponent field = AllFormFields(view).Single(field => PluginNodes.Name(field) == "includeSpecials");
+
+        PluginNodes.Checked(field).Should().BeTrue();
+    }
+
     // The general form's action carries a method the client can resolve without help: no
     // identifying field, no payload of its own.
     [Fact]

@@ -92,6 +92,14 @@ internal static class PluginNodes
     public static object? Value(PluginComponent field) =>
         field.Props.TryGetValue("value", out object? value) ? value : null;
 
+    /// <summary>
+    /// A toggle's or checkbox's state. The renderer writes it to "checked" and gives the
+    /// node no "value" at all, so a test reaching for <see cref="Value"/> reads null and
+    /// passes for the wrong reason no matter which way the toggle is set.
+    /// </summary>
+    public static bool Checked(PluginComponent field) =>
+        field.Props.TryGetValue("checked", out object? value) && value is true;
+
     public static string Placeholder(PluginComponent field) => Prop(field, "placeholder");
 
     /// <summary>

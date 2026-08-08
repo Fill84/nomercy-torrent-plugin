@@ -23,6 +23,7 @@ public sealed class SaveSettingsRequest
     public string? MaintenanceCron { get; init; }
     public string? IncompleteFolder { get; init; }
     public string? IntakeFolder { get; init; }
+    public bool? IncludeSpecials { get; init; }
 
     // Shared by the indexer and client forms - never both submitted in the same
     // request, since SettingsView renders one form per entry.

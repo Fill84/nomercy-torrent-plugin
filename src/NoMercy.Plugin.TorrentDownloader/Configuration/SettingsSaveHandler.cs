@@ -112,6 +112,11 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             MaintenanceCron = request.MaintenanceCron!,
             IncompleteFolder = request.IncompleteFolder ?? string.Empty,
             IntakeFolder = request.IntakeFolder ?? string.Empty,
+
+            // Falls back to what is stored rather than to false, so a client that omits an
+            // off toggle does not silently reset a setting the owner turned on. A submitted
+            // false is still honoured - see the save handler test that turns it off again.
+            IncludeSpecials = request.IncludeSpecials ?? current.Settings.IncludeSpecials,
             Indexers = current.Settings.Indexers,
             Clients = current.Settings.Clients,
         };

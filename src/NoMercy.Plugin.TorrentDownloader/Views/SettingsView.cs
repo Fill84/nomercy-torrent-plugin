@@ -175,6 +175,13 @@ public static class SettingsView
             new() { Name = "maintenanceCron", Label = "Maintenance schedule", Value = settings.MaintenanceCron, Required = true },
             new() { Name = "incompleteFolder", Label = "Incomplete downloads folder", Value = settings.IncompleteFolder },
             new() { Name = "intakeFolder", Label = "Intake folder", Value = settings.IntakeFolder },
+            new()
+            {
+                Name = "includeSpecials",
+                Label = "Download specials (season 0)",
+                Type = PluginFormFieldType.Toggle,
+                Value = settings.IncludeSpecials,
+            },
         ];
 
         return PluginViews.Form("settings-general-form", SaveLabel, PluginActionIntent.CallPlugin(SaveSettingsMethod), fields);

@@ -60,9 +60,9 @@ public class DownloadOrchestratorTests
             (1, 3, HasFile: false),
         ]);
 
-        int wanted = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+        WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
 
-        wanted.Should().Be(2);
+        refresh.Wanted.Should().Be(2);
         (await _store.WantedAsync(10, CancellationToken.None)).Should().HaveCount(2);
     }
 
@@ -71,7 +71,98 @@ public class DownloadOrchestratorTests
     {
         _library.Add(showId: 1, "Homeless Show", folder: null, episodes: [(1, 1, false)]);
 
-        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Should().Be(0);
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(0);
+    }
+
+    // The rule that keeps a first run from being a thousand downloads: a show nobody has
+    // a single episode of is a show nobody asked for. The library lists everything the
+    // metadata provider knows about, not everything the owner wants.
+    [Fact]
+    public async Task RefreshWantedAsync_LeavesAloneAShowWithNothingOnTheServerYet()
+    {
+        _library.Add(showId: 1, "Never Watched", folder: "/media/never", episodes:
+        [
+            (1, 1, HasFile: false),
+            (1, 2, HasFile: false),
+        ]);
+
+        WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(0);
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().BeEmpty();
+    }
+
+    // Skipping quietly is how a user concludes the plugin is broken. The counts are what
+    // the log line is built from.
+    [Fact]
+    public async Task RefreshWantedAsync_CountsTheShowsItLeftAlone()
+    {
+        _library.Add(showId: 1, "Started", folder: "/media/started", episodes: [(1, 1, true), (1, 2, false)]);
+        _library.Add(showId: 2, "Never Watched", folder: "/media/never", episodes: [(1, 1, false)]);
+        _library.Add(showId: 3, "Also Never", folder: "/media/also", episodes: [(1, 1, false)]);
+
+        WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(1);
+        refresh.ShowsFollowed.Should().Be(1);
+        refresh.ShowsNotStarted.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task RefreshWantedAsync_LeavesSpecialsOutOfTheQueue()
+    {
+        _library.Add(showId: 1, "Some Show", folder: "/media/some-show", episodes:
+        [
+            (1, 1, HasFile: true),
+            (0, 1, HasFile: false),
+            (1, 2, HasFile: false),
+        ]);
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        IReadOnlyList<WantedEpisode> wanted = await _store.WantedAsync(10, CancellationToken.None);
+        wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
+    }
+
+    [Fact]
+    public async Task RefreshWantedAsync_TakesSpecialsWhenTheyAreTurnedOn()
+    {
+        _library.Add(showId: 1, "Some Show", folder: "/media/some-show", episodes:
+        [
+            (1, 1, HasFile: true),
+            (0, 1, HasFile: false),
+        ]);
+
+        WantedRefresh refresh = await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            IncludeSpecials = true,
+        }).RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(1);
+    }
+
+    // A queue built under the old rules is not left standing: the refresh replaces the
+    // list wholesale, so entries the new rules no longer want disappear on the next tick
+    // rather than needing anyone to clear anything by hand.
+    [Fact]
+    public async Task RefreshWantedAsync_DropsWhatAnEarlierRunWantedAndTheRulesNoLongerDo()
+    {
+        await _store.RefreshWantedAsync(
+            [
+                new WantedEpisode { Key = new EpisodeKey(2, 0, 1), ShowTitle = "Never Watched" },
+                new WantedEpisode { Key = new EpisodeKey(1, 0, 1), ShowTitle = "Started" },
+                new WantedEpisode { Key = new EpisodeKey(1, 1, 2), ShowTitle = "Started" },
+            ],
+            CancellationToken.None);
+
+        _library.Add(showId: 1, "Started", folder: "/media/started", episodes: [(1, 1, true), (0, 1, false), (1, 2, false)]);
+        _library.Add(showId: 2, "Never Watched", folder: "/media/never", episodes: [(0, 1, false)]);
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        IReadOnlyList<WantedEpisode> wanted = await _store.WantedAsync(10, CancellationToken.None);
+        wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
     // --- search and grab ---------------------------------------------------------
@@ -285,10 +376,16 @@ public class DownloadOrchestratorTests
 
     private async Task WantOneEpisodeAsync() => await WantEpisodesAsync(1);
 
+    // The show carries one episode that is already on the server, because a show with
+    // nothing is one this plugin leaves alone - see RefreshWantedAsync. It sits after the
+    // wanted ones so their numbers, which several tests assert on, stay 1..count.
     private async Task WantEpisodesAsync(int count)
     {
         _library.Add(1, "Some Show", "/media/some-show",
-            [.. Enumerable.Range(1, count).Select(number => (1, number, false))]);
+        [
+            .. Enumerable.Range(1, count).Select(number => (1, number, false)),
+            (1, count + 1, true),
+        ]);
 
         await Orchestrator().RefreshWantedAsync(CancellationToken.None);
     }

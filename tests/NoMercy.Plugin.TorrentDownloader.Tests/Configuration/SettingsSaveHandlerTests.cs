@@ -268,6 +268,38 @@ public class SettingsSaveHandlerTests
         saved.IntakeFolder.Should().Be("/downloads/intake");
     }
 
+    [Fact]
+    public async Task HandleGeneralAsync_TurnsSpecialsOnAndOffAgain()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        SaveSettingsRequest on = new()
+        {
+            TransfersCron = "*/2 * * * *",
+            FeedCron = "*/20 * * * *",
+            SearchCron = "0 */3 * * *",
+            MaintenanceCron = "0 5 * * *",
+            IncludeSpecials = true,
+        };
+
+        await handler.HandleGeneralAsync(on, CancellationToken.None);
+        ((TorrentDownloaderSettings)configuration.Stored!).IncludeSpecials.Should().BeTrue();
+
+        SaveSettingsRequest off = new()
+        {
+            TransfersCron = "*/2 * * * *",
+            FeedCron = "*/20 * * * *",
+            SearchCron = "0 */3 * * *",
+            MaintenanceCron = "0 5 * * *",
+            IncludeSpecials = false,
+        };
+
+        // Off again, not just on: a toggle merged with "?? current" can be switched on and
+        // never switched off, and the test that only proves the on direction passes anyway.
+        await handler.HandleGeneralAsync(off, CancellationToken.None);
+        ((TorrentDownloaderSettings)configuration.Stored!).IncludeSpecials.Should().BeFalse();
+    }
+
     // Also the general form's "only its own six fields" contract, since the body used
     // above already carries nothing else - unlike the pre-fix shape, there is no
     // indexerName/clientName field left that could accidentally satisfy this branch.
