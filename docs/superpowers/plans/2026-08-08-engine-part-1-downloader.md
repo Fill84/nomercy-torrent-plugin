@@ -1579,7 +1579,9 @@ place before it is executed.
 | 8 — BT handshake | done | 9 |
 | 9 — MSE, forced (RC4, key exchange, handshake) | done | 20 |
 | 11 — `SwarmPolicy` | done | 15 |
-| 10, 12-15 | not started | — |
+| 10 — `PeerConnection` | done | 6 |
+| 12 — `TorrentCoordinator` | done | 16 |
+| 13-15 | not started | — |
 
 Two departures from the original list, both made while building rather than planned:
 
