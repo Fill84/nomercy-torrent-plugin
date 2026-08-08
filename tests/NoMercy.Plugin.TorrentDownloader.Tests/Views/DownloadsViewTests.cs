@@ -71,6 +71,24 @@ public class DownloadsViewTests
         text.Should().Contain("8 peers");
     }
 
+    // Seen on a real server: every queue row read "456 S00E01". EpisodeKey.ToString()
+    // carries the show id because a log line needs it to be unambiguous; a page does not,
+    // because the show's name is the text right beside it.
+    [Fact]
+    public void Build_NamesTheEpisodeSlotWithoutLeakingTheShowId()
+    {
+        PluginView view = DownloadsView.Build(
+            [Transfer("abc", 500, 1000)],
+            [Grab("abc", 7, "Some.Show.S01E07.1080p")],
+            [Wanted(2)]);
+
+        List<string> text = TextOf(view);
+
+        // The fixtures use show id 1, so the leak reads "1 S01E07".
+        text.Should().Contain("S01E07").And.NotContain("1 S01E07");
+        text.Should().Contain("S01E02").And.NotContain("1 S01E02");
+    }
+
     [Fact]
     public void Build_AsksTheClientToComeBackBecauseTheseNumbersMove()
     {

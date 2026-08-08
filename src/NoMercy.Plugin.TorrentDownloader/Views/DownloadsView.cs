@@ -64,7 +64,7 @@ public static class DownloadsView
             rows.Add(PluginViews.Row(
                 $"downloads-row-{transfer.InfoHash}",
                 PluginViews.Text($"downloads-title-{transfer.InfoHash}", grab?.ReleaseTitle ?? transfer.InfoHash),
-                PluginViews.Text($"downloads-episode-{transfer.InfoHash}", grab is null ? "" : grab.Key.ToString(), "caption"),
+                PluginViews.Text($"downloads-episode-{transfer.InfoHash}", grab is null ? "" : Slot(grab.Key), "caption"),
                 PluginViews.Progress($"downloads-progress-{transfer.InfoHash}", transfer.Progress),
 
                 // The percentage as its own text rather than only a label on the bar: a
@@ -103,7 +103,7 @@ public static class DownloadsView
             rows.Add(PluginViews.Row(
                 $"downloads-wanted-{episode.Key}",
                 PluginViews.Text($"downloads-wanted-show-{episode.Key}", episode.ShowTitle),
-                PluginViews.Text($"downloads-wanted-slot-{episode.Key}", episode.Key.ToString(), "caption"),
+                PluginViews.Text($"downloads-wanted-slot-{episode.Key}", Slot(episode.Key), "caption"),
                 StateBadge(episode)));
         }
 
@@ -129,6 +129,18 @@ public static class DownloadsView
                 WantedState.Grabbed => PluginBadgeVariant.Success,
                 _ => PluginBadgeVariant.Neutral,
             });
+
+    /// <summary>
+    /// Which episode, for a reader.
+    ///
+    /// <para>
+    /// Not <see cref="EpisodeKey.ToString"/>: that leads with the show id so a log line
+    /// is unambiguous on its own. On a page the show's name is the text beside this, so
+    /// the id is a number the reader has no use for - and it was on screen as
+    /// "456 S00E01" until somebody looked.
+    /// </para>
+    /// </summary>
+    private static string Slot(EpisodeKey key) => $"S{key.Season:D2}E{key.Episode:D2}";
 
     private static string QueueHeading(IReadOnlyList<WantedEpisode> wanted) =>
         wanted.Count > QueuePreviewLength
