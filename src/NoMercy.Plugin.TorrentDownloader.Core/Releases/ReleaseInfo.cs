@@ -17,4 +17,11 @@ public record ReleaseInfo
     public int Leechers { get; init; }
     public int IndexerPriority { get; init; }
     public DateTimeOffset? PublishedAt { get; init; }
+
+    /// <summary>
+    /// Every tracker any source named for this info hash, merged by the aggregator.
+    /// One release listed on four sites announces four different tracker sets, and a
+    /// bigger swarm is a faster download.
+    /// </summary>
+    public IReadOnlyList<string> Trackers { get; init; } = [];
 }

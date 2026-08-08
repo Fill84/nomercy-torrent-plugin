@@ -57,6 +57,10 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
         Dictionary<string, int> slots = [];
         List<ReleaseInfo> best = [];
 
+        // Every release that landed in a slot, not only the winner. The losers are not
+        // noise: they carry the trackers that make the swarm bigger.
+        List<List<ReleaseInfo>> merged = [];
+
         foreach (ReleaseInfo release in harvested.SelectMany(list => list))
         {
             string titleKey = "t:" + TitleMatcher.Normalize(release.Title);
@@ -74,6 +78,8 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
             if (existingSlot is int found)
             {
                 slot = found;
+                merged[slot].Add(release);
+
                 if (Prefer(release, best[slot]))
                     best[slot] = release;
             }
@@ -81,6 +87,7 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
             {
                 slot = best.Count;
                 best.Add(release);
+                merged.Add([release]);
             }
 
             // Registering the title on every iteration, not only on a new slot, is what lets a
@@ -92,7 +99,8 @@ public sealed class IndexerAggregator(IReadOnlyList<PacedIndexer> indexers, Acti
                 slots[hashKey] = slot;
         }
 
-        return best;
+        // The winner speaks for the whole slot, so it carries everyone's trackers.
+        return [.. best.Select((release, slot) => release with { Trackers = TrackerSet.Merge(merged[slot]) })];
     }
 
     private static bool Prefer(ReleaseInfo candidate, ReleaseInfo existing)
