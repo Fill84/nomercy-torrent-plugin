@@ -117,6 +117,20 @@ What not to try again.
 - **Not a queue implementation.** Ordering and the in-flight limit belong to the orchestrator. The
   store answers questions; it does not decide what happens next.
 
+### A known gap: season packs
+
+A grab is keyed by info hash and carries one `EpisodeKey`. One torrent therefore serves exactly one
+episode.
+
+Season packs break that: one torrent satisfies a dozen episodes, and grabbing it for episode 3 leaves
+the other eleven still wanted, still searched for, and eventually grabbed again as separate torrents.
+
+This surfaced while writing the orchestrator tests, where a fake handing every episode the same info
+hash silently collapsed several grabs into one. It is recorded rather than fixed because fixing it
+means a grab owning a set of episodes and an import step that can place several files from one
+folder - a feature, not a detail. Nothing here forecloses it: the info hash is already the identity,
+so the change is one-to-many on a column rather than a rewrite.
+
 ## 4. Testing
 
 Same rule as everywhere else: the interface is in `Core` and the orchestrator is tested against an
