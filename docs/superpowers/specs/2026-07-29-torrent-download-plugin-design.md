@@ -240,12 +240,37 @@ public record WantedEpisode(
 
 An episode is wanted when **all** hold:
 
-- its show is monitored;
+- its show is monitored — see below;
 - it has aired, minus a configurable grace window so same-day slots are not chased before the
   release exists;
 - it has no file, **or** it has a file whose quality ranks below the profile's cutoff.
 
 `Reason` is `Missing` or `Upgrade`. Specials (season 0) are excluded unless explicitly enabled.
+
+#### Monitored — defined 2026-08-08, against a real library
+
+**A show is monitored when at least one of its episodes is already on the server.**
+
+"Monitored" was written here without saying what decides it, and the implementation read the
+library's whole catalogue instead. On a real server that was **1973 wanted episodes**, nearly all
+of them shows whose owner had never put a single file on disk. The library lists what the metadata
+provider knows about; it is not a statement of intent.
+
+The shelf is the statement of intent. A show with an episode on it is one somebody started, and
+finishing it is the point. A show with nothing is one nobody asked for.
+
+Two consequences worth stating rather than discovering:
+
+- **The plugin cannot start a new show for you.** That is the deliberate counterpart of the rule,
+  and the gap it leaves is an explicit opt-in — a way to say "follow this one" for a show with no
+  files yet. Deferred, not forgotten: it needs a page, an endpoint and somewhere to store the
+  choice, and the rule above is worth having before any of that exists.
+- **Started is read from the episode list**, not from `LibraryShow.HaveEpisodeCount`. Both come
+  from the host, and the field already trusted to decide whether an episode is missing is the one
+  that should decide whether a show has begun. Two fields can disagree; one cannot.
+
+The wanted list is replaced on every refresh, never merged, so a queue built under older rules
+re-decides itself on the next feed tick rather than outliving the rules that produced it.
 
 ### 7.2 Discover
 
