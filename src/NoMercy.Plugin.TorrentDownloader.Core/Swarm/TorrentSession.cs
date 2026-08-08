@@ -32,6 +32,7 @@ public sealed class TorrentSession : IAsyncDisposable
 
     private int _nextPeerHandle;
     private bool _disposed;
+    private Task? _brain;
 
     public TorrentSession(
         TorrentMetadata metadata,
@@ -60,7 +61,38 @@ public sealed class TorrentSession : IAsyncDisposable
     /// Starts the brain. Nothing is decided until this is running, because it is the
     /// only thing allowed to touch the coordinator.
     /// </summary>
-    public Task RunAsync(CancellationToken ct) => Task.Run(() => BrainLoopAsync(ct), ct);
+    public Task RunAsync(CancellationToken ct)
+    {
+        _brain = Task.Run(() => BrainLoopAsync(ct), ct);
+        return _brain;
+    }
+
+    /// <summary>
+    /// Stops accepting work and waits for what is already decided to finish.
+    ///
+    /// <para>
+    /// A piece that verified but has not been written yet is the gap where the resume
+    /// invariant would break: the coordinator counts it as held while the disk does not
+    /// have it. Draining here means a shutdown never leaves that gap, and it is why a
+    /// caller must stop rather than simply dispose.
+    /// </para>
+    /// </summary>
+    public async Task StopAsync()
+    {
+        _events.Writer.TryComplete();
+
+        if (_brain is null)
+            return;
+
+        try
+        {
+            await _brain;
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down while cancelled is the ordinary case, not a failure.
+        }
+    }
 
     public void AddPeer(PeerConnection connection, CancellationToken ct)
     {
@@ -79,14 +111,17 @@ public sealed class TorrentSession : IAsyncDisposable
             while (!ct.IsCancellationRequested)
             {
                 PeerMessage message = await connection.ReceiveAsync(ct);
-                await _events.Writer.WriteAsync(new PeerEvent(key, message), ct);
+
+                if (!_events.Writer.TryWrite(new PeerEvent(key, message)))
+                    return;
             }
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
         {
             // A peer dropping is the steady state, not an incident. Tell the brain so
             // its outstanding blocks are released, and say nothing to anyone else.
-            await _events.Writer.WriteAsync(new PeerEvent(key, null), CancellationToken.None);
+            // TryWrite because the queue may already be closing around us.
+            _events.Writer.TryWrite(new PeerEvent(key, null));
         }
     }
 
@@ -170,7 +205,7 @@ public sealed class TorrentSession : IAsyncDisposable
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
         {
-            await _events.Writer.WriteAsync(new PeerEvent(send.Peer, null), ct);
+            _events.Writer.TryWrite(new PeerEvent(send.Peer, null));
         }
     }
 
@@ -193,7 +228,10 @@ public sealed class TorrentSession : IAsyncDisposable
             return;
 
         _disposed = true;
-        _events.Writer.TryComplete();
+
+        // Drain first: disposing the stores out from under a half-written piece is
+        // exactly the race StopAsync exists to close.
+        await StopAsync();
 
         List<PeerConnection> open;
 

@@ -102,6 +102,7 @@ public class DownloadEndToEndTests
         TorrentMetadata metadata = MetadataParser.FromTorrentFile(builder.Build());
         byte[] content = builder.Content();
         FileResumeStore resume = new(resumeFolder.Path);
+        int held;
 
         // A seeder that hangs up partway, standing in for a reboot mid-download.
         using (FilePieceStore firstStore = new(metadata, folder.Path))
@@ -114,12 +115,21 @@ public class DownloadEndToEndTests
             await ConnectAsync(first, quitter, metadata, serving, deadline.Token);
 
             await WaitUntilAsync(() => first.Have.SetCount >= 3, deadline.Token);
+
+            // Drain before tearing down. Without it the last verified piece may still be
+            // on its way to disk, and the assertions below would be racing the writer.
+            await first.StopAsync();
+
             first.Have.IsComplete.Should().BeFalse();
+            held = first.Have.SetCount;
         }
 
         Bitfield? recovered = await resume.LoadAsync(metadata, deadline.Token);
         recovered.Should().NotBeNull();
-        recovered!.SetCount.Should().BeGreaterThan(0);
+
+        // The record matches what the session held exactly - not less, which would mean
+        // refetching, and never more, which would mean claiming a piece the disk lacks.
+        recovered!.SetCount.Should().Be(held);
         int alreadyHeld = recovered.SetCount;
 
         // Restart with what survived and finish against an honest seeder.
