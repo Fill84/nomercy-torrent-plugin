@@ -52,10 +52,17 @@ feed="$root/_nupkgs"
 # A release must be rebuildable. SERVER_REF pins the contract to one commit; it
 # defaults to a branch for day-to-day work, but CI sets it to a SHA for a tag build
 # so the artifact is reproducible instead of "whatever dev happened to be".
-ref="${SERVER_REF:-${SERVER_BRANCH:-dev}}"
+#
+# The default is master, not dev: this plugin is installed on servers running a
+# release, so the contract it compiles against should be the one those servers
+# actually ship. Building against dev meant a green build proved nothing about the
+# machine the plugin lands on - and the two branches carry different version stamps
+# for identical sources, so "it built" was not the same as "it will load".
+# SERVER_BRANCH=dev is still one word away when the work needs an unreleased change.
+ref="${SERVER_REF:-${SERVER_BRANCH:-master}}"
 
 if [ ! -d "$server" ]; then
-    git clone --depth=1 --branch="${SERVER_BRANCH:-dev}" --filter=blob:none --no-checkout \
+    git clone --depth=1 --branch="${SERVER_BRANCH:-master}" --filter=blob:none --no-checkout \
         https://github.com/NoMercy-Entertainment/nomercy-media-server.git "$server"
     git -C "$server" sparse-checkout init --cone
 fi

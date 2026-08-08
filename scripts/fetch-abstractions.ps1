@@ -37,7 +37,9 @@ $root   = Split-Path -Parent $PSScriptRoot
 # which is how CI keeps the clone inside its own disposable workspace.
 $server = if ($env:SERVER_DIR) { $env:SERVER_DIR } else { Join-Path (Split-Path -Parent $root) 'nomercy-media-server' }
 $feed   = Join-Path $root '_nupkgs'
-$branch = if ($env:SERVER_BRANCH) { $env:SERVER_BRANCH } else { 'dev' }
+# master, not dev: this plugin is installed on servers running a release, so the
+# contract it compiles against should be the one those servers actually ship.
+$branch = if ($env:SERVER_BRANCH) { $env:SERVER_BRANCH } else { 'master' }
 # A release must be rebuildable. SERVER_REF pins the contract to one commit; it defaults
 # to a branch for day-to-day work, but CI sets it to a SHA for a tag build so the artifact
 # is reproducible instead of "whatever dev happened to be".
