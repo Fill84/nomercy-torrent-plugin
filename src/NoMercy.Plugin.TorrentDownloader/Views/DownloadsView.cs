@@ -20,6 +20,18 @@ public static class DownloadsView
     /// <summary>Long enough to be useful, short enough that a first run does not render a thousand rows.</summary>
     public const int QueuePreviewLength = 25;
 
+    /// <summary>
+    /// How often the client should come back, in seconds.
+    ///
+    /// <para>
+    /// The transfers cadence is what rewrites these numbers, and it runs once a minute by
+    /// default, so half of that sees every change soon after it lands without asking for a
+    /// render nothing has moved since. A settings page declares zero; this one cannot -
+    /// a progress bar that only advances when the user reloads is a screenshot.
+    /// </para>
+    /// </summary>
+    public const int RefreshSeconds = 30;
+
     public static PluginView Build(
         IReadOnlyList<Transfer> transfers,
         IReadOnlyList<Grab> grabs,
@@ -38,7 +50,7 @@ public static class DownloadsView
             Queue(wanted),
         ];
 
-        return PluginViews.Declarative(0, PluginViews.Container("downloads-root", [.. children]));
+        return PluginViews.Declarative(RefreshSeconds, PluginViews.Container("downloads-root", [.. children]));
     }
 
     private static PluginComponent ActiveTable(IReadOnlyList<Transfer> transfers, IReadOnlyDictionary<string, Grab> byHash)

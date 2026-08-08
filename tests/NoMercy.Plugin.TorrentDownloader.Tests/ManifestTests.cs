@@ -147,23 +147,34 @@ public class ManifestTests
     }
 
     [Fact]
-    public void Manifest_UiMountUsesAKnownSection()
+    public void Manifest_EveryUiMountUsesAKnownSection()
     {
         PluginManifest manifest = LoadManifest();
-        PluginUiMount mount = manifest.Capabilities!.Ui!.Mounts[0];
 
-        PluginUiSection.All.Should().Contain(mount.Section);
+        // An unknown section is not rejected - it silently falls back to the add-ons page,
+        // which is a mount the author cannot find and is never told about.
+        manifest.Capabilities!.Ui!.Mounts.Should().OnlyContain(mount => PluginUiSection.All.Contains(mount.Section));
     }
 
     [Fact]
-    public void Manifest_UiMountAgreesWithNavEntries()
+    public void Manifest_UiMountsAgreeWithNavEntries()
     {
         PluginManifest manifest = LoadManifest();
-        PluginUiMount mount = manifest.Capabilities!.Ui!.Mounts[0];
+        List<PluginUiMount> mounts = manifest.Capabilities!.Ui!.Mounts;
         TorrentDownloaderPlugin plugin = new();
-        PluginNavEntry navEntry = plugin.NavEntries.Should().ContainSingle().Which;
 
-        navEntry.Section.Should().Be(mount.Section);
-        navEntry.Route.Should().Be(mount.Route);
+        plugin.NavEntries.Select(entry => (entry.Section, entry.Route))
+            .Should().BeEquivalentTo(mounts.Select(mount => (mount.Section, mount.Route)));
+    }
+
+    // The dashboard prefers NavEntries over the manifest, so a page mounted in only one of
+    // the two is a page that appears for some clients and not others.
+    [Fact]
+    public void Manifest_MountsBothThePluginsPages()
+    {
+        PluginManifest manifest = LoadManifest();
+        List<PluginUiMount> mounts = manifest.Capabilities!.Ui!.Mounts;
+
+        mounts.Select(mount => mount.Route).Should().BeEquivalentTo(["/settings", "/downloads"]);
     }
 }

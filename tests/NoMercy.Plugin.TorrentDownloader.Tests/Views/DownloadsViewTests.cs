@@ -72,6 +72,21 @@ public class DownloadsViewTests
     }
 
     [Fact]
+    public void Build_AsksTheClientToComeBackBecauseTheseNumbersMove()
+    {
+        PluginView view = DownloadsView.Build(
+            [Transfer("abc", 500, 1000)],
+            [Grab("abc", 1, "Some.Show.S01E01.1080p")],
+            []);
+
+        // Zero means never, and a progress bar that only moves when the user reloads the
+        // page is a screenshot. The ceiling is here because the other direction is just as
+        // wrong: re-rendering every second costs a request per viewer for numbers the
+        // transfers cadence only rewrites once a minute.
+        view.RefreshInterval.Should().BeInRange(1, 60);
+    }
+
+    [Fact]
     public void Build_PutsTheFurthestAlongFirst()
     {
         PluginView view = DownloadsView.Build(

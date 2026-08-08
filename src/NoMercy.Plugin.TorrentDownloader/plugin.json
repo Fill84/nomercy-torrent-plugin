@@ -19,6 +19,12 @@
           "label": "Torrent Downloader",
           "icon": "download",
           "route": "/settings"
+        },
+        {
+          "section": "video",
+          "label": "Downloads",
+          "icon": "download",
+          "route": "/downloads"
         }
       ]
     }

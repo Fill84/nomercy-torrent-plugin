@@ -4,6 +4,7 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
+using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
@@ -218,6 +219,30 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private DownloadPipeline? _pipeline;
     private readonly SemaphoreSlim _pipelineLock = new(1, 1);
 
+    // The store outlives the pipeline and is reachable without it, because the downloads
+    // page needs what the cadences recorded and must not start an engine to read it.
+    // FileDownloadStore keeps its state in memory, so a second instance over the same file
+    // would answer from whatever it last read - hence one field, created once, under the
+    // same lock the pipeline uses.
+    private IDownloadStore? _store;
+
+    private async Task<IDownloadStore> StoreAsync(IPluginContext context, CancellationToken ct)
+    {
+        if (_store is not null)
+            return _store;
+
+        await _pipelineLock.WaitAsync(ct);
+
+        try
+        {
+            return _store ??= new FileDownloadStore(DownloadPipeline.StorePath(context));
+        }
+        finally
+        {
+            _pipelineLock.Release();
+        }
+    }
+
     private async Task<DownloadPipeline> PipelineAsync(IPluginContext context, CancellationToken ct)
     {
         if (_pipeline is not null)
@@ -232,7 +257,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
                 await LogUngrantedHostsAsync(context, loaded.Settings, ct);
 
-                _pipeline = DownloadPipeline.Create(context, loaded);
+                _store ??= new FileDownloadStore(DownloadPipeline.StorePath(context));
+                _pipeline = DownloadPipeline.Create(context, loaded, _store);
             }
 
             return _pipeline;
@@ -303,9 +329,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
     }
 
-    // One entry, matching plugin.json's own mount. ManifestTests asserts the two stay in
-    // agreement, since a manifest and this property are two declarations of the same fact
-    // and nothing else would catch them drifting apart.
+    // One entry per plugin.json mount. ManifestTests asserts the two stay in agreement,
+    // since a manifest and this property are two declarations of the same fact and nothing
+    // else would catch them drifting apart - the dashboard prefers this one.
+    //
+    // The downloads page sits beside films and shows rather than in the admin panel: the
+    // question it answers - where is episode five - is one asked while looking at the
+    // library, not while configuring a server.
     public IReadOnlyList<PluginNavEntry> NavEntries { get; } =
         [
             new PluginNavEntry
@@ -314,6 +344,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 Label = PluginIdentity.Name,
                 Icon = "download",
                 Route = "/settings",
+            },
+            new PluginNavEntry
+            {
+                Section = PluginUiSection.Video,
+                Label = "Downloads",
+                Icon = "download",
+                Route = "/downloads",
             },
         ];
 
@@ -331,29 +368,31 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             )
         );
 
-    // This page is the plugin's only diagnostic surface, so letting a load failure throw
-    // through it hides its own cause - the owner sees a broken settings page instead of
-    // learning their key ring rotated or their config file is truncated. Secret reads go
-    // through the host's data protector, which throws CryptographicException on a rotated
-    // key ring or a corrupt payload; a truncated config throws JsonException the same way
-    // Fix 1 guards against on the registration path. Rendered text and the log message both
-    // name what failed, never the exception detail, the settings, or a stored secret.
-    private static PluginView SettingsErrorView() =>
+    // These pages are the plugin's only diagnostic surface, so letting a load failure throw
+    // through one hides its own cause - the owner sees a broken page instead of learning
+    // their key ring rotated or their config file is truncated. Secret reads go through the
+    // host's data protector, which throws CryptographicException on a rotated key ring or a
+    // corrupt payload; a truncated config throws JsonException the same way Fix 1 guards
+    // against on the registration path. Rendered text and the log message both name what
+    // failed, never the exception detail, the settings, or a stored secret - which is also
+    // why one card serves both routes: what went wrong is in the log, and guessing at it in
+    // the card is how a downloads page ends up advising someone about an encryption key.
+    private static PluginView PageErrorView() =>
         PluginViews.Declarative(
             PluginViews.Container(
-                "settings-error",
-                PluginViews.Badge("settings-error-badge", "Unavailable", PluginBadgeVariant.Danger),
+                "page-error",
+                PluginViews.Badge("page-error-badge", "Unavailable", PluginBadgeVariant.Danger),
                 PluginViews.EmptyState(
-                    "settings-error-empty",
-                    "Settings could not be loaded",
-                    "Check the server log for Torrent Downloader, and confirm its encryption key has not changed."
+                    "page-error-empty",
+                    "This page could not be loaded",
+                    "Check the server log for Torrent Downloader - it names what failed."
                 )
             )
         );
 
-    // The one route this stage has. A client asking for anything else is not a bug worth
-    // failing the request over - the empty state is the honest answer for a route this
-    // version does not have.
+    // The two routes this plugin mounts. A client asking for anything else is not a bug
+    // worth failing the request over - the empty state is the honest answer for a route
+    // this version does not have.
     public async Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
     {
         if (_disposed)
@@ -361,21 +400,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             return DisposedView();
         }
 
-        if (request.Route != "/settings")
-        {
-            return PluginViews.Declarative(PluginViews.EmptyState("settings-unknown-route", "Nothing here"));
-        }
-
         IPluginContext context = Context;
 
         try
         {
-            LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
-            HostGrants hostGrants = new(context.Grants);
-            IReadOnlyList<string> ungrantedHosts = await hostGrants.EnsureAsync(loaded.Settings, ct);
-            IReadOnlyList<string> storedSecretKeys = await context.Secrets.KeysAsync(ct);
-
-            return SettingsView.Build(loaded.Settings, ungrantedHosts, new HashSet<string>(storedSecretKeys, StringComparer.Ordinal));
+            return request.Route switch
+            {
+                "/settings" => await SettingsPageAsync(context, ct),
+                "/downloads" => await DownloadsPageAsync(context, ct),
+                _ => PluginViews.Declarative(PluginViews.EmptyState("unknown-route", "Nothing here")),
+            };
         }
         catch (OperationCanceledException)
         {
@@ -383,9 +417,38 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception exception)
         {
-            context.Logger.LogError(exception, "Torrent Downloader could not build its settings view.");
-            return SettingsErrorView();
+            context.Logger.LogError(exception, "Torrent Downloader could not build the view for {Route}.", request.Route);
+            return PageErrorView();
         }
+    }
+
+    private async Task<PluginView> SettingsPageAsync(IPluginContext context, CancellationToken ct)
+    {
+        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
+        HostGrants hostGrants = new(context.Grants);
+        IReadOnlyList<string> ungrantedHosts = await hostGrants.EnsureAsync(loaded.Settings, ct);
+        IReadOnlyList<string> storedSecretKeys = await context.Secrets.KeysAsync(ct);
+
+        return SettingsView.Build(loaded.Settings, ungrantedHosts, new HashSet<string>(storedSecretKeys, StringComparer.Ordinal));
+    }
+
+    // Reads the store and nothing else. Deliberately not through PipelineAsync: that builds
+    // the engine, and someone opening a page in the dashboard should not be what starts
+    // dialling peers. The store is shared with the cadences, so what this shows is what the
+    // last transfers tick actually recorded rather than a second, staler copy of it.
+    private async Task<PluginView> DownloadsPageAsync(IPluginContext context, CancellationToken ct)
+    {
+        IDownloadStore store = await StoreAsync(context, ct);
+
+        IReadOnlyList<Transfer> transfers = await store.TransfersAsync(ct);
+        IReadOnlyList<Grab> grabs = await store.ActiveGrabsAsync(ct);
+
+        // Everything still wanted, not a page of it: the view truncates the list itself and
+        // says how many it left out, which it cannot do from a list already cut short. The
+        // store answers from memory, so the cost of the full list is the allocation.
+        IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(int.MaxValue, ct);
+
+        return DownloadsView.Build(transfers, grabs, wanted);
     }
 
     // Null-safe before Initialize (the host may dispose a plugin whose load failed) and

@@ -39,7 +39,19 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
     public DownloadOrchestrator Orchestrator { get; }
 
-    public static DownloadPipeline Create(IPluginContext context, LoadedSettings loaded)
+    /// <summary>
+    /// Where the store's one file lives.
+    ///
+    /// <para>
+    /// Named here rather than at each caller because FileDownloadStore holds its state in
+    /// memory: two instances over the same path are two answers to the same question, and
+    /// the one that did not write last is wrong. The downloads page and the four cadences
+    /// therefore share a single instance, which the plugin owns and passes in.
+    /// </para>
+    /// </summary>
+    public static string StorePath(IPluginContext context) => Path.Combine(context.DataFolderPath, "downloads.json");
+
+    public static DownloadPipeline Create(IPluginContext context, LoadedSettings loaded, IDownloadStore store)
     {
         TorrentDownloaderSettings settings = loaded.Settings;
 
@@ -67,7 +79,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
         DownloadOrchestrator orchestrator = new(
             new PluginLibraryQueryAdapter(context.Library),
-            new FileDownloadStore(Path.Combine(context.DataFolderPath, "downloads.json")),
+            store,
             new AggregatorReleaseSearch(new IndexerAggregator(Indexers(context, loaded))),
             new ProfileReleaseChooser(DefaultProfile),
             engine,

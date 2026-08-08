@@ -6,6 +6,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugins.Abstractions;
 using Xunit;
@@ -14,6 +15,36 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests;
 
 public class PluginLifecycleTests
 {
+    private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
+
+    // Written through the real store rather than as hand-rolled JSON, so this seeds
+    // whatever shape FileDownloadStore actually persists. The file name is spelled out
+    // here on purpose: it is the one fact the plugin and this test have to agree on, and
+    // a rename that forgets one of them empties the page rather than failing to build.
+    private static async Task SeedStoreAsync(FakePluginContext context)
+    {
+        FileDownloadStore store = new(Path.Combine(context.DataFolderPath, "downloads.json"));
+
+        await store.AddGrabAsync(
+            new Grab
+            {
+                InfoHash = "abc",
+                Key = new EpisodeKey(1, 1, 1),
+                ReleaseTitle = "Some.Show.S01E01.1080p",
+                Indexer = "site-a",
+                GrabbedAt = Now,
+            },
+            CancellationToken.None);
+
+        await store.RecordTransferAsync(
+            new Transfer { InfoHash = "abc", BytesDone = 500, BytesTotal = 1000, Peers = 8, UpdatedAt = Now },
+            CancellationToken.None);
+
+        await store.RefreshWantedAsync(
+            [new WantedEpisode { Key = new EpisodeKey(1, 1, 2), ShowTitle = "Some Show" }],
+            CancellationToken.None);
+    }
+
     // Matches SettingsViewTests' own Flatten: GetViewAsync's error path nests its EmptyState
     // inside a container, so a top-level-only check would miss it just as it would there.
     private static IEnumerable<PluginComponent> Flatten(IEnumerable<PluginComponent> components)
@@ -203,6 +234,70 @@ public class PluginLifecycleTests
         PluginView view = (await act.Should().NotThrowAsync()).Which;
         Flatten(view.Components!).Should().Contain(component => component.Component == PluginComponentType.EmptyState);
         logger.Levels.Should().Contain(LogLevel.Error);
+    }
+
+    [Fact]
+    public async Task GetViewAsync_RoutesDownloadsToThePageThatSaysWhatIsDownloading()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        await SeedStoreAsync(context);
+        plugin.Initialize(context);
+
+        PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = "/downloads" }, CancellationToken.None);
+
+        List<string> words = [.. PluginNodes.Words(view)];
+        words.Should().Contain("Some.Show.S01E01.1080p", "the active list names the release being downloaded");
+        words.Should().Contain("50%", "500 of 1000 bytes is half of it");
+        words.Should().Contain("Some Show", "the queue names the show an episode is still missing from");
+    }
+
+    [Fact]
+    public async Task GetViewAsync_DownloadsPageReadsTheStoreWithoutStartingTheEngine()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        await SeedStoreAsync(context);
+        plugin.Initialize(context);
+
+        await plugin.GetViewAsync(new PluginViewRequest { Route = "/downloads" }, CancellationToken.None);
+
+        // Opening a page must not start a BitTorrent engine. Building the pipeline reads
+        // the settings first, so a settings read here means the render did exactly that -
+        // and someone browsing the dashboard would be dialling peers without a tick.
+        context.Configuration.Reads.Should().Be(0);
+        context.HttpHandler.Requests.Should().BeEmpty();
+    }
+
+    // The test that would have caught a page built, tested, and then reachable from
+    // nowhere: a mount the plugin advertises and does not answer renders as "Nothing here".
+    [Fact]
+    public async Task GetViewAsync_AnswersEveryRouteTheNavEntriesAdvertise()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings();
+        plugin.Initialize(context);
+
+        foreach (PluginNavEntry entry in plugin.NavEntries)
+        {
+            PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = entry.Route }, CancellationToken.None);
+
+            PluginNodes.All(view).Should().NotContain(
+                node => node.Id == "unknown-route",
+                $"the plugin mounts {entry.Route}, so it has to answer it");
+        }
+    }
+
+    [Fact]
+    public async Task GetViewAsync_RouteThisVersionDoesNotHaveSaysSoInsteadOfFailing()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        plugin.Initialize(new FakePluginContext());
+
+        PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = "/history" }, CancellationToken.None);
+
+        PluginNodes.All(view).Should().Contain(node => node.Id == "unknown-route");
     }
 
     [Fact]
