@@ -212,35 +212,77 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
     }
 
-    // Every job body below has the same shape for this stage: find out what the owner has
-    // not yet granted and say so, then log what the job would actually do. No orchestration
-    // - Stage 4 replaces each body with the real cycle, not this structure.
-    private async Task RunTransfersAsync(IPluginContext context, CancellationToken ct)
+    // The engine holds running torrents, so the pipeline outlives a job tick and is built
+    // once. Changing folders or indexers therefore lands on the next restart - rebuilding
+    // an engine underneath live downloads is a good way to lose them.
+    private DownloadPipeline? _pipeline;
+    private readonly SemaphoreSlim _pipelineLock = new(1, 1);
+
+    private async Task<DownloadPipeline> PipelineAsync(IPluginContext context, CancellationToken ct)
     {
-        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
-        await LogUngrantedHostsAsync(context, loaded.Settings, ct);
-        context.Logger.LogInformation("Torrent Downloader would poll configured clients for transfer progress.");
+        if (_pipeline is not null)
+            return _pipeline;
+
+        await _pipelineLock.WaitAsync(ct);
+
+        try
+        {
+            if (_pipeline is null)
+            {
+                LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
+                await LogUngrantedHostsAsync(context, loaded.Settings, ct);
+
+                _pipeline = DownloadPipeline.Create(context, loaded);
+            }
+
+            return _pipeline;
+        }
+        finally
+        {
+            _pipelineLock.Release();
+        }
     }
 
+    private async Task RunTransfersAsync(IPluginContext context, CancellationToken ct)
+    {
+        DownloadPipeline pipeline = await PipelineAsync(context, ct);
+
+        int imported = await pipeline.Orchestrator.TransfersCycleAsync(ct);
+
+        if (imported > 0)
+            context.Logger.LogInformation("Torrent Downloader handed {Count} finished download(s) to the intake.", imported);
+    }
+
+    // The library is the list of what is watched, so refreshing it is the whole of
+    // "which shows do we follow": nothing is opted into.
     private async Task RunFeedAsync(IPluginContext context, CancellationToken ct)
     {
-        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
-        await LogUngrantedHostsAsync(context, loaded.Settings, ct);
-        context.Logger.LogInformation("Torrent Downloader would poll configured indexer feeds for new releases.");
+        DownloadPipeline pipeline = await PipelineAsync(context, ct);
+
+        int wanted = await pipeline.Orchestrator.RefreshWantedAsync(ct);
+
+        context.Logger.LogInformation("Torrent Downloader is missing {Count} episode(s) across the library.", wanted);
     }
 
     private async Task RunSearchAsync(IPluginContext context, CancellationToken ct)
     {
-        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
-        await LogUngrantedHostsAsync(context, loaded.Settings, ct);
-        context.Logger.LogInformation("Torrent Downloader would search configured indexers for missing episodes.");
+        DownloadPipeline pipeline = await PipelineAsync(context, ct);
+
+        int grabbed = await pipeline.Orchestrator.SearchCycleAsync(ct);
+
+        if (grabbed > 0)
+            context.Logger.LogInformation("Torrent Downloader started {Count} download(s).", grabbed);
     }
 
     private async Task RunMaintenanceAsync(IPluginContext context, CancellationToken ct)
     {
-        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
-        await LogUngrantedHostsAsync(context, loaded.Settings, ct);
-        context.Logger.LogInformation("Torrent Downloader would run housekeeping on completed and stalled transfers.");
+        DownloadPipeline pipeline = await PipelineAsync(context, ct);
+
+        // Housekeeping is a refresh for now: it notices episodes a user filled in by hand
+        // and stops wanting them, and notices files that disappeared and wants them again.
+        await pipeline.Orchestrator.RefreshWantedAsync(ct);
+
+        context.Logger.LogInformation("Torrent Downloader finished its housekeeping pass.");
     }
 
     private static async Task LogUngrantedHostsAsync(

@@ -348,10 +348,12 @@ public class PluginLifecycleTests
         await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
         await plugin.ExecuteAsync(JobNames.Maintenance, CancellationToken.None);
 
-        // Four ticks, four distinct log messages: proof each job name reached its own body
-        // rather than all four quietly funnelling into the same work.
-        logger.Messages.Should().HaveCount(4);
-        logger.Messages.Distinct().Should().HaveCount(4);
+        // Transfers and Search now say nothing when there is nothing to report - a cycle
+        // that found no finished downloads and started none should not log every minute.
+        // The two that always report do, and they report different things, which is what
+        // proves the switch is not funnelling every job into one body.
+        logger.Messages.Should().HaveCount(2);
+        logger.Messages.Distinct().Should().HaveCount(2);
     }
 
     [Fact]

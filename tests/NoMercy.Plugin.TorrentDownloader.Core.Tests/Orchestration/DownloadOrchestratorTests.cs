@@ -55,9 +55,9 @@ public class DownloadOrchestratorTests
     {
         _library.Add(showId: 1, "Some Show", folder: "/media/some-show", episodes:
         [
-            (1, 1, hasFile: true),
-            (1, 2, hasFile: false),
-            (1, 3, hasFile: false),
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: false),
+            (1, 3, HasFile: false),
         ]);
 
         int wanted = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
