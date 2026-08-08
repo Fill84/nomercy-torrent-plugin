@@ -35,6 +35,8 @@ public sealed class UdpTracker(IUdpTransport transport) : IPeerSource
     private const int AnnounceHeaderLength = 20;
     private const int CompactEntryLength = 6;
 
+    public bool CanAnnounceTo(string url) => url.StartsWith("udp://", StringComparison.OrdinalIgnoreCase);
+
     public async Task<AnnounceResult> AnnounceAsync(string url, AnnounceRequest request, CancellationToken ct)
     {
         if (!Uri.TryCreate(url, UriKind.Absolute, out Uri? parsed) || parsed.Scheme != "udp")

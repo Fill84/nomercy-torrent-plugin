@@ -15,6 +15,10 @@ public sealed class HttpTracker(HttpClient client) : IPeerSource
     /// <summary>Used when a tracker names no interval. Frequent enough to keep the swarm fresh, rare enough not to be rude.</summary>
     private static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(30);
 
+    public bool CanAnnounceTo(string url) =>
+        url.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+        || url.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
+
     public async Task<AnnounceResult> AnnounceAsync(string url, AnnounceRequest request, CancellationToken ct)
     {
         HttpResponseMessage response;

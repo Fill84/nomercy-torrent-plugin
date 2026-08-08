@@ -37,6 +37,13 @@ public sealed record AnnounceResult(IReadOnlyList<PeerEndPoint> Peers, TimeSpan 
 /// </summary>
 public interface IPeerSource
 {
+    /// <summary>
+    /// Whether this source can announce to that address. Asked rather than inferred from
+    /// the implementing type: an engine that decides by type check cannot be handed a
+    /// different source, which makes it untestable and closes the door on the next one.
+    /// </summary>
+    bool CanAnnounceTo(string url);
+
     Task<AnnounceResult> AnnounceAsync(string url, AnnounceRequest request, CancellationToken ct);
 }
 
