@@ -1576,11 +1576,22 @@ place before it is executed.
 | 5 — `FilePieceStore` | done | 7 |
 | 6 — `Bitfield` and `FileResumeStore` | done | 21 |
 | 7 — Peer messages and framing | done | 20 |
-| 8-15 | not started | — |
+| 8 — BT handshake | done | 9 |
+| 9 — MSE, forced (RC4, key exchange, handshake) | done | 20 |
+| 11 — `SwarmPolicy` | done | 15 |
+| 10, 12-15 | not started | — |
 
-`Bitfield` was not in the original task list. It landed with task 6 because three callers need it —
-our own progress, what a peer advertises, and the resume record — and giving each its own
-representation would have meant three chances to disagree about which bit is piece zero.
+Two departures from the original list, both made while building rather than planned:
+
+`Bitfield` was not a task. It landed with task 6 because three callers need it — our own progress,
+what a peer advertises, and the resume record — and giving each its own representation would have
+meant three chances to disagree about which bit is piece zero.
+
+Task 9 was one task and became three: `Rc4Engine`, `MseCrypto`, then `MseHandshake`. Each has its
+own failure mode worth isolating — a cipher that is subtly wrong, constants that must match the
+specification exactly, and a negotiation that has to find its place in a stream padded with noise.
+Task 11 was pulled ahead of task 10 because the coordinator needs the policy and the peer
+connection does not.
 
 | Task | Delivers | Key test |
 | --- | --- | --- |
