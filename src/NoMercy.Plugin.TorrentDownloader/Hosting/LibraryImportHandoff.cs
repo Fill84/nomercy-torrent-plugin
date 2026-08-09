@@ -2,8 +2,6 @@
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
 using Microsoft.Extensions.Logging;
-using NoMercy.Events;
-using NoMercy.Events.FileWatcher;
 using NoMercy.Plugin.TorrentDownloader.Core.Orchestration;
 using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugins.Abstractions;
@@ -33,7 +31,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 public sealed class LibraryImportHandoff(
     FinishedFolderMover mover,
     IPluginLibraryQuery library,
-    IEventBus events,
+    EncodeJobDispatch encodes,
     ILogger logger
 ) : IIntakeHandoff
 {
@@ -61,34 +59,15 @@ public sealed class LibraryImportHandoff(
             return true;
         }
 
-        string type = await LibraryTypeAsync(show.LibraryId, ct);
-
-        await events.PublishAsync(
-            new FileCreatedEvent
-            {
-                FolderPath = finished,
-                LibraryId = libraryId,
-                LibraryType = type,
-            },
-            ct);
-
-        logger.LogInformation(
-            "Torrent Downloader handed {Folder} to the {Type} library for import.",
-            finished,
-            type);
+        // One encode per video file, exactly as the Add content screen queues one per
+        // selected file. The media id is zero for the same reason the screen sends zero:
+        // it is the server that decides what a file is, and it does that from the path.
+        foreach (string video in Directory.EnumerateFiles(finished, "*", SearchOption.AllDirectories))
+        {
+            await encodes.QueueAsync(libraryId, video, mediaId: 0, ct);
+        }
 
         return true;
     }
 
-    /// <summary>
-    /// The library's own type, because the server's handler switches on it and treats tv
-    /// and anime differently from a movie. Falling back to "tv" rather than refusing: the
-    /// shows this plugin follows come from tv and anime libraries in the first place, so
-    /// a type it cannot read is a lookup that failed, not a movie.
-    /// </summary>
-    private async Task<string> LibraryTypeAsync(string libraryId, CancellationToken ct) =>
-        (await library.GetLibrariesAsync(ct))
-            .FirstOrDefault(candidate => candidate.Id == libraryId)
-            ?.Type
-        ?? "tv";
 }

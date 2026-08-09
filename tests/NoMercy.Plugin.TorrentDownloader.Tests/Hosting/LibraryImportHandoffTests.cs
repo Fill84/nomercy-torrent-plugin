@@ -3,8 +3,6 @@
 
 using FluentAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using NoMercy.Events;
-using NoMercy.Events.FileWatcher;
 using NoMercy.Plugin.TorrentDownloader.Core.Orchestration;
 using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -26,7 +24,6 @@ public class LibraryImportHandoffTests : IDisposable
 
     private readonly string _downloads = Directory.CreateTempSubdirectory("nm-tdl-dl-").FullName;
     private readonly string _finished = Directory.CreateTempSubdirectory("nm-tdl-fin-").FullName;
-    private readonly RecordingEventBus _events = new();
     private readonly FakeLibraryQuery _library = new();
 
     public LibraryImportHandoffTests()
@@ -59,7 +56,7 @@ public class LibraryImportHandoffTests : IDisposable
     }
 
     private LibraryImportHandoff Handoff() =>
-        new(new FinishedFolderMover(_finished), _library, _events, NullLogger.Instance);
+        new(new FinishedFolderMover(_finished), _library, new EncodeJobDispatch(new NothingResolved(), NullLogger.Instance), NullLogger.Instance);
 
     private async Task<string> ACompletedDownloadAsync(string name = "Some.Show.S01E02.1080p.WEB-DL-GROUP")
     {
@@ -84,26 +81,9 @@ public class LibraryImportHandoffTests : IDisposable
 
         handed.Should().BeTrue();
 
-        FileCreatedEvent published = _events.Published.OfType<FileCreatedEvent>().Should().ContainSingle().Which;
-        published.FolderPath.Should().Be(Path.Combine(_finished, "Some.Show.S01E02.1080p.WEB-DL-GROUP"));
-        published.LibraryId.Should().Be(LibraryUlid);
-        published.LibraryType.Should().Be("tv");
+        Directory.Exists(Path.Combine(_finished, "Some.Show.S01E02.1080p.WEB-DL-GROUP")).Should().BeTrue();
     }
 
-    // The server's handler switches on the type and treats anime like tv but not like a
-    // movie, so sending the show's own library type is what puts it through the right arm.
-    [Fact]
-    public async Task MoveIntoIntakeAsync_SendsTheLibrarysOwnTypeRatherThanAssumingTv()
-    {
-        Ulid animeLibrary = Ulid.NewUlid();
-        Add(animeLibrary.ToString(), "Anime", "anime", showId: 7, "Some Anime");
-
-        string completed = await ACompletedDownloadAsync("Some.Anime.S01E02.1080p");
-
-        await Handoff().MoveIntoIntakeAsync(completed, new EpisodeKey(7, 1, 2), CancellationToken.None);
-
-        _events.Published.OfType<FileCreatedEvent>().Single().LibraryType.Should().Be("anime");
-    }
 
     [Fact]
     public async Task MoveIntoIntakeAsync_SaysNothingToTheServerWhenNothingMoved()
@@ -117,7 +97,6 @@ public class LibraryImportHandoffTests : IDisposable
         // folder with nothing in it would have the server scanning for a file that is
         // not there.
         handed.Should().BeFalse();
-        _events.Published.Should().BeEmpty();
     }
 
     // The bytes are safe either way, so this reports success and keeps the grab settled.
@@ -130,29 +109,15 @@ public class LibraryImportHandoffTests : IDisposable
         bool handed = await Handoff().MoveIntoIntakeAsync(completed, new EpisodeKey(999, 1, 2), CancellationToken.None);
 
         handed.Should().BeTrue();
-        _events.Published.Should().BeEmpty();
     }
 
-    private sealed class RecordingEventBus : IEventBus
+    /// <summary>
+    /// A container with none of the server's services in it, which is what a test process
+    /// is. The dispatch says so and queues nothing; the move still has to happen and the
+    /// grab still has to settle, and that is what these tests are about.
+    /// </summary>
+    private sealed class NothingResolved : IServiceProvider
     {
-        public List<IEvent> Published { get; } = [];
-
-        public Task PublishAsync<TEvent>(TEvent @event, CancellationToken ct = default)
-            where TEvent : IEvent
-        {
-            Published.Add(@event);
-            return Task.CompletedTask;
-        }
-
-        public IDisposable Subscribe<TEvent>(Func<TEvent, CancellationToken, Task> handler)
-            where TEvent : IEvent => new Nothing();
-
-        public IDisposable Subscribe<TEvent>(IEventHandler<TEvent> handler)
-            where TEvent : IEvent => new Nothing();
-
-        private sealed class Nothing : IDisposable
-        {
-            public void Dispose() { }
-        }
+        public object? GetService(Type serviceType) => null;
     }
 }

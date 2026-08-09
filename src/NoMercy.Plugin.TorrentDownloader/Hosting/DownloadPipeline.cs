@@ -83,7 +83,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new AggregatorReleaseSearch(new IndexerAggregator(Indexers(context, loaded))),
             new ProfileReleaseChooser(ProfileFor(settings)),
             engine,
-            new LibraryImportHandoff(new FinishedFolderMover(intake), context.Library, context.EventBus, context.Logger),
+            new LibraryImportHandoff(new FinishedFolderMover(intake), context.Library, new EncodeJobDispatch(context.Services, context.Logger), context.Logger),
             new OrchestratorOptions
             {
                 DownloadFolder = downloads,
