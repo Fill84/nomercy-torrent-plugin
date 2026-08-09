@@ -5,7 +5,8 @@ that keeps a TV library complete without supervision.
 
 It reads the server's library to work out which episodes are missing, searches configured indexers
 for them, picks one release per episode against a quality/language/group profile, pushes it to a
-torrent client, tracks the download, and hands the finished file to the server's import pipeline.
+torrent client, tracks the download, moves the finished file where the owner asked, and queues the
+same encode job the dashboard's Add content queues.
 Downloads can also be added and removed by hand, by magnet link or `.torrent` file.
 
 > **Status: in development — it loads, it does not download yet.** The domain core, the indexer
@@ -50,10 +51,13 @@ that plugs it into the server.
 | ✅ Indexers: RSS/scene feeds, Torznab, per-indexer pacing, aggregation | done |
 | ✅ Plugin shell: loads, four scheduled jobs, reads the library, settings + secrets storage | done |
 | ✅ REST surface: the settings page saves | done |
-| ⬜ Download database (SQLite) | next |
-| ⬜ Torrent clients: qBittorrent, then Transmission and Deluge | |
-| ⬜ The loop: wanted → search → decide → grab → track → import | |
+| ✅ Download store: one atomically written JSON file, held in memory | done |
+| ✅ Built-in torrent engine: magnets, DHT, HTTP and UDP trackers, resume, gated seeding | done |
+| ✅ The loop: wanted → search → decide → grab → track → move → encode | done |
+| ✅ The feed as a discovery source, matched against what is missing | done |
+| ⬜ Verified end to end on a real server | next |
 | ⬜ Quality upgrades that replace the old file, and daily-show matching | |
+| ⬜ External clients: qBittorrent, Transmission, Deluge, for owners who already run one | |
 
 ## Design
 
