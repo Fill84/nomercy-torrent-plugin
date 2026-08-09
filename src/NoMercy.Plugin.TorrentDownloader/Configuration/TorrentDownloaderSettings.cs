@@ -20,6 +20,7 @@ public class TorrentDownloaderSettings
 
     public List<IndexerSettings> Indexers { get; set; } = [];
     public List<TorrentClientSettings> Clients { get; set; } = [];
+    public List<PrivateTrackerSettings> PrivateTrackers { get; set; } = [];
 
     // Set by SettingsSaveHandler on every successful save/add/remove, never by a form
     // field - it exists so the settings page has a visible sign a save actually reached
@@ -40,6 +41,29 @@ public class IndexerSettings
     public bool Enabled { get; set; } = true;
     public int MinimumIntervalSeconds { get; set; } = 15;
     public List<string> Categories { get; set; } = [];
+}
+
+// No AnnounceUrl here, and that is not the same reason as the other two - it is a
+// stronger one. An announce URL carries the user's passkey, so the whole URL is the
+// secret, not a field beside it. What is left in configuration is a name, whether this
+// tracker is on, and the seeding targets - none of which identifies an account.
+//
+// The consequence is deliberate: the settings page can say a URL is stored but never
+// show it back, exactly as it treats an API key. A passkey that appears in a rendered
+// page is a passkey in a browser cache, a screenshot and a support ticket.
+//
+// This is the only way a torrent from this plugin can ever be uploaded. Everything else
+// is public and public never seeds, so an entry here is always a deliberate act.
+public class PrivateTrackerSettings
+{
+    public string Name { get; set; } = string.Empty;
+    public bool Enabled { get; set; } = true;
+
+    /// <summary>Off by default: seeding is what keeps a private account alive, and it is the user's call to start.</summary>
+    public bool Seed { get; set; }
+
+    public double SeedRatioTarget { get; set; } = 1.0;
+    public int SeedTimeTargetHours { get; set; } = 72;
 }
 
 // No Password here, for the same reason.

@@ -212,4 +212,123 @@ public class SettingsGatewayTests
         string? jackettSecret = await secretStore.GetAsync("indexer:Jackett:apikey", CancellationToken.None);
         jackettSecret.Should().Be("jackett-key");
     }
+
+    // --- private trackers ---------------------------------------------------------
+
+    // The announce URL is not a field with a secret in it, it is the secret: the passkey
+    // in it is the account. Configuration is whole-object JSON on disk, so this asserts
+    // on the serialised settings rather than on the object - a leak is what lands there.
+    [Fact]
+    public async Task SaveAsync_KeepsAPrivateTrackersAnnounceUrlOutOfConfigurationEntirely()
+    {
+        FakeConfiguration configuration = new();
+        FakeSecretStore secretStore = new();
+        SettingsGateway gateway = new(configuration, secretStore);
+        TorrentDownloaderSettings settings = new()
+        {
+            PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish", Seed = true }],
+        };
+
+        await gateway.SaveAsync(
+            new LoadedSettings(
+                settings,
+                [],
+                [],
+                [new PrivateTrackerSecret("RedFish", "https://redfish.test/announce/PASSKEY123", null)]
+            ),
+            CancellationToken.None
+        );
+
+        JsonSerializer.Serialize(configuration.Stored).Should().NotContain("PASSKEY123").And.NotContain("redfish.test");
+        (await secretStore.GetAsync("tracker:RedFish:announce", CancellationToken.None))
+            .Should().Be("https://redfish.test/announce/PASSKEY123");
+    }
+
+    [Fact]
+    public async Task LoadAsync_BringsBackAPrivateTrackersAnnounceUrlAndApiKey()
+    {
+        FakeConfiguration configuration = new();
+        FakeSecretStore secretStore = new();
+        SettingsGateway gateway = new(configuration, secretStore);
+        configuration.Stored = new TorrentDownloaderSettings
+        {
+            PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }],
+        };
+        await secretStore.SetAsync("tracker:RedFish:announce", "https://redfish.test/announce/PASSKEY123", CancellationToken.None);
+        await secretStore.SetAsync("tracker:RedFish:apikey", "torznab-key", CancellationToken.None);
+
+        LoadedSettings loaded = await gateway.LoadAsync(CancellationToken.None);
+
+        PrivateTrackerSecret secret = loaded.PrivateTrackerSecrets.Should().ContainSingle().Which;
+        secret.AnnounceUrl.Should().Be("https://redfish.test/announce/PASSKEY123");
+        secret.ApiKey.Should().Be("torznab-key");
+    }
+
+    // An entry whose announce URL never made it to the store cannot match a torrent to
+    // anything - the host it announces to is its whole identity. Handing it on anyway
+    // would put a nameless tracker in the registry and invite a crash further down.
+    [Fact]
+    public async Task LoadAsync_SkipsAPrivateTrackerWithNoAnnounceUrlStored()
+    {
+        FakeConfiguration configuration = new();
+        FakeSecretStore secretStore = new();
+        SettingsGateway gateway = new(configuration, secretStore);
+        configuration.Stored = new TorrentDownloaderSettings
+        {
+            PrivateTrackers = [new PrivateTrackerSettings { Name = "HalfAdded" }],
+        };
+
+        LoadedSettings loaded = await gateway.LoadAsync(CancellationToken.None);
+
+        loaded.PrivateTrackerSecrets.Should().BeEmpty();
+    }
+
+    // The orphan sweep deletes secrets no live entry owns, and a tracker owns two. The
+    // naive version keeps only the announce key alive and silently drops the API key on
+    // the next unrelated save.
+    [Fact]
+    public async Task SaveAsync_KeepsBothOfAPrivateTrackersSecretsWhenSomethingElseIsSaved()
+    {
+        FakeConfiguration configuration = new();
+        FakeSecretStore secretStore = new();
+        SettingsGateway gateway = new(configuration, secretStore);
+        TorrentDownloaderSettings settings = new()
+        {
+            PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }],
+        };
+
+        await gateway.SaveAsync(
+            new LoadedSettings(settings, [], [], [new PrivateTrackerSecret("RedFish", "https://redfish.test/a/KEY", "torznab-key")]),
+            CancellationToken.None
+        );
+
+        // A later save that carries no tracker secrets at all - the general form, say.
+        await gateway.SaveAsync(new LoadedSettings(settings, [], []), CancellationToken.None);
+
+        (await secretStore.GetAsync("tracker:RedFish:announce", CancellationToken.None)).Should().Be("https://redfish.test/a/KEY");
+        (await secretStore.GetAsync("tracker:RedFish:apikey", CancellationToken.None)).Should().Be("torznab-key");
+    }
+
+    [Fact]
+    public async Task SaveAsync_ForgetsBothSecretsOfAPrivateTrackerThatWasRemoved()
+    {
+        FakeConfiguration configuration = new();
+        FakeSecretStore secretStore = new();
+        SettingsGateway gateway = new(configuration, secretStore);
+        TorrentDownloaderSettings withTracker = new()
+        {
+            PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }],
+        };
+
+        await gateway.SaveAsync(
+            new LoadedSettings(withTracker, [], [], [new PrivateTrackerSecret("RedFish", "https://redfish.test/a/KEY", "torznab-key")]),
+            CancellationToken.None
+        );
+        await gateway.SaveAsync(new LoadedSettings(new TorrentDownloaderSettings(), [], []), CancellationToken.None);
+
+        // A passkey outliving the entry that owned it is a credential nobody is looking
+        // after any more.
+        (await secretStore.GetAsync("tracker:RedFish:announce", CancellationToken.None)).Should().BeNull();
+        (await secretStore.GetAsync("tracker:RedFish:apikey", CancellationToken.None)).Should().BeNull();
+    }
 }

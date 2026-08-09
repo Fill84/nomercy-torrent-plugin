@@ -268,6 +268,37 @@ public class SettingsSaveHandlerTests
         saved.IntakeFolder.Should().Be("/downloads/intake");
     }
 
+    // Every per-entry save rebuilds the settings object, so a field the rebuild forgets is
+    // reset to its default by an edit that had nothing to do with it. That is how a toggle
+    // turns itself off while the owner is editing an indexer URL, and nothing says so.
+    [Fact]
+    public async Task HandleIndexerAsync_DoesNotForgetThatSpecialsWereTurnedOn()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings
+        {
+            IncludeSpecials = true,
+            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.test" }],
+        });
+
+        await handler.HandleIndexerAsync(
+            0,
+            new SaveSettingsRequest { Name = "Prowlarr", Url = "https://prowlarr.test/changed" },
+            CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).IncludeSpecials.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HandleAddIndexerAsync_DoesNotForgetThatSpecialsWereTurnedOn()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) =
+            await SeededAsync(new TorrentDownloaderSettings { IncludeSpecials = true });
+
+        await handler.HandleAddIndexerAsync(CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).IncludeSpecials.Should().BeTrue();
+    }
+
     [Fact]
     public async Task HandleGeneralAsync_TurnsSpecialsOnAndOffAgain()
     {

@@ -104,22 +104,22 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             }
         }
 
-        TorrentDownloaderSettings merged = new()
-        {
-            TransfersCron = request.TransfersCron!,
-            FeedCron = request.FeedCron!,
-            SearchCron = request.SearchCron!,
-            MaintenanceCron = request.MaintenanceCron!,
-            IncompleteFolder = request.IncompleteFolder ?? string.Empty,
-            IntakeFolder = request.IntakeFolder ?? string.Empty,
+        // Cloned and then overwritten, like every other Apply, rather than built field by
+        // field: built from scratch it forgets whatever was added to the settings last and
+        // nothing says so. It had already forgotten the private trackers.
+        TorrentDownloaderSettings merged = Clone(current.Settings);
 
-            // Falls back to what is stored rather than to false, so a client that omits an
-            // off toggle does not silently reset a setting the owner turned on. A submitted
-            // false is still honoured - see the save handler test that turns it off again.
-            IncludeSpecials = request.IncludeSpecials ?? current.Settings.IncludeSpecials,
-            Indexers = current.Settings.Indexers,
-            Clients = current.Settings.Clients,
-        };
+        merged.TransfersCron = request.TransfersCron!;
+        merged.FeedCron = request.FeedCron!;
+        merged.SearchCron = request.SearchCron!;
+        merged.MaintenanceCron = request.MaintenanceCron!;
+        merged.IncompleteFolder = request.IncompleteFolder ?? string.Empty;
+        merged.IntakeFolder = request.IntakeFolder ?? string.Empty;
+
+        // Falls back to what is stored rather than to false, so a client that omits an
+        // off toggle does not silently reset a setting the owner turned on. A submitted
+        // false is still honoured - see the save handler test that turns it off again.
+        merged.IncludeSpecials = request.IncludeSpecials ?? current.Settings.IncludeSpecials;
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
     }
@@ -161,9 +161,8 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         List<IndexerSettings> indexers = [.. current.Settings.Indexers];
         indexers[index] = updated;
 
-        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
+        TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Indexers = indexers;
-        merged.Clients = current.Settings.Clients;
 
         string? apiKey = string.IsNullOrEmpty(request.ApiKey)
             ? current.IndexerSecrets.FirstOrDefault(secret => secret.Name == oldName)?.ApiKey
@@ -203,8 +202,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         List<TorrentClientSettings> clients = [.. current.Settings.Clients];
         clients[index] = updated;
 
-        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
-        merged.Indexers = current.Settings.Indexers;
+        TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Clients = clients;
 
         string? password = string.IsNullOrEmpty(request.Password)
@@ -251,9 +249,8 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             Name = NextDefaultName("New Indexer", [.. current.Settings.Indexers.Select(indexer => indexer.Name)]),
         };
 
-        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
+        TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Indexers = [.. current.Settings.Indexers, added];
-        merged.Clients = current.Settings.Clients;
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
     }
@@ -265,8 +262,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             Name = NextDefaultName("New Download Client", [.. current.Settings.Clients.Select(client => client.Name)]),
         };
 
-        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
-        merged.Indexers = current.Settings.Indexers;
+        TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Clients = [.. current.Settings.Clients, added];
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
@@ -287,9 +283,8 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         List<IndexerSettings> indexers = [.. current.Settings.Indexers];
         indexers.RemoveAt(index);
 
-        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
+        TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Indexers = indexers;
-        merged.Clients = current.Settings.Clients;
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
     }
@@ -304,8 +299,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         List<TorrentClientSettings> clients = [.. current.Settings.Clients];
         clients.RemoveAt(index);
 
-        TorrentDownloaderSettings merged = CloneWithoutEntries(current.Settings);
-        merged.Indexers = current.Settings.Indexers;
+        TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Clients = clients;
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
@@ -319,10 +313,17 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             ? []
             : [.. categories.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)];
 
-    // Copies everything except Indexers/Clients, which each caller sets itself - the
-    // general form's fields have no place here since only one of the three forms is ever
-    // being applied at a time.
-    private static TorrentDownloaderSettings CloneWithoutEntries(TorrentDownloaderSettings source) =>
+    // Copies everything, lists included, and each caller then replaces the one list its
+    // form is about.
+    //
+    // It used to copy everything EXCEPT the lists, leaving every caller to carry the ones
+    // it was not editing. That shape has a standing invitation to a bug in it: add a
+    // setting and eight methods have to remember it, and the one that forgets resets the
+    // owner's choice during an edit of something unrelated. It was not hypothetical -
+    // IncludeSpecials was added and immediately turned itself off whenever an indexer was
+    // saved. Copying everything means a new setting survives by default and only a
+    // deliberate line can drop it.
+    private static TorrentDownloaderSettings Clone(TorrentDownloaderSettings source) =>
         new()
         {
             TransfersCron = source.TransfersCron,
@@ -331,5 +332,9 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             MaintenanceCron = source.MaintenanceCron,
             IncompleteFolder = source.IncompleteFolder,
             IntakeFolder = source.IntakeFolder,
+            IncludeSpecials = source.IncludeSpecials,
+            Indexers = source.Indexers,
+            Clients = source.Clients,
+            PrivateTrackers = source.PrivateTrackers,
         };
 }
