@@ -81,7 +81,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new PluginLibraryQueryAdapter(context.Library),
             store,
             new AggregatorReleaseSearch(new IndexerAggregator(Indexers(context, loaded))),
-            new ProfileReleaseChooser(DefaultProfile),
+            new ProfileReleaseChooser(ProfileFor(settings)),
             engine,
             new IntakeHandoff(intake),
             new OrchestratorOptions { DownloadFolder = downloads, IncludeSpecials = settings.IncludeSpecials },
@@ -199,26 +199,20 @@ internal sealed class DownloadPipeline : IAsyncDisposable
     }
 
     /// <summary>
-    /// Until profiles are a settings section, one sensible ladder.
+    /// The owner's three answers, as the profile the decider wants.
     ///
     /// <para>
-    /// Season packs are on now that a grab owns every episode it settles. They were off
-    /// because a pack satisfying twelve episodes left eleven still wanted and grabbed
-    /// again as eleven more torrents; that is fixed, and the orchestrator will still only
-    /// consider a pack once enough of the season is missing to be worth its bytes.
+    /// Everything else on <see cref="ReleaseProfile"/> - codecs, blocked groups, term
+    /// rules, size bounds - stays at its default until somebody asks for it. A knob
+    /// nobody understands is a knob that gets set wrong and blamed on the plugin.
     /// </para>
     /// </summary>
-    private static ReleaseProfile DefaultProfile { get; } = new()
+    private static ReleaseProfile ProfileFor(TorrentDownloaderSettings settings) => new()
     {
         Name = "default",
-        Quality = new QualityLadder(
-            [
-                new QualityDefinition("WEB-720p", Resolution.Hd720, ReleaseSource.Unknown),
-                new QualityDefinition("WEB-1080p", Resolution.Fhd1080, ReleaseSource.Unknown),
-            ],
-            "WEB-1080p"),
-        MinSeeders = 2,
-        AllowSeasonPacks = true,
+        Quality = QualityLadders.UpTo(QualityLadders.ParseResolution(settings.MaximumResolution, Resolution.Fhd1080)),
+        MinSeeders = Math.Max(1, settings.MinimumSeeders),
+        AllowSeasonPacks = settings.AllowSeasonPacks,
     };
 
     public ValueTask DisposeAsync() => _engine.DisposeAsync();

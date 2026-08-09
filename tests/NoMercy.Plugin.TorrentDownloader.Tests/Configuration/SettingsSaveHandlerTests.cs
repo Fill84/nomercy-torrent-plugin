@@ -416,6 +416,55 @@ public class SettingsSaveHandlerTests
     }
 
     [Fact]
+    public async Task HandleGeneralAsync_SavesTheQualityAnswers()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleGeneralAsync(
+            new SaveSettingsRequest
+            {
+                TransfersCron = "*/2 * * * *",
+                FeedCron = "*/20 * * * *",
+                SearchCron = "0 */3 * * *",
+                MaintenanceCron = "0 5 * * *",
+                MaximumResolution = "2160p",
+                MinimumSeeders = 10,
+                AllowSeasonPacks = false,
+            },
+            CancellationToken.None);
+
+        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
+        saved.MaximumResolution.Should().Be("2160p");
+        saved.MinimumSeeders.Should().Be(10);
+        saved.AllowSeasonPacks.Should().BeFalse();
+    }
+
+    // Zero seeders makes every dead release a candidate and the queue fills with
+    // downloads that never start. Clamped rather than refused: it is not worth failing a
+    // save the owner made to change a cron on the same form.
+    [Theory]
+    [InlineData(0, 1)]
+    [InlineData(-5, 1)]
+    [InlineData(99999, 1000)]
+    public async Task HandleGeneralAsync_KeepsMinimumSeedersInsideWhatMeansAnything(int submitted, int expected)
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleGeneralAsync(
+            new SaveSettingsRequest
+            {
+                TransfersCron = "*/2 * * * *",
+                FeedCron = "*/20 * * * *",
+                SearchCron = "0 */3 * * *",
+                MaintenanceCron = "0 5 * * *",
+                MinimumSeeders = submitted,
+            },
+            CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).MinimumSeeders.Should().Be(expected);
+    }
+
+    [Fact]
     public async Task HandleGeneralAsync_TurnsSpecialsOnAndOffAgain()
     {
         (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());

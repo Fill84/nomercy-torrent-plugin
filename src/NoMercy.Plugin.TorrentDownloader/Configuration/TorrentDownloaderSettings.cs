@@ -18,6 +18,22 @@ public class TorrentDownloaderSettings
     // where a library's metadata is loosest. See OrchestratorOptions.IncludeSpecials.
     public bool IncludeSpecials { get; set; }
 
+    // The three questions an owner can actually answer about quality. The release profile
+    // underneath has a dozen more knobs - codecs, groups, term rules, size bounds - and
+    // none of them belongs on a page until somebody asks for it: a setting nobody
+    // understands is a setting that gets set wrong and blamed on the plugin.
+    //
+    // A maximum rather than a preference. Above it is off the ladder entirely, because a
+    // rung that exists is a rung the scorer can argue itself onto when the seeders look
+    // good, and then a 2160p remux arrives on a connection that cannot carry it.
+    public string MaximumResolution { get; set; } = "1080p";
+
+    /// <summary>Below this a release is usually dead or a trap, and the download stalls at 2%.</summary>
+    public int MinimumSeeders { get; set; } = 2;
+
+    /// <summary>A pack is still only considered once enough of a season is missing to be worth its bytes.</summary>
+    public bool AllowSeasonPacks { get; set; } = true;
+
     public List<IndexerSettings> Indexers { get; set; } = [];
     public List<TorrentClientSettings> Clients { get; set; } = [];
     public List<PrivateTrackerSettings> PrivateTrackers { get; set; } = [];

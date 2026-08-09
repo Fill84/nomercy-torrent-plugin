@@ -24,6 +24,9 @@ public sealed class SaveSettingsRequest
     public string? IncompleteFolder { get; init; }
     public string? IntakeFolder { get; init; }
     public bool? IncludeSpecials { get; init; }
+    public string? MaximumResolution { get; init; }
+    public int? MinimumSeeders { get; init; }
+    public bool? AllowSeasonPacks { get; init; }
 
     // Shared by the indexer and client forms - never both submitted in the same
     // request, since SettingsView renders one form per entry.

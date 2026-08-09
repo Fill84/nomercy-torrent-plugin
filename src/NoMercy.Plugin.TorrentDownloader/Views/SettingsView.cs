@@ -215,6 +215,33 @@ public static class SettingsView
                 Type = PluginFormFieldType.Toggle,
                 Value = settings.IncludeSpecials,
             },
+            new()
+            {
+                Name = "maximumResolution",
+                Label = "Highest quality to download",
+                Type = PluginFormFieldType.Select,
+                Value = settings.MaximumResolution,
+                Options =
+                [
+                    new PluginFormOption { Value = "720p", Label = "Up to 720p" },
+                    new PluginFormOption { Value = "1080p", Label = "Up to 1080p" },
+                    new PluginFormOption { Value = "2160p", Label = "Up to 2160p" },
+                ],
+            },
+            new()
+            {
+                Name = "minimumSeeders",
+                Label = "Minimum seeders",
+                Type = PluginFormFieldType.Number,
+                Value = settings.MinimumSeeders,
+            },
+            new()
+            {
+                Name = "allowSeasonPacks",
+                Label = "Allow season packs",
+                Type = PluginFormFieldType.Toggle,
+                Value = settings.AllowSeasonPacks,
+            },
         ];
 
         return PluginViews.Form("settings-general-form", SaveLabel, PluginActionIntent.CallPlugin(SaveSettingsMethod), fields);

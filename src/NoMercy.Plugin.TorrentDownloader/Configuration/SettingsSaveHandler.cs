@@ -138,6 +138,21 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         // off toggle does not silently reset a setting the owner turned on. A submitted
         // false is still honoured - see the save handler test that turns it off again.
         merged.IncludeSpecials = request.IncludeSpecials ?? current.Settings.IncludeSpecials;
+        merged.AllowSeasonPacks = request.AllowSeasonPacks ?? current.Settings.AllowSeasonPacks;
+
+        if (!string.IsNullOrWhiteSpace(request.MaximumResolution))
+        {
+            merged.MaximumResolution = request.MaximumResolution!;
+        }
+
+        // Clamped rather than refused. Zero seeders means every dead release is a
+        // candidate and the queue fills with downloads that never start; a negative is
+        // somebody testing the box. Neither is worth failing a save the owner made for
+        // some other reason on the same form.
+        if (request.MinimumSeeders is int seeders)
+        {
+            merged.MinimumSeeders = Math.Clamp(seeders, 1, 1000);
+        }
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
     }
@@ -434,6 +449,9 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             IncompleteFolder = source.IncompleteFolder,
             IntakeFolder = source.IntakeFolder,
             IncludeSpecials = source.IncludeSpecials,
+            MaximumResolution = source.MaximumResolution,
+            MinimumSeeders = source.MinimumSeeders,
+            AllowSeasonPacks = source.AllowSeasonPacks,
             Indexers = source.Indexers,
             Clients = source.Clients,
             PrivateTrackers = source.PrivateTrackers,
