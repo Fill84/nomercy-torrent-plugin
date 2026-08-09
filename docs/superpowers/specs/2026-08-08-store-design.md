@@ -117,19 +117,30 @@ What not to try again.
 - **Not a queue implementation.** Ordering and the in-flight limit belong to the orchestrator. The
   store answers questions; it does not decide what happens next.
 
-### A known gap: season packs
+### Season packs — closed 2026-08-09
 
-A grab is keyed by info hash and carries one `EpisodeKey`. One torrent therefore serves exactly one
-episode.
+A grab used to carry one `EpisodeKey`, so one torrent served exactly one episode. A pack satisfying
+a dozen left the other eleven wanted, searched for, and grabbed again as eleven more torrents of
+bytes already on the disk. Season packs were switched off in the profile because of it.
 
-Season packs break that: one torrent satisfies a dozen episodes, and grabbing it for episode 3 leaves
-the other eleven still wanted, still searched for, and eventually grabbed again as separate torrents.
+A grab now carries `Covers`, the episodes it settles, and the import, the failure path and the queue
+all read that instead of the key that triggered the grab. `Covers` is empty on anything written
+before this and resolves to `[Key]` through the `Covered` property, so an existing file keeps meaning
+what it meant — the shape changed without a migration.
 
-This surfaced while writing the orchestrator tests, where a fake handing every episode the same info
-hash silently collapsed several grabs into one. It is recorded rather than fixed because fixing it
-means a grab owning a set of episodes and an import step that can place several files from one
-folder - a feature, not a detail. Nothing here forecloses it: the info hash is already the identity,
-so the change is one-to-many on a column rather than a rewrite.
+The import step needed nothing: `IntakeHandoff` already moved every video file out of the completed
+folder rather than picking one, so a pack's dozen files were always going to land in the intake
+together. The gap was entirely in what the store remembered.
+
+Two consequences worth keeping in view:
+
+- **Over-claiming is safe.** A pack that turns out not to contain an episode still marks it done,
+  and the next refresh wants it again, because the wanted list is derived from the library rather
+  than from what the plugin believes it downloaded. The queue self-corrects because it is a view of
+  the shelf, not a ledger.
+- **A pack is only considered once three of a season's episodes are missing** (`SeasonPackThreshold`).
+  It costs a season of bytes whether it settles one gap or ten. Both the profile and the caller have
+  to allow it; either refusing is a refusal.
 
 ## 4. Testing
 
