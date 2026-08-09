@@ -72,6 +72,12 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
                 .Take(limit),
         ], ct);
 
+    public async Task RecordUnstartedShowsAsync(IReadOnlyList<UnstartedShow> shows, CancellationToken ct) =>
+        await MutateAsync(state => state.UnstartedShows = [.. shows.DistinctBy(show => show.ShowId)], ct);
+
+    public async Task<IReadOnlyList<UnstartedShow>> UnstartedShowsAsync(CancellationToken ct) =>
+        await ReadAsync(state => (IReadOnlyList<UnstartedShow>)[.. state.UnstartedShows], ct);
+
     public async Task<WantedEpisode?> FindWantedAsync(EpisodeKey key, CancellationToken ct) =>
         await ReadAsync(state => state.Wanted.FirstOrDefault(episode => episode.Key == key), ct);
 
@@ -221,6 +227,8 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
         public int Version { get; set; } = 1;
 
         public List<WantedEpisode> Wanted { get; set; } = [];
+
+        public List<UnstartedShow> UnstartedShows { get; set; } = [];
 
         public List<Grab> Grabs { get; set; } = [];
 

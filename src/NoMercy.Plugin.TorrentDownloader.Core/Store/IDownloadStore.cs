@@ -97,6 +97,24 @@ public sealed record Transfer
     public double Progress => BytesTotal > 0 ? (double)BytesDone / BytesTotal : 0;
 }
 
+/// <summary>
+/// A show the refresh decided to leave alone, so a page can offer to stop leaving it
+/// alone.
+///
+/// <para>
+/// Written by the refresh rather than worked out again by whoever renders it. The first
+/// version had the page ask the library and read <c>HaveEpisodeCount</c>, which the host
+/// reports as zero for shows that plainly have episodes: the page offered to follow Silo
+/// while Silo's missing episodes sat in the queue above it. The refresh already walks the
+/// episodes to make the decision, so the decision is what gets recorded.
+/// </para>
+/// </summary>
+public sealed record UnstartedShow
+{
+    public required int ShowId { get; init; }
+    public required string Title { get; init; }
+}
+
 public sealed record BlacklistEntry
 {
     /// <summary>Either identifies a bad release. Some sources give no hash, so a title has to do.</summary>
@@ -131,6 +149,11 @@ public interface IDownloadStore
     Task RefreshWantedAsync(IReadOnlyList<WantedEpisode> missing, CancellationToken ct);
 
     Task<IReadOnlyList<WantedEpisode>> WantedAsync(int limit, CancellationToken ct);
+
+    /// <summary>Replaces the list wholesale, like the wanted list: it is a conclusion, not an accumulation.</summary>
+    Task RecordUnstartedShowsAsync(IReadOnlyList<UnstartedShow> shows, CancellationToken ct);
+
+    Task<IReadOnlyList<UnstartedShow>> UnstartedShowsAsync(CancellationToken ct);
 
     Task<WantedEpisode?> FindWantedAsync(EpisodeKey key, CancellationToken ct);
 

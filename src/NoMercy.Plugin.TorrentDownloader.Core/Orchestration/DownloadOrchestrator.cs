@@ -148,6 +148,7 @@ public sealed class DownloadOrchestrator(
     public async Task<WantedRefresh> RefreshWantedAsync(CancellationToken ct)
     {
         List<WantedEpisode> missing = [];
+        List<UnstartedShow> unstarted = [];
         HashSet<int> askedFor = [.. options.FollowedShowIds];
         int followed = 0;
         int notStarted = 0;
@@ -167,6 +168,7 @@ public sealed class DownloadOrchestrator(
             if (!episodes.Any(episode => episode.HasFile) && !askedFor.Contains(show.ShowId))
             {
                 notStarted++;
+                unstarted.Add(new UnstartedShow { ShowId = show.ShowId, Title = show.Title });
                 continue;
             }
 
@@ -200,6 +202,13 @@ public sealed class DownloadOrchestrator(
         }
 
         await store.RefreshWantedAsync(missing, ct);
+
+        // Recorded here rather than worked out again by whoever renders it. The page that
+        // shows this list used to ask the library and read HaveEpisodeCount, which the
+        // host reports as zero for shows that plainly have episodes - so it offered to
+        // follow shows whose missing episodes were in the queue directly above it. This
+        // loop already walked the episodes to decide; the decision is the thing to keep.
+        await store.RecordUnstartedShowsAsync(unstarted, ct);
 
         return new WantedRefresh(missing.Count, followed, notStarted);
     }

@@ -126,6 +126,35 @@ public class DownloadOrchestratorTests
         refresh.ShowsNotStarted.Should().Be(1);
     }
 
+    // Seen on a real server: the page listed 65 shows to follow while the log said 12,
+    // and among the 65 were shows whose missing episodes were in the queue directly
+    // above. The page was reading the host's HaveEpisodeCount, which is zero for shows
+    // that plainly have episodes. One question, one answer: whoever decides, records.
+    [Fact]
+    public async Task RefreshWantedAsync_WritesDownTheShowsItLeftAloneAndNoOthers()
+    {
+        _library.Add(showId: 1, "Started", folder: "/media/started", episodes: [(1, 1, true), (1, 2, false)]);
+        _library.Add(showId: 2, "Never Watched", folder: "/media/never", episodes: [(1, 1, false)]);
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        IReadOnlyList<UnstartedShow> unstarted = await _store.UnstartedShowsAsync(CancellationToken.None);
+        unstarted.Should().ContainSingle();
+        unstarted[0].ShowId.Should().Be(2);
+        unstarted[0].Title.Should().Be("Never Watched");
+    }
+
+    [Fact]
+    public async Task RefreshWantedAsync_StopsListingAShowOnceItIsFollowed()
+    {
+        _library.Add(showId: 7, "Asked For", folder: "/media/asked", episodes: [(1, 1, false)]);
+
+        await Orchestrator(new OrchestratorOptions { DownloadFolder = "/downloads", FollowedShowIds = [7] })
+            .RefreshWantedAsync(CancellationToken.None);
+
+        (await _store.UnstartedShowsAsync(CancellationToken.None)).Should().BeEmpty();
+    }
+
     // Skipping quietly is how a user concludes the plugin is broken. The counts are what
     // the log line is built from.
     [Fact]

@@ -471,37 +471,35 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // store answers from memory, so the cost of the full list is the allocation.
         IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(int.MaxValue, ct);
 
-        return DownloadsView.Build(transfers, grabs, wanted, await UnstartedShowsAsync(context, ct));
+        return DownloadsView.Build(transfers, grabs, wanted, await UnstartedShowsAsync(store, ct));
     }
 
     /// <summary>
-    /// The shows this plugin is leaving alone, so the page can offer to stop leaving them
-    /// alone. Reads the library, which is what the page needs and the store cannot say:
-    /// the store only remembers shows the plugin already follows.
+    /// The shows this plugin is leaving alone, as the last refresh concluded them.
+    ///
+    /// <para>
+    /// Read back rather than worked out here. The first version asked the library and
+    /// filtered on <c>HaveEpisodeCount</c>, and the host reports that as zero for shows
+    /// that plainly have episodes: the page offered to follow Silo, Sugar and South Park
+    /// while their missing episodes sat in the queue directly above. Two sources for one
+    /// question, and the page had the worse one.
+    /// </para>
+    ///
+    /// <para>
+    /// A show already followed is not in that list at all - the refresh counts it as
+    /// started - so the followed set here only ever marks one whose refresh has not
+    /// happened yet, which is what lets the button say "Stop following" straight away.
+    /// </para>
     /// </summary>
-    private async Task<IReadOnlyList<DownloadsView.FollowableShow>> UnstartedShowsAsync(IPluginContext context, CancellationToken ct)
+    private async Task<IReadOnlyList<DownloadsView.FollowableShow>> UnstartedShowsAsync(IDownloadStore store, CancellationToken ct)
     {
-        TorrentDownloaderSettings settings = ReadSettingsOrDefault();
-        HashSet<int> followed = [.. settings.FollowedShowIds];
+        HashSet<int> followed = [.. ReadSettingsOrDefault().FollowedShowIds];
 
-        PluginLibraryQueryAdapter library = new(context.Library);
-        List<DownloadsView.FollowableShow> unstarted = [];
-
-        foreach (LibraryShow show in await library.GetShowsAsync(ct))
-        {
-            if (show.Folder is null)
-                continue;
-
-            // The have-count is the host's own summary and is enough here: this list is a
-            // prompt, not a decision. RefreshWantedAsync reads the episodes themselves,
-            // because that one IS the decision and has to agree with itself.
-            if (show.HaveEpisodeCount > 0)
-                continue;
-
-            unstarted.Add(new DownloadsView.FollowableShow(show.ShowId, show.Title, followed.Contains(show.ShowId)));
-        }
-
-        return unstarted;
+        return
+        [
+            .. (await store.UnstartedShowsAsync(ct))
+                .Select(show => new DownloadsView.FollowableShow(show.ShowId, show.Title, followed.Contains(show.ShowId))),
+        ];
     }
 
     // Null-safe before Initialize (the host may dispose a plugin whose load failed) and
