@@ -308,20 +308,20 @@ Slice 10 also changes existing code. `IndexerAggregator.Deduplicate` currently g
 and title and keeps the single best result, discarding the rest. It must keep the union of their
 tracker URLs instead: the duplicates are not noise, they are the reason the swarm gets bigger.
 
-## 9a. Status, 2026-08-08
+## 9a. Status, 2026-08-09
 
-Slices 1 to 8 and 10 to 12 are built and green: bencode, metadata, multi-file layout, verified
+All twelve slices are built and green: bencode, metadata, multi-file layout, verified
 durable storage, resume, forced MSE, the peer wire, the single-owner coordinator, HTTP and UDP
 trackers, magnet with BEP 10 and BEP 9, DHT routing and lookup, tracker merging by info hash,
 private tracker configuration, and gated seeding.
 
-676 tests, no warnings. A multi-file torrent downloads byte for byte against an in-process seeder,
+Slice 9, the `ITorrentEngine` facade, was held back on purpose until the orchestrator could say
+what it needed - a seam built before that conversation ends up in the wrong place - and landed with
+subsystem C. The orchestrator now talks to the engine through it and knows no protocol.
+
+797 tests, no warnings. A multi-file torrent downloads byte for byte against an in-process seeder,
 resumes after a restart without refetching, survives a peer sending nothing but corrupt pieces, and
 answers a stranger's request only when a private tracker the user configured says it may.
-
-Slice 9, the `ITorrentEngine` facade, is deliberately last. Its shape is decided by what the
-orchestrator asks of it, and building the seam before that conversation is how a seam ends up in the
-wrong place.
 
 ## 10. Where this sits
 

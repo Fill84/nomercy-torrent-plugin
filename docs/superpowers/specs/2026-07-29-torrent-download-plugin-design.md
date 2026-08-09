@@ -980,29 +980,36 @@ The packed version is `0.1.404`, which is the assembly version in `Directory.Bui
 
 ## 14. Build order
 
-**Revised 2026-07-30.** All twelve upstream issues closed, so nothing is gated any more and the order
-is driven by what each stage needs from the one before. Stage 0 was also larger than one stage: it
-split once the indexers turned out to be a body of work in their own right.
+**Revised 2026-08-09.** Everything through stage 5 is built, deployed to a real server and observed
+working there. The order below is what happened, not what was planned: stage 3 disappeared, because
+the plugin turned out to be better off downloading by itself than driving somebody else's client.
 
 | Stage | Work | Status |
 | --- | --- | --- |
-| **0a** | `Core` release domain: size and name parsing, title matcher, quality/language/group profiles, hard filters, soft scoring, decider | **Done** — 180 tests |
-| **0b** | `Core` indexers: `IIndexer`, RSS/scene feeds, Torznab, per-indexer pacer, aggregator | **Done** — 257 tests total |
-| **1** | **Shell:** `IPlugin`, `IScheduledTaskPlugin` with the four jobs, `ILibraryQuery` adapter over `IPluginLibraryQuery`, settings and secrets, manifest, CI against the local feed. The plugin loads, appears in the dashboard, and is configurable. | **Next** |
-| 2 | `Core` store: plugin-owned SQLite over Dapper — monitored shows, wanted episodes, grabs, transfers, blacklist | |
-| 3 | `Core` `ITorrentClient`: qBittorrent first, then Transmission and Deluge | |
-| 4 | `Core` orchestrator: the six-stage loop, plus the completion handoff and its move-into-intake | |
-| 5 | REST + WS surface, then UI views | |
-| 6 | Upgrade-replace via `RecycleAsync`, and the daily-show air-date path (§18.5) | |
-| 0b-2 | Deferred indexer work: TorrentBay and LimeTorrents scrapers, FlareSolverr, bencode verification, `ResolveMagnetAsync`, `Retry-After` | |
+| **0a** | `Core` release domain: size and name parsing, title matcher, quality/language/group profiles, hard filters, soft scoring, decider | **Done** |
+| **0b** | `Core` indexers: `IIndexer`, RSS/scene feeds, Torznab, per-indexer pacer, aggregator | **Done** |
+| **1** | Shell: `IPlugin`, `IScheduledTaskPlugin`, the `ILibraryQuery` adapter, settings and secrets, manifest, CI | **Done** |
+| **2** | `Core` store — one atomically written file, not SQLite (see the store spec for why) | **Done** |
+| ~~3~~ | ~~`Core` `ITorrentClient`: qBittorrent, Transmission, Deluge~~ | **Dropped.** The engine replaced it. The settings section that survived it was removed on 2026-08-09; it asked for a password for something nothing ever contacted |
+| **3′** | `Core` engine: the whole BitTorrent client, twelve slices — see the engine spec | **Done** |
+| **4** | `Core` orchestrator: the six-stage loop, the completion handoff, the four cadences wired | **Done** |
+| **5** | REST surface and the two pages: settings, and downloads beside films and shows | **Done** |
+| 6 | Upgrade-replace via `RecycleAsync`, and the daily-show air-date path (§18.5) | Not started |
+| 0b-2 | Deferred indexer work: TorrentBay and LimeTorrents scrapers, FlareSolverr, bencode verification, `ResolveMagnetAsync`, `Retry-After` | Not started |
 
-Stage 1 comes before the store and the client deliberately. It is the first stage that produces
-something a user can install, and it is the one that proves the platform integration — the part no
-amount of `Core` testing can tell us is right. Stages 2-4 then have a real host to run inside.
+### What is not finished, as of 2026-08-09
 
-The substance is still `Core`, and it is still where correctness is hardest.
+Two things, and neither is in this plugin.
 
----
+**Nothing has been downloaded on a real server yet.** Every link is tested and the whole chain runs
+against an in-process seeder that can also lie, but no episode has arrived over a real swarm. That
+is the remaining unknown, and it needs an indexer with a search endpoint - a scene RSS feed cannot
+be asked for a particular episode.
+
+**The handoff into the server is blocked upstream.** The plugin moves finished files into the intake
+folder. This server wants a webhook instead, and that webhook needs a drop folder inside an
+Inbox-type library - a library type the dashboard cannot create. Until that exists, a finished
+download sits in the folder and waits.
 
 ## 15. Testing
 

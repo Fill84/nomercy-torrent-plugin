@@ -13,9 +13,11 @@
 # nothing. This script refuses to report success in that case; see the check
 # after each file.
 #
-# Files go over as base64 through ssh rather than with scp, because scp against
-# this host fails while a plain ssh session works. It is slower and it does not
-# matter: these are a few hundred kilobytes.
+# Files go over as base64 through ssh rather than with scp. Plain scp fails
+# against this host because OpenSSH 9 made it speak SFTP by default and the host
+# does not answer that; `scp -O` works and is faster. This stays on base64
+# because it verifies every file's hash afterwards either way, and at a few
+# hundred kilobytes the difference is not worth a second code path.
 set -eu
 
 server="${SERVER:-beast-unit}"

@@ -10,3 +10,4 @@ TestResults/
 _server/
 _nupkgs/
 _stage/
+.mcp.json

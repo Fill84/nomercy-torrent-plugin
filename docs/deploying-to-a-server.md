@@ -25,11 +25,17 @@ So the loop is: **stop the server → deploy → start the server**. The script
 compares hashes and refuses to report success on a mismatch, which is what turns
 that failure from a silent one into a loud one.
 
-## Why base64 rather than scp
+## scp works, with -O
 
-`scp` against this host fails where a plain `ssh` session works, so each file is
-base64-encoded, piped through `ssh` into a temp file, and decoded on the far
-side. It is slower and it does not matter at a few hundred kilobytes.
+Plain `scp` fails against this host and a plain `ssh` session works, which is
+what the base64 path was written for. The cause is narrower than it looked:
+OpenSSH 9 made `scp` speak the SFTP protocol by default, and this host does not
+answer it. `scp -O` uses the old protocol and copies everything in one go,
+including the 380 KB `Core.dll`.
+
+The script still uses base64 because it also verifies what arrived, and at a few
+hundred kilobytes the speed difference is not worth a second code path. For a
+one-off copy by hand, `scp -O` is fine.
 
 ## Two things that are easy to get wrong
 
