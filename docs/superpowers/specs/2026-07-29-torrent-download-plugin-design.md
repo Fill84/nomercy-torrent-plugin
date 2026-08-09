@@ -261,10 +261,12 @@ finishing it is the point. A show with nothing is one nobody asked for.
 
 Two consequences worth stating rather than discovering:
 
-- **The plugin cannot start a new show for you.** That is the deliberate counterpart of the rule,
-  and the gap it leaves is an explicit opt-in — a way to say "follow this one" for a show with no
-  files yet. Deferred, not forgotten: it needs a page, an endpoint and somewhere to store the
-  choice, and the rule above is worth having before any of that exists.
+- **Starting a new show is an explicit act.** The rule alone would mean the plugin can only ever
+  finish a show somebody began by hand. So the downloads page lists the shows being left alone with
+  one button each, and following one adds its id to `FollowedShowIds`, which the refresh treats as
+  started. The rule is unchanged; the exception is named, stored, and visible on the page that
+  explains why those shows are sitting there. Keyed by show id, not by a position in that list —
+  the list changes shape the moment a show leaves it.
 - **Started is read from the episode list**, not from `LibraryShow.HaveEpisodeCount`. Both come
   from the host, and the field already trusted to decide whether an episode is missing is the one
   that should decide whether a show has begun. Two fields can disagree; one cannot.
