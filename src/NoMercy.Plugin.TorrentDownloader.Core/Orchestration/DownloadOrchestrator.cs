@@ -17,6 +17,22 @@ public interface IReleaseSearch
 }
 
 /// <summary>
+/// Everything an indexer has posted lately, asked for without a query.
+///
+/// <para>
+/// A feed is not a search. A search asks "who has this episode" and pays a rate limit per
+/// question; a feed is handed over whole and costs one request no matter how much of it
+/// turns out to be useful. That difference is the whole reason to have both: the search
+/// cadence works through a backlog ten episodes at a time, and the feed catches tonight's
+/// airing within a quarter of an hour of it being posted, without asking anybody anything.
+/// </para>
+/// </summary>
+public interface IReleaseFeed
+{
+    Task<IReadOnlyList<ReleaseInfo>> LatestAsync(CancellationToken ct);
+}
+
+/// <summary>
 /// Choosing between candidates. Wraps the profiles and the scorer, which is the
 /// orchestrator's business to call and nobody's business to reimplement.
 /// </summary>
@@ -107,6 +123,21 @@ public sealed record OrchestratorOptions
 public sealed record WantedRefresh(int Wanted, int ShowsFollowed, int ShowsNotStarted);
 
 /// <summary>
+/// What one pass over the feeds came to.
+///
+/// <para>
+/// <paramref name="Matched"/> is reported beside <paramref name="Grabbed"/> because the
+/// two failures look identical from outside and have nothing to do with each other. A feed
+/// that matched nothing is a feed carrying other people's shows, or an indexer that is not
+/// answering. A feed that matched plenty and grabbed none of it is working perfectly and
+/// being turned down - by the quality profile, or because the items link to a web page
+/// instead of to a torrent, which some sites' feeds do. Only one of those is worth
+/// anybody's evening.
+/// </para>
+/// </summary>
+public sealed record FeedCycle(int Matched, int Grabbed);
+
+/// <summary>
 /// The loop: notice what is missing, find something for it, hand it to the engine,
 /// and put the result where the server will import it.
 ///
@@ -126,7 +157,8 @@ public sealed class DownloadOrchestrator(
     IIntakeHandoff intake,
     OrchestratorOptions options,
     PrivateTrackerRegistry privateTrackers,
-    Func<DateTimeOffset> now)
+    Func<DateTimeOffset> now,
+    IReleaseFeed? feed = null)
 {
     /// <summary>
     /// Brings the wanted list in line with the library.
@@ -248,8 +280,159 @@ public sealed class DownloadOrchestrator(
         return grabbed;
     }
 
+    /// <summary>
+    /// Grabs from what the feed just posted, rather than from what was asked for.
+    ///
+    /// <para>
+    /// One request gets the whole feed, and then the matching happens here rather than at
+    /// the indexer: the feed does not know which episodes this server is missing, and
+    /// asking it per episode would be the search cadence again at a fifteen-minute
+    /// interval. Everything a release could plausibly answer for is offered to the same
+    /// decider the search uses, so a feed grab is held to the owner's profile exactly as a
+    /// searched one is - the feed decides what is <em>available</em>, never what is good
+    /// enough.
+    /// </para>
+    ///
+    /// <para>
+    /// An episode the feed has nothing for is left untouched. It has not been searched
+    /// for, and counting a quiet feed against its search attempts would park episodes as
+    /// unavailable without anybody ever having asked an indexer about them.
+    /// </para>
+    /// </summary>
+    public async Task<FeedCycle> FeedCycleAsync(CancellationToken ct)
+    {
+        if (feed is null)
+            return new FeedCycle(0, 0);
+
+        int running = (await store.ActiveGrabsAsync(ct)).Count;
+        int room = options.MaxConcurrentDownloads - running;
+
+        if (room <= 0)
+            return new FeedCycle(0, 0);
+
+        IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(int.MaxValue, ct);
+
+        if (wanted.Count == 0)
+            return new FeedCycle(0, 0);
+
+        IReadOnlyList<ReleaseInfo> latest = await feed.LatestAsync(ct);
+
+        List<(WantedEpisode Episode, List<ReleaseInfo> Candidates)> offers = [.. Offers(latest, wanted)];
+
+        int grabbed = 0;
+        HashSet<EpisodeKey> settled = [];
+
+        foreach ((WantedEpisode episode, List<ReleaseInfo> candidates) in offers)
+        {
+            if (grabbed >= room)
+                break;
+
+            if (settled.Contains(episode.Key))
+                continue;
+
+            IReadOnlyList<EpisodeKey>? covered = await GrabAsync(episode, candidates, countsAsSearch: false, ct);
+
+            if (covered is null)
+                continue;
+
+            settled.UnionWith(covered);
+            grabbed++;
+        }
+
+        return new FeedCycle(offers.Count, grabbed);
+    }
+
+    /// <summary>
+    /// Which wanted episodes each release could be, keyed by episode.
+    ///
+    /// <para>
+    /// Matching is by show name and then by slot, and it is deliberately generous: a
+    /// season pack is offered to every gap in that season, and a release whose name parses
+    /// to nothing is offered to nobody. Being generous is safe because the decider filters
+    /// on title and slot again before it picks anything - this only decides what is worth
+    /// showing it, and a release shown to an episode it does not fit is simply refused.
+    /// </para>
+    ///
+    /// <para>
+    /// Shows are matched once each rather than once per wanted episode. A season of a show
+    /// is twenty-odd episodes with the same name on it, and tokenizing that name twenty
+    /// times per feed item is the difference between a cheap cadence and a hot one.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<(WantedEpisode Episode, List<ReleaseInfo> Candidates)> Offers(
+        IReadOnlyList<ReleaseInfo> latest,
+        IReadOnlyList<WantedEpisode> wanted)
+    {
+        Dictionary<int, List<WantedEpisode>> byShow = [];
+
+        foreach (WantedEpisode episode in wanted)
+        {
+            if (!byShow.TryGetValue(episode.Key.ShowId, out List<WantedEpisode>? episodes))
+                byShow[episode.Key.ShowId] = episodes = [];
+
+            episodes.Add(episode);
+        }
+
+        Dictionary<EpisodeKey, (WantedEpisode Episode, List<ReleaseInfo> Candidates)> offers = [];
+
+        foreach (ReleaseInfo release in latest)
+        {
+            EpisodeSlot? slot = ReleaseNameParser.ParseEpisode(release.Title);
+            int? pack = ReleaseNameParser.ParseSeasonPack(release.Title);
+
+            if (slot is null && pack is null)
+                continue;
+
+            foreach (List<WantedEpisode> episodes in byShow.Values)
+            {
+                if (!TitleMatcher.Matches(release.Title, episodes[0].ShowTitle))
+                    continue;
+
+                foreach (WantedEpisode episode in episodes)
+                {
+                    bool fits = slot is not null
+                        ? slot.Value.Season == episode.Key.Season && slot.Value.Episode == episode.Key.Episode
+                        : pack == episode.Key.Season;
+
+                    if (!fits)
+                        continue;
+
+                    if (!offers.TryGetValue(episode.Key, out (WantedEpisode Episode, List<ReleaseInfo> Candidates) offer))
+                        offers[episode.Key] = offer = (episode, []);
+
+                    offer.Candidates.Add(release);
+                }
+            }
+        }
+
+        return offers.Values;
+    }
+
     /// <summary>The episodes the grab settled, or null when nothing was grabbed.</summary>
     private async Task<IReadOnlyList<EpisodeKey>?> TryGrabAsync(WantedEpisode episode, CancellationToken ct)
+    {
+        IReadOnlyList<ReleaseInfo> found = await search.SearchAsync(
+            new SearchQuery(episode.ShowTitle, new EpisodeSlot(episode.Key.Season, episode.Key.Episode)),
+            ct);
+
+        return await GrabAsync(episode, found, countsAsSearch: true, ct);
+    }
+
+    /// <summary>
+    /// Picks from a set of candidates and hands the winner to the engine, whether they
+    /// came from a search or off a feed.
+    ///
+    /// <para>
+    /// <paramref name="countsAsSearch"/> is the one difference between the two callers. A
+    /// search that finds nothing is evidence about the episode and eventually parks it; a
+    /// feed that happens not to mention it tonight is evidence about the feed.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<EpisodeKey>?> GrabAsync(
+        WantedEpisode episode,
+        IReadOnlyList<ReleaseInfo> found,
+        bool countsAsSearch,
+        CancellationToken ct)
     {
         // Everything still missing from this show and season, this episode included. It
         // decides both whether a pack is worth its bytes and, if one is taken, what the
@@ -260,10 +443,6 @@ public sealed class DownloadOrchestrator(
                 .Where(wanted => wanted.Key.ShowId == episode.Key.ShowId && wanted.Key.Season == episode.Key.Season)
                 .Select(wanted => wanted.Key),
         ];
-
-        IReadOnlyList<ReleaseInfo> found = await search.SearchAsync(
-            new SearchQuery(episode.ShowTitle, new EpisodeSlot(episode.Key.Season, episode.Key.Episode)),
-            ct);
 
         List<ReleaseInfo> allowed = [];
 
@@ -283,7 +462,9 @@ public sealed class DownloadOrchestrator(
                 ? WantedState.Unavailable
                 : WantedState.Wanted;
 
-            await store.MarkSearchedAsync(episode.Key, now(), next, ct);
+            if (countsAsSearch)
+                await store.MarkSearchedAsync(episode.Key, now(), next, ct);
+
             return null;
         }
 
@@ -291,7 +472,9 @@ public sealed class DownloadOrchestrator(
 
         if (source is null)
         {
-            await store.MarkSearchedAsync(episode.Key, now(), WantedState.Wanted, ct);
+            if (countsAsSearch)
+                await store.MarkSearchedAsync(episode.Key, now(), WantedState.Wanted, ct);
+
             return null;
         }
 

@@ -77,10 +77,12 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             },
             () => DateTimeOffset.UtcNow);
 
+        IReadOnlyList<ConfiguredIndexer> indexers = Indexers(context, loaded);
+
         DownloadOrchestrator orchestrator = new(
             new PluginLibraryQueryAdapter(context.Library),
             store,
-            new AggregatorReleaseSearch(new IndexerAggregator(Indexers(context, loaded))),
+            new AggregatorReleaseSearch(new IndexerAggregator([.. indexers.Select(indexer => indexer.Indexer)])),
             new ProfileReleaseChooser(ProfileFor(settings)),
             engine,
             new LibraryImportHandoff(new FinishedFolderMover(intake), context.Library, new EncodeJobDispatch(context.Services, context.Logger), context.Logger),
@@ -92,7 +94,12 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             },
 
             PrivateTrackers(context, loaded),
-            () => DateTimeOffset.UtcNow);
+            () => DateTimeOffset.UtcNow,
+
+            // Feed indexers only: see IndexerReleaseFeed for why a query-less request must
+            // never reach a Torznab endpoint.
+            new IndexerReleaseFeed(new IndexerAggregator(
+                [.. indexers.Where(indexer => indexer.IsFeed).Select(indexer => indexer.Indexer)])));
 
         return new DownloadPipeline(engine, orchestrator);
     }
@@ -143,9 +150,16 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         return new PrivateTrackerRegistry(trackers);
     }
 
-    private static IReadOnlyList<PacedIndexer> Indexers(IPluginContext context, LoadedSettings loaded)
+    /// <summary>
+    /// One configured indexer, and whether it is the kind that can be read without asking
+    /// it a question. The two cadences want different subsets of the same instances - the
+    /// pacer's rate limiting only works if both go through the one object per endpoint.
+    /// </summary>
+    private sealed record ConfiguredIndexer(PacedIndexer Indexer, bool IsFeed);
+
+    private static IReadOnlyList<ConfiguredIndexer> Indexers(IPluginContext context, LoadedSettings loaded)
     {
-        List<PacedIndexer> indexers = [];
+        List<ConfiguredIndexer> indexers = [];
 
         foreach (IndexerSettings settings in loaded.Settings.Indexers.Where(indexer => indexer.Enabled))
         {
@@ -162,14 +176,15 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             if (indexer is null)
                 continue;
 
-            indexers.Add(new PacedIndexer(
+            indexers.Add(new ConfiguredIndexer(new PacedIndexer(
                 indexer,
                 new IndexerPacer(
                     new SystemClock(),
                     TimeSpan.FromSeconds(Math.Max(1, settings.MinimumIntervalSeconds)),
                     maxConcurrency: 2,
                     failureThreshold: 3,
-                    cooldown: TimeSpan.FromMinutes(15))));
+                    cooldown: TimeSpan.FromMinutes(15))),
+                IsFeed: settings.Kind.Equals("rss", StringComparison.OrdinalIgnoreCase)));
         }
 
         return indexers;

@@ -311,6 +311,22 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 "Torrent Downloader is leaving {Count} show(s) alone: nothing of them is on the server yet.",
                 refresh.ShowsNotStarted);
         }
+
+        // Then whatever the feeds have posted since the last quarter of an hour. This runs
+        // after the refresh on purpose: an episode that aired an hour ago is only wanted
+        // once the refresh has noticed it is missing, and doing both in one tick means it
+        // is grabbed in that same tick rather than fifteen minutes later.
+        FeedCycle feed = await pipeline.Orchestrator.FeedCycleAsync(ct);
+
+        // Both numbers, because "matched 40, grabbed 0" and "matched 0" are different
+        // problems and one line has to tell them apart.
+        if (feed.Matched > 0)
+        {
+            context.Logger.LogInformation(
+                "Torrent Downloader found feed releases for {Matched} wanted episode(s) and grabbed {Grabbed}.",
+                feed.Matched,
+                feed.Grabbed);
+        }
     }
 
     private async Task RunSearchAsync(IPluginContext context, CancellationToken ct)

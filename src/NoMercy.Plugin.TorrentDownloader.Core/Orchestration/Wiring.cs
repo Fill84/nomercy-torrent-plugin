@@ -53,6 +53,22 @@ public sealed class AggregatorReleaseSearch(IndexerAggregator aggregator) : IRel
         (await aggregator.SearchAsync(query, ct)).Releases;
 }
 
+/// <summary>
+/// Reading the feed indexers, over the same aggregator the search uses.
+///
+/// <para>
+/// The query is empty because a feed has no query: an RSS endpoint hands over whatever it
+/// has posted lately and ignores what it was asked. Only feed indexers belong in here for
+/// exactly that reason - an empty query put to a Torznab endpoint is a request for its
+/// entire catalogue, which is a good way to be banned from it.
+/// </para>
+/// </summary>
+public sealed class IndexerReleaseFeed(IndexerAggregator aggregator) : IReleaseFeed
+{
+    public async Task<IReadOnlyList<ReleaseInfo>> LatestAsync(CancellationToken ct) =>
+        (await aggregator.SearchAsync(new SearchQuery(string.Empty, null), ct)).Releases;
+}
+
 /// <summary>Fetching a <c>.torrent</c> an indexer pointed at.</summary>
 public sealed class HttpTorrentFileFetcher(HttpClient client) : ITorrentFileFetcher
 {
