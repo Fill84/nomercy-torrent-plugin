@@ -30,6 +30,7 @@ public static class SettingsView
     internal const string SaveSettingsMethod = "SaveSettings";
     internal const string SaveIndexerMethod = "SaveIndexer";
     internal const string SaveClientMethod = "SaveClient";
+    internal const string SavePrivateTrackerMethod = "SavePrivateTracker";
 
     // Add carries no index - it targets no existing entry, so there is nothing for the
     // route to parameterise. Remove needs one, for the same reason SaveIndexer/SaveClient
@@ -39,8 +40,10 @@ public static class SettingsView
     // sibling reading it from the payload.
     internal const string AddIndexerMethod = "AddIndexer";
     internal const string AddClientMethod = "AddClient";
+    internal const string AddPrivateTrackerMethod = "AddPrivateTracker";
     internal const string RemoveIndexerMethod = "RemoveIndexer";
     internal const string RemoveClientMethod = "RemoveClient";
+    internal const string RemovePrivateTrackerMethod = "RemovePrivateTracker";
 
     // Route templates the controller attaches its [HttpPost] to. Built from the same method
     // constants above at compile time, so the "{method}/{index}" shape used when building a
@@ -48,8 +51,10 @@ public static class SettingsView
     // drift into two different stems.
     internal const string SaveIndexerRouteTemplate = SaveIndexerMethod + "/{index:int}";
     internal const string SaveClientRouteTemplate = SaveClientMethod + "/{index:int}";
+    internal const string SavePrivateTrackerRouteTemplate = SavePrivateTrackerMethod + "/{index:int}";
     internal const string RemoveIndexerRouteTemplate = RemoveIndexerMethod + "/{index:int}";
     internal const string RemoveClientRouteTemplate = RemoveClientMethod + "/{index:int}";
+    internal const string RemovePrivateTrackerRouteTemplate = RemovePrivateTrackerMethod + "/{index:int}";
 
     private const string SaveLabel = "Save";
 
@@ -110,6 +115,34 @@ public static class SettingsView
                     "settings-clients-empty",
                     "No download client configured",
                     "Add a torrent client so Torrent Downloader has somewhere to send what it finds."
+                )
+            );
+        }
+
+        children.Add(PluginViews.Text("settings-trackers-heading", "Private Trackers", "subheading"));
+        children.Add(
+            PluginViews.Text(
+                "settings-trackers-explainer",
+                "Everything else is public and never uploads. A tracker added here is the only way this plugin seeds.",
+                "caption"
+            )
+        );
+        children.Add(PluginViews.Button("settings-trackers-add", "Add private tracker", PluginActionIntent.CallPlugin(AddPrivateTrackerMethod)));
+        if (settings.PrivateTrackers.Count > 0)
+        {
+            for (int i = 0; i < settings.PrivateTrackers.Count; i++)
+            {
+                children.Add(BuildPrivateTrackerForm(i, settings.PrivateTrackers[i], storedSecretKeys));
+                children.Add(BuildRemovePrivateTrackerButton(i));
+            }
+        }
+        else
+        {
+            children.Add(
+                PluginViews.EmptyState(
+                    "settings-trackers-empty",
+                    "No private tracker configured",
+                    "Without one, every torrent is treated as public: nothing is ever uploaded."
                 )
             );
         }
@@ -238,6 +271,54 @@ public static class SettingsView
             fields
         );
     }
+
+    // The announce URL is a secret field, not a URL field, and that is the whole shape of
+    // this form. Everything else about a private tracker is ordinary configuration; the
+    // one thing that identifies the account never comes back down the wire.
+    private static PluginComponent BuildPrivateTrackerForm(int index, PrivateTrackerSettings tracker, IReadOnlySet<string> storedSecretKeys)
+    {
+        bool hasStoredAnnounce = storedSecretKeys.Contains(SettingsGateway.PrivateTrackerAnnounceKey(tracker.Name));
+        bool hasStoredApiKey = storedSecretKeys.Contains(SettingsGateway.PrivateTrackerApiKeyKey(tracker.Name));
+
+        PluginFormField[] fields =
+        [
+            new() { Name = "name", Label = "Name", Value = tracker.Name, Required = true },
+            BuildSecretField("announceUrl", "Announce URL", hasStoredAnnounce),
+            BuildSecretField("apiKey", "API key", hasStoredApiKey),
+            new() { Name = "enabled", Label = "Enabled", Type = PluginFormFieldType.Toggle, Value = tracker.Enabled },
+            new() { Name = "seed", Label = "Seed to this tracker", Type = PluginFormFieldType.Toggle, Value = tracker.Seed },
+            new()
+            {
+                Name = "seedRatioTarget",
+                Label = "Seed until ratio",
+                Type = PluginFormFieldType.Number,
+                Value = tracker.SeedRatioTarget,
+            },
+            new()
+            {
+                Name = "seedTimeTargetHours",
+                Label = "Seed for at least (hours)",
+                Type = PluginFormFieldType.Number,
+                Value = tracker.SeedTimeTargetHours,
+            },
+        ];
+
+        return PluginViews.Form(
+            $"settings-tracker-{index}-form",
+            SaveLabel,
+            PluginActionIntent.CallPlugin($"{SavePrivateTrackerMethod}/{index}"),
+            fields
+        );
+    }
+
+    private static PluginComponent BuildRemovePrivateTrackerButton(int index) =>
+        PluginViews.DestructiveButton(
+            $"tracker-{index}-remove",
+            "Remove private tracker",
+            PluginActionIntent.CallPlugin($"{RemovePrivateTrackerMethod}/{index}"),
+            "Remove this private tracker?",
+            "This deletes the tracker, its announce URL and its API key. Torrents from it become public, and stop seeding."
+        );
 
     // Never carries the stored value - Build never receives it in the first place. The
     // placeholder is the only signal of "stored", so the owner can tell "never set" from

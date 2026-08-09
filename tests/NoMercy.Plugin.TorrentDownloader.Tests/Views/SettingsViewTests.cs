@@ -241,6 +241,58 @@ public class SettingsViewTests
         AllFormFields(view).Should().NotContain(field => PluginNodes.Name(field) == "apiKey");
     }
 
+    // --- private trackers ---------------------------------------------------------
+
+    // The passkey in an announce URL is the account. Build is never handed the stored
+    // value, so this asserts the field is shaped to receive one and never to show one -
+    // a rendered passkey is a passkey in a browser cache, a screenshot and a support
+    // ticket, and it is the same field the owner has to be able to replace.
+    [Fact]
+    public void Build_RendersAPrivateTrackersAnnounceUrlAsASecretThatIsNeverSentBack()
+    {
+        TorrentDownloaderSettings settings = new()
+        {
+            PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }],
+        };
+        HashSet<string> stored = new(StringComparer.Ordinal) { SettingsGateway.PrivateTrackerAnnounceKey("RedFish") };
+
+        PluginView view = SettingsView.Build(settings, [], stored);
+
+        PluginComponent field = AllFormFields(view).Should()
+            .ContainSingle(field => PluginNodes.Name(field) == "announceUrl").Which;
+
+        PluginNodes.Type(field).Should().Be(PluginFormFieldType.Password);
+        PluginNodes.Value(field).Should().BeNull();
+        PluginNodes.Placeholder(field).Should().Contain("already saved");
+    }
+
+    [Fact]
+    public void Build_SaysAPrivateTrackerIsNotConfiguredRatherThanShowingNothing()
+    {
+        PluginView view = SettingsView.Build(new TorrentDownloaderSettings(), [], new HashSet<string>());
+
+        // "Nothing here" reads as broken. The empty state has to say what the absence
+        // means, and what it means is that nothing will ever be uploaded.
+        Flatten(view.Components!).Should().Contain(component => component.Id == "settings-trackers-empty");
+    }
+
+    // Same defect the indexer forms had: a PluginForm's submit discards the intent's
+    // payload, so an entry's identity has to ride in the method string or the wrong
+    // tracker is edited.
+    [Fact]
+    public void Build_PrivateTrackerFormsActionEncodesTheEntrysRenderIndexInTheMethod()
+    {
+        TorrentDownloaderSettings settings = new()
+        {
+            PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }, new PrivateTrackerSettings { Name = "BlueFish" }],
+        };
+
+        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
+
+        PluginComponent second = Flatten(view.Components!).Single(component => component.Id == "settings-tracker-1-form");
+        second.Action!.Payload["method"].Should().Be("SavePrivateTracker/1");
+    }
+
     // Specials are off by default and the owner has to be able to see that, and change it.
     // A default that can only be changed by editing config.json is not a setting.
     [Fact]

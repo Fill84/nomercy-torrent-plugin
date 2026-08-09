@@ -41,4 +41,12 @@ public sealed class SaveSettingsRequest
     // Client-only.
     public string? Username { get; init; }
     public string? Password { get; init; }
+
+    // Private-tracker-only. AnnounceUrl is nullable for the same reason ApiKey is: the
+    // form cannot render a stored secret back, so it submits blank whenever the owner is
+    // editing something else on the same entry, and blank has to mean "leave it alone".
+    public string? AnnounceUrl { get; init; }
+    public bool? Seed { get; init; }
+    public double? SeedRatioTarget { get; init; }
+    public int? SeedTimeTargetHours { get; init; }
 }

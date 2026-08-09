@@ -51,6 +51,24 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         return await PersistIfSucceededAsync(ApplyAddClient(current), ct);
     }
 
+    public async Task<SaveSettingsOutcome> HandlePrivateTrackerAsync(int index, SaveSettingsRequest request, CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyPrivateTracker(current, index, request), ct);
+    }
+
+    public async Task<SaveSettingsOutcome> HandleAddPrivateTrackerAsync(CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyAddPrivateTracker(current), ct);
+    }
+
+    public async Task<SaveSettingsOutcome> HandleRemovePrivateTrackerAsync(int index, CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyRemovePrivateTracker(current, index), ct);
+    }
+
     public async Task<SaveSettingsOutcome> HandleRemoveIndexerAsync(int index, CancellationToken ct = default)
     {
         LoadedSettings current = await gateway.LoadAsync(ct);
@@ -301,6 +319,89 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
 
         TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Clients = clients;
+
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+    }
+
+    // Unlike an indexer or a client, the URL being edited here is one this form can never
+    // show back, because the passkey in it is the account. So blank means "keep what is
+    // stored", and the entry is only refused when neither the submission nor the store
+    // has one - an entry with no announce URL matches no torrent and therefore quietly
+    // makes nothing private, which is the failure worth being loud about.
+    private static SaveSettingsOutcome ApplyPrivateTracker(LoadedSettings current, int index, SaveSettingsRequest request)
+    {
+        if (index < 0 || index >= current.Settings.PrivateTrackers.Count)
+        {
+            return SaveSettingsOutcome.Failure($"No private tracker at index {index}.");
+        }
+
+        PrivateTrackerSettings existing = current.Settings.PrivateTrackers[index];
+        string oldName = existing.Name;
+        string newName = string.IsNullOrWhiteSpace(request.Name) ? oldName : request.Name!;
+
+        PrivateTrackerSecret? stored = current.PrivateTrackerSecrets.FirstOrDefault(secret => secret.Name == oldName);
+
+        string? announceUrl = string.IsNullOrWhiteSpace(request.AnnounceUrl) ? stored?.AnnounceUrl : request.AnnounceUrl;
+
+        if (string.IsNullOrWhiteSpace(announceUrl))
+        {
+            return SaveSettingsOutcome.Failure("A private tracker needs its announce URL.");
+        }
+
+        if (!IsAbsoluteUrl(announceUrl))
+        {
+            return SaveSettingsOutcome.Failure("Private tracker announce URL must be an absolute URL.");
+        }
+
+        PrivateTrackerSettings updated = new()
+        {
+            Name = newName,
+            Enabled = request.Enabled ?? existing.Enabled,
+            Seed = request.Seed ?? existing.Seed,
+            SeedRatioTarget = request.SeedRatioTarget ?? existing.SeedRatioTarget,
+            SeedTimeTargetHours = request.SeedTimeTargetHours ?? existing.SeedTimeTargetHours,
+        };
+
+        List<PrivateTrackerSettings> trackers = [.. current.Settings.PrivateTrackers];
+        trackers[index] = updated;
+
+        TorrentDownloaderSettings merged = Clone(current.Settings);
+        merged.PrivateTrackers = trackers;
+
+        string? apiKey = string.IsNullOrEmpty(request.ApiKey) ? stored?.ApiKey : request.ApiKey;
+
+        return SaveSettingsOutcome.Success(
+            new LoadedSettings(merged, [], [], [new PrivateTrackerSecret(newName, announceUrl, apiKey)]));
+    }
+
+    private static SaveSettingsOutcome ApplyAddPrivateTracker(LoadedSettings current)
+    {
+        // Seed stays off, which PrivateTrackerSettings' own default already says. Adding
+        // a tracker is not consenting to upload from it; that is a second decision, made
+        // on the entry's own form.
+        PrivateTrackerSettings added = new()
+        {
+            Name = NextDefaultName("New Private Tracker", [.. current.Settings.PrivateTrackers.Select(tracker => tracker.Name)]),
+        };
+
+        TorrentDownloaderSettings merged = Clone(current.Settings);
+        merged.PrivateTrackers = [.. current.Settings.PrivateTrackers, added];
+
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+    }
+
+    private static SaveSettingsOutcome ApplyRemovePrivateTracker(LoadedSettings current, int index)
+    {
+        if (index < 0 || index >= current.Settings.PrivateTrackers.Count)
+        {
+            return SaveSettingsOutcome.Failure($"No private tracker at index {index}.");
+        }
+
+        List<PrivateTrackerSettings> trackers = [.. current.Settings.PrivateTrackers];
+        trackers.RemoveAt(index);
+
+        TorrentDownloaderSettings merged = Clone(current.Settings);
+        merged.PrivateTrackers = trackers;
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
     }

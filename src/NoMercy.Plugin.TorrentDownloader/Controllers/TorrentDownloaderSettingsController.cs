@@ -42,6 +42,18 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
     public Task<IActionResult> SaveClient(int index, [FromBody] SaveSettingsRequest request, CancellationToken ct) =>
         RespondAsync(plugin => plugin.SaveClientAsync(index, request, ct));
 
+    [HttpPost(SettingsView.SavePrivateTrackerRouteTemplate)]
+    public Task<IActionResult> SavePrivateTracker(int index, [FromBody] SaveSettingsRequest request, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.SavePrivateTrackerAsync(index, request, ct));
+
+    [HttpPost(SettingsView.AddPrivateTrackerMethod)]
+    public Task<IActionResult> AddPrivateTracker(CancellationToken ct) =>
+        RespondAsync(plugin => plugin.AddPrivateTrackerAsync(ct));
+
+    [HttpPost(SettingsView.RemovePrivateTrackerRouteTemplate)]
+    public Task<IActionResult> RemovePrivateTracker(int index, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.RemovePrivateTrackerAsync(index, ct));
+
     [HttpPost(SettingsView.AddIndexerMethod)]
     public Task<IActionResult> AddIndexer(CancellationToken ct) =>
         RespondAsync(plugin => plugin.AddIndexerAsync(ct));

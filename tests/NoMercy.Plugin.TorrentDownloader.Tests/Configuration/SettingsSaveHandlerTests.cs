@@ -268,6 +268,122 @@ public class SettingsSaveHandlerTests
         saved.IntakeFolder.Should().Be("/downloads/intake");
     }
 
+    // --- private trackers ---------------------------------------------------------
+
+    [Fact]
+    public async Task HandleAddPrivateTrackerAsync_AddsAnEntryThatSeedsNothingUntilItIsTold()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleAddPrivateTrackerAsync(CancellationToken.None);
+
+        PrivateTrackerSettings added = ((TorrentDownloaderSettings)configuration.Stored!).PrivateTrackers.Should().ContainSingle().Which;
+        added.Name.Should().NotBeNullOrWhiteSpace("two blank names would share one secret key");
+
+        // Adding a tracker is not consenting to upload from it. That is a second,
+        // separate decision, and this is the direction it has to fail in.
+        added.Seed.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HandlePrivateTrackerAsync_PutsTheAnnounceUrlInTheSecretStoreAndNotInConfiguration()
+    {
+        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
+            await SeededAsync(new TorrentDownloaderSettings { PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }] });
+
+        await handler.HandlePrivateTrackerAsync(
+            0,
+            new SaveSettingsRequest { Name = "RedFish", AnnounceUrl = "https://redfish.test/announce/PASSKEY123", Seed = true },
+            CancellationToken.None);
+
+        JsonSerializer.Serialize(configuration.Stored).Should().NotContain("PASSKEY123");
+        (await secrets.GetAsync("tracker:RedFish:announce", CancellationToken.None))
+            .Should().Be("https://redfish.test/announce/PASSKEY123");
+        ((TorrentDownloaderSettings)configuration.Stored!).PrivateTrackers[0].Seed.Should().BeTrue();
+    }
+
+    // The form cannot show a stored URL back, so it submits blank when the owner is only
+    // changing the ratio. Blank has to mean "leave it" or every unrelated edit wipes the
+    // passkey and the tracker silently stops matching anything.
+    [Fact]
+    public async Task HandlePrivateTrackerAsync_KeepsTheStoredAnnounceUrlWhenTheFormSubmitsNone()
+    {
+        (_, FakeSecretStore secrets, SettingsSaveHandler handler) =
+            await SeededAsync(new TorrentDownloaderSettings { PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }] });
+        await secrets.SetAsync("tracker:RedFish:announce", "https://redfish.test/announce/PASSKEY123", CancellationToken.None);
+
+        await handler.HandlePrivateTrackerAsync(
+            0,
+            new SaveSettingsRequest { Name = "RedFish", SeedRatioTarget = 2.5 },
+            CancellationToken.None);
+
+        (await secrets.GetAsync("tracker:RedFish:announce", CancellationToken.None))
+            .Should().Be("https://redfish.test/announce/PASSKEY123");
+    }
+
+    [Fact]
+    public async Task HandlePrivateTrackerAsync_CarriesBothSecretsToTheNewNameOnARename()
+    {
+        (_, FakeSecretStore secrets, SettingsSaveHandler handler) =
+            await SeededAsync(new TorrentDownloaderSettings { PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }] });
+        await secrets.SetAsync("tracker:RedFish:announce", "https://redfish.test/a/KEY", CancellationToken.None);
+        await secrets.SetAsync("tracker:RedFish:apikey", "torznab-key", CancellationToken.None);
+
+        await handler.HandlePrivateTrackerAsync(
+            0,
+            new SaveSettingsRequest { Name = "BlueFish" },
+            CancellationToken.None);
+
+        (await secrets.GetAsync("tracker:BlueFish:announce", CancellationToken.None)).Should().Be("https://redfish.test/a/KEY");
+        (await secrets.GetAsync("tracker:BlueFish:apikey", CancellationToken.None)).Should().Be("torznab-key");
+    }
+
+    [Fact]
+    public async Task HandlePrivateTrackerAsync_RefusesAnAnnounceUrlThatIsNotAUrlWithoutPersisting()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) =
+            await SeededAsync(new TorrentDownloaderSettings { PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }] });
+        int savesBefore = configuration.SavedObjects.Count;
+
+        SaveSettingsOutcome outcome = await handler.HandlePrivateTrackerAsync(
+            0,
+            new SaveSettingsRequest { Name = "RedFish", AnnounceUrl = "redfish.test/announce" },
+            CancellationToken.None);
+
+        outcome.Succeeded.Should().BeFalse();
+        configuration.SavedObjects.Should().HaveCount(savesBefore, "a rejected save must not reach disk");
+    }
+
+    // A tracker with no announce URL anywhere matches no torrent, so it can never make
+    // one private - and an entry that looks configured but does nothing is worse than one
+    // that refuses to be saved.
+    [Fact]
+    public async Task HandlePrivateTrackerAsync_RefusesToSaveAnEntryThatHasNoAnnounceUrlAtAll()
+    {
+        (_, _, SettingsSaveHandler handler) =
+            await SeededAsync(new TorrentDownloaderSettings { PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }] });
+
+        SaveSettingsOutcome outcome = await handler.HandlePrivateTrackerAsync(
+            0,
+            new SaveSettingsRequest { Name = "RedFish", Seed = true },
+            CancellationToken.None);
+
+        outcome.Succeeded.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task HandleRemovePrivateTrackerAsync_TakesTheEntryAndItsSecretsWithIt()
+    {
+        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
+            await SeededAsync(new TorrentDownloaderSettings { PrivateTrackers = [new PrivateTrackerSettings { Name = "RedFish" }] });
+        await secrets.SetAsync("tracker:RedFish:announce", "https://redfish.test/a/KEY", CancellationToken.None);
+
+        await handler.HandleRemovePrivateTrackerAsync(0, CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).PrivateTrackers.Should().BeEmpty();
+        (await secrets.GetAsync("tracker:RedFish:announce", CancellationToken.None)).Should().BeNull();
+    }
+
     // Every per-entry save rebuilds the settings object, so a field the rebuild forgets is
     // reset to its default by an edit that had nothing to do with it. That is how a toggle
     // turns itself off while the owner is editing an indexer URL, and nothing says so.

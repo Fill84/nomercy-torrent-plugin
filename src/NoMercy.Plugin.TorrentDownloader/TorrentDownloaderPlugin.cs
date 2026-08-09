@@ -85,6 +85,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public Task<SaveSettingsOutcome> SaveClientAsync(int index, SaveSettingsRequest request, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleClientAsync(index, request, ct));
 
+    public Task<SaveSettingsOutcome> SavePrivateTrackerAsync(int index, SaveSettingsRequest request, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandlePrivateTrackerAsync(index, request, ct));
+
+    public Task<SaveSettingsOutcome> AddPrivateTrackerAsync(CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleAddPrivateTrackerAsync(ct));
+
+    public Task<SaveSettingsOutcome> RemovePrivateTrackerAsync(int index, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleRemovePrivateTrackerAsync(index, ct));
+
     public Task<SaveSettingsOutcome> AddIndexerAsync(CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleAddIndexerAsync(ct));
 

@@ -86,12 +86,56 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new IntakeHandoff(intake),
             new OrchestratorOptions { DownloadFolder = downloads, IncludeSpecials = settings.IncludeSpecials },
 
-            // No private trackers in the settings shape yet, so everything is public and
-            // nothing can upload. That is the safe direction for this default to fail in.
-            new PrivateTrackerRegistry([]),
+            PrivateTrackers(context, loaded),
             () => DateTimeOffset.UtcNow);
 
         return new DownloadPipeline(engine, orchestrator);
+    }
+
+    /// <summary>
+    /// The trackers the owner added on purpose, and the only reason anything ever uploads.
+    ///
+    /// <para>
+    /// A malformed announce URL is dropped with a warning rather than thrown: the registry
+    /// refuses one it cannot parse, and letting that throw here would take the whole
+    /// pipeline down - which means no downloads at all because one entry has a typo in a
+    /// field nobody can see on the page. Dropping it fails the safe way instead: that
+    /// tracker's torrents are treated as public, and public never seeds.
+    /// </para>
+    /// </summary>
+    private static PrivateTrackerRegistry PrivateTrackers(IPluginContext context, LoadedSettings loaded)
+    {
+        List<PrivateTracker> trackers = [];
+
+        foreach (PrivateTrackerSettings settings in loaded.Settings.PrivateTrackers.Where(tracker => tracker.Enabled))
+        {
+            PrivateTrackerSecret? secret = loaded.PrivateTrackerSecrets.FirstOrDefault(entry => entry.Name == settings.Name);
+
+            if (secret is null)
+            {
+                context.Logger.LogWarning("Skipping private tracker {Name}: it has no announce URL saved.", settings.Name);
+                continue;
+            }
+
+            if (!Uri.TryCreate(secret.AnnounceUrl, UriKind.Absolute, out _))
+            {
+                // The URL itself is never logged: it carries the passkey.
+                context.Logger.LogWarning("Skipping private tracker {Name}: its announce URL cannot be read.", settings.Name);
+                continue;
+            }
+
+            trackers.Add(new PrivateTracker
+            {
+                Name = settings.Name,
+                AnnounceUrl = secret.AnnounceUrl,
+                ApiKey = secret.ApiKey,
+                Seed = settings.Seed,
+                SeedRatioTarget = settings.SeedRatioTarget,
+                SeedTimeTarget = TimeSpan.FromHours(Math.Max(0, settings.SeedTimeTargetHours)),
+            });
+        }
+
+        return new PrivateTrackerRegistry(trackers);
     }
 
     private static IReadOnlyList<PacedIndexer> Indexers(IPluginContext context, LoadedSettings loaded)
