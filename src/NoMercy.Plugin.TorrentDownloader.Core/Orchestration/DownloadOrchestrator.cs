@@ -22,7 +22,12 @@ public interface IReleaseSearch
 /// </summary>
 public interface IReleaseChooser
 {
-    ReleaseInfo? Choose(WantedEpisode episode, IReadOnlyList<ReleaseInfo> candidates);
+    /// <summary>
+    /// <paramref name="allowSeasonPacks"/> is the caller's decision, not this one's: only
+    /// the orchestrator knows how much of the season is missing, and therefore whether a
+    /// season's worth of bytes buys one gap or ten.
+    /// </summary>
+    ReleaseInfo? Choose(WantedEpisode episode, IReadOnlyList<ReleaseInfo> candidates, bool allowSeasonPacks);
 }
 
 /// <summary>Handing a finished download to the server's import pipeline.</summary>
@@ -43,6 +48,19 @@ public sealed record OrchestratorOptions
 
     /// <summary>How many wanted episodes to search per cycle. Indexers are rate limited; a cycle that asks for everything gets throttled.</summary>
     public int SearchBatchSize { get; init; } = 10;
+
+    /// <summary>
+    /// How many episodes of a season have to be missing before a season pack is worth
+    /// considering.
+    ///
+    /// <para>
+    /// A pack costs a whole season of bytes whether it settles one gap or ten, so below
+    /// this the episode release is the cheaper answer by a wide margin. Three is the
+    /// point where re-downloading a season stops being obviously worse than three
+    /// separate torrents; it is a judgement, which is why it is a setting.
+    /// </para>
+    /// </summary>
+    public int SeasonPackThreshold { get; init; } = 3;
 
     /// <summary>After this many fruitless searches an episode is parked rather than asked for forever.</summary>
     public int MaxSearchAttempts { get; init; } = 12;
@@ -184,21 +202,44 @@ public sealed class DownloadOrchestrator(
             return 0;
 
         int grabbed = 0;
+        HashSet<EpisodeKey> settled = [];
 
         foreach (WantedEpisode episode in await store.WantedAsync(options.SearchBatchSize, ct))
         {
             if (grabbed >= room)
                 break;
 
-            if (await TryGrabAsync(episode, ct))
-                grabbed++;
+            // A pack taken earlier in this same cycle already settled this one. The batch
+            // was read before that happened, so without this the plugin searches for an
+            // episode it just grabbed and pays an indexer's rate limit to be told so.
+            if (settled.Contains(episode.Key))
+                continue;
+
+            IReadOnlyList<EpisodeKey>? covered = await TryGrabAsync(episode, ct);
+
+            if (covered is null)
+                continue;
+
+            settled.UnionWith(covered);
+            grabbed++;
         }
 
         return grabbed;
     }
 
-    private async Task<bool> TryGrabAsync(WantedEpisode episode, CancellationToken ct)
+    /// <summary>The episodes the grab settled, or null when nothing was grabbed.</summary>
+    private async Task<IReadOnlyList<EpisodeKey>?> TryGrabAsync(WantedEpisode episode, CancellationToken ct)
     {
+        // Everything still missing from this show and season, this episode included. It
+        // decides both whether a pack is worth its bytes and, if one is taken, what the
+        // grab is answering for.
+        IReadOnlyList<EpisodeKey> gapsInSeason =
+        [
+            .. (await store.WantedAsync(int.MaxValue, ct))
+                .Where(wanted => wanted.Key.ShowId == episode.Key.ShowId && wanted.Key.Season == episode.Key.Season)
+                .Select(wanted => wanted.Key),
+        ];
+
         IReadOnlyList<ReleaseInfo> found = await search.SearchAsync(
             new SearchQuery(episode.ShowTitle, new EpisodeSlot(episode.Key.Season, episode.Key.Episode)),
             ct);
@@ -211,7 +252,7 @@ public sealed class DownloadOrchestrator(
                 allowed.Add(release);
         }
 
-        ReleaseInfo? chosen = chooser.Choose(episode, allowed);
+        ReleaseInfo? chosen = chooser.Choose(episode, allowed, gapsInSeason.Count >= options.SeasonPackThreshold);
 
         if (chosen is null)
         {
@@ -222,7 +263,7 @@ public sealed class DownloadOrchestrator(
                 : WantedState.Wanted;
 
             await store.MarkSearchedAsync(episode.Key, now(), next, ct);
-            return false;
+            return null;
         }
 
         string? source = chosen.MagnetUri ?? chosen.DownloadUrl;
@@ -230,8 +271,17 @@ public sealed class DownloadOrchestrator(
         if (source is null)
         {
             await store.MarkSearchedAsync(episode.Key, now(), WantedState.Wanted, ct);
-            return false;
+            return null;
         }
+
+        // A pack answers for every gap in the season it covers; an episode release
+        // answers for itself. Claiming a gap the pack turns out not to contain is safe:
+        // the wanted list is derived from the library on the next refresh, so an episode
+        // that never arrived is simply wanted again.
+        IReadOnlyList<EpisodeKey> covers =
+            ReleaseNameParser.ParseSeasonPack(chosen.Title) == episode.Key.Season
+                ? gapsInSeason
+                : [episode.Key];
 
         string infoHash = await engine.AddAsync(new TorrentRequest
         {
@@ -245,15 +295,17 @@ public sealed class DownloadOrchestrator(
         {
             InfoHash = infoHash,
             Key = episode.Key,
+            Covers = covers,
             ReleaseTitle = chosen.Title,
             Indexer = chosen.IndexerName,
             SizeBytes = chosen.SizeBytes,
             GrabbedAt = now(),
         }, ct);
 
-        await store.MarkSearchedAsync(episode.Key, now(), WantedState.Grabbed, ct);
+        foreach (EpisodeKey key in covers)
+            await store.MarkSearchedAsync(key, now(), WantedState.Grabbed, ct);
 
-        return true;
+        return covers;
     }
 
     /// <summary>
@@ -316,7 +368,9 @@ public sealed class DownloadOrchestrator(
         }
 
         await store.UpdateGrabAsync(grab.InfoHash, GrabState.Imported, null, now(), ct);
-        await store.MarkSearchedAsync(grab.Key, now(), WantedState.Done, ct);
+
+        foreach (EpisodeKey key in grab.Covered)
+            await store.MarkSearchedAsync(key, now(), WantedState.Done, ct);
 
         return true;
     }
@@ -338,8 +392,11 @@ public sealed class DownloadOrchestrator(
         }, ct);
 
         // Wanted again, so the next cycle looks for a different release. The blacklist
-        // is what stops it choosing the same broken one.
-        await store.MarkSearchedAsync(grab.Key, now(), WantedState.Wanted, ct);
+        // is what stops it choosing the same broken one. Every episode it covered, not
+        // just the one that triggered it: the others left the queue on the strength of
+        // this torrent, so its failure is theirs.
+        foreach (EpisodeKey key in grab.Covered)
+            await store.MarkSearchedAsync(key, now(), WantedState.Wanted, ct);
 
         await engine.RemoveAsync(grab.InfoHash, deleteFiles: true, ct);
     }

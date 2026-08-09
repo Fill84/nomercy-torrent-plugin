@@ -24,19 +24,25 @@ public sealed class ProfileReleaseChooser(ReleaseProfile profile) : IReleaseChoo
 
     private readonly ReleaseDecider _decider = new();
 
-    public ReleaseInfo? Choose(WantedEpisode episode, IReadOnlyList<ReleaseInfo> candidates)
+    public ReleaseInfo? Choose(WantedEpisode episode, IReadOnlyList<ReleaseInfo> candidates, bool allowSeasonPacks)
     {
         if (candidates.Count == 0)
             return null;
 
+        // The profile carries the owner's standing preference; the caller carries what
+        // this particular search can justify. A pack is refused when either says no.
+        ReleaseProfile effective = profile.AllowSeasonPacks && allowSeasonPacks
+            ? profile
+            : profile with { AllowSeasonPacks = false };
+
         FilterContext filter = new(
             episode.ShowTitle,
             new EpisodeSlot(episode.Key.Season, episode.Key.Episode),
-            profile,
+            effective,
             Nothing,
             Nothing);
 
-        return _decider.PickBest(candidates, filter, new ScoreContext(profile, null))?.Release;
+        return _decider.PickBest(candidates, filter, new ScoreContext(effective, null))?.Release;
     }
 }
 

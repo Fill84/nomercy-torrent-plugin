@@ -158,9 +158,10 @@ internal sealed class DownloadPipeline : IAsyncDisposable
     /// Until profiles are a settings section, one sensible ladder.
     ///
     /// <para>
-    /// Season packs are off, and that is not a preference: a grab carries one episode,
-    /// so a pack satisfying twelve of them would leave eleven still wanted and grabbed
-    /// again separately. Turning it on belongs with the fix, not before it.
+    /// Season packs are on now that a grab owns every episode it settles. They were off
+    /// because a pack satisfying twelve episodes left eleven still wanted and grabbed
+    /// again as eleven more torrents; that is fixed, and the orchestrator will still only
+    /// consider a pack once enough of the season is missing to be worth its bytes.
     /// </para>
     /// </summary>
     private static ReleaseProfile DefaultProfile { get; } = new()
@@ -173,7 +174,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             ],
             "WEB-1080p"),
         MinSeeders = 2,
-        AllowSeasonPacks = false,
+        AllowSeasonPacks = true,
     };
 
     public ValueTask DisposeAsync() => _engine.DisposeAsync();

@@ -51,7 +51,32 @@ public enum GrabState
 public sealed record Grab
 {
     public required string InfoHash { get; init; }
+
+    /// <summary>The episode whose turn in the queue caused this grab. Always one of <see cref="Covers"/>.</summary>
     public required EpisodeKey Key { get; init; }
+
+    /// <summary>
+    /// Every episode this torrent settles. One for an episode release; a season's worth
+    /// for a pack.
+    ///
+    /// <para>
+    /// Empty means "just <see cref="Key"/>", which is what every grab written before
+    /// packs existed deserialises to - so an existing store file keeps meaning what it
+    /// meant instead of needing a migration. Read it through <see cref="Covered"/>.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
+
+    /// <summary>
+    /// What this grab actually settles, with the empty case resolved.
+    ///
+    /// <para>
+    /// Every caller wants this rather than <see cref="Covers"/>: marking only
+    /// <see cref="Key"/> when a pack finishes is the bug this whole shape exists to
+    /// stop, and it is the shape an unwary caller falls into.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<EpisodeKey> Covered => Covers.Count == 0 ? [Key] : Covers;
     public required string ReleaseTitle { get; init; }
     public required string Indexer { get; init; }
     public long SizeBytes { get; init; }

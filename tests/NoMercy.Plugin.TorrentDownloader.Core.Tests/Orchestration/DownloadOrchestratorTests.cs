@@ -185,6 +185,111 @@ public class DownloadOrchestratorTests
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
+    // --- season packs ------------------------------------------------------------
+
+    [Fact]
+    public async Task SearchCycleAsync_ASeasonPackIsOneGrabThatSettlesEveryEpisodeItCovers()
+    {
+        await WantEpisodesAsync(4);
+        _search.Results = [Release("Some.Show.S01.1080p.WEB-DL", "packhash")];
+
+        int grabbed = await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        grabbed.Should().Be(1, "one torrent was added, not one per episode");
+        (await _store.ActiveGrabsAsync(CancellationToken.None)).Should().ContainSingle()
+            .Which.Covers.Should().HaveCount(4);
+
+        // The whole point: none of the four is still asking to be searched for. Before
+        // this, a pack grabbed for episode 1 left the other three wanted, and they were
+        // grabbed again as three more torrents of the same bytes.
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SearchCycleAsync_DoesNotKeepSearchingForEpisodesThePackJustCovered()
+    {
+        await WantEpisodesAsync(4);
+        _search.Results = [Release("Some.Show.S01.1080p.WEB-DL", "packhash")];
+
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        _search.Queries.Should().ContainSingle("the other three were settled before their turn came round");
+    }
+
+    [Fact]
+    public async Task TransfersCycleAsync_APackThatImportsMarksEveryEpisodeItCoveredDone()
+    {
+        string hash = await GrabAPackAsync(4);
+        _engine.Transfers = [Completed(hash, "/downloads/pack")];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        for (int number = 1; number <= 4; number++)
+        {
+            WantedEpisode? episode = await _store.FindWantedAsync(new EpisodeKey(1, 1, number), CancellationToken.None);
+            episode!.State.Should().Be(WantedState.Done, $"episode {number} was inside the pack");
+        }
+    }
+
+    [Fact]
+    public async Task TransfersCycleAsync_APackThatFailsPutsEveryEpisodeItCoveredBackInTheQueue()
+    {
+        string hash = await GrabAPackAsync(4);
+        _engine.Transfers = [Failed(hash, "no peers")];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        // All four, not just the one that triggered the grab: the other three were taken
+        // off the queue on the strength of this torrent, so its failure is their failure.
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().HaveCount(4);
+    }
+
+    // A pack costs a whole season of bytes. Spending that to settle a single gap is the
+    // kind of arithmetic nobody checks until the disk fills.
+    [Fact]
+    public async Task SearchCycleAsync_WillNotConsiderAPackForASeasonMissingOnlyOneEpisode()
+    {
+        await WantEpisodesAsync(1);
+        _search.Results = [Release("Some.Show.S01.1080p.WEB-DL", "packhash")];
+
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        _chooser.LastAllowedSeasonPacks.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task SearchCycleAsync_ConsidersAPackOnceEnoughOfTheSeasonIsMissing()
+    {
+        await WantEpisodesAsync(3);
+        _search.Results = [Release("Some.Show.S01.1080p.WEB-DL", "packhash")];
+
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        _chooser.LastAllowedSeasonPacks.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task SearchCycleAsync_ASingleEpisodeGrabCoversOnlyItself()
+    {
+        await WantEpisodesAsync(3);
+        _search.Results = [Release()];
+
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        Grab grab = (await _store.ActiveGrabsAsync(CancellationToken.None)).First();
+        grab.Covers.Should().Equal(grab.Key);
+    }
+
+    /// <summary>Grabs one pack and hands back the info hash the engine gave it.</summary>
+    private async Task<string> GrabAPackAsync(int episodes)
+    {
+        await WantEpisodesAsync(episodes);
+        _search.Results = [Release("Some.Show.S01.1080p.WEB-DL", "packhash")];
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        return _engine.Added[0].Source;
+    }
+
     // --- search and grab ---------------------------------------------------------
 
     [Fact]
@@ -477,8 +582,12 @@ public class DownloadOrchestratorTests
         /// </summary>
         public bool UniquePerQuery { get; set; }
 
+        public List<SearchQuery> Queries { get; } = [];
+
         public Task<IReadOnlyList<ReleaseInfo>> SearchAsync(SearchQuery query, CancellationToken ct)
         {
+            Queries.Add(query);
+
             if (!UniquePerQuery)
                 return Task.FromResult(Results);
 
@@ -502,9 +611,17 @@ public class DownloadOrchestratorTests
 
         public IReadOnlyList<ReleaseInfo> LastCandidates { get; private set; } = [];
 
-        public ReleaseInfo? Choose(WantedEpisode episode, IReadOnlyList<ReleaseInfo> candidates)
+        /// <summary>
+        /// Whether the orchestrator was willing to spend a season's bytes on this search.
+        /// It is the orchestrator's decision, not the chooser's - the chooser only obeys
+        /// it - so this is where the decision is observable.
+        /// </summary>
+        public bool LastAllowedSeasonPacks { get; private set; }
+
+        public ReleaseInfo? Choose(WantedEpisode episode, IReadOnlyList<ReleaseInfo> candidates, bool allowSeasonPacks)
         {
             LastCandidates = candidates;
+            LastAllowedSeasonPacks = allowSeasonPacks;
             return Accept ? candidates.FirstOrDefault() : null;
         }
     }
