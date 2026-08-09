@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
 using Xunit;
 
@@ -214,7 +215,7 @@ public class PluginLifecycleTests
         Func<Task<PluginView>> act = () => plugin.GetViewAsync(new PluginViewRequest { Route = "/settings" }, CancellationToken.None);
 
         PluginView view = (await act.Should().NotThrowAsync()).Which;
-        Flatten(view.Components!).Should().Contain(component => component.Component == PluginComponentType.EmptyState);
+        Flatten(view.Components!).Should().Contain(component => component.Component == Ui.EmptyStateComponent);
         logger.Levels.Should().Contain(LogLevel.Error);
     }
 
@@ -232,7 +233,7 @@ public class PluginLifecycleTests
         Func<Task<PluginView>> act = () => plugin.GetViewAsync(new PluginViewRequest { Route = "/settings" }, CancellationToken.None);
 
         PluginView view = (await act.Should().NotThrowAsync()).Which;
-        Flatten(view.Components!).Should().Contain(component => component.Component == PluginComponentType.EmptyState);
+        Flatten(view.Components!).Should().Contain(component => component.Component == Ui.EmptyStateComponent);
         logger.Levels.Should().Contain(LogLevel.Error);
     }
 

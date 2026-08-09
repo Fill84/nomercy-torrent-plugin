@@ -2,20 +2,26 @@
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
 using System.Reflection;
-using NoMercy.Design;
+using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 
 /// <summary>
-/// Reading a built view the way a client does.
+/// Reading a built view the way the dashboard does.
 ///
 /// <para>
-/// The design system draws every container as <c>NMCard</c> and turns what a
-/// view authored as props into components: a form's fields are its children
-/// now, not a "fields" bag on the form, and a label is a text node inside the
-/// thing it labels rather than a string beside it. A test that reads the
-/// authored shape is reading something no client ever receives.
+/// This used to read the design system's rendering, because that is what the contract's
+/// own helpers produce: a form became an NMCard whose fields were turned into child
+/// components. The client never drew any of it - it keys plugin components by their own
+/// names and those nodes were never reached. See <see cref="Ui"/> for the whole account.
+/// </para>
+///
+/// <para>
+/// So a form's fields are a <c>fields</c> prop again, exactly as the plugin authored them,
+/// and these helpers read them there. That is also the shape the client submits from,
+/// which is the point: a test that reads the authored form is now reading the thing that
+/// actually posts.
 /// </para>
 /// </summary>
 internal static class PluginNodes
@@ -34,87 +40,55 @@ internal static class PluginNodes
         (view.Components ?? []).SelectMany(Flatten);
 
     /// <summary>
-    /// Every tag a client is expected to draw: the plugin contract's own set, the
-    /// media components the app's screens are built from, and the design system's
-    /// fifty-six. Reflected rather than listed, so a component added to the design
-    /// system is known here the moment the contract is repacked - the alternative
-    /// is a literal list that fails on a component that renders perfectly well.
+    /// Every tag the dashboard can draw: the ones <see cref="Ui"/> names, reflected rather
+    /// than listed so a component added there is known here without a second edit.
     /// </summary>
     public static IReadOnlySet<string> KnownComponents { get; } =
         new HashSet<string>(
-            PluginComponentType
-                .All.Concat(NmAppComponents.All)
-                .Concat(
-                    typeof(NmComponents)
-                        .GetFields(BindingFlags.Public | BindingFlags.Static)
-                        .Where(field => field.IsLiteral && field.FieldType == typeof(string))
-                        .Select(field => (string)field.GetRawConstantValue()!)
-                ),
+            typeof(Ui)
+                .GetFields(BindingFlags.Public | BindingFlags.Static)
+                .Where(field => field.IsLiteral && field.FieldType == typeof(string))
+                .Select(field => (string)field.GetRawConstantValue()!),
             StringComparer.Ordinal
         );
 
-    /// <summary>A form: the card the submit button belongs to.</summary>
     public static IEnumerable<PluginComponent> Forms(PluginView view) =>
-        All(view).Where(node => node.Items.Any(child => child.Id == $"{node.Id}-submit"));
+        All(view).Where(node => node.Component == Ui.FormComponent);
 
-    public static PluginComponent Submit(PluginComponent form) =>
-        form.Items.Single(child => child.Id == $"{form.Id}-submit");
+    /// <summary>A form's fields, as the plugin authored them and as the client submits them.</summary>
+    public static IEnumerable<PluginFormField> Fields(PluginComponent form) =>
+        form.Props.TryGetValue("fields", out object? fields) && fields is IEnumerable<PluginFormField> typed
+            ? typed
+            : [];
 
-    /// <summary>
-    /// A form's fields, as the renderer leaves them: an input under a ghost group,
-    /// or a toggle standing on its own. Both carry the authored name, which is what
-    /// still ties a rendered control back to the field the view asked for.
-    /// </summary>
-    public static IEnumerable<PluginComponent> Fields(PluginComponent form) =>
-        form.Items.SelectMany(Flatten).Where(node => node.Props.ContainsKey("name"));
-
-    public static IEnumerable<PluginComponent> AllFields(PluginView view) =>
+    public static IEnumerable<PluginFormField> AllFields(PluginView view) =>
         Forms(view).SelectMany(Fields);
 
-    public static string Name(PluginComponent field) => Prop(field, "name");
+    public static string Name(PluginFormField field) => field.Name;
+
+    public static string Type(PluginFormField field) => field.Type;
+
+    public static object? Value(PluginFormField field) => field.Value;
+
+    public static string Placeholder(PluginFormField field) => field.Placeholder ?? "";
+
+    /// <summary>A toggle's state. Authored as the field's value, which is a bool for a toggle.</summary>
+    public static bool Checked(PluginFormField field) => field.Value is true;
 
     /// <summary>
-    /// What kind of control this is. A password and a number are inputs wearing a
-    /// "type"; a toggle and a checkbox are their own components and carry none.
-    /// </summary>
-    public static string Type(PluginComponent field) =>
-        field.Component switch
-        {
-            "NMToggle" => PluginFormFieldType.Toggle,
-            "NMCheckbox" => PluginFormFieldType.Checkbox,
-            "NMSelect" => PluginFormFieldType.Select,
-            "NMFileUpload" => PluginFormFieldType.File,
-            _ => field.Props.TryGetValue("type", out object? type)
-                ? type as string ?? PluginFormFieldType.Text
-                : PluginFormFieldType.Text,
-        };
-
-    public static object? Value(PluginComponent field) =>
-        field.Props.TryGetValue("value", out object? value) ? value : null;
-
-    /// <summary>
-    /// A toggle's or checkbox's state. The renderer writes it to "checked" and gives the
-    /// node no "value" at all, so a test reaching for <see cref="Value"/> reads null and
-    /// passes for the wrong reason no matter which way the toggle is set.
-    /// </summary>
-    public static bool Checked(PluginComponent field) =>
-        field.Props.TryGetValue("checked", out object? value) && value is true;
-
-    public static string Placeholder(PluginComponent field) => Prop(field, "placeholder");
-
-    /// <summary>
-    /// Every word in the view, wherever the renderer put it: a text leaf's own
-    /// content, and the helper line that a caption became.
+    /// Every word in the view, wherever the component that carries it keeps it. Each
+    /// component names its own text prop - a text node has "value", an empty state has a
+    /// "title" and a "message", a button and a badge have a "label" - so a helper looking
+    /// for one of them finds nothing on a page full of words.
     /// </summary>
     public static IEnumerable<string> Words(PluginView view) =>
-        All(view)
-            .SelectMany(node => new[] { Prop(node, "text"), Prop(node, "helperText") })
-            .Where(word => word.Length > 0);
+        All(view).SelectMany(TextOf).Where(word => word.Length > 0);
 
     public static IEnumerable<string> Words(PluginComponent node) =>
-        Flatten(node)
-            .SelectMany(child => new[] { Prop(child, "text"), Prop(child, "helperText") })
-            .Where(word => word.Length > 0);
+        Flatten(node).SelectMany(TextOf).Where(word => word.Length > 0);
+
+    private static IEnumerable<string> TextOf(PluginComponent node) =>
+        [Prop(node, "value"), Prop(node, "title"), Prop(node, "message"), Prop(node, "label")];
 
     private static string Prop(PluginComponent node, string key) =>
         node.Props.TryGetValue(key, out object? value) ? value?.ToString() ?? "" : "";

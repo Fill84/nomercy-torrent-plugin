@@ -60,8 +60,8 @@ public static class SettingsView
     {
         List<PluginComponent> children =
         [
-            PluginViews.Text("settings-heading", "Torrent Downloader Settings", "heading"),
-            PluginViews.Text("settings-last-saved", LastSavedLabel(settings.LastSavedAtUtc), "caption"),
+            Ui.Text("settings-heading", "Torrent Downloader Settings", "title"),
+            Ui.Text("settings-last-saved", LastSavedLabel(settings.LastSavedAtUtc), "caption"),
         ];
 
         if (ungrantedHosts.Count > 0)
@@ -71,8 +71,8 @@ public static class SettingsView
 
         children.Add(BuildGeneralForm(settings));
 
-        children.Add(PluginViews.Text("settings-indexers-heading", "Indexers", "subheading"));
-        children.Add(PluginViews.Button("settings-indexers-add", "Add indexer", PluginActionIntent.CallPlugin(AddIndexerMethod)));
+        children.Add(Ui.Text("settings-indexers-heading", "Indexers", "subtitle"));
+        children.Add(Ui.Button("settings-indexers-add", "Add indexer", PluginActionIntent.CallPlugin(AddIndexerMethod)));
         if (settings.Indexers.Count > 0)
         {
             for (int i = 0; i < settings.Indexers.Count; i++)
@@ -84,7 +84,7 @@ public static class SettingsView
         else
         {
             children.Add(
-                PluginViews.EmptyState(
+                Ui.EmptyState(
                     "settings-indexers-empty",
                     "No indexer configured",
                     "Add an indexer so Torrent Downloader knows where to search for releases."
@@ -92,15 +92,15 @@ public static class SettingsView
             );
         }
 
-        children.Add(PluginViews.Text("settings-trackers-heading", "Private Trackers", "subheading"));
+        children.Add(Ui.Text("settings-trackers-heading", "Private Trackers", "subtitle"));
         children.Add(
-            PluginViews.Text(
+            Ui.Text(
                 "settings-trackers-explainer",
                 "Everything else is public and never uploads. A tracker added here is the only way this plugin seeds.",
                 "caption"
             )
         );
-        children.Add(PluginViews.Button("settings-trackers-add", "Add private tracker", PluginActionIntent.CallPlugin(AddPrivateTrackerMethod)));
+        children.Add(Ui.Button("settings-trackers-add", "Add private tracker", PluginActionIntent.CallPlugin(AddPrivateTrackerMethod)));
         if (settings.PrivateTrackers.Count > 0)
         {
             for (int i = 0; i < settings.PrivateTrackers.Count; i++)
@@ -112,7 +112,7 @@ public static class SettingsView
         else
         {
             children.Add(
-                PluginViews.EmptyState(
+                Ui.EmptyState(
                     "settings-trackers-empty",
                     "No private tracker configured",
                     "Without one, every torrent is treated as public: nothing is ever uploaded."
@@ -120,7 +120,7 @@ public static class SettingsView
             );
         }
 
-        return PluginViews.Declarative(0, PluginViews.Container("settings-root", [.. children]));
+        return PluginViews.Declarative(0, Ui.Container("settings-root", [.. children]));
     }
 
     // Rendered with CultureInfo.InvariantCulture, same as Core's size formatting, so this
@@ -139,10 +139,10 @@ public static class SettingsView
     // namespace would collide with tests that gather every component by that prefix and
     // then treat every match as a form.
     private static PluginComponent BuildRemoveIndexerButton(int index) =>
-        PluginViews.DestructiveButton(
+        Ui.DestructiveButton(
             $"indexer-{index}-remove",
             "Remove indexer",
-            PluginActionIntent.CallPlugin($"{RemoveIndexerMethod}/{index}"),
+            $"{RemoveIndexerMethod}/{index}",
             "Remove this indexer?",
             "This deletes the indexer and its saved API key. This cannot be undone."
         );
@@ -151,10 +151,10 @@ public static class SettingsView
     // may have missed is why nothing is downloading yet.
     private static PluginComponent BuildGrantWarning(IReadOnlyList<string> ungrantedHosts)
     {
-        return PluginViews.Container(
+        return Ui.Container(
             "settings-grant-warning",
-            PluginViews.Badge("settings-grant-warning-badge", "Access needed", PluginBadgeVariant.Warning),
-            PluginViews.Text(
+            Ui.Badge("settings-grant-warning-badge", "Access needed", PluginBadgeVariant.Warning),
+            Ui.Text(
                 "settings-grant-warning-text",
                 $"Torrent Downloader is waiting on host access for: {string.Join(", ", ungrantedHosts)}.",
                 "body"
@@ -208,7 +208,7 @@ public static class SettingsView
             },
         ];
 
-        return PluginViews.Form("settings-general-form", SaveLabel, PluginActionIntent.CallPlugin(SaveSettingsMethod), fields);
+        return Ui.Form("settings-general-form", SaveLabel, PluginActionIntent.CallPlugin(SaveSettingsMethod), fields);
     }
 
     private static PluginComponent BuildIndexerForm(int index, IndexerSettings indexer, IReadOnlySet<string> storedSecretKeys)
@@ -233,7 +233,7 @@ public static class SettingsView
             BuildSecretField("apiKey", "API key", hasStoredKey),
         ];
 
-        return PluginViews.Form(
+        return Ui.Form(
             $"settings-indexer-{index}-form",
             SaveLabel,
             PluginActionIntent.CallPlugin($"{SaveIndexerMethod}/{index}"),
@@ -272,7 +272,7 @@ public static class SettingsView
             },
         ];
 
-        return PluginViews.Form(
+        return Ui.Form(
             $"settings-tracker-{index}-form",
             SaveLabel,
             PluginActionIntent.CallPlugin($"{SavePrivateTrackerMethod}/{index}"),
@@ -281,10 +281,10 @@ public static class SettingsView
     }
 
     private static PluginComponent BuildRemovePrivateTrackerButton(int index) =>
-        PluginViews.DestructiveButton(
+        Ui.DestructiveButton(
             $"tracker-{index}-remove",
             "Remove private tracker",
-            PluginActionIntent.CallPlugin($"{RemovePrivateTrackerMethod}/{index}"),
+            $"{RemovePrivateTrackerMethod}/{index}",
             "Remove this private tracker?",
             "This deletes the tracker, its announce URL and its API key. Torrents from it become public, and stop seeding."
         );

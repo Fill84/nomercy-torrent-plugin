@@ -33,7 +33,7 @@ public class SettingsViewTests
     // the design system spends the authored field building an input, a toggle or a
     // select, and the record never reaches the client. Reading them back through the
     // rendered tree is the only version that still sees what a viewer gets.
-    private static List<PluginComponent> AllFormFields(PluginView view) => [.. PluginNodes.AllFields(view)];
+    private static List<PluginFormField> AllFormFields(PluginView view) => [.. PluginNodes.AllFields(view)];
 
     [Fact]
     public void Build_ReturnsADeclarativeTreeNotAWebView()
@@ -53,7 +53,7 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
-        PluginComponent apiKeyField = AllFormFields(view)
+        PluginFormField apiKeyField = AllFormFields(view)
             .Should()
             .ContainSingle(field => PluginNodes.Name(field) == "apiKey")
             .Which;
@@ -69,7 +69,7 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], storedSecretKeys);
 
-        PluginComponent apiKeyField = AllFormFields(view)
+        PluginFormField apiKeyField = AllFormFields(view)
             .Should().ContainSingle(field => PluginNodes.Name(field) == "apiKey").Which;
 
         PluginNodes.Value(apiKeyField).Should().BeNull();
@@ -115,7 +115,7 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
-        Flatten(view.Components!).Should().Contain(component => component.Component == PluginComponentType.EmptyState);
+        Flatten(view.Components!).Should().Contain(component => component.Component == Ui.EmptyStateComponent);
         AllFormFields(view).Should().NotContain(field => PluginNodes.Name(field) == "apiKey");
     }
 
@@ -136,7 +136,7 @@ public class SettingsViewTests
 
         PluginView view = SettingsView.Build(settings, [], stored);
 
-        PluginComponent field = AllFormFields(view).Should()
+        PluginFormField field = AllFormFields(view).Should()
             .ContainSingle(field => PluginNodes.Name(field) == "announceUrl").Which;
 
         PluginNodes.Type(field).Should().Be(PluginFormFieldType.Password);
@@ -178,7 +178,7 @@ public class SettingsViewTests
     {
         PluginView view = SettingsView.Build(new TorrentDownloaderSettings(), [], new HashSet<string>());
 
-        PluginComponent field = AllFormFields(view).Should()
+        PluginFormField field = AllFormFields(view).Should()
             .ContainSingle(field => PluginNodes.Name(field) == "includeSpecials").Which;
 
         PluginNodes.Type(field).Should().Be(PluginFormFieldType.Toggle);
@@ -193,7 +193,7 @@ public class SettingsViewTests
             [],
             new HashSet<string>());
 
-        PluginComponent field = AllFormFields(view).Single(field => PluginNodes.Name(field) == "includeSpecials");
+        PluginFormField field = AllFormFields(view).Single(field => PluginNodes.Name(field) == "includeSpecials");
 
         PluginNodes.Checked(field).Should().BeTrue();
     }
@@ -260,7 +260,7 @@ public class SettingsViewTests
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
         PluginComponent addButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "settings-indexers-add").Which;
-        addButton.Component.Should().Be(PluginComponentType.Button);
+        addButton.Component.Should().Be(Ui.ButtonComponent);
         addButton.Action!.Payload["method"].Should().Be("AddIndexer");
         addButton.Action.Payload["payload"].Should().BeNull();
         addButton.Action.Confirm.Should().BeNull();
@@ -281,7 +281,7 @@ public class SettingsViewTests
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
         PluginComponent removeButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "indexer-1-remove").Which;
-        removeButton.Component.Should().Be(PluginComponentType.Button);
+        removeButton.Component.Should().Be(Ui.ButtonComponent);
         removeButton.Action!.Payload["method"].Should().Be("RemoveIndexer/1");
         removeButton.Action.Confirm.Should().NotBeNull();
     }

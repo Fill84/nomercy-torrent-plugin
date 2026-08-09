@@ -59,18 +59,18 @@ public static class DownloadsView
 
         List<PluginComponent> children =
         [
-            PluginViews.Text("downloads-heading", "Downloads", "heading"),
-            PluginViews.Text("downloads-active-heading", "Active", "subheading"),
+            Ui.Text("downloads-heading", "Downloads", "title"),
+            Ui.Text("downloads-active-heading", "Active", "subtitle"),
             ActiveTable(transfers, byHash),
-            PluginViews.Text("downloads-queue-heading", QueueHeading(wanted), "subheading"),
+            Ui.Text("downloads-queue-heading", QueueHeading(wanted), "subtitle"),
             Queue(wanted),
         ];
 
         if (unstartedShows.Count > 0)
         {
-            children.Add(PluginViews.Text("downloads-unstarted-heading", "Not started", "subheading"));
+            children.Add(Ui.Text("downloads-unstarted-heading", "Not started", "subtitle"));
             children.Add(
-                PluginViews.Text(
+                Ui.Text(
                     "downloads-unstarted-explainer",
                     "These shows have no episode on the server, so nothing is downloaded for them. Follow one and it joins the queue.",
                     "caption"
@@ -79,7 +79,7 @@ public static class DownloadsView
             children.Add(Unstarted(unstartedShows));
         }
 
-        return PluginViews.Declarative(RefreshSeconds, PluginViews.Container("downloads-root", [.. children]));
+        return PluginViews.Declarative(RefreshSeconds, Ui.Container("downloads-root", [.. children]));
     }
 
     private static PluginComponent ActiveTable(IReadOnlyList<Transfer> transfers, IReadOnlyDictionary<string, Grab> byHash)
@@ -90,17 +90,17 @@ public static class DownloadsView
         {
             byHash.TryGetValue(transfer.InfoHash, out Grab? grab);
 
-            rows.Add(PluginViews.Row(
+            rows.Add(Ui.Row(
                 $"downloads-row-{transfer.InfoHash}",
-                PluginViews.Text($"downloads-title-{transfer.InfoHash}", grab?.ReleaseTitle ?? transfer.InfoHash),
-                PluginViews.Text($"downloads-episode-{transfer.InfoHash}", grab is null ? "" : Covers(grab), "caption"),
-                PluginViews.Progress($"downloads-progress-{transfer.InfoHash}", transfer.Progress),
+                Ui.Text($"downloads-title-{transfer.InfoHash}", grab?.ReleaseTitle ?? transfer.InfoHash),
+                Ui.Text($"downloads-episode-{transfer.InfoHash}", grab is null ? "" : Covers(grab), "caption"),
+                Ui.Progress($"downloads-progress-{transfer.InfoHash}", transfer.Progress),
 
                 // The percentage as its own text rather than only a label on the bar: a
                 // label that lives inside the bar is one a reader walking the page - or a
                 // screen reader - may never reach.
-                PluginViews.Text($"downloads-percent-{transfer.InfoHash}", Percentage(transfer), "caption"),
-                PluginViews.Text($"downloads-peers-{transfer.InfoHash}", Peers(transfer.Peers), "caption")));
+                Ui.Text($"downloads-percent-{transfer.InfoHash}", Percentage(transfer), "caption"),
+                Ui.Text($"downloads-peers-{transfer.InfoHash}", Peers(transfer.Peers), "caption")));
         }
 
         // A list of rows rather than a table. The design system turns a table's cells
@@ -108,18 +108,18 @@ public static class DownloadsView
         // children do - which makes them invisible to anything walking the tree, tests
         // included. A row of text and a progress bar draws the same and stays readable.
         return rows.Count == 0
-            ? PluginViews.EmptyState(
+            ? Ui.EmptyState(
                 "downloads-active-empty",
                 "Nothing is downloading right now.",
                 "Finished downloads move to the intake and leave this list.")
-            : PluginViews.List("downloads-active", [.. rows]);
+            : Ui.List("downloads-active", [.. rows]);
     }
 
     private static PluginComponent Queue(IReadOnlyList<WantedEpisode> wanted)
     {
         if (wanted.Count == 0)
         {
-            return PluginViews.EmptyState(
+            return Ui.EmptyState(
                 "downloads-queue-empty",
                 "Nothing is missing",
                 "Every episode the library knows about has a file.");
@@ -129,14 +129,14 @@ public static class DownloadsView
 
         foreach (WantedEpisode episode in wanted.Take(QueuePreviewLength))
         {
-            rows.Add(PluginViews.Row(
+            rows.Add(Ui.Row(
                 $"downloads-wanted-{episode.Key}",
-                PluginViews.Text($"downloads-wanted-show-{episode.Key}", episode.ShowTitle),
-                PluginViews.Text($"downloads-wanted-slot-{episode.Key}", Slot(episode.Key), "caption"),
+                Ui.Text($"downloads-wanted-show-{episode.Key}", episode.ShowTitle),
+                Ui.Text($"downloads-wanted-slot-{episode.Key}", Slot(episode.Key), "caption"),
                 StateBadge(episode)));
         }
 
-        return PluginViews.List("downloads-queue", [.. rows]);
+        return Ui.List("downloads-queue", [.. rows]);
     }
 
     /// <summary>
@@ -154,25 +154,25 @@ public static class DownloadsView
 
         foreach (FollowableShow show in shows.OrderBy(show => show.Title, StringComparer.CurrentCultureIgnoreCase))
         {
-            rows.Add(PluginViews.Row(
+            rows.Add(Ui.Row(
                 $"downloads-unstarted-{show.ShowId}",
-                PluginViews.Text($"downloads-unstarted-title-{show.ShowId}", show.Title),
+                Ui.Text($"downloads-unstarted-title-{show.ShowId}", show.Title),
                 show.Followed
-                    ? PluginViews.Button(
+                    ? Ui.Button(
                         $"downloads-unfollow-{show.ShowId}",
                         "Stop following",
                         PluginActionIntent.CallPlugin($"{UnfollowShowMethod}/{show.ShowId}"))
-                    : PluginViews.Button(
+                    : Ui.Button(
                         $"downloads-follow-{show.ShowId}",
                         "Follow",
                         PluginActionIntent.CallPlugin($"{FollowShowMethod}/{show.ShowId}"))));
         }
 
-        return PluginViews.List("downloads-unstarted", [.. rows]);
+        return Ui.List("downloads-unstarted", [.. rows]);
     }
 
     private static PluginComponent StateBadge(WantedEpisode episode) =>
-        PluginViews.Badge(
+        Ui.Badge(
             $"downloads-wanted-state-{episode.Key}",
             episode.State switch
             {

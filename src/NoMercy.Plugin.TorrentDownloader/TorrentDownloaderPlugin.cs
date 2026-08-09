@@ -384,7 +384,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     // reaches the try block below.
     private static PluginView DisposedView() =>
         PluginViews.Declarative(
-            PluginViews.EmptyState(
+            Ui.EmptyState(
                 "settings-unavailable",
                 "Torrent Downloader is unavailable",
                 "This plugin is disabled or is being unloaded."
@@ -402,10 +402,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     // the card is how a downloads page ends up advising someone about an encryption key.
     private static PluginView PageErrorView() =>
         PluginViews.Declarative(
-            PluginViews.Container(
+            Ui.Container(
                 "page-error",
-                PluginViews.Badge("page-error-badge", "Unavailable", PluginBadgeVariant.Danger),
-                PluginViews.EmptyState(
+                Ui.Badge("page-error-badge", "Unavailable", PluginBadgeVariant.Danger),
+                Ui.EmptyState(
                     "page-error-empty",
                     "This page could not be loaded",
                     "Check the server log for Torrent Downloader - it names what failed."
@@ -431,7 +431,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             {
                 "/settings" => await SettingsPageAsync(context, ct),
                 "/downloads" => await DownloadsPageAsync(context, ct),
-                _ => PluginViews.Declarative(PluginViews.EmptyState("unknown-route", "Nothing here")),
+                _ => PluginViews.Declarative(Ui.EmptyState("unknown-route", "Nothing here")),
             };
         }
         catch (OperationCanceledException)
