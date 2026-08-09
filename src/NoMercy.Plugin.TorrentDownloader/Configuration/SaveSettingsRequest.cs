@@ -5,13 +5,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 
 // What one of the three forms actually posts. Which entry (if any) this submission is
 // about is no longer carried in here - a PluginForm's submit discards whatever payload
-// the action intent was built with, so an indexer/client identity field placed on this
+// the action intent was built with, so a per-entry identity field placed on this
 // request would never arrive (that was the defect). The entry's identity now lives in
-// the URL instead - SaveIndexer/{index} and SaveClient/{index} - which is the one part
+// the URL instead - SaveIndexer/{index}, SavePrivateTracker/{index} - which is the one part
 // of the request a form's submit cannot strip, so SettingsSaveHandler's per-entry
 // methods take it as a parameter rather than reading it off this type.
 //
-// Nullable throughout rather than defaulted, because a missing indexer/client field
+// Nullable throughout rather than defaulted, because a missing per-entry field
 // still needs to read as "not supplied" so the merge can fall back to the entry's
 // current value - only the general form's own fields are always present together.
 public sealed class SaveSettingsRequest
@@ -28,7 +28,7 @@ public sealed class SaveSettingsRequest
     public int? MinimumSeeders { get; init; }
     public bool? AllowSeasonPacks { get; init; }
 
-    // Shared by the indexer and client forms - never both submitted in the same
+    // Shared by the indexer and private tracker forms - never both submitted in the same
     // request, since SettingsView renders one form per entry.
     public string? Name { get; init; }
     public string? Kind { get; init; }
@@ -41,9 +41,6 @@ public sealed class SaveSettingsRequest
     public string? Categories { get; init; }
     public string? ApiKey { get; init; }
 
-    // Client-only.
-    public string? Username { get; init; }
-    public string? Password { get; init; }
 
     // Private-tracker-only. AnnounceUrl is nullable for the same reason ApiKey is: the
     // form cannot render a stored secret back, so it submits blank whenever the owner is

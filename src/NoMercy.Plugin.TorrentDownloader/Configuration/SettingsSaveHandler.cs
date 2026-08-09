@@ -5,14 +5,14 @@ using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
 
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 
-// SettingsView renders three kinds of form - general, one per indexer, one per client -
+// SettingsView renders three kinds of form - general, one per indexer, one per private tracker -
 // and each posts to its own entry point (see TorrentDownloaderSettingsController): the
 // general form to HandleGeneralAsync, an indexer form at render index i to
-// HandleIndexerAsync(i, ...), a client form at render index i to HandleClientAsync(i, ...).
+// HandleIndexerAsync(i, ...), a private tracker's to HandlePrivateTrackerAsync(i, ...).
 // A form only ever carries part of the settings world, so each method's job is to load the
 // current one, apply just the part this submission addresses, and hand SaveAsync the
 // merged result - never the submitted fields alone. Reconstructing settings from the
-// submitted fields and saving that directly would wipe every indexer, every client and
+// submitted fields and saving that directly would wipe every indexer, every tracker and
 // every stored credential the moment the owner saves the general form.
 //
 // The index, not the submitted name, is what identifies the row: the name is the value
@@ -30,12 +30,6 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         return await PersistIfSucceededAsync(ApplyIndexer(current, index, request), ct);
     }
 
-    public async Task<SaveSettingsOutcome> HandleClientAsync(int index, SaveSettingsRequest request, CancellationToken ct = default)
-    {
-        LoadedSettings current = await gateway.LoadAsync(ct);
-        return await PersistIfSucceededAsync(ApplyClient(current, index, request), ct);
-    }
-
     // No request body: SettingsView's "Add indexer" button carries only the method, so
     // there is nothing here for a submitted field to collide with. See ApplyAddIndexer for
     // why the new entry's name still has to be chosen carefully despite that.
@@ -43,12 +37,6 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
     {
         LoadedSettings current = await gateway.LoadAsync(ct);
         return await PersistIfSucceededAsync(ApplyAddIndexer(current), ct);
-    }
-
-    public async Task<SaveSettingsOutcome> HandleAddClientAsync(CancellationToken ct = default)
-    {
-        LoadedSettings current = await gateway.LoadAsync(ct);
-        return await PersistIfSucceededAsync(ApplyAddClient(current), ct);
     }
 
     public async Task<SaveSettingsOutcome> HandlePrivateTrackerAsync(int index, SaveSettingsRequest request, CancellationToken ct = default)
@@ -91,12 +79,6 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         return await PersistIfSucceededAsync(ApplyRemoveIndexer(current, index), ct);
     }
 
-    public async Task<SaveSettingsOutcome> HandleRemoveClientAsync(int index, CancellationToken ct = default)
-    {
-        LoadedSettings current = await gateway.LoadAsync(ct);
-        return await PersistIfSucceededAsync(ApplyRemoveClient(current, index), ct);
-    }
-
     // The one place every successful save/add/remove passes through, which is what makes
     // it the one place worth stamping the timestamp - every Apply* method above only needs
     // to get the entry data right, not remember to also touch the clock. Stamped on the
@@ -115,7 +97,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
     }
 
     // No secret changes hands here: none of the four cron fields or the two folders is a
-    // secret, and every existing indexer/client - and, critically, every secret already
+    // secret, and every existing indexer and tracker - and, critically, every secret already
     // stored for them - carries forward untouched because their names are unchanged in the
     // merged settings. SaveAsync's orphan sweep only deletes a secret whose entry's name is
     // absent from what it is handed, so leaving the lists as loaded is what keeps them safe,
@@ -170,7 +152,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             merged.MinimumSeeders = Math.Clamp(seeders, 1, 1000);
         }
 
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, []));
     }
 
     // A rename (name != the entry's current name) is honoured rather than refused: the
@@ -219,51 +201,10 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
 
         List<IndexerSecret> indexerSecrets = string.IsNullOrEmpty(apiKey) ? [] : [new IndexerSecret(newName, apiKey)];
 
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, indexerSecrets, []));
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, indexerSecrets));
     }
 
-    private static SaveSettingsOutcome ApplyClient(LoadedSettings current, int index, SaveSettingsRequest request)
-    {
-        if (index < 0 || index >= current.Settings.Clients.Count)
-        {
-            return SaveSettingsOutcome.Failure($"No download client at index {index}.");
-        }
-
-        string oldName = current.Settings.Clients[index].Name;
-
-        if (!IsAbsoluteUrl(request.Url))
-        {
-            return SaveSettingsOutcome.Failure("Download client URL must be an absolute URL.");
-        }
-
-        TorrentClientSettings existing = current.Settings.Clients[index];
-        string newName = string.IsNullOrWhiteSpace(request.Name) ? oldName : request.Name!;
-
-        TorrentClientSettings updated = new()
-        {
-            Name = newName,
-            Kind = request.Kind ?? existing.Kind,
-            Url = request.Url!,
-            Username = request.Username ?? existing.Username,
-            Enabled = request.Enabled ?? existing.Enabled,
-        };
-
-        List<TorrentClientSettings> clients = [.. current.Settings.Clients];
-        clients[index] = updated;
-
-        TorrentDownloaderSettings merged = Clone(current.Settings);
-        merged.Clients = clients;
-
-        string? password = string.IsNullOrEmpty(request.Password)
-            ? current.ClientSecrets.FirstOrDefault(secret => secret.Name == oldName)?.Password
-            : request.Password;
-
-        List<ClientSecret> clientSecrets = string.IsNullOrEmpty(password) ? [] : [new ClientSecret(newName, password)];
-
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], clientSecrets));
-    }
-
-    // A new entry's Name starts blank on IndexerSettings/TorrentClientSettings, and two
+    // A new entry's Name starts blank on IndexerSettings and PrivateTrackerSettings, and two
     // blank names would derive the exact same secret key (SettingsGateway.IndexerSecretKey
     // hashes only the name) - the second Add would silently share, then clobber, the
     // first entry's stored credential the moment either got an API key. Naming the entry
@@ -285,7 +226,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         return candidate;
     }
 
-    // No validation to fail here, unlike ApplyIndexer/ApplyClient: an added entry's Url is
+    // No validation to fail here, unlike ApplyIndexer: an added entry's Url is
     // blank, which is expected - the owner fills it in and saves through the per-entry form
     // afterward, the same form that does enforce an absolute URL. Secrets are passed through
     // untouched ([], []) rather than carried forward explicitly, for the same reason
@@ -301,20 +242,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Indexers = [.. current.Settings.Indexers, added];
 
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
-    }
-
-    private static SaveSettingsOutcome ApplyAddClient(LoadedSettings current)
-    {
-        TorrentClientSettings added = new()
-        {
-            Name = NextDefaultName("New Download Client", [.. current.Settings.Clients.Select(client => client.Name)]),
-        };
-
-        TorrentDownloaderSettings merged = Clone(current.Settings);
-        merged.Clients = [.. current.Settings.Clients, added];
-
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, []));
     }
 
     // Deleting the entry from the merged settings is the whole fix: SaveAsync's orphan
@@ -335,26 +263,10 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.Indexers = indexers;
 
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, []));
     }
 
-    private static SaveSettingsOutcome ApplyRemoveClient(LoadedSettings current, int index)
-    {
-        if (index < 0 || index >= current.Settings.Clients.Count)
-        {
-            return SaveSettingsOutcome.Failure($"No download client at index {index}.");
-        }
-
-        List<TorrentClientSettings> clients = [.. current.Settings.Clients];
-        clients.RemoveAt(index);
-
-        TorrentDownloaderSettings merged = Clone(current.Settings);
-        merged.Clients = clients;
-
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
-    }
-
-    // Unlike an indexer or a client, the URL being edited here is one this form can never
+    // Unlike an indexer's, the URL being edited here is one this form can never
     // show back, because the passkey in it is the account. So blank means "keep what is
     // stored", and the entry is only refused when neither the submission nor the store
     // has one - an entry with no announce URL matches no torrent and therefore quietly
@@ -402,7 +314,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         string? apiKey = string.IsNullOrEmpty(request.ApiKey) ? stored?.ApiKey : request.ApiKey;
 
         return SaveSettingsOutcome.Success(
-            new LoadedSettings(merged, [], [], [new PrivateTrackerSecret(newName, announceUrl, apiKey)]));
+            new LoadedSettings(merged, [], [new PrivateTrackerSecret(newName, announceUrl, apiKey)]));
     }
 
     private static SaveSettingsOutcome ApplyAddPrivateTracker(LoadedSettings current)
@@ -418,7 +330,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.PrivateTrackers = [.. current.Settings.PrivateTrackers, added];
 
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, []));
     }
 
     private static SaveSettingsOutcome ApplyRemovePrivateTracker(LoadedSettings current, int index)
@@ -434,7 +346,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.PrivateTrackers = trackers;
 
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, []));
     }
 
     // Idempotent in both directions on purpose. These are driven by a button on a page
@@ -457,7 +369,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         TorrentDownloaderSettings merged = Clone(current.Settings);
         merged.FollowedShowIds = followed;
 
-        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, []));
     }
 
     private static bool IsAbsoluteUrl(string? url) =>
@@ -492,7 +404,6 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             MinimumSeeders = source.MinimumSeeders,
             AllowSeasonPacks = source.AllowSeasonPacks,
             Indexers = source.Indexers,
-            Clients = source.Clients,
             PrivateTrackers = source.PrivateTrackers,
             FollowedShowIds = source.FollowedShowIds,
         };

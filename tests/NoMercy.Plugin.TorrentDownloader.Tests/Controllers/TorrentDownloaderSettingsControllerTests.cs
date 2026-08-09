@@ -124,30 +124,6 @@ public class TorrentDownloaderSettingsControllerTests
     }
 
     [Fact]
-    public async Task SaveClient_BodyWithOnlyTheClientFormsFields_UpdatesTheClientAtThatIndex()
-    {
-        TorrentDownloaderPlugin plugin = new();
-        FakePluginContext context = new();
-        context.Configuration.Stored = new TorrentDownloaderSettings
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        plugin.Initialize(context);
-        FakePluginManager pluginManager = new() { Instance = plugin, InstanceId = PluginIdentity.Id };
-        TorrentDownloaderSettingsController controller = BuildController(pluginManager);
-
-        IActionResult result = await controller.SaveClient(
-            0,
-            new SaveSettingsRequest { Name = "qBit", Url = "https://qbit.local:8080" },
-            CancellationToken.None
-        );
-
-        result.Should().BeOfType<OkObjectResult>();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)context.Configuration.Stored!;
-        saved.Clients.Should().ContainSingle(client => client.Name == "qBit" && client.Url == "https://qbit.local:8080");
-    }
-
-    [Fact]
     public async Task SaveIndexer_OutOfRangeIndexReturnsAnErrorStatusWithoutPersisting()
     {
         TorrentDownloaderPlugin plugin = new();
@@ -186,17 +162,6 @@ public class TorrentDownloaderSettingsControllerTests
     }
 
     [Fact]
-    public async Task SaveClient_WhenThePluginIdDoesNotResolveToThisPlugin_ReturnsNotFound()
-    {
-        FakePluginManager pluginManager = new() { Instance = null, InstanceId = PluginIdentity.Id };
-        TorrentDownloaderSettingsController controller = BuildController(pluginManager);
-
-        IActionResult result = await controller.SaveClient(0, new SaveSettingsRequest(), CancellationToken.None);
-
-        result.Should().BeOfType<NotFoundResult>();
-    }
-
-    [Fact]
     public async Task AddIndexer_ReachesTheLivePluginThroughIPluginManagerAndSaves()
     {
         TorrentDownloaderPlugin plugin = new();
@@ -220,34 +185,6 @@ public class TorrentDownloaderSettingsControllerTests
         TorrentDownloaderSettingsController controller = BuildController(pluginManager);
 
         IActionResult result = await controller.AddIndexer(CancellationToken.None);
-
-        result.Should().BeOfType<NotFoundResult>();
-    }
-
-    [Fact]
-    public async Task AddClient_ReachesTheLivePluginThroughIPluginManagerAndSaves()
-    {
-        TorrentDownloaderPlugin plugin = new();
-        FakePluginContext context = new();
-        context.Configuration.Stored = new TorrentDownloaderSettings();
-        plugin.Initialize(context);
-        FakePluginManager pluginManager = new() { Instance = plugin, InstanceId = PluginIdentity.Id };
-        TorrentDownloaderSettingsController controller = BuildController(pluginManager);
-
-        IActionResult result = await controller.AddClient(CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)context.Configuration.Stored!;
-        saved.Clients.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task AddClient_WhenThePluginIdDoesNotResolveToThisPlugin_ReturnsNotFound()
-    {
-        FakePluginManager pluginManager = new() { Instance = null, InstanceId = PluginIdentity.Id };
-        TorrentDownloaderSettingsController controller = BuildController(pluginManager);
-
-        IActionResult result = await controller.AddClient(CancellationToken.None);
 
         result.Should().BeOfType<NotFoundResult>();
     }
@@ -308,59 +245,4 @@ public class TorrentDownloaderSettingsControllerTests
         result.Should().BeOfType<NotFoundResult>();
     }
 
-    [Fact]
-    public async Task RemoveClient_RemovesTheClientAtThatIndexAndItsSecret()
-    {
-        TorrentDownloaderPlugin plugin = new();
-        FakePluginContext context = new();
-        context.Configuration.Stored = new TorrentDownloaderSettings
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        context.Secrets.Values["client:qBit:password"] = "the-password";
-        plugin.Initialize(context);
-        FakePluginManager pluginManager = new() { Instance = plugin, InstanceId = PluginIdentity.Id };
-        TorrentDownloaderSettingsController controller = BuildController(pluginManager);
-
-        IActionResult result = await controller.RemoveClient(0, CancellationToken.None);
-
-        result.Should().BeOfType<OkObjectResult>();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)context.Configuration.Stored!;
-        saved.Clients.Should().BeEmpty();
-        context.Secrets.Values.Should().NotContainKey("client:qBit:password");
-    }
-
-    [Fact]
-    public async Task RemoveClient_OutOfRangeIndexReturnsAnErrorStatusWithoutPersisting()
-    {
-        TorrentDownloaderPlugin plugin = new();
-        FakePluginContext context = new();
-        context.Configuration.Stored = new TorrentDownloaderSettings
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        plugin.Initialize(context);
-        FakePluginManager pluginManager = new() { Instance = plugin, InstanceId = PluginIdentity.Id };
-        TorrentDownloaderSettingsController controller = BuildController(pluginManager);
-        int savesBefore = context.Configuration.SavedObjects.Count;
-
-        IActionResult result = await controller.RemoveClient(3, CancellationToken.None);
-
-        OkObjectResult ok = result.Should().BeOfType<OkObjectResult>().Which;
-        PluginStatusResponse<object?> status = ok.Value.Should().BeOfType<PluginStatusResponse<object?>>().Which;
-        status.Status.Should().Be("error");
-        status.Message.Should().Contain("3");
-        context.Configuration.SavedObjects.Should().HaveCount(savesBefore);
-    }
-
-    [Fact]
-    public async Task RemoveClient_WhenThePluginIdDoesNotResolveToThisPlugin_ReturnsNotFound()
-    {
-        FakePluginManager pluginManager = new() { Instance = null, InstanceId = PluginIdentity.Id };
-        TorrentDownloaderSettingsController controller = BuildController(pluginManager);
-
-        IActionResult result = await controller.RemoveClient(0, CancellationToken.None);
-
-        result.Should().BeOfType<NotFoundResult>();
-    }
 }

@@ -12,9 +12,10 @@ namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 // PluginRouteConvention prefixes every route below with api/plugins/{this plugin's id},
 // taken from the assembly the controller came from - not something this class can see or
 // choose. Each [HttpPost] below is the other half of an agreement with SettingsView: its
-// general form calls CallPlugin(SettingsView.SaveSettingsMethod), and its indexer/client
-// forms call CallPlugin($"{SaveIndexerMethod}/{index}") / CallPlugin($"{SaveClientMethod}
-// /{index}") - the client interpolates that method straight into the request path and never
+// general form calls CallPlugin(SettingsView.SaveSettingsMethod), and its per-entry
+// forms call CallPlugin($"{SaveIndexerMethod}/{index}") and its private tracker forms
+// CallPlugin($"{SavePrivateTrackerMethod}/{index}") - the client interpolates that method
+// straight into the request path and never
 // forwards an action intent's payload, so the entry's index has to travel in the route
 // rather than the body. The shared constants are what keep the method strings SettingsView
 // builds and the routes below from drifting into two different literals.
@@ -37,10 +38,6 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
     [HttpPost(SettingsView.SaveIndexerRouteTemplate)]
     public Task<IActionResult> SaveIndexer(int index, [FromBody] SaveSettingsRequest request, CancellationToken ct) =>
         RespondAsync(plugin => plugin.SaveIndexerAsync(index, request, ct));
-
-    [HttpPost(SettingsView.SaveClientRouteTemplate)]
-    public Task<IActionResult> SaveClient(int index, [FromBody] SaveSettingsRequest request, CancellationToken ct) =>
-        RespondAsync(plugin => plugin.SaveClientAsync(index, request, ct));
 
     [HttpPost(SettingsView.SavePrivateTrackerRouteTemplate)]
     public Task<IActionResult> SavePrivateTracker(int index, [FromBody] SaveSettingsRequest request, CancellationToken ct) =>
@@ -68,17 +65,9 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
     public Task<IActionResult> AddIndexer(CancellationToken ct) =>
         RespondAsync(plugin => plugin.AddIndexerAsync(ct));
 
-    [HttpPost(SettingsView.AddClientMethod)]
-    public Task<IActionResult> AddClient(CancellationToken ct) =>
-        RespondAsync(plugin => plugin.AddClientAsync(ct));
-
     [HttpPost(SettingsView.RemoveIndexerRouteTemplate)]
     public Task<IActionResult> RemoveIndexer(int index, CancellationToken ct) =>
         RespondAsync(plugin => plugin.RemoveIndexerAsync(index, ct));
-
-    [HttpPost(SettingsView.RemoveClientRouteTemplate)]
-    public Task<IActionResult> RemoveClient(int index, CancellationToken ct) =>
-        RespondAsync(plugin => plugin.RemoveClientAsync(index, ct));
 
     private async Task<IActionResult> RespondAsync(Func<TorrentDownloaderPlugin, Task<SaveSettingsOutcome>> save)
     {

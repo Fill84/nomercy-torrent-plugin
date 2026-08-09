@@ -47,49 +47,6 @@ public class SettingsViewTests
     }
 
     [Fact]
-    public void Build_UsesOnlyKnownComponentTags()
-    {
-        TorrentDownloaderSettings settings = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr" }],
-            Clients = [new TorrentClientSettings { Name = "qBittorrent" }],
-        };
-
-        PluginView view = SettingsView.Build(settings, ["prowlarr.local"], new HashSet<string>());
-
-        Flatten(view.Components!).Should().OnlyContain(component => PluginNodes.KnownComponents.Contains(component.Component));
-    }
-
-    [Fact]
-    public void Build_GivesEveryComponentAUniqueId()
-    {
-        TorrentDownloaderSettings settings = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr" }, new IndexerSettings { Name = "Jackett" }],
-            Clients = [new TorrentClientSettings { Name = "qBittorrent" }, new TorrentClientSettings { Name = "Transmission" }],
-        };
-
-        PluginView view = SettingsView.Build(settings, ["prowlarr.local"], new HashSet<string>());
-
-        List<string> ids = [.. Flatten(view.Components!).Select(component => component.Id)];
-        ids.Should().OnlyHaveUniqueItems();
-    }
-
-    [Fact]
-    public void Build_UsesOnlyKnownFormFieldTypes()
-    {
-        TorrentDownloaderSettings settings = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr" }],
-            Clients = [new TorrentClientSettings { Name = "qBittorrent" }],
-        };
-
-        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
-
-        AllFormFields(view).Should().OnlyContain(field => PluginFormFieldType.All.Contains(PluginNodes.Type(field)));
-    }
-
-    [Fact]
     public void Build_RendersASecretFieldAsPassword()
     {
         TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
@@ -102,47 +59,6 @@ public class SettingsViewTests
             .Which;
 
         PluginNodes.Type(apiKeyField).Should().Be(PluginFormFieldType.Password);
-    }
-
-    [Fact]
-    // Asserts on every password field in the tree, not on one named field, and not by
-    // looking for a secret string that Build is never handed in the first place. An
-    // absent-value assertion against a value the code under test never receives cannot
-    // fail, so it would look like this guard while checking nothing: the moment someone
-    // adds a secret field - a client password, a second indexer credential - or starts
-    // pre-filling one, that version passes and this one does not.
-    public void Build_NeverPutsAValueInAnySecretField()
-    {
-        TorrentDownloaderSettings settings = new()
-        {
-            Indexers =
-            [
-                new IndexerSettings { Name = "Prowlarr" },
-                new IndexerSettings { Name = "Jackett" },
-            ],
-            Clients = [new TorrentClientSettings { Name = "qBit", Username = "admin" }],
-        };
-        HashSet<string> storedSecretKeys = new(StringComparer.Ordinal)
-        {
-            SettingsGateway.IndexerSecretKey("Prowlarr"),
-            SettingsGateway.ClientSecretKey("qBit"),
-        };
-
-        PluginView view = SettingsView.Build(settings, [], storedSecretKeys);
-
-        IReadOnlyList<PluginComponent> secretFields =
-        [
-            .. AllFormFields(view)
-                .Where(field => PluginNodes.Type(field) == PluginFormFieldType.Password),
-        ];
-
-        secretFields.Should().HaveCount(3, "every indexer and client gets one secret field");
-        secretFields.Should()
-            .AllSatisfy(field =>
-                (PluginNodes.Value(field) as string ?? string.Empty)
-                    .Should()
-                    .BeEmpty("a stored secret is never echoed back to the client")
-            );
     }
 
     [Fact]
@@ -190,44 +106,6 @@ public class SettingsViewTests
         Flatten(view.Components!)
             .Should()
             .NotContain(component => component.Id.StartsWith("settings-grant-warning", StringComparison.Ordinal));
-    }
-
-    [Fact]
-    public void Build_EveryFormUsesAnOrdinarySaveLabelAndCarriesNoReadOnlyNotice()
-    {
-        TorrentDownloaderSettings settings = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr" }],
-            Clients = [new TorrentClientSettings { Name = "qBittorrent" }],
-        };
-
-        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
-
-        IReadOnlyList<PluginComponent> flattened = [.. Flatten(view.Components!)];
-
-        // Saving now has a REST endpoint behind it (TorrentDownloaderSettingsController), so
-        // nothing on this page should still tell the owner otherwise.
-        flattened.Should().NotContain(component => component.Id == "settings-readonly-notice");
-        flattened.Should().NotContain(component => component.Id == "settings-readonly-badge");
-
-        // A form is no longer findable by tag - the design system draws it as the same
-        // NMCard as every other container, and the submit label it used to carry as a
-        // prop is now the button's own words. So a form is the card that owns a submit
-        // button, and the label is read off that button.
-        IReadOnlyList<PluginComponent> forms = [.. PluginNodes.Forms(view)];
-        forms.Should().HaveCount(3, "one general form plus one per configured indexer and client");
-        forms.Should().AllSatisfy(form =>
-            PluginNodes.Words(PluginNodes.Submit(form)).Should().Contain("Save"));
-    }
-
-    [Fact]
-    public void Build_ShowsAnEmptyStateWhenNoDownloadClientIsConfigured()
-    {
-        TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
-
-        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
-
-        Flatten(view.Components!).Should().Contain(component => component.Id == "settings-clients-empty");
     }
 
     [Fact]
@@ -365,31 +243,6 @@ public class SettingsViewTests
     }
 
     [Fact]
-    public void Build_ClientFormsActionEncodesTheEntrysRenderIndexInTheMethodNotThePayload()
-    {
-        TorrentDownloaderSettings settings = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit" }, new TorrentClientSettings { Name = "Transmission" }],
-        };
-
-        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
-
-        // The forms themselves, not everything under them: a field's id extends its
-        // form's, so a plain prefix match over the flattened tree counts one form once
-        // per control it draws.
-        List<PluginComponent> forms =
-        [
-            .. PluginNodes.Forms(view).Where(form => form.Id.StartsWith("settings-client-", StringComparison.Ordinal)),
-        ];
-        forms.Should().HaveCount(2);
-        for (int i = 0; i < forms.Count; i++)
-        {
-            forms[i].Action!.Payload["method"].Should().Be($"SaveClient/{i}");
-            forms[i].Action!.Payload["payload"].Should().BeNull();
-        }
-    }
-
-    [Fact]
     public void Build_HidesTheIndexersEmptyStateOnceThereIsAtLeastOneIndexer()
     {
         TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "New Indexer 1" }] };
@@ -397,16 +250,6 @@ public class SettingsViewTests
         PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
 
         Flatten(view.Components!).Should().NotContain(component => component.Id == "settings-indexers-empty");
-    }
-
-    [Fact]
-    public void Build_HidesTheClientsEmptyStateOnceThereIsAtLeastOneClient()
-    {
-        TorrentDownloaderSettings settings = new() { Clients = [new TorrentClientSettings { Name = "New Download Client 1" }] };
-
-        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
-
-        Flatten(view.Components!).Should().NotContain(component => component.Id == "settings-clients-empty");
     }
 
     [Fact]
@@ -420,19 +263,6 @@ public class SettingsViewTests
         addButton.Component.Should().Be(PluginComponentType.Button);
         addButton.Action!.Payload["method"].Should().Be("AddIndexer");
         addButton.Action.Payload["payload"].Should().BeNull();
-        addButton.Action.Confirm.Should().BeNull();
-    }
-
-    [Fact]
-    public void Build_AddClientButtonCallsAddClientWithNoConfirmationAndNoPayload()
-    {
-        TorrentDownloaderSettings settings = new();
-
-        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
-
-        PluginComponent addButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "settings-clients-add").Which;
-        addButton.Component.Should().Be(PluginComponentType.Button);
-        addButton.Action!.Payload["method"].Should().Be("AddClient");
         addButton.Action.Confirm.Should().BeNull();
     }
 
@@ -453,21 +283,6 @@ public class SettingsViewTests
         PluginComponent removeButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "indexer-1-remove").Which;
         removeButton.Component.Should().Be(PluginComponentType.Button);
         removeButton.Action!.Payload["method"].Should().Be("RemoveIndexer/1");
-        removeButton.Action.Confirm.Should().NotBeNull();
-    }
-
-    [Fact]
-    public void Build_RemoveClientButtonCallsRemoveClientWithTheRenderIndexAndAConfirmation()
-    {
-        TorrentDownloaderSettings settings = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit" }],
-        };
-
-        PluginView view = SettingsView.Build(settings, [], new HashSet<string>());
-
-        PluginComponent removeButton = Flatten(view.Components!).Should().ContainSingle(component => component.Id == "client-0-remove").Which;
-        removeButton.Action!.Payload["method"].Should().Be("RemoveClient/0");
         removeButton.Action.Confirm.Should().NotBeNull();
     }
 

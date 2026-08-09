@@ -19,7 +19,7 @@ public class SettingsSaveHandlerTests
         FakeConfiguration configuration = new();
         FakeSecretStore secretStore = new();
         SettingsGateway gateway = new(configuration, secretStore);
-        await gateway.SaveAsync(new LoadedSettings(initialSettings, [], []), CancellationToken.None);
+        await gateway.SaveAsync(new LoadedSettings(initialSettings, []), CancellationToken.None);
 
         foreach ((string key, string value) in secrets)
         {
@@ -35,40 +35,9 @@ public class SettingsSaveHandlerTests
 
     // THE data-loss test. A naive implementation - reconstruct settings from only the
     // submitted fields and call SaveAsync directly - passes every other test in this file
-    // and fails only this one, because the general form carries neither an indexer nor a
-    // client: reconstructing "the world" from it alone produces empty Indexers/Clients
-    // lists, and SaveAsync's orphan sweep then deletes every secret whose entry vanished.
-    [Fact]
-    public async Task HandleGeneralAsync_LeavesExistingIndexersClientsAndSecretsIntact()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" }],
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("indexer:Prowlarr:apikey", "prowlarr-key"), ("client:qBit:password", "qbit-password"));
-
-        SaveSettingsRequest request = new()
-        {
-            TransfersCron = "*/2 * * * *",
-            FeedCron = "*/20 * * * *",
-            SearchCron = "0 */3 * * *",
-            MaintenanceCron = "0 5 * * *",
-            IncompleteFolder = "/downloads/incomplete",
-            IntakeFolder = "/downloads/intake",
-        };
-
-        SaveSettingsOutcome outcome = await handler.HandleGeneralAsync(request, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Indexers.Should().ContainSingle(indexer => indexer.Name == "Prowlarr");
-        saved.Clients.Should().ContainSingle(client => client.Name == "qBit");
-        (await secrets.GetAsync("indexer:Prowlarr:apikey", CancellationToken.None)).Should().Be("prowlarr-key");
-        (await secrets.GetAsync("client:qBit:password", CancellationToken.None)).Should().Be("qbit-password");
-    }
-
+    // and fails only this one, because the general form carries no indexer at all:
+    // reconstructing "the world" from it alone produces an empty Indexers list, and
+    // SaveAsync's orphan sweep then deletes every secret whose entry vanished.
     // The old shape could not express this at all: an indexer form only ever posts its own
     // fields (name, kind, url, priority, enabled, minimumIntervalSeconds, categories,
     // apiKey), never a cron field and never an out-of-band "indexerName" - the client's
@@ -105,35 +74,6 @@ public class SettingsSaveHandlerTests
         );
     }
 
-    // Same defect, one section across: a client form's body never carries "clientName"
-    // either, so routing by index has to be enough on its own here too.
-    [Fact]
-    public async Task HandleClientAsync_BodyWithOnlyTheClientFormsFields_StillUpdatesThatClient()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(initial);
-
-        SaveSettingsRequest request = new()
-        {
-            Name = "qBit",
-            Kind = "qbittorrent",
-            Url = "https://qbit.local:8080",
-            Username = "changed",
-            Enabled = true,
-        };
-
-        SaveSettingsOutcome outcome = await handler.HandleClientAsync(0, request, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().ContainSingle(
-            client => client.Name == "qBit" && client.Url == "https://qbit.local:8080" && client.Username == "changed"
-        );
-    }
-
     [Fact]
     public async Task HandleIndexerAsync_OutOfRangeIndexFailsCleanlyWithoutPersisting()
     {
@@ -154,25 +94,6 @@ public class SettingsSaveHandlerTests
     }
 
     [Fact]
-    public async Task HandleClientAsync_OutOfRangeIndexFailsCleanlyWithoutPersisting()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(initial);
-        int savesBefore = configuration.SavedObjects.Count;
-
-        SaveSettingsRequest request = new() { Name = "qBit", Url = "https://qbit.example" };
-
-        SaveSettingsOutcome outcome = await handler.HandleClientAsync(3, request, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeFalse();
-        outcome.Error.Should().Contain("3");
-        configuration.SavedObjects.Should().HaveCount(savesBefore);
-    }
-
-    [Fact]
     public async Task HandleIndexerAsync_NegativeIndexFailsCleanlyWithoutPersisting()
     {
         (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
@@ -184,65 +105,6 @@ public class SettingsSaveHandlerTests
 
         outcome.Succeeded.Should().BeFalse();
         configuration.SavedObjects.Should().HaveCount(savesBefore);
-    }
-
-    // The two things the indexer/client tests below cover were mutants that survived the
-    // whole suite before: making the indexer branch drop every client, and the client
-    // branch drop every indexer, changed no test's result. Same hazard as the general
-    // form's own data-loss case above - a partial submission overwriting a section it
-    // never addressed - one section across.
-    [Fact]
-    public async Task HandleIndexerAsync_LeavesEveryDownloadClientAndItsSecretIntact()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" }],
-            Clients =
-            [
-                new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" },
-                new TorrentClientSettings { Name = "Deluge", Url = "https://deluge.local" },
-            ],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("client:qBit:password", "qbit-password"));
-
-        SaveSettingsRequest request = new() { Name = "Prowlarr", Url = "https://prowlarr.local:9696" };
-
-        SaveSettingsOutcome outcome = await handler.HandleIndexerAsync(0, request, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().HaveCount(2);
-        saved.Clients.Should().Contain(client => client.Name == "qBit");
-        saved.Clients.Should().Contain(client => client.Name == "Deluge");
-        (await secrets.GetAsync("client:qBit:password", CancellationToken.None)).Should().Be("qbit-password");
-    }
-
-    [Fact]
-    public async Task HandleClientAsync_LeavesEveryIndexerAndItsSecretIntact()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Indexers =
-            [
-                new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" },
-                new IndexerSettings { Name = "Jackett", Url = "https://jackett.local" },
-            ],
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("indexer:Prowlarr:apikey", "prowlarr-key"));
-
-        SaveSettingsRequest request = new() { Name = "qBit", Url = "https://qbit.local:8080" };
-
-        SaveSettingsOutcome outcome = await handler.HandleClientAsync(0, request, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Indexers.Should().HaveCount(2);
-        saved.Indexers.Should().Contain(indexer => indexer.Name == "Prowlarr");
-        saved.Indexers.Should().Contain(indexer => indexer.Name == "Jackett");
-        (await secrets.GetAsync("indexer:Prowlarr:apikey", CancellationToken.None)).Should().Be("prowlarr-key");
     }
 
     [Fact]
@@ -722,80 +584,6 @@ public class SettingsSaveHandlerTests
     }
 
     [Fact]
-    public async Task HandleClientAsync_DoesNotDisturbAnotherClientsFieldsOrSecret()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Clients =
-            [
-                new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local", Username = "admin" },
-                new TorrentClientSettings { Name = "Transmission", Url = "https://transmission.local", Username = "root" },
-            ],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("client:Transmission:password", "transmission-password"));
-
-        SaveSettingsRequest request = new()
-        {
-            Name = "qBit",
-            Url = "https://qbit.example",
-            Username = "changed",
-        };
-
-        SaveSettingsOutcome outcome = await handler.HandleClientAsync(0, request, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().ContainSingle(client => client.Name == "qBit" && client.Url == "https://qbit.example" && client.Username == "changed");
-        TorrentClientSettings transmission = saved.Clients.Should().ContainSingle(client => client.Name == "Transmission").Which;
-        transmission.Url.Should().Be("https://transmission.local");
-        transmission.Username.Should().Be("root");
-        (await secrets.GetAsync("client:Transmission:password", CancellationToken.None)).Should().Be("transmission-password");
-    }
-
-    [Fact]
-    public async Task HandleClientAsync_EmptySubmittedPasswordLeavesStoredPasswordInPlace()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("client:qBit:password", "the-original-password"));
-
-        SaveSettingsRequest request = new()
-        {
-            Name = "qBit",
-            Url = "https://qbit.local",
-            Password = string.Empty,
-        };
-
-        await handler.HandleClientAsync(0, request, CancellationToken.None);
-
-        (await secrets.GetAsync("client:qBit:password", CancellationToken.None)).Should().Be("the-original-password");
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().ContainSingle(client => client.Name == "qBit");
-    }
-
-    [Fact]
-    public async Task HandleClientAsync_RejectsANonAbsoluteUrlWithoutPersisting()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(initial);
-        int savesBefore = configuration.SavedObjects.Count;
-
-        SaveSettingsRequest request = new() { Name = "qBit", Url = "not-a-url" };
-
-        SaveSettingsOutcome outcome = await handler.HandleClientAsync(0, request, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeFalse();
-        configuration.SavedObjects.Should().HaveCount(savesBefore);
-    }
-
-    [Fact]
     public async Task HandleAddIndexerAsync_WhenThereAreNoIndexers_AddsExactlyOne()
     {
         (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
@@ -805,18 +593,6 @@ public class SettingsSaveHandlerTests
         outcome.Succeeded.Should().BeTrue();
         TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
         saved.Indexers.Should().ContainSingle();
-    }
-
-    [Fact]
-    public async Task HandleAddClientAsync_WhenThereAreNoClients_AddsExactlyOne()
-    {
-        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
-
-        SaveSettingsOutcome outcome = await handler.HandleAddClientAsync(CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().ContainSingle();
     }
 
     // The collision task 1 exists to avoid: two blank-named indexers derive the exact same
@@ -835,56 +611,6 @@ public class SettingsSaveHandlerTests
         saved.Indexers.Should().HaveCount(2);
         saved.Indexers.Select(indexer => indexer.Name).Should().OnlyHaveUniqueItems();
         saved.Indexers.Should().OnlyContain(indexer => !string.IsNullOrWhiteSpace(indexer.Name));
-    }
-
-    [Fact]
-    public async Task HandleAddClientAsync_CalledTwice_GivesEachEntryAUniqueName()
-    {
-        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
-
-        await handler.HandleAddClientAsync(CancellationToken.None);
-        await handler.HandleAddClientAsync(CancellationToken.None);
-
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().HaveCount(2);
-        saved.Clients.Select(client => client.Name).Should().OnlyHaveUniqueItems();
-        saved.Clients.Should().OnlyContain(client => !string.IsNullOrWhiteSpace(client.Name));
-    }
-
-    [Fact]
-    public async Task HandleAddIndexerAsync_LeavesEveryDownloadClientAndItsSecretIntact()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("client:qBit:password", "qbit-password"));
-
-        SaveSettingsOutcome outcome = await handler.HandleAddIndexerAsync(CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().ContainSingle(client => client.Name == "qBit");
-        (await secrets.GetAsync("client:qBit:password", CancellationToken.None)).Should().Be("qbit-password");
-    }
-
-    [Fact]
-    public async Task HandleAddClientAsync_LeavesEveryIndexerAndItsSecretIntact()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" }],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("indexer:Prowlarr:apikey", "prowlarr-key"));
-
-        SaveSettingsOutcome outcome = await handler.HandleAddClientAsync(CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Indexers.Should().ContainSingle(indexer => indexer.Name == "Prowlarr");
-        (await secrets.GetAsync("indexer:Prowlarr:apikey", CancellationToken.None)).Should().Be("prowlarr-key");
     }
 
     // THE hazard test for removal: SaveAsync's orphan sweep is what actually deletes a
@@ -911,24 +637,6 @@ public class SettingsSaveHandlerTests
         TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
         saved.Indexers.Should().BeEmpty();
         (await secrets.GetAsync("indexer:Prowlarr:apikey", CancellationToken.None)).Should().BeNull();
-    }
-
-    [Fact]
-    public async Task HandleRemoveClientAsync_DeletesTheEntrysStoredSecret()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("client:qBit:password", "the-password"));
-
-        SaveSettingsOutcome outcome = await handler.HandleRemoveClientAsync(0, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().BeEmpty();
-        (await secrets.GetAsync("client:qBit:password", CancellationToken.None)).Should().BeNull();
     }
 
     [Fact]
@@ -969,44 +677,6 @@ public class SettingsSaveHandlerTests
     }
 
     [Fact]
-    public async Task HandleRemoveIndexerAsync_LeavesEveryDownloadClientAndItsSecretIntact()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" }],
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("client:qBit:password", "qbit-password"));
-
-        SaveSettingsOutcome outcome = await handler.HandleRemoveIndexerAsync(0, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Clients.Should().ContainSingle(client => client.Name == "qBit");
-        (await secrets.GetAsync("client:qBit:password", CancellationToken.None)).Should().Be("qbit-password");
-    }
-
-    [Fact]
-    public async Task HandleRemoveClientAsync_LeavesEveryIndexerAndItsSecretIntact()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" }],
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, FakeSecretStore secrets, SettingsSaveHandler handler) =
-            await SeededAsync(initial, ("indexer:Prowlarr:apikey", "prowlarr-key"));
-
-        SaveSettingsOutcome outcome = await handler.HandleRemoveClientAsync(0, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeTrue();
-        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
-        saved.Indexers.Should().ContainSingle(indexer => indexer.Name == "Prowlarr");
-        (await secrets.GetAsync("indexer:Prowlarr:apikey", CancellationToken.None)).Should().Be("prowlarr-key");
-    }
-
-    [Fact]
     public async Task HandleRemoveIndexerAsync_OutOfRangeIndexFailsCleanlyWithoutPersisting()
     {
         TorrentDownloaderSettings initial = new()
@@ -1020,23 +690,6 @@ public class SettingsSaveHandlerTests
 
         outcome.Succeeded.Should().BeFalse();
         outcome.Error.Should().Contain("4");
-        configuration.SavedObjects.Should().HaveCount(savesBefore);
-    }
-
-    [Fact]
-    public async Task HandleRemoveClientAsync_OutOfRangeIndexFailsCleanlyWithoutPersisting()
-    {
-        TorrentDownloaderSettings initial = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local" }],
-        };
-        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(initial);
-        int savesBefore = configuration.SavedObjects.Count;
-
-        SaveSettingsOutcome outcome = await handler.HandleRemoveClientAsync(3, CancellationToken.None);
-
-        outcome.Succeeded.Should().BeFalse();
-        outcome.Error.Should().Contain("3");
         configuration.SavedObjects.Should().HaveCount(savesBefore);
     }
 

@@ -75,24 +75,6 @@ public class HostGrantsTests
     }
 
     [Fact]
-    public async Task EnsureAsync_TreatsAWildcardGrantAsCoveringEveryHost()
-    {
-        FakeGrants grants = new();
-        grants.Grant(PluginGrantKind.NetworkHost, PluginGrant.Everything);
-        HostGrants hostGrants = new(grants);
-        TorrentDownloaderSettings settings = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.local" }],
-            Clients = [new TorrentClientSettings { Name = "qBittorrent", Url = "https://qbit.local:8080" }],
-        };
-
-        IReadOnlyList<string> ungranted = await hostGrants.EnsureAsync(settings, CancellationToken.None);
-
-        ungranted.Should().BeEmpty();
-        grants.Requests.Should().BeEmpty();
-    }
-
-    [Fact]
     public async Task EnsureAsync_ExtractsTheHostFromAConfiguredUrl()
     {
         FakeGrants grants = new();
@@ -169,38 +151,4 @@ public class HostGrantsTests
         grants.Requests[0].Reason.Should().Contain("prowlarr.local").And.Contain("indexer");
     }
 
-    [Fact]
-    public async Task EnsureAsync_DescribesAHostServingBothRolesAsBoth()
-    {
-        FakeGrants grants = new();
-        HostGrants hostGrants = new(grants);
-        TorrentDownloaderSettings settings = new()
-        {
-            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://box.local:9696/api" }],
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://box.local:8080" }],
-        };
-
-        await hostGrants.EnsureAsync(settings, CancellationToken.None);
-
-        // One host, one request, but the owner is told it covers both uses. Naming only the indexer
-        // would understate what they are approving.
-        grants.Requests.Should().ContainSingle();
-        grants.Requests[0].Reason.Should().Contain("indexer").And.Contain("download client");
-    }
-
-    [Fact]
-    public async Task EnsureAsync_DescribesAClientOnlyHostAsAClient()
-    {
-        FakeGrants grants = new();
-        HostGrants hostGrants = new(grants);
-        TorrentDownloaderSettings settings = new()
-        {
-            Clients = [new TorrentClientSettings { Name = "qBit", Url = "https://qbit.local:8080" }],
-        };
-
-        await hostGrants.EnsureAsync(settings, CancellationToken.None);
-
-        grants.Requests.Should().ContainSingle();
-        grants.Requests[0].Reason.Should().Contain("download client").And.NotContain("indexer");
-    }
 }

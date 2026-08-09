@@ -23,26 +23,22 @@ public static class SettingsView
     // The client interpolates CallPlugin's method straight into the request path
     // (plugins/{pluginId}/{method}) and posts the form's own fields as the body, discarding
     // anything else the action intent carried - a PluginForm's submit never forwards the
-    // intent's payload. So an indexer/client form's identity cannot ride in the payload (that
-    // was the defect); it rides in the method string instead, as "SaveIndexer/{index}" /
-    // "SaveClient/{index}", which is why SaveIndexerMethod/SaveClientMethod are the shared
-    // route stems rather than full method names.
+    // intent's payload. So a per-entry form's identity cannot ride in the payload (that was
+    // the defect); it rides in the method string instead, as "SaveIndexer/{index}", which is
+    // why these are shared route stems rather than full method names.
     internal const string SaveSettingsMethod = "SaveSettings";
     internal const string SaveIndexerMethod = "SaveIndexer";
-    internal const string SaveClientMethod = "SaveClient";
     internal const string SavePrivateTrackerMethod = "SavePrivateTracker";
 
     // Add carries no index - it targets no existing entry, so there is nothing for the
-    // route to parameterise. Remove needs one, for the same reason SaveIndexer/SaveClient
-    // do: the client's PluginButton dispatches its action's payload intact (unlike a
+    // route to parameterise. Remove needs one, for the same reason the save routes do:
+    // the client's PluginButton dispatches its action's payload intact (unlike a
     // form), but the index still rides in the method string for consistency with the save
     // routes above, rather than one entry point reading the index from the route and its
     // sibling reading it from the payload.
     internal const string AddIndexerMethod = "AddIndexer";
-    internal const string AddClientMethod = "AddClient";
     internal const string AddPrivateTrackerMethod = "AddPrivateTracker";
     internal const string RemoveIndexerMethod = "RemoveIndexer";
-    internal const string RemoveClientMethod = "RemoveClient";
     internal const string RemovePrivateTrackerMethod = "RemovePrivateTracker";
 
     // Route templates the controller attaches its [HttpPost] to. Built from the same method
@@ -50,10 +46,8 @@ public static class SettingsView
     // per-entry action and the "{method}/{index:int}" route the controller listens on cannot
     // drift into two different stems.
     internal const string SaveIndexerRouteTemplate = SaveIndexerMethod + "/{index:int}";
-    internal const string SaveClientRouteTemplate = SaveClientMethod + "/{index:int}";
     internal const string SavePrivateTrackerRouteTemplate = SavePrivateTrackerMethod + "/{index:int}";
     internal const string RemoveIndexerRouteTemplate = RemoveIndexerMethod + "/{index:int}";
-    internal const string RemoveClientRouteTemplate = RemoveClientMethod + "/{index:int}";
     internal const string RemovePrivateTrackerRouteTemplate = RemovePrivateTrackerMethod + "/{index:int}";
 
     private const string SaveLabel = "Save";
@@ -94,27 +88,6 @@ public static class SettingsView
                     "settings-indexers-empty",
                     "No indexer configured",
                     "Add an indexer so Torrent Downloader knows where to search for releases."
-                )
-            );
-        }
-
-        children.Add(PluginViews.Text("settings-clients-heading", "Download Clients", "subheading"));
-        children.Add(PluginViews.Button("settings-clients-add", "Add download client", PluginActionIntent.CallPlugin(AddClientMethod)));
-        if (settings.Clients.Count > 0)
-        {
-            for (int i = 0; i < settings.Clients.Count; i++)
-            {
-                children.Add(BuildClientForm(i, settings.Clients[i], storedSecretKeys));
-                children.Add(BuildRemoveClientButton(i));
-            }
-        }
-        else
-        {
-            children.Add(
-                PluginViews.EmptyState(
-                    "settings-clients-empty",
-                    "No download client configured",
-                    "Add a torrent client so Torrent Downloader has somewhere to send what it finds."
                 )
             );
         }
@@ -161,7 +134,7 @@ public static class SettingsView
             ? $"Last saved {savedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC"
             : "Not saved yet.";
 
-    // Ids live outside the "settings-indexer-"/"settings-client-" namespace the per-entry
+    // Ids live outside the "settings-indexer-"/"settings-tracker-" namespace the per-entry
     // form uses (settings-indexer-{index}-form) - a component here landing inside that
     // namespace would collide with tests that gather every component by that prefix and
     // then treat every match as a form.
@@ -172,15 +145,6 @@ public static class SettingsView
             PluginActionIntent.CallPlugin($"{RemoveIndexerMethod}/{index}"),
             "Remove this indexer?",
             "This deletes the indexer and its saved API key. This cannot be undone."
-        );
-
-    private static PluginComponent BuildRemoveClientButton(int index) =>
-        PluginViews.DestructiveButton(
-            $"client-{index}-remove",
-            "Remove download client",
-            PluginActionIntent.CallPlugin($"{RemoveClientMethod}/{index}"),
-            "Remove this download client?",
-            "This deletes the client and its saved password. This cannot be undone."
         );
 
     // A badge plus the sentence naming the hosts, so the owner knows a grant prompt they
@@ -273,28 +237,6 @@ public static class SettingsView
             $"settings-indexer-{index}-form",
             SaveLabel,
             PluginActionIntent.CallPlugin($"{SaveIndexerMethod}/{index}"),
-            fields
-        );
-    }
-
-    private static PluginComponent BuildClientForm(int index, TorrentClientSettings client, IReadOnlySet<string> storedSecretKeys)
-    {
-        bool hasStoredPassword = storedSecretKeys.Contains(SettingsGateway.ClientSecretKey(client.Name));
-
-        PluginFormField[] fields =
-        [
-            new() { Name = "name", Label = "Name", Value = client.Name, Required = true },
-            new() { Name = "kind", Label = "Kind", Value = client.Kind },
-            new() { Name = "url", Label = "URL", Value = client.Url, Required = true },
-            new() { Name = "username", Label = "Username", Value = client.Username },
-            new() { Name = "enabled", Label = "Enabled", Type = PluginFormFieldType.Toggle, Value = client.Enabled },
-            BuildSecretField("password", "Password", hasStoredPassword),
-        ];
-
-        return PluginViews.Form(
-            $"settings-client-{index}-form",
-            SaveLabel,
-            PluginActionIntent.CallPlugin($"{SaveClientMethod}/{index}"),
             fields
         );
     }

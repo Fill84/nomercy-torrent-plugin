@@ -84,9 +84,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public Task<SaveSettingsOutcome> SaveIndexerAsync(int index, SaveSettingsRequest request, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleIndexerAsync(index, request, ct));
 
-    public Task<SaveSettingsOutcome> SaveClientAsync(int index, SaveSettingsRequest request, CancellationToken ct = default) =>
-        SaveAsync(handler => handler.HandleClientAsync(index, request, ct));
-
     public Task<SaveSettingsOutcome> SavePrivateTrackerAsync(int index, SaveSettingsRequest request, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandlePrivateTrackerAsync(index, request, ct));
 
@@ -105,14 +102,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public Task<SaveSettingsOutcome> AddIndexerAsync(CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleAddIndexerAsync(ct));
 
-    public Task<SaveSettingsOutcome> AddClientAsync(CancellationToken ct = default) =>
-        SaveAsync(handler => handler.HandleAddClientAsync(ct));
-
     public Task<SaveSettingsOutcome> RemoveIndexerAsync(int index, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleRemoveIndexerAsync(index, ct));
-
-    public Task<SaveSettingsOutcome> RemoveClientAsync(int index, CancellationToken ct = default) =>
-        SaveAsync(handler => handler.HandleRemoveClientAsync(index, ct));
 
     private Task<SaveSettingsOutcome> SaveAsync(Func<SettingsSaveHandler, Task<SaveSettingsOutcome>> handle)
     {

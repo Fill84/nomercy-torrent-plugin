@@ -35,7 +35,6 @@ public class TorrentDownloaderSettings
     public bool AllowSeasonPacks { get; set; } = true;
 
     public List<IndexerSettings> Indexers { get; set; } = [];
-    public List<TorrentClientSettings> Clients { get; set; } = [];
     public List<PrivateTrackerSettings> PrivateTrackers { get; set; } = [];
 
     // Shows to follow that have no episode on the server yet. The plugin otherwise only
@@ -90,12 +89,3 @@ public class PrivateTrackerSettings
     public int SeedTimeTargetHours { get; set; } = 72;
 }
 
-// No Password here, for the same reason.
-public class TorrentClientSettings
-{
-    public string Name { get; set; } = string.Empty;
-    public string Kind { get; set; } = "qbittorrent";
-    public string Url { get; set; } = string.Empty;
-    public string Username { get; set; } = string.Empty;
-    public bool Enabled { get; set; } = true;
-}

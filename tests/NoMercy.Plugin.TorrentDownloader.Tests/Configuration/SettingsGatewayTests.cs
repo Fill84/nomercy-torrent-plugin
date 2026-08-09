@@ -55,7 +55,7 @@ public class SettingsGatewayTests
         SettingsGateway gateway = new(configuration, secretStore);
         TorrentDownloaderSettings settings = new() { IncompleteFolder = "/downloads/incomplete" };
 
-        await gateway.SaveAsync(new LoadedSettings(settings, [], []), CancellationToken.None);
+        await gateway.SaveAsync(new LoadedSettings(settings, []), CancellationToken.None);
 
         configuration.Stored.Should().BeOfType<TorrentDownloaderSettings>();
         ((TorrentDownloaderSettings)configuration.Stored!).IncompleteFolder.Should().Be("/downloads/incomplete");
@@ -70,7 +70,7 @@ public class SettingsGatewayTests
         TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
 
         await gateway.SaveAsync(
-            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", "super-secret-api-key")], []),
+            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", "super-secret-api-key")]),
             CancellationToken.None
         );
 
@@ -88,7 +88,7 @@ public class SettingsGatewayTests
         const string apiKey = "super-secret-api-key-that-must-never-leak";
 
         await gateway.SaveAsync(
-            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", apiKey)], []),
+            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", apiKey)]),
             CancellationToken.None
         );
 
@@ -100,27 +100,6 @@ public class SettingsGatewayTests
     }
 
     [Fact]
-    public async Task SaveAsync_NeverWritesAClientPasswordIntoConfiguration()
-    {
-        FakeConfiguration configuration = new();
-        FakeSecretStore secretStore = new();
-        SettingsGateway gateway = new(configuration, secretStore);
-        TorrentDownloaderSettings settings = new() { Clients = [new TorrentClientSettings { Name = "qBittorrent" }] };
-        const string password = "super-secret-client-password-that-must-never-leak";
-
-        await gateway.SaveAsync(
-            new LoadedSettings(settings, [], [new ClientSecret("qBittorrent", password)]),
-            CancellationToken.None
-        );
-
-        string serialized = string.Join(
-            '\n',
-            configuration.SavedObjects.Select(saved => JsonSerializer.Serialize(saved, saved.GetType()))
-        );
-        serialized.Should().NotContain(password);
-    }
-
-    [Fact]
     public async Task LoadAsync_FillsAnApiKeyBackFromTheSecretStore()
     {
         FakeConfiguration configuration = new();
@@ -128,7 +107,7 @@ public class SettingsGatewayTests
         SettingsGateway gateway = new(configuration, secretStore);
         TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
         await gateway.SaveAsync(
-            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", "the-api-key")], []),
+            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", "the-api-key")]),
             CancellationToken.None
         );
 
@@ -145,7 +124,7 @@ public class SettingsGatewayTests
         SettingsGateway gateway = new(configuration, secretStore);
         TorrentDownloaderSettings withIndexer = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
         await gateway.SaveAsync(
-            new LoadedSettings(withIndexer, [new IndexerSecret("Prowlarr", "the-api-key")], []),
+            new LoadedSettings(withIndexer, [new IndexerSecret("Prowlarr", "the-api-key")]),
             CancellationToken.None
         );
 
@@ -164,12 +143,12 @@ public class SettingsGatewayTests
         SettingsGateway gateway = new(configuration, secretStore);
         TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
         await gateway.SaveAsync(
-            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", "the-original-api-key")], []),
+            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", "the-original-api-key")]),
             CancellationToken.None
         );
 
         await gateway.SaveAsync(
-            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", string.Empty)], []),
+            new LoadedSettings(settings, [new IndexerSecret("Prowlarr", string.Empty)]),
             CancellationToken.None
         );
 
@@ -232,7 +211,6 @@ public class SettingsGatewayTests
         await gateway.SaveAsync(
             new LoadedSettings(
                 settings,
-                [],
                 [],
                 [new PrivateTrackerSecret("RedFish", "https://redfish.test/announce/PASSKEY123", null)]
             ),
@@ -298,12 +276,12 @@ public class SettingsGatewayTests
         };
 
         await gateway.SaveAsync(
-            new LoadedSettings(settings, [], [], [new PrivateTrackerSecret("RedFish", "https://redfish.test/a/KEY", "torznab-key")]),
+            new LoadedSettings(settings, [], [new PrivateTrackerSecret("RedFish", "https://redfish.test/a/KEY", "torznab-key")]),
             CancellationToken.None
         );
 
         // A later save that carries no tracker secrets at all - the general form, say.
-        await gateway.SaveAsync(new LoadedSettings(settings, [], []), CancellationToken.None);
+        await gateway.SaveAsync(new LoadedSettings(settings, []), CancellationToken.None);
 
         (await secretStore.GetAsync("tracker:RedFish:announce", CancellationToken.None)).Should().Be("https://redfish.test/a/KEY");
         (await secretStore.GetAsync("tracker:RedFish:apikey", CancellationToken.None)).Should().Be("torznab-key");
@@ -321,10 +299,10 @@ public class SettingsGatewayTests
         };
 
         await gateway.SaveAsync(
-            new LoadedSettings(withTracker, [], [], [new PrivateTrackerSecret("RedFish", "https://redfish.test/a/KEY", "torznab-key")]),
+            new LoadedSettings(withTracker, [], [new PrivateTrackerSecret("RedFish", "https://redfish.test/a/KEY", "torznab-key")]),
             CancellationToken.None
         );
-        await gateway.SaveAsync(new LoadedSettings(new TorrentDownloaderSettings(), [], []), CancellationToken.None);
+        await gateway.SaveAsync(new LoadedSettings(new TorrentDownloaderSettings(), []), CancellationToken.None);
 
         // A passkey outliving the entry that owned it is a credential nobody is looking
         // after any more.

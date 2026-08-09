@@ -15,8 +15,8 @@ public sealed class HostGrants(IPluginGrants grants)
     public async Task<IReadOnlyList<string>> EnsureAsync(TorrentDownloaderSettings settings, CancellationToken ct = default)
     {
         // The role is tracked per host, not just the host, because the reason string is shown to
-        // the owner and it should say what they are actually approving. One host can serve both an
-        // indexer and a client, so this is a set of roles rather than a single label.
+        // the owner and it should say what they are actually approving. Two indexers can share a
+        // host, so this is a set of roles rather than a single label.
         Dictionary<string, SortedSet<string>> hosts = [];
 
         foreach (IndexerSettings indexer in settings.Indexers)
@@ -27,13 +27,6 @@ public sealed class HostGrants(IPluginGrants grants)
             }
         }
 
-        foreach (TorrentClientSettings client in settings.Clients)
-        {
-            if (client.Enabled && TryGetHost(client.Url, out string clientHost))
-            {
-                AddRole(hosts, clientHost, "a download client");
-            }
-        }
 
         if (hosts.Count == 0)
         {
