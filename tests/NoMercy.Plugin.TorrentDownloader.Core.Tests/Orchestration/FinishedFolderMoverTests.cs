@@ -3,16 +3,13 @@
 
 using FluentAssertions;
 using NoMercy.Plugin.TorrentDownloader.Core.Orchestration;
-using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Orchestration;
 
-public class IntakeHandoffTests
+public class FinishedFolderMoverTests
 {
-    private static readonly EpisodeKey Key = new(1, 1, 1);
-
     private const long BigEnough = 60 * 1024 * 1024;
 
     private static async Task WriteAsync(string path, long length)
@@ -24,7 +21,7 @@ public class IntakeHandoffTests
     }
 
     [Fact]
-    public async Task MoveIntoIntakeAsync_MovesTheEpisodeWhereTheServerWillFindIt()
+    public async Task MoveAsync_MovesTheEpisodeWhereTheServerWillFindIt()
     {
         using TempFolder downloads = new();
         using TempFolder intake = new();
@@ -32,15 +29,15 @@ public class IntakeHandoffTests
         string completed = downloads.File("season");
         await WriteAsync(Path.Combine(completed, "S01E01.mkv"), BigEnough);
 
-        bool moved = await new IntakeHandoff(intake.Path).MoveIntoIntakeAsync(completed, Key, CancellationToken.None);
+        string? moved = await new FinishedFolderMover(intake.Path).MoveAsync(completed, CancellationToken.None);
 
-        moved.Should().BeTrue();
-        File.Exists(Path.Combine(intake.Path, "S01E01.mkv")).Should().BeTrue();
+        moved.Should().Be(Path.Combine(intake.Path, "season"));
+        File.Exists(Path.Combine(intake.Path, "season", "S01E01.mkv")).Should().BeTrue();
         File.Exists(Path.Combine(completed, "S01E01.mkv")).Should().BeFalse();
     }
 
     [Fact]
-    public async Task MoveIntoIntakeAsync_TakesEveryEpisodeInASeasonPack()
+    public async Task MoveAsync_TakesEveryEpisodeInASeasonPack()
     {
         using TempFolder downloads = new();
         using TempFolder intake = new();
@@ -49,13 +46,13 @@ public class IntakeHandoffTests
         await WriteAsync(Path.Combine(completed, "S01E01.mkv"), BigEnough);
         await WriteAsync(Path.Combine(completed, "S01E02.mkv"), BigEnough);
 
-        await new IntakeHandoff(intake.Path).MoveIntoIntakeAsync(completed, Key, CancellationToken.None);
+        await new FinishedFolderMover(intake.Path).MoveAsync(completed, CancellationToken.None);
 
-        Directory.GetFiles(intake.Path).Should().HaveCount(2);
+        Directory.GetFiles(Path.Combine(intake.Path, "season")).Should().HaveCount(2);
     }
 
     [Fact]
-    public async Task MoveIntoIntakeAsync_LeavesTheJunkThatCameWithIt()
+    public async Task MoveAsync_LeavesTheJunkThatCameWithIt()
     {
         using TempFolder downloads = new();
         using TempFolder intake = new();
@@ -69,14 +66,15 @@ public class IntakeHandoffTests
         // import a two-minute clip as the show.
         await WriteAsync(Path.Combine(completed, "sample", "sample.mkv"), 5 * 1024 * 1024);
 
-        await new IntakeHandoff(intake.Path).MoveIntoIntakeAsync(completed, Key, CancellationToken.None);
+        await new FinishedFolderMover(intake.Path).MoveAsync(completed, CancellationToken.None);
 
-        Directory.GetFiles(intake.Path).Should().ContainSingle();
-        Path.GetFileName(Directory.GetFiles(intake.Path)[0]).Should().Be("S01E01.mkv");
+        string[] moved = Directory.GetFiles(Path.Combine(intake.Path, "season"));
+        moved.Should().ContainSingle();
+        Path.GetFileName(moved[0]).Should().Be("S01E01.mkv");
     }
 
     [Fact]
-    public async Task MoveIntoIntakeAsync_FindsAnEpisodeNestedInASubfolder()
+    public async Task MoveAsync_FindsAnEpisodeNestedInASubfolder()
     {
         using TempFolder downloads = new();
         using TempFolder intake = new();
@@ -84,14 +82,14 @@ public class IntakeHandoffTests
         string completed = downloads.File("season");
         await WriteAsync(Path.Combine(completed, "Season 01", "S01E01.mkv"), BigEnough);
 
-        (await new IntakeHandoff(intake.Path).MoveIntoIntakeAsync(completed, Key, CancellationToken.None))
-            .Should().BeTrue();
+        (await new FinishedFolderMover(intake.Path).MoveAsync(completed, CancellationToken.None))
+            .Should().NotBeNull();
 
-        File.Exists(Path.Combine(intake.Path, "S01E01.mkv")).Should().BeTrue();
+        File.Exists(Path.Combine(intake.Path, "season", "S01E01.mkv")).Should().BeTrue();
     }
 
     [Fact]
-    public async Task MoveIntoIntakeAsync_SaysNoWhenThereIsNoVideoAtAll()
+    public async Task MoveAsync_SaysNoWhenThereIsNoVideoAtAll()
     {
         using TempFolder downloads = new();
         using TempFolder intake = new();
@@ -101,21 +99,21 @@ public class IntakeHandoffTests
 
         // Saying no leaves the grab unfinished, which is right: something arrived that
         // is not what was asked for, and pretending otherwise hides it.
-        (await new IntakeHandoff(intake.Path).MoveIntoIntakeAsync(completed, Key, CancellationToken.None))
-            .Should().BeFalse();
+        (await new FinishedFolderMover(intake.Path).MoveAsync(completed, CancellationToken.None))
+            .Should().BeNull();
     }
 
     [Fact]
-    public async Task MoveIntoIntakeAsync_SaysNoWhenTheFolderIsNotThere()
+    public async Task MoveAsync_SaysNoWhenTheFolderIsNotThere()
     {
         using TempFolder intake = new();
 
-        (await new IntakeHandoff(intake.Path).MoveIntoIntakeAsync("/nowhere/at/all", Key, CancellationToken.None))
-            .Should().BeFalse();
+        (await new FinishedFolderMover(intake.Path).MoveAsync("/nowhere/at/all", CancellationToken.None))
+            .Should().BeNull();
     }
 
     [Fact]
-    public async Task MoveIntoIntakeAsync_NeverOverwritesSomethingAlreadyWaiting()
+    public async Task MoveAsync_NeverOverwritesSomethingAlreadyWaiting()
     {
         using TempFolder downloads = new();
         using TempFolder intake = new();
@@ -124,7 +122,7 @@ public class IntakeHandoffTests
         await WriteAsync(Path.Combine(completed, "S01E01.mkv"), BigEnough);
         await File.WriteAllTextAsync(Path.Combine(intake.Path, "S01E01.mkv"), "somebody else's file");
 
-        await new IntakeHandoff(intake.Path).MoveIntoIntakeAsync(completed, Key, CancellationToken.None);
+        await new FinishedFolderMover(intake.Path).MoveAsync(completed, CancellationToken.None);
 
         // Whatever is already there is either a half-finished earlier attempt or somebody
         // else's, and both are worse to clobber than to leave alone.
@@ -132,7 +130,7 @@ public class IntakeHandoffTests
     }
 
     [Fact]
-    public async Task MoveIntoIntakeAsync_CreatesTheIntakeFolderIfItIsNotThereYet()
+    public async Task MoveAsync_CreatesTheIntakeFolderIfItIsNotThereYet()
     {
         using TempFolder downloads = new();
         using TempFolder parent = new();
@@ -141,9 +139,9 @@ public class IntakeHandoffTests
         string completed = downloads.File("season");
         await WriteAsync(Path.Combine(completed, "S01E01.mkv"), BigEnough);
 
-        (await new IntakeHandoff(intake).MoveIntoIntakeAsync(completed, Key, CancellationToken.None))
-            .Should().BeTrue();
+        (await new FinishedFolderMover(intake).MoveAsync(completed, CancellationToken.None))
+            .Should().NotBeNull();
 
-        File.Exists(Path.Combine(intake, "S01E01.mkv")).Should().BeTrue();
+        File.Exists(Path.Combine(intake, "season", "S01E01.mkv")).Should().BeTrue();
     }
 }

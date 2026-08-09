@@ -77,16 +77,22 @@ public sealed class HttpTorrentFileFetcher(HttpClient client) : ITorrentFileFetc
 }
 
 /// <summary>
-/// Moving a finished download to where the server will import it.
+/// Moving a finished download into the folder the owner nominated.
 ///
 /// <para>
-/// The plugin's job ends here. It puts video files in the intake folder and the
-/// server's own watcher takes over - which is why this returns a bool rather than
-/// throwing: a move that did not happen leaves the grab unfinished, and the next cycle
-/// tries again.
+/// One folder per download, named after the release, rather than the video files loose
+/// in the finished folder. The server scans a folder and takes the first media folder it
+/// finds, so two downloads sitting side by side would make it pick one and import the
+/// wrong show. The folder name is also what the title lookup reads.
+/// </para>
+///
+/// <para>
+/// Returns the folder it created, or null when the move did not happen - which leaves
+/// the grab unfinished so the next cycle tries again. Nothing here throws: an incomplete
+/// handoff is never recorded as a finished one.
 /// </para>
 /// </summary>
-public sealed class IntakeHandoff(string intakeFolder) : IIntakeHandoff
+public sealed class FinishedFolderMover(string finishedFolder)
 {
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -96,12 +102,12 @@ public sealed class IntakeHandoff(string intakeFolder) : IIntakeHandoff
     /// <summary>Samples and extras are not the episode. Moving them makes the server import junk.</summary>
     private const long SmallestPlausibleEpisodeBytes = 50 * 1024 * 1024;
 
-    public async Task<bool> MoveIntoIntakeAsync(string completedFolder, EpisodeKey key, CancellationToken ct)
+    public async Task<string?> MoveAsync(string completedFolder, CancellationToken ct)
     {
         try
         {
             if (!Directory.Exists(completedFolder))
-                return false;
+                return null;
 
             List<FileInfo> videos =
             [
@@ -113,13 +119,16 @@ public sealed class IntakeHandoff(string intakeFolder) : IIntakeHandoff
             ];
 
             if (videos.Count == 0)
-                return false;
+                return null;
 
-            Directory.CreateDirectory(intakeFolder);
+            // Named after the download, because that name is the release name and the
+            // server reads it to work out what this is.
+            string destinationFolder = Path.Combine(finishedFolder, new DirectoryInfo(completedFolder).Name);
+            Directory.CreateDirectory(destinationFolder);
 
             foreach (FileInfo video in videos)
             {
-                string destination = Path.Combine(intakeFolder, video.Name);
+                string destination = Path.Combine(destinationFolder, video.Name);
 
                 // Never overwrite. Something already there is either this file from a
                 // half-finished earlier attempt or somebody else's, and both are worse
@@ -132,13 +141,11 @@ public sealed class IntakeHandoff(string intakeFolder) : IIntakeHandoff
 
             await Task.CompletedTask;
 
-            return true;
+            return destinationFolder;
         }
         catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
         {
-            // The grab stays unfinished and the next cycle retries. An incomplete handoff
-            // is never recorded as a finished one.
-            return false;
+            return null;
         }
     }
 }

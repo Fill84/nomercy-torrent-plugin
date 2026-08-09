@@ -60,7 +60,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             : settings.IncompleteFolder;
 
         string intake = string.IsNullOrWhiteSpace(settings.IntakeFolder)
-            ? Path.Combine(context.DataFolderPath, "intake")
+            ? Path.Combine(context.DataFolderPath, "finished")
             : settings.IntakeFolder;
 
         TorrentEngine engine = new(
@@ -83,7 +83,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new AggregatorReleaseSearch(new IndexerAggregator(Indexers(context, loaded))),
             new ProfileReleaseChooser(ProfileFor(settings)),
             engine,
-            new IntakeHandoff(intake),
+            new LibraryImportHandoff(new FinishedFolderMover(intake), context.Library, context.EventBus, context.Logger),
             new OrchestratorOptions
             {
                 DownloadFolder = downloads,

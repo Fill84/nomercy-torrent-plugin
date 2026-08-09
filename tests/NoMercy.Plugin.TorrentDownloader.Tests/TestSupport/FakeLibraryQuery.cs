@@ -33,8 +33,13 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
     {
         GetShowsCallCount++;
 
-        List<PluginLibraryShow> shows =
-            libraryId is not null && ShowsByLibraryId.TryGetValue(libraryId, out List<PluginLibraryShow>? found)
+        // No library id means every show, which is what the contract says: "Shows,
+        // optionally narrowed to one library". Returning nothing for the un-narrowed
+        // call made this double disagree with the thing it stands in for, and a caller
+        // that asked the honest way got an empty library.
+        List<PluginLibraryShow> shows = libraryId is null
+            ? [.. ShowsByLibraryId.Values.SelectMany(entry => entry)]
+            : ShowsByLibraryId.TryGetValue(libraryId, out List<PluginLibraryShow>? found)
                 ? found
                 : [];
 
