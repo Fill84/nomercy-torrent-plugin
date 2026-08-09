@@ -3,7 +3,9 @@
 
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Adapters;
 using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
+using NoMercy.Plugin.TorrentDownloader.Core.Library;
 using NoMercy.Plugin.TorrentDownloader.Core.Orchestration;
 using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -93,6 +95,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     public Task<SaveSettingsOutcome> RemovePrivateTrackerAsync(int index, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleRemovePrivateTrackerAsync(index, ct));
+
+    public Task<SaveSettingsOutcome> FollowShowAsync(int showId, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleFollowShowAsync(showId, ct));
+
+    public Task<SaveSettingsOutcome> UnfollowShowAsync(int showId, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleUnfollowShowAsync(showId, ct));
 
     public Task<SaveSettingsOutcome> AddIndexerAsync(CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleAddIndexerAsync(ct));
@@ -472,7 +480,37 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // store answers from memory, so the cost of the full list is the allocation.
         IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(int.MaxValue, ct);
 
-        return DownloadsView.Build(transfers, grabs, wanted);
+        return DownloadsView.Build(transfers, grabs, wanted, await UnstartedShowsAsync(context, ct));
+    }
+
+    /// <summary>
+    /// The shows this plugin is leaving alone, so the page can offer to stop leaving them
+    /// alone. Reads the library, which is what the page needs and the store cannot say:
+    /// the store only remembers shows the plugin already follows.
+    /// </summary>
+    private async Task<IReadOnlyList<DownloadsView.FollowableShow>> UnstartedShowsAsync(IPluginContext context, CancellationToken ct)
+    {
+        TorrentDownloaderSettings settings = ReadSettingsOrDefault();
+        HashSet<int> followed = [.. settings.FollowedShowIds];
+
+        PluginLibraryQueryAdapter library = new(context.Library);
+        List<DownloadsView.FollowableShow> unstarted = [];
+
+        foreach (LibraryShow show in await library.GetShowsAsync(ct))
+        {
+            if (show.Folder is null)
+                continue;
+
+            // The have-count is the host's own summary and is enough here: this list is a
+            // prompt, not a decision. RefreshWantedAsync reads the episodes themselves,
+            // because that one IS the decision and has to agree with itself.
+            if (show.HaveEpisodeCount > 0)
+                continue;
+
+            unstarted.Add(new DownloadsView.FollowableShow(show.ShowId, show.Title, followed.Contains(show.ShowId)));
+        }
+
+        return unstarted;
     }
 
     // Null-safe before Initialize (the host may dispose a plugin whose load failed) and

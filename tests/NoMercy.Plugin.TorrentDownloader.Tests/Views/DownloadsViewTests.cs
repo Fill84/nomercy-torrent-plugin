@@ -110,6 +110,37 @@ public class DownloadsViewTests
     }
 
     [Fact]
+    public void Build_OffersToFollowAShowWithNothingOnTheServer()
+    {
+        PluginView view = DownloadsView.Build([], [], [], [new DownloadsView.FollowableShow(42, "Never Watched", Followed: false)]);
+
+        PluginComponent button = PluginNodes.All(view).Should()
+            .ContainSingle(node => node.Id == "downloads-follow-42").Which;
+
+        button.Action!.Payload["method"].Should().Be("FollowShow/42");
+        TextOf(view).Should().Contain("Never Watched");
+    }
+
+    [Fact]
+    public void Build_OffersToStopFollowingAShowItIsAlreadyFollowing()
+    {
+        PluginView view = DownloadsView.Build([], [], [], [new DownloadsView.FollowableShow(42, "Asked For", Followed: true)]);
+
+        PluginNodes.All(view).Should().ContainSingle(node => node.Id == "downloads-unfollow-42");
+        PluginNodes.All(view).Should().NotContain(node => node.Id == "downloads-follow-42");
+    }
+
+    // A library where every show has files is the normal case, and a heading over an
+    // empty list reads as something being broken.
+    [Fact]
+    public void Build_SaysNothingAboutUnstartedShowsWhenThereAreNone()
+    {
+        PluginView view = DownloadsView.Build([], [], []);
+
+        PluginNodes.All(view).Should().NotContain(node => node.Id == "downloads-unstarted-heading");
+    }
+
+    [Fact]
     public void Build_AsksTheClientToComeBackBecauseTheseNumbersMove()
     {
         PluginView view = DownloadsView.Build(

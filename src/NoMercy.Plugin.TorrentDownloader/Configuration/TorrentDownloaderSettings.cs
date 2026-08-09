@@ -38,6 +38,14 @@ public class TorrentDownloaderSettings
     public List<TorrentClientSettings> Clients { get; set; } = [];
     public List<PrivateTrackerSettings> PrivateTrackers { get; set; } = [];
 
+    // Shows to follow that have no episode on the server yet. The plugin otherwise only
+    // finishes what somebody already started by hand, which is a coherent tool and not
+    // the one anybody wants - see the "monitored" section of the design spec.
+    //
+    // Ids rather than titles: a title is the thing the owner renames, and the library
+    // keys on the id everywhere else in this plugin.
+    public List<int> FollowedShowIds { get; set; } = [];
+
     // Set by SettingsSaveHandler on every successful save/add/remove, never by a form
     // field - it exists so the settings page has a visible sign a save actually reached
     // disk, since the client discards a successful action's response body entirely and

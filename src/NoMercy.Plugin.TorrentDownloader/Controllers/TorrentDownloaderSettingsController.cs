@@ -54,6 +54,16 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
     public Task<IActionResult> RemovePrivateTracker(int index, CancellationToken ct) =>
         RespondAsync(plugin => plugin.RemovePrivateTrackerAsync(index, ct));
 
+    // Keyed by the library's show id, not a render index: the downloads page is the only
+    // caller and the list it renders changes shape the moment a show is followed.
+    [HttpPost(DownloadsView.FollowShowRouteTemplate)]
+    public Task<IActionResult> FollowShow(int showId, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.FollowShowAsync(showId, ct));
+
+    [HttpPost(DownloadsView.UnfollowShowRouteTemplate)]
+    public Task<IActionResult> UnfollowShow(int showId, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.UnfollowShowAsync(showId, ct));
+
     [HttpPost(SettingsView.AddIndexerMethod)]
     public Task<IActionResult> AddIndexer(CancellationToken ct) =>
         RespondAsync(plugin => plugin.AddIndexerAsync(ct));

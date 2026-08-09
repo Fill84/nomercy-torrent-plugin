@@ -268,6 +268,51 @@ public class SettingsSaveHandlerTests
         saved.IntakeFolder.Should().Be("/downloads/intake");
     }
 
+    // --- following a show ----------------------------------------------------------
+
+    [Fact]
+    public async Task HandleFollowShowAsync_RemembersTheShowAndThenForgetsItAgain()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleFollowShowAsync(42, CancellationToken.None);
+        ((TorrentDownloaderSettings)configuration.Stored!).FollowedShowIds.Should().Equal(42);
+
+        await handler.HandleUnfollowShowAsync(42, CancellationToken.None);
+        ((TorrentDownloaderSettings)configuration.Stored!).FollowedShowIds.Should().BeEmpty();
+    }
+
+    // The page these buttons live on refreshes on a timer, so it can be a moment behind
+    // the truth and the owner can press twice. Neither direction is an error.
+    [Fact]
+    public async Task HandleFollowShowAsync_IsSafeToPressTwice()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleFollowShowAsync(42, CancellationToken.None);
+        await handler.HandleFollowShowAsync(42, CancellationToken.None);
+        SaveSettingsOutcome extra = await handler.HandleUnfollowShowAsync(99, CancellationToken.None);
+
+        extra.Succeeded.Should().BeTrue();
+        ((TorrentDownloaderSettings)configuration.Stored!).FollowedShowIds.Should().Equal(42);
+    }
+
+    [Fact]
+    public async Task HandleFollowShowAsync_LeavesTheRestOfTheSettingsAlone()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings
+        {
+            IncludeSpecials = true,
+            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.test" }],
+        });
+
+        await handler.HandleFollowShowAsync(42, CancellationToken.None);
+
+        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
+        saved.IncludeSpecials.Should().BeTrue();
+        saved.Indexers.Should().ContainSingle();
+    }
+
     // --- private trackers ---------------------------------------------------------
 
     [Fact]

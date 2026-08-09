@@ -92,6 +92,40 @@ public class DownloadOrchestratorTests
         (await _store.WantedAsync(10, CancellationToken.None)).Should().BeEmpty();
     }
 
+    // The counterpart of the shelf rule: without this the plugin can only ever finish a
+    // show somebody already started by hand, and can never begin one.
+    [Fact]
+    public async Task RefreshWantedAsync_FollowsAShowWithNothingOnTheServerWhenItWasAskedTo()
+    {
+        _library.Add(showId: 7, "Asked For", folder: "/media/asked", episodes: [(1, 1, false), (1, 2, false)]);
+
+        WantedRefresh refresh = await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            FollowedShowIds = [7],
+        }).RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(2);
+        refresh.ShowsFollowed.Should().Be(1);
+        refresh.ShowsNotStarted.Should().Be(0, "it was asked for, so it is not being left alone");
+    }
+
+    [Fact]
+    public async Task RefreshWantedAsync_StillLeavesAloneAShowThatWasNotAskedFor()
+    {
+        _library.Add(showId: 7, "Asked For", folder: "/media/asked", episodes: [(1, 1, false)]);
+        _library.Add(showId: 8, "Not Asked For", folder: "/media/not", episodes: [(1, 1, false)]);
+
+        WantedRefresh refresh = await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            FollowedShowIds = [7],
+        }).RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(1);
+        refresh.ShowsNotStarted.Should().Be(1);
+    }
+
     // Skipping quietly is how a user concludes the plugin is broken. The counts are what
     // the log line is built from.
     [Fact]

@@ -84,7 +84,12 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new ProfileReleaseChooser(ProfileFor(settings)),
             engine,
             new IntakeHandoff(intake),
-            new OrchestratorOptions { DownloadFolder = downloads, IncludeSpecials = settings.IncludeSpecials },
+            new OrchestratorOptions
+            {
+                DownloadFolder = downloads,
+                IncludeSpecials = settings.IncludeSpecials,
+                FollowedShowIds = settings.FollowedShowIds,
+            },
 
             PrivateTrackers(context, loaded),
             () => DateTimeOffset.UtcNow);

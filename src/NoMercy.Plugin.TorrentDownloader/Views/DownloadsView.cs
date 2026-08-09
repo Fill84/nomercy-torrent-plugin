@@ -32,10 +32,26 @@ public static class DownloadsView
     /// </summary>
     public const int RefreshSeconds = 30;
 
+    internal const string FollowShowMethod = "FollowShow";
+    internal const string UnfollowShowMethod = "UnfollowShow";
+
+    internal const string FollowShowRouteTemplate = FollowShowMethod + "/{showId:int}";
+    internal const string UnfollowShowRouteTemplate = UnfollowShowMethod + "/{showId:int}";
+
+    /// <summary>A show the library knows about, and whether this plugin is following it.</summary>
+    public sealed record FollowableShow(int ShowId, string Title, bool Followed);
+
     public static PluginView Build(
         IReadOnlyList<Transfer> transfers,
         IReadOnlyList<Grab> grabs,
         IReadOnlyList<WantedEpisode> wanted)
+        => Build(transfers, grabs, wanted, []);
+
+    public static PluginView Build(
+        IReadOnlyList<Transfer> transfers,
+        IReadOnlyList<Grab> grabs,
+        IReadOnlyList<WantedEpisode> wanted,
+        IReadOnlyList<FollowableShow> unstartedShows)
     {
         Dictionary<string, Grab> byHash = grabs
             .GroupBy(grab => grab.InfoHash)
@@ -49,6 +65,19 @@ public static class DownloadsView
             PluginViews.Text("downloads-queue-heading", QueueHeading(wanted), "subheading"),
             Queue(wanted),
         ];
+
+        if (unstartedShows.Count > 0)
+        {
+            children.Add(PluginViews.Text("downloads-unstarted-heading", "Not started", "subheading"));
+            children.Add(
+                PluginViews.Text(
+                    "downloads-unstarted-explainer",
+                    "These shows have no episode on the server, so nothing is downloaded for them. Follow one and it joins the queue.",
+                    "caption"
+                )
+            );
+            children.Add(Unstarted(unstartedShows));
+        }
 
         return PluginViews.Declarative(RefreshSeconds, PluginViews.Container("downloads-root", [.. children]));
     }
@@ -108,6 +137,38 @@ public static class DownloadsView
         }
 
         return PluginViews.List("downloads-queue", [.. rows]);
+    }
+
+    /// <summary>
+    /// The shows the plugin is leaving alone, each with the one button that changes that.
+    ///
+    /// <para>
+    /// The counterpart of the rule that keeps a first run from being a thousand
+    /// downloads: the rule is right, and without somewhere to say "except this one" it
+    /// means the plugin can never start a show at all. This is that somewhere.
+    /// </para>
+    /// </summary>
+    private static PluginComponent Unstarted(IReadOnlyList<FollowableShow> shows)
+    {
+        List<PluginComponent> rows = [];
+
+        foreach (FollowableShow show in shows.OrderBy(show => show.Title, StringComparer.CurrentCultureIgnoreCase))
+        {
+            rows.Add(PluginViews.Row(
+                $"downloads-unstarted-{show.ShowId}",
+                PluginViews.Text($"downloads-unstarted-title-{show.ShowId}", show.Title),
+                show.Followed
+                    ? PluginViews.Button(
+                        $"downloads-unfollow-{show.ShowId}",
+                        "Stop following",
+                        PluginActionIntent.CallPlugin($"{UnfollowShowMethod}/{show.ShowId}"))
+                    : PluginViews.Button(
+                        $"downloads-follow-{show.ShowId}",
+                        "Follow",
+                        PluginActionIntent.CallPlugin($"{FollowShowMethod}/{show.ShowId}"))));
+        }
+
+        return PluginViews.List("downloads-unstarted", [.. rows]);
     }
 
     private static PluginComponent StateBadge(WantedEpisode episode) =>

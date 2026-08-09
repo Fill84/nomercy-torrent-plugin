@@ -257,15 +257,23 @@ public class PluginLifecycleTests
     {
         TorrentDownloaderPlugin plugin = new();
         FakePluginContext context = new();
+
+        // A configured indexer host is what makes this observable: building the pipeline
+        // asks the host for access to it, and that request is recorded. The page reads
+        // settings of its own now - which shows the owner follows - so a settings read is
+        // no longer the signal. This is.
+        context.Configuration.Stored = new TorrentDownloaderSettings
+        {
+            Indexers = [new IndexerSettings { Name = "Prowlarr", Url = "https://prowlarr.test", Enabled = true }],
+        };
         await SeedStoreAsync(context);
         plugin.Initialize(context);
 
         await plugin.GetViewAsync(new PluginViewRequest { Route = "/downloads" }, CancellationToken.None);
 
-        // Opening a page must not start a BitTorrent engine. Building the pipeline reads
-        // the settings first, so a settings read here means the render did exactly that -
-        // and someone browsing the dashboard would be dialling peers without a tick.
-        context.Configuration.Reads.Should().Be(0);
+        // Opening a page must not start a BitTorrent engine: someone browsing the
+        // dashboard would be dialling peers without a tick having run.
+        context.Grants.Requests.Should().BeEmpty("only building the pipeline asks for host access");
         context.HttpHandler.Requests.Should().BeEmpty();
     }
 

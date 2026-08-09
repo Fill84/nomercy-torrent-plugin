@@ -81,6 +81,17 @@ public sealed record OrchestratorOptions
     /// </summary>
     public bool IncludeSpecials { get; init; }
 
+    /// <summary>
+    /// Shows to follow even though nothing of them is on the server yet.
+    ///
+    /// <para>
+    /// The counterpart of the shelf rule. Without it the plugin can only ever finish a
+    /// show somebody already started by hand, and can never begin one - which is a
+    /// perfectly coherent tool and not the one anybody wants.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<int> FollowedShowIds { get; init; } = [];
+
     public required string DownloadFolder { get; init; }
 }
 
@@ -137,6 +148,7 @@ public sealed class DownloadOrchestrator(
     public async Task<WantedRefresh> RefreshWantedAsync(CancellationToken ct)
     {
         List<WantedEpisode> missing = [];
+        HashSet<int> askedFor = [.. options.FollowedShowIds];
         int followed = 0;
         int notStarted = 0;
 
@@ -152,7 +164,7 @@ public sealed class DownloadOrchestrator(
             // Read from the episodes rather than the show's own have-count: both come
             // from the host, and the one this loop already trusts to decide "missing"
             // is the one that should decide "started", or the two can disagree.
-            if (!episodes.Any(episode => episode.HasFile))
+            if (!episodes.Any(episode => episode.HasFile) && !askedFor.Contains(show.ShowId))
             {
                 notStarted++;
                 continue;

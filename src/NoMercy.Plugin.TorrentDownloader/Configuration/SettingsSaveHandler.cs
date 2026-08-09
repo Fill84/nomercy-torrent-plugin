@@ -69,6 +69,22 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         return await PersistIfSucceededAsync(ApplyRemovePrivateTracker(current, index), ct);
     }
 
+    // Keyed by the library's show id rather than by a render index, unlike every other
+    // entry point here: this one is not editing a row the plugin owns, it is naming a
+    // show the library owns. An index would be an index into a list that changes shape
+    // the moment the show is followed and leaves the "not started" list.
+    public async Task<SaveSettingsOutcome> HandleFollowShowAsync(int showId, CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyFollowShow(current, showId, follow: true), ct);
+    }
+
+    public async Task<SaveSettingsOutcome> HandleUnfollowShowAsync(int showId, CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+        return await PersistIfSucceededAsync(ApplyFollowShow(current, showId, follow: false), ct);
+    }
+
     public async Task<SaveSettingsOutcome> HandleRemoveIndexerAsync(int index, CancellationToken ct = default)
     {
         LoadedSettings current = await gateway.LoadAsync(ct);
@@ -421,6 +437,29 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
     }
 
+    // Idempotent in both directions on purpose. These are driven by a button on a page
+    // that may be a refresh interval behind the truth, so following a show twice, or
+    // unfollowing one that is not followed, is an ordinary race and not an error worth
+    // showing anybody.
+    private static SaveSettingsOutcome ApplyFollowShow(LoadedSettings current, int showId, bool follow)
+    {
+        List<int> followed = [.. current.Settings.FollowedShowIds];
+
+        if (follow && !followed.Contains(showId))
+        {
+            followed.Add(showId);
+        }
+        else if (!follow)
+        {
+            followed.Remove(showId);
+        }
+
+        TorrentDownloaderSettings merged = Clone(current.Settings);
+        merged.FollowedShowIds = followed;
+
+        return SaveSettingsOutcome.Success(new LoadedSettings(merged, [], []));
+    }
+
     private static bool IsAbsoluteUrl(string? url) =>
         !string.IsNullOrWhiteSpace(url) && Uri.TryCreate(url, UriKind.Absolute, out _);
 
@@ -455,5 +494,6 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             Indexers = source.Indexers,
             Clients = source.Clients,
             PrivateTrackers = source.PrivateTrackers,
+            FollowedShowIds = source.FollowedShowIds,
         };
 }
