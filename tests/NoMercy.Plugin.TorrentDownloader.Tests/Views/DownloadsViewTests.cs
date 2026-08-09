@@ -89,6 +89,26 @@ public class DownloadsViewTests
         text.Should().Contain("S01E02").And.NotContain("1 S01E02");
     }
 
+    // A pack row labelled with the single episode that triggered it reads as one episode
+    // arriving, which is wrong about both the bytes and the wait.
+    [Fact]
+    public void Build_SaysHowManyEpisodesAPackIsBringing()
+    {
+        Grab pack = Grab("abc", 1, "Some.Show.S01.1080p") with
+        {
+            Covers =
+            [
+                new EpisodeKey(1, 1, 1),
+                new EpisodeKey(1, 1, 2),
+                new EpisodeKey(1, 1, 3),
+            ],
+        };
+
+        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [pack], []);
+
+        TextOf(view).Should().Contain("3 episodes").And.NotContain("S01E01");
+    }
+
     [Fact]
     public void Build_AsksTheClientToComeBackBecauseTheseNumbersMove()
     {

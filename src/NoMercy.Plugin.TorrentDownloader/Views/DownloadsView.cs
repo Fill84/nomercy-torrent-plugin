@@ -64,7 +64,7 @@ public static class DownloadsView
             rows.Add(PluginViews.Row(
                 $"downloads-row-{transfer.InfoHash}",
                 PluginViews.Text($"downloads-title-{transfer.InfoHash}", grab?.ReleaseTitle ?? transfer.InfoHash),
-                PluginViews.Text($"downloads-episode-{transfer.InfoHash}", grab is null ? "" : Slot(grab.Key), "caption"),
+                PluginViews.Text($"downloads-episode-{transfer.InfoHash}", grab is null ? "" : Covers(grab), "caption"),
                 PluginViews.Progress($"downloads-progress-{transfer.InfoHash}", transfer.Progress),
 
                 // The percentage as its own text rather than only a label on the bar: a
@@ -129,6 +129,20 @@ public static class DownloadsView
                 WantedState.Grabbed => PluginBadgeVariant.Success,
                 _ => PluginBadgeVariant.Neutral,
             });
+
+    /// <summary>
+    /// What this download is bringing.
+    ///
+    /// <para>
+    /// A season pack labelled with the one episode that triggered it reads as a single
+    /// episode arriving, which misleads about both the size of the download and how much
+    /// of the queue it is about to clear.
+    /// </para>
+    /// </summary>
+    private static string Covers(Grab grab) =>
+        grab.Covered.Count > 1
+            ? $"{grab.Covered.Count} episodes"
+            : Slot(grab.Key);
 
     /// <summary>
     /// Which episode, for a reader.
