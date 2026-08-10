@@ -112,6 +112,27 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             ct);
 
     /// <summary>
+    /// Lifts a skip, so the release can be chosen again.
+    ///
+    /// <para>
+    /// Straight to the store rather than through the pipeline: nothing is running that
+    /// needs telling, and a page that only wants to forget something should not be what
+    /// starts an engine.
+    /// </para>
+    /// </summary>
+    public async Task<SaveSettingsOutcome> AllowReleaseAsync(string handle, CancellationToken ct = default)
+    {
+        if (_disposed || _context is null)
+            return SaveSettingsOutcome.Failure("Torrent Downloader is unavailable.");
+
+        IDownloadStore store = await StoreAsync(_context, ct);
+
+        return await store.AllowAgainAsync(handle, ct)
+            ? SaveSettingsOutcome.Done("Allowed again. It can be picked on the next search.")
+            : SaveSettingsOutcome.Failure("That release is not being skipped any more.");
+    }
+
+    /// <summary>
     /// A button on the downloads page, applied to the running engine.
     ///
     /// <para>
@@ -539,7 +560,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             grabs,
             wanted,
             await UnstartedShowsAsync(store, ct),
-            await store.HistoryAsync(DownloadsView.HistoryLimit, ct));
+            await store.HistoryAsync(DownloadsView.HistoryLimit, ct),
+            await store.BlacklistedAsync(_clock.UtcNow, ct));
     }
 
     /// <summary>

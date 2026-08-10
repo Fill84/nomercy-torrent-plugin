@@ -254,6 +254,49 @@ public class DownloadOrchestratorTests
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
+    // --- what is being skipped, and taking it back -------------------------------------
+
+    // The list was invisible before. A release skipped for a fortnight is the likeliest
+    // reason an episode keeps not arriving, and an owner who cannot see the list cannot
+    // tell that from "nobody is seeding it" - two problems with different answers.
+    [Fact]
+    public async Task CancelDownloadAsync_ShowsUpInWhatIsBeingSkipped()
+    {
+        await GrabOneAsync();
+        Grab grab = (await _store.ActiveGrabsAsync(CancellationToken.None))[0];
+
+        await Orchestrator().CancelDownloadAsync(grab.InfoHash, CancellationToken.None);
+
+        (await _store.BlacklistedAsync(Now, CancellationToken.None)).Should().ContainSingle()
+            .Which.ReleaseTitle.Should().Be(grab.ReleaseTitle);
+    }
+
+    [Fact]
+    public async Task AllowAgainAsync_LetsARefusedReleaseBeChosenOnceMore()
+    {
+        await GrabOneAsync();
+        Grab grab = (await _store.ActiveGrabsAsync(CancellationToken.None))[0];
+        await Orchestrator().CancelDownloadAsync(grab.InfoHash, CancellationToken.None);
+
+        BlacklistEntry skipped = (await _store.BlacklistedAsync(Now, CancellationToken.None))[0];
+
+        (await _store.AllowAgainAsync(skipped.Handle, CancellationToken.None)).Should().BeTrue();
+
+        (await _store.IsBlacklistedAsync(grab.InfoHash, grab.ReleaseTitle, Now, CancellationToken.None))
+            .Should().BeFalse();
+    }
+
+    // The handle is derived, not stored, so it has to come out the same on every render -
+    // otherwise the button on the page names an entry that no longer answers to it.
+    [Fact]
+    public async Task Handle_IsTheSameEveryTimeForTheSameEntry()
+    {
+        BlacklistEntry entry = new() { InfoHash = "abc123", ReleaseTitle = "Some.Release", Reason = "why", AddedAt = Now };
+
+        entry.Handle.Should().Be((entry with { }).Handle);
+        entry.Handle.Should().NotBe(new BlacklistEntry { InfoHash = "def456", Reason = "why", AddedAt = Now }.Handle);
+    }
+
     // --- room on the disk --------------------------------------------------------------
 
     // A media server that fills its own disk stops encoding, stops writing databases and

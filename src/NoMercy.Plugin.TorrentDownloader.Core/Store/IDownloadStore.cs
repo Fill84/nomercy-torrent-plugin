@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
+using System.Text.Json.Serialization;
+
 namespace NoMercy.Plugin.TorrentDownloader.Core.Store;
 
 /// <summary>Identifies one episode. The natural key everywhere in this plugin.</summary>
@@ -180,6 +182,22 @@ public sealed record BlacklistEntry
 
     /// <summary>Null means forever. A release that failed once may be fine next month, so most entries expire.</summary>
     public DateTimeOffset? ExpiresAt { get; init; }
+
+    /// <summary>
+    /// A short, stable, URL-safe handle for this entry, so a button on the page can name
+    /// which one it means.
+    ///
+    /// <para>
+    /// Derived rather than stored: an index into a list reorders as entries expire, and a
+    /// release title is an arbitrary string that can carry slashes straight through a
+    /// route. Hashing the identity gives the same handle for the same entry on every
+    /// render, and never a character a URL has to be told about.
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public string Handle => Convert.ToHexString(
+        System.Security.Cryptography.SHA256.HashData(
+            System.Text.Encoding.UTF8.GetBytes(InfoHash ?? ReleaseTitle ?? Reason)))[..12].ToLowerInvariant();
 }
 
 /// <summary>
@@ -232,4 +250,10 @@ public interface IDownloadStore
 
     /// <summary>True when this release should be skipped right now. Expired entries do not count.</summary>
     Task<bool> IsBlacklistedAsync(string? infoHash, string releaseTitle, DateTimeOffset now, CancellationToken ct);
+
+    /// <summary>Everything currently being skipped, so the page can show it and offer to stop.</summary>
+    Task<IReadOnlyList<BlacklistEntry>> BlacklistedAsync(DateTimeOffset now, CancellationToken ct);
+
+    /// <summary>Lifts one skip, by its handle. False when there was nothing under that handle.</summary>
+    Task<bool> AllowAgainAsync(string handle, CancellationToken ct);
 }

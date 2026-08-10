@@ -38,10 +38,14 @@ public static class DownloadsView
     /// </summary>
     public const int HistoryLimit = 15;
 
+    /// <summary>How many skipped releases the page lists. Beyond this it stops being a list and starts being a log.</summary>
+    public const int SkippedLimit = 15;
+
     internal const string FollowShowMethod = "FollowShow";
     internal const string PauseDownloadMethod = "PauseDownload";
     internal const string ResumeDownloadMethod = "ResumeDownload";
     internal const string CancelDownloadMethod = "CancelDownload";
+    internal const string AllowReleaseMethod = "AllowRelease";
     internal const string UnfollowShowMethod = "UnfollowShow";
 
     internal const string FollowShowRouteTemplate = FollowShowMethod + "/{showId:int}";
@@ -52,6 +56,7 @@ public static class DownloadsView
     internal const string PauseDownloadRouteTemplate = PauseDownloadMethod + "/{infoHash}";
     internal const string ResumeDownloadRouteTemplate = ResumeDownloadMethod + "/{infoHash}";
     internal const string CancelDownloadRouteTemplate = CancelDownloadMethod + "/{infoHash}";
+    internal const string AllowReleaseRouteTemplate = AllowReleaseMethod + "/{handle}";
 
     /// <summary>A show the library knows about, and whether this plugin is following it.</summary>
     public sealed record FollowableShow(int ShowId, string Title, bool Followed);
@@ -75,6 +80,15 @@ public static class DownloadsView
         IReadOnlyList<WantedEpisode> wanted,
         IReadOnlyList<FollowableShow> unstartedShows,
         IReadOnlyList<HistoryEntry> history)
+        => Build(transfers, grabs, wanted, unstartedShows, history, []);
+
+    public static PluginView Build(
+        IReadOnlyList<Transfer> transfers,
+        IReadOnlyList<Grab> grabs,
+        IReadOnlyList<WantedEpisode> wanted,
+        IReadOnlyList<FollowableShow> unstartedShows,
+        IReadOnlyList<HistoryEntry> history,
+        IReadOnlyList<BlacklistEntry> skipped)
     {
         Dictionary<string, Grab> byHash = grabs
             .GroupBy(grab => grab.InfoHash)
@@ -111,6 +125,15 @@ public static class DownloadsView
                 "Recently",
                 "What became of the last downloads, after they left the list above.",
                 History(history)));
+        }
+
+        if (skipped.Count > 0)
+        {
+            children.Add(Ui.Section(
+                "downloads-skipped",
+                Count("Skipped releases", skipped.Count),
+                "These are passed over when choosing. Allow one again and it can be picked next time.",
+                Skipped(skipped)));
         }
 
         if (unstartedShows.Count > 0)
@@ -359,9 +382,56 @@ public static class DownloadsView
         return Ui.List("downloads-history-list", [.. rows]);
     }
 
+    /// <summary>
+    /// What the plugin is refusing to pick, and a way to change its mind.
+    ///
+    /// <para>
+    /// This list was invisible before. A release blacklisted for a fortnight is the most
+    /// likely reason an episode keeps not arriving, and an owner who cannot see the list
+    /// has no way to tell that from "nobody is seeding it" - two problems with completely
+    /// different answers.
+    /// </para>
+    /// </summary>
+    private static PluginComponent Skipped(IReadOnlyList<BlacklistEntry> skipped)
+    {
+        List<PluginComponent> rows = [];
+
+        foreach (BlacklistEntry entry in skipped.OrderByDescending(entry => entry.AddedAt).Take(SkippedLimit))
+        {
+            rows.Add(Ui.Row(
+                $"downloads-skipped-row-{entry.Handle}",
+                Ui.Text($"downloads-skipped-title-{entry.Handle}", entry.ReleaseTitle ?? entry.InfoHash ?? "an unnamed release"),
+                Ui.Text($"downloads-skipped-reason-{entry.Handle}", entry.Reason, "caption"),
+                Ui.Text($"downloads-skipped-until-{entry.Handle}", Until(entry.ExpiresAt), "caption"),
+                Ui.Button(
+                    $"downloads-skipped-allow-{entry.Handle}",
+                    "Allow again",
+                    PluginActionIntent.CallPlugin($"{AllowReleaseMethod}/{entry.Handle}"))));
+        }
+
+        return Ui.List("downloads-skipped-list", [.. rows]);
+    }
+
+    private static string Until(DateTimeOffset? expires)
+    {
+        if (expires is null)
+            return "skipped for good";
+
+        TimeSpan left = expires.Value - DateTimeOffset.UtcNow;
+
+        return left switch
+        {
+            { TotalDays: >= 2 } => $"{left.TotalDays:0} days left",
+            { TotalDays: >= 1 } => "1 day left",
+            { TotalHours: >= 1 } => $"{left.TotalHours:0} h left",
+            _ => "nearly up",
+        };
+    }
+
     private static string Outcome(HistoryEvent outcome) => outcome switch
     {
         HistoryEvent.Imported => "Imported",
+        HistoryEvent.Skipped => "Skipped",
         HistoryEvent.Failed => "Failed",
         HistoryEvent.Cancelled => "Cancelled",
         _ => "Grabbed",
@@ -371,6 +441,7 @@ public static class DownloadsView
     {
         HistoryEvent.Imported => PluginBadgeVariant.Success,
         HistoryEvent.Failed => PluginBadgeVariant.Warning,
+        HistoryEvent.Skipped => PluginBadgeVariant.Warning,
         _ => PluginBadgeVariant.Neutral,
     };
 

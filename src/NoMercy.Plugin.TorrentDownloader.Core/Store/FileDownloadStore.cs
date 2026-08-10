@@ -169,6 +169,27 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
     public async Task BlacklistAsync(BlacklistEntry entry, CancellationToken ct) =>
         await MutateAsync(state => state.Blacklist.Add(entry), ct);
 
+    public async Task<IReadOnlyList<BlacklistEntry>> BlacklistedAsync(DateTimeOffset now, CancellationToken ct) =>
+        await ReadAsync(state => (IReadOnlyList<BlacklistEntry>)
+        [
+            .. state.Blacklist
+                .Where(entry => entry.ExpiresAt is null || entry.ExpiresAt > now)
+                .OrderByDescending(entry => entry.AddedAt),
+        ], ct);
+
+    public async Task<bool> AllowAgainAsync(string handle, CancellationToken ct)
+    {
+        bool lifted = false;
+
+        await MutateAsync(state =>
+        {
+            lifted = state.Blacklist.RemoveAll(entry =>
+                string.Equals(entry.Handle, handle, StringComparison.OrdinalIgnoreCase)) > 0;
+        }, ct);
+
+        return lifted;
+    }
+
     public async Task<bool> IsBlacklistedAsync(string? infoHash, string releaseTitle, DateTimeOffset now, CancellationToken ct) =>
         await ReadAsync(state => state.Blacklist.Any(entry =>
             (entry.ExpiresAt is null || entry.ExpiresAt > now)

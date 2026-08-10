@@ -140,6 +140,14 @@ public sealed class InMemoryDownloadStore : IDownloadStore
         Task.FromResult<IReadOnlyList<HistoryEntry>>(
             [.. History.OrderByDescending(entry => entry.At).Take(Math.Max(0, limit))]);
 
+    public Task<IReadOnlyList<BlacklistEntry>> BlacklistedAsync(DateTimeOffset now, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<BlacklistEntry>>(
+            [.. _blacklist.Where(entry => entry.ExpiresAt is null || entry.ExpiresAt > now)]);
+
+    public Task<bool> AllowAgainAsync(string handle, CancellationToken ct) =>
+        Task.FromResult(_blacklist.RemoveAll(entry =>
+            string.Equals(entry.Handle, handle, StringComparison.OrdinalIgnoreCase)) > 0);
+
     public Task BlacklistAsync(BlacklistEntry entry, CancellationToken ct)
     {
         _blacklist.Add(entry);
