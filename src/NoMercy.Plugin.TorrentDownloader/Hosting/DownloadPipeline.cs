@@ -99,9 +99,36 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             // Feed indexers only: see IndexerReleaseFeed for why a query-less request must
             // never reach a Torznab endpoint.
             new IndexerReleaseFeed(new IndexerAggregator(
-                [.. indexers.Where(indexer => indexer.IsFeed).Select(indexer => indexer.Indexer)])));
+                [.. indexers.Where(indexer => indexer.IsFeed).Select(indexer => indexer.Indexer)])),
+
+            FreeSpaceOn);
 
         return new DownloadPipeline(engine, orchestrator);
+    }
+
+    /// <summary>
+    /// Free bytes on whichever volume holds the download folder, or null when that cannot
+    /// be worked out.
+    ///
+    /// <para>
+    /// Null rather than zero on failure, and the guard treats null as "no objection". A
+    /// network share or an unusual mount that will not report its size is not a reason to
+    /// stop downloading - refusing everything because a number could not be read would be
+    /// a worse failure than the one the check exists to prevent.
+    /// </para>
+    /// </summary>
+    private static long? FreeSpaceOn(string folder)
+    {
+        try
+        {
+            string? root = Path.GetPathRoot(Path.GetFullPath(folder));
+
+            return string.IsNullOrEmpty(root) ? null : new DriveInfo(root).AvailableFreeSpace;
+        }
+        catch (Exception failure) when (failure is IOException or ArgumentException or UnauthorizedAccessException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

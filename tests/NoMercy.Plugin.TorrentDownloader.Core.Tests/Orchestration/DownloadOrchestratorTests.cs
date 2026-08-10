@@ -36,7 +36,11 @@ public class DownloadOrchestratorTests
         options ?? new OrchestratorOptions { DownloadFolder = "/downloads" },
         new PrivateTrackerRegistry([]),
         () => Now,
-        _feed);
+        _feed,
+        _ => FreeBytes);
+
+    /// <summary>What the disk claims to have left. Enough for anything, unless a test says otherwise.</summary>
+    private long? FreeBytes { get; set; } = 500L * 1024 * 1024 * 1024;
 
     private static ReleaseInfo Release(string title = "Some.Show.S01E01.1080p.WEB-DL", string? hash = "abc123") => new()
     {
@@ -248,6 +252,75 @@ public class DownloadOrchestratorTests
 
         IReadOnlyList<WantedEpisode> wanted = await _store.WantedAsync(10, CancellationToken.None);
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
+    }
+
+    // --- room on the disk --------------------------------------------------------------
+
+    // A media server that fills its own disk stops encoding, stops writing databases and
+    // stops playing back, all at once and for reasons that look nothing like a torrent.
+    [Fact]
+    public async Task SearchCycleAsync_WillNotTakeAReleaseThatWouldFillTheDisk()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        FreeBytes = 3L * 1024 * 1024 * 1024;
+
+        int grabbed = await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            MinimumFreeBytes = 20L * 1024 * 1024 * 1024,
+        }).SearchCycleAsync(CancellationToken.None);
+
+        grabbed.Should().Be(0);
+        _engine.Added.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task SearchCycleAsync_SaysOnThePageWhyItSkippedOne()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        FreeBytes = 3L * 1024 * 1024 * 1024;
+
+        await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            MinimumFreeBytes = 20L * 1024 * 1024 * 1024,
+        }).SearchCycleAsync(CancellationToken.None);
+
+        HistoryEntry entry = _store.History.Should().ContainSingle().Subject;
+        entry.Event.Should().Be(HistoryEvent.Skipped);
+        entry.Detail.Should().Contain("free space");
+    }
+
+    // Nothing is wrong with the episode, and there will be room again when something
+    // finishes. Charging it a search attempt would eventually park it as unavailable.
+    [Fact]
+    public async Task SearchCycleAsync_AnEpisodeSkippedForSpaceKeepsItsSearchAttempts()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        FreeBytes = 3L * 1024 * 1024 * 1024;
+
+        await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            MinimumFreeBytes = 20L * 1024 * 1024 * 1024,
+        }).SearchCycleAsync(CancellationToken.None);
+
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().ContainSingle()
+            .Which.SearchAttempts.Should().Be(0);
+    }
+
+    // A share that will not report its size is not a reason to stop downloading.
+    [Fact]
+    public async Task SearchCycleAsync_StillDownloadsWhenTheDiskWillNotSayHowFullItIs()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        FreeBytes = null;
+
+        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Should().Be(1);
     }
 
     // --- history ---------------------------------------------------------------------

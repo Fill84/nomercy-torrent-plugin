@@ -109,6 +109,19 @@ public sealed record OrchestratorOptions
     public IReadOnlyList<int> FollowedShowIds { get; init; } = [];
 
     public required string DownloadFolder { get; init; }
+
+    /// <summary>
+    /// How much room to leave on the disk after a download finishes.
+    ///
+    /// <para>
+    /// A media server that fills its own disk does not politely stop downloading - it
+    /// stops encoding, stops writing databases, and stops playing back, all at once and
+    /// for reasons that look nothing like a torrent. Twenty gigabytes is roughly one
+    /// oversized film of headroom, and cheap insurance against a plugin that would
+    /// otherwise cheerfully take the last byte.
+    /// </para>
+    /// </summary>
+    public long MinimumFreeBytes { get; init; } = 20L * 1024 * 1024 * 1024;
 }
 
 /// <summary>
@@ -158,7 +171,8 @@ public sealed class DownloadOrchestrator(
     OrchestratorOptions options,
     PrivateTrackerRegistry privateTrackers,
     Func<DateTimeOffset> now,
-    IReleaseFeed? feed = null)
+    IReleaseFeed? feed = null,
+    Func<string, long?>? freeSpace = null)
 {
     /// <summary>
     /// Brings the wanted list in line with the library.
@@ -468,6 +482,9 @@ public sealed class DownloadOrchestrator(
             return null;
         }
 
+        if (await NoRoomForAsync(chosen, episode, ct))
+            return null;
+
         string? source = chosen.MagnetUri ?? chosen.DownloadUrl;
 
         if (source is null)
@@ -686,6 +703,42 @@ public sealed class DownloadOrchestrator(
 
         return true;
     }
+
+    /// <summary>
+    /// Whether taking this release would leave the disk too full, and says so where the
+    /// owner will see it.
+    ///
+    /// <para>
+    /// Refused rather than queued and failed later, because a torrent that runs the disk
+    /// to zero takes the encoder, the databases and playback down with it - and none of
+    /// those failures look like a download. The episode stays wanted and costs no search
+    /// attempt: there is nothing wrong with it, and there will be room again once
+    /// something finishes or somebody clears space.
+    /// </para>
+    /// </summary>
+    private async Task<bool> NoRoomForAsync(ReleaseInfo chosen, WantedEpisode episode, CancellationToken ct)
+    {
+        long? free = freeSpace?.Invoke(options.DownloadFolder);
+
+        if (free is null || chosen.SizeBytes <= 0 || free >= chosen.SizeBytes + options.MinimumFreeBytes)
+            return false;
+
+        await store.RecordHistoryAsync(new HistoryEntry
+        {
+            At = now(),
+            Event = HistoryEvent.Skipped,
+            Key = episode.Key,
+            ShowTitle = episode.ShowTitle,
+            ReleaseTitle = chosen.Title,
+            Indexer = chosen.IndexerName,
+            SizeBytes = chosen.SizeBytes,
+            Detail = $"not enough free space: {Gigabytes(free.Value)} left, and this needs {Gigabytes(chosen.SizeBytes)}",
+        }, ct);
+
+        return true;
+    }
+
+    private static string Gigabytes(long bytes) => $"{bytes / (1024d * 1024 * 1024):0.#} GB";
 
     private async Task FailAsync(Grab grab, EngineTransfer transfer, CancellationToken ct)
     {

@@ -93,6 +93,9 @@ public enum HistoryEvent
     Imported,
     Failed,
     Cancelled,
+
+    /// <summary>Found and wanted, but not taken. <c>Detail</c> says what stopped it.</summary>
+    Skipped,
 }
 
 /// <summary>
