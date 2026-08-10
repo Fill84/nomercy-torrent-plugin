@@ -56,8 +56,9 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         if (dispatcher is null || jobType is null)
         {
             logger.LogError(
-                "Torrent Downloader cannot queue an encode: the server does not expose {Missing}.",
-                dispatcher is null ? DispatcherType : JobType);
+                "Torrent Downloader cannot queue an encode: the server does not expose {Missing}. {Alternatives}",
+                dispatcher is null ? DispatcherType : JobType,
+                WhatIsThere());
 
             return false;
         }
@@ -164,10 +165,91 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         return type is null ? null : services.GetService(type);
     }
 
-    private static Type? FindType(string fullName) =>
-        AppDomain.CurrentDomain.GetAssemblies()
+    /// <summary>
+    /// The type by its full name, or failing that by its short name anywhere.
+    ///
+    /// <para>
+    /// The fallback is what keeps this working when the server rearranges its namespaces,
+    /// which is a refactor nobody would think to tell a plugin about. There is exactly one
+    /// <c>IJobDispatcher</c> in that process and exactly one <c>VideoEncodeJob</c>, so a
+    /// short-name match is not a guess. Two of either would be ambiguous, and the type
+    /// then stays unresolved rather than being picked at random - a named failure beats a
+    /// coin toss over which encoder runs.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// The job and dispatcher types that <em>do</em> exist in the process, for the log line
+    /// that reports a miss.
+    ///
+    /// <para>
+    /// A plugin ships as a file somebody drops next to a server they did not build, and the
+    /// server is a single-file bundle whose type names cannot be read from outside it. So a
+    /// miss has to answer its own question: not "it is not there", but "it is not there,
+    /// and here is what is". That turns diagnosing this from a restart per guess into one
+    /// restart.
+    /// </para>
+    /// </summary>
+    private static string WhatIsThere()
+    {
+        List<string> candidates =
+        [
+            .. AppDomain.CurrentDomain.GetAssemblies()
+                .SelectMany(Types)
+                .Where(type => type.Name.EndsWith("EncodeJob", StringComparison.Ordinal)
+                    || type.Name.EndsWith("JobDispatcher", StringComparison.Ordinal))
+                .Select(type => type.FullName ?? type.Name)
+                .Distinct()
+                .Order()
+                .Take(20),
+        ];
+
+        return candidates.Count == 0
+            ? "Nothing in this process looks like a job dispatcher or an encode job at all."
+            : $"What the process does have: {string.Join(", ", candidates)}.";
+    }
+
+    private Type? FindType(string fullName)
+    {
+        Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies();
+
+        Type? exact = loaded
             .Select(assembly => assembly.GetType(fullName, throwOnError: false))
             .FirstOrDefault(type => type is not null);
+
+        if (exact is not null)
+            return exact;
+
+        string shortName = fullName[(fullName.LastIndexOf('.') + 1)..];
+
+        // Only reached when the full name missed, so the cost of walking every assembly is
+        // paid once on a server that moved the type and never on one that did not.
+        List<Type> named = [.. loaded.SelectMany(Types).Where(type => type.Name == shortName).Distinct()];
+
+        if (named.Count != 1)
+            return null;
+
+        logger.LogWarning(
+            "Torrent Downloader found {Short} at {Actual} rather than {Expected}. The server moved it; this still works, but the plugin is out of date.",
+            shortName,
+            named[0].FullName,
+            fullName);
+
+        return named[0];
+    }
+
+    private static IEnumerable<Type> Types(Assembly assembly)
+    {
+        try
+        {
+            return assembly.GetTypes();
+        }
+        catch (ReflectionTypeLoadException)
+        {
+            // An assembly whose dependencies are not all loaded cannot be walked, and is
+            // not the one holding the server's own job types either.
+            return [];
+        }
+    }
 
     private static object? Get(object target, string property) =>
         target.GetType().GetProperty(property)?.GetValue(target);
