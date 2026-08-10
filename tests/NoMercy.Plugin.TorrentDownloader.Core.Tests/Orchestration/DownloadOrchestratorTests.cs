@@ -250,6 +250,67 @@ public class DownloadOrchestratorTests
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
+    // --- the owner's own hands ------------------------------------------------------
+
+    [Fact]
+    public async Task PauseDownloadAsync_StopsTheTorrentAndLeavesTheEpisodeSettled()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+
+        (await Orchestrator().PauseDownloadAsync(hash, CancellationToken.None)).Should().BeTrue();
+
+        _engine.Paused.Should().ContainSingle().Which.Should().Be(hash);
+
+        // Not back on the queue: a paused torrent is still the answer to that episode, and
+        // re-wanting it would have the next search cycle grab a second copy.
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task PauseDownloadAsync_SaysNoToAHashItIsNotHolding()
+    {
+        (await Orchestrator().PauseDownloadAsync("nothing", CancellationToken.None)).Should().BeFalse();
+        _engine.Paused.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task CancelDownloadAsync_DeletesTheFilesAndPutsTheEpisodeBack()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+
+        (await Orchestrator().CancelDownloadAsync(hash, CancellationToken.None)).Should().BeTrue();
+
+        _engine.Removed.Should().ContainSingle().Which.Should().Be(hash);
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().ContainSingle();
+    }
+
+    // Without this the next search cycle scores the same release top again and grabs it
+    // straight back, and cancel becomes a button that does nothing you can see.
+    [Fact]
+    public async Task CancelDownloadAsync_BlacklistsTheReleaseSoItIsNotGrabbedStraightBack()
+    {
+        await GrabOneAsync();
+        Grab grab = (await _store.ActiveGrabsAsync(CancellationToken.None))[0];
+
+        await Orchestrator().CancelDownloadAsync(grab.InfoHash, CancellationToken.None);
+
+        (await _store.IsBlacklistedAsync(grab.InfoHash, grab.ReleaseTitle, Now, CancellationToken.None))
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CancelDownloadAsync_PutsBackEveryEpisodeAPackWasCovering()
+    {
+        string hash = await GrabAPackAsync(4);
+
+        await Orchestrator().CancelDownloadAsync(hash, CancellationToken.None);
+
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().HaveCount(4,
+            "all four left the queue on the strength of that one torrent");
+    }
+
     // --- feed ----------------------------------------------------------------------
 
     // The point of having a feed at all: nobody asked for this episode by name, it was
@@ -808,6 +869,22 @@ public class DownloadOrchestratorTests
         public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct)
         {
             Removed.Add(infoHash);
+            return Task.CompletedTask;
+        }
+
+        public List<string> Paused { get; } = [];
+
+        public List<string> Resumed { get; } = [];
+
+        public Task PauseAsync(string infoHash, CancellationToken ct)
+        {
+            Paused.Add(infoHash);
+            return Task.CompletedTask;
+        }
+
+        public Task ResumeAsync(string infoHash, CancellationToken ct)
+        {
+            Resumed.Add(infoHash);
             return Task.CompletedTask;
         }
 

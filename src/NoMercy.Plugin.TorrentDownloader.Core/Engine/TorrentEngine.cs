@@ -50,6 +50,7 @@ public sealed class TorrentEngine(
     Func<DateTimeOffset> now) : ITorrentEngine, IAsyncDisposable
 {
     private readonly ConcurrentDictionary<string, RunningTorrent> _torrents = new();
+    private readonly ConcurrentDictionary<string, PausedTorrent> _paused = new();
     private readonly byte[] _peerId = Handshake.NewPeerId();
     private bool _disposed;
 
@@ -86,6 +87,10 @@ public sealed class TorrentEngine(
 
     public async Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct)
     {
+        // A paused torrent is still one the owner can throw away, and it is not in
+        // _torrents. Without this, removing one would report success and change nothing.
+        _paused.TryRemove(infoHash, out _);
+
         if (!_torrents.TryRemove(infoHash, out RunningTorrent? running))
             return;
 
@@ -112,8 +117,63 @@ public sealed class TorrentEngine(
         }
     }
 
+    /// <summary>
+    /// Stops the torrent and keeps its request, rather than inventing a suspended state.
+    ///
+    /// <para>
+    /// A paused torrent is exactly a torrent this process is not currently running, and
+    /// the engine already knows how to start one of those from pieces on disk - it is what
+    /// it does after every server restart. Resuming down that same path means pause has no
+    /// recovery logic of its own, and therefore no second way for recovery to be wrong.
+    /// </para>
+    /// </summary>
+    public async Task PauseAsync(string infoHash, CancellationToken ct)
+    {
+        if (!_torrents.TryRemove(infoHash, out RunningTorrent? running))
+            return;
+
+        _paused[infoHash] = new PausedTorrent(
+            running.Request,
+            running.Metadata.TotalLength,
+            Math.Min((long)running.Session.Have.SetCount * running.Metadata.PieceLength, running.Metadata.TotalLength));
+
+        await running.StopAsync();
+    }
+
+    public async Task ResumeAsync(string infoHash, CancellationToken ct)
+    {
+        if (!_paused.TryRemove(infoHash, out PausedTorrent? paused))
+            return;
+
+        try
+        {
+            await AddAsync(paused.Request, ct);
+        }
+        catch
+        {
+            // Put it back rather than losing it. A resume that cannot reach the tracker
+            // right now is a resume to try again in a minute, not a download the owner
+            // silently no longer has.
+            _paused[infoHash] = paused;
+            throw;
+        }
+    }
+
     public Task<IReadOnlyList<EngineTransfer>> TransfersAsync(CancellationToken ct) =>
-        Task.FromResult<IReadOnlyList<EngineTransfer>>([.. _torrents.Values.Select(Describe)]);
+        Task.FromResult<IReadOnlyList<EngineTransfer>>(
+        [
+            .. _torrents.Values.Select(Describe),
+            .. _paused.Select(entry => new EngineTransfer
+            {
+                InfoHash = entry.Key,
+                State = EngineState.Paused,
+                BytesDone = entry.Value.BytesDone,
+                BytesTotal = entry.Value.BytesTotal,
+            }),
+        ]);
+
+    /// <summary>What is kept about a torrent that is not running: enough to start it again and to draw a bar.</summary>
+    private sealed record PausedTorrent(TorrentRequest Request, long BytesTotal, long BytesDone);
 
     private EngineTransfer Describe(RunningTorrent running)
     {
@@ -145,6 +205,7 @@ public sealed class TorrentEngine(
             BytesDone = Math.Min(done, running.Metadata.TotalLength),
             BytesTotal = running.Metadata.TotalLength,
             Peers = running.PeerCount,
+            BytesPerSecond = running.RateAt(done, now()),
             FailureReason = dead ? $"no peers after {options.NoPeersTimeout.TotalMinutes:0} minutes" : null,
         };
     }
@@ -283,6 +344,9 @@ public sealed class TorrentEngine(
     {
         private readonly CancellationTokenSource _stopping = new();
         private int _peers;
+        private long _sampledBytes;
+        private long _rate;
+        private DateTimeOffset _sampledAt;
 
         public string InfoHash => infoHash;
         public TorrentMetadata Metadata => metadata;
@@ -293,6 +357,40 @@ public sealed class TorrentEngine(
         public int PeerCount => Volatile.Read(ref _peers);
 
         public void PeerConnected() => Interlocked.Increment(ref _peers);
+
+        /// <summary>
+        /// The rate since the last sample, kept between samples.
+        ///
+        /// <para>
+        /// Two seconds apart at least, because the page polls faster than that and a
+        /// window narrower than a piece reads as zero on a torrent that is downloading
+        /// perfectly well. The previous answer is repeated in between rather than a fresh
+        /// zero, which is the difference between a number and a flicker.
+        /// </para>
+        /// </summary>
+        public long RateAt(long done, DateTimeOffset at)
+        {
+            if (_sampledAt == default)
+            {
+                _sampledAt = at;
+                _sampledBytes = done;
+
+                return 0;
+            }
+
+            double seconds = (at - _sampledAt).TotalSeconds;
+
+            if (seconds < 2)
+                return Volatile.Read(ref _rate);
+
+            long rate = (long)Math.Max(0, (done - _sampledBytes) / seconds);
+
+            Volatile.Write(ref _rate, rate);
+            _sampledAt = at;
+            _sampledBytes = done;
+
+            return rate;
+        }
 
         public void Start(TorrentEngine engine, CancellationToken ct)
         {

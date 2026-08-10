@@ -533,6 +533,8 @@ public sealed class DownloadOrchestrator(
                 BytesDone = transfer.BytesDone,
                 BytesTotal = transfer.BytesTotal,
                 Peers = transfer.Peers,
+                BytesPerSecond = transfer.BytesPerSecond,
+                Paused = transfer.State == EngineState.Paused,
                 UpdatedAt = now(),
             }, ct);
 
@@ -575,6 +577,76 @@ public sealed class DownloadOrchestrator(
 
         foreach (EpisodeKey key in grab.Covered)
             await store.MarkSearchedAsync(key, now(), WantedState.Done, ct);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Stops a download the owner wants stopped, keeping the bytes.
+    ///
+    /// <para>
+    /// The grab stays exactly as it is. A paused torrent is still this plugin's answer to
+    /// that episode, and putting the episode back on the wanted list would have the next
+    /// search cycle grab a second copy of the thing the owner just stopped.
+    /// </para>
+    /// </summary>
+    public async Task<bool> PauseDownloadAsync(string infoHash, CancellationToken ct)
+    {
+        if (await store.FindGrabAsync(infoHash, ct) is null)
+            return false;
+
+        await engine.PauseAsync(infoHash, ct);
+
+        return true;
+    }
+
+    public async Task<bool> ResumeDownloadAsync(string infoHash, CancellationToken ct)
+    {
+        if (await store.FindGrabAsync(infoHash, ct) is null)
+            return false;
+
+        await engine.ResumeAsync(infoHash, ct);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Throws a download away and looks for something else instead.
+    ///
+    /// <para>
+    /// Blacklisted on the way out, which is the whole point of the button. Without it the
+    /// next search cycle scores the same release top again and grabs it back within
+    /// minutes, and the owner is left clicking cancel at a thing that will not go away.
+    /// A cancel says "not this one", so the plugin has to remember which one.
+    /// </para>
+    ///
+    /// <para>
+    /// Every episode the grab covered goes back to wanted, not just the one it was filed
+    /// under: they left the queue on the strength of this torrent, and it is gone.
+    /// </para>
+    /// </summary>
+    public async Task<bool> CancelDownloadAsync(string infoHash, CancellationToken ct)
+    {
+        Grab? grab = await store.FindGrabAsync(infoHash, ct);
+
+        if (grab is null)
+            return false;
+
+        await store.UpdateGrabAsync(infoHash, GrabState.Failed, "cancelled by the owner", now(), ct);
+
+        await store.BlacklistAsync(new BlacklistEntry
+        {
+            InfoHash = grab.InfoHash,
+            ReleaseTitle = grab.ReleaseTitle,
+            Reason = "cancelled by the owner",
+            AddedAt = now(),
+            ExpiresAt = now() + options.BlacklistDuration,
+        }, ct);
+
+        foreach (EpisodeKey key in grab.Covered)
+            await store.MarkSearchedAsync(key, now(), WantedState.Wanted, ct);
+
+        await engine.RemoveAsync(infoHash, deleteFiles: true, ct);
 
         return true;
     }

@@ -33,10 +33,19 @@ public static class DownloadsView
     public const int RefreshSeconds = 30;
 
     internal const string FollowShowMethod = "FollowShow";
+    internal const string PauseDownloadMethod = "PauseDownload";
+    internal const string ResumeDownloadMethod = "ResumeDownload";
+    internal const string CancelDownloadMethod = "CancelDownload";
     internal const string UnfollowShowMethod = "UnfollowShow";
 
     internal const string FollowShowRouteTemplate = FollowShowMethod + "/{showId:int}";
     internal const string UnfollowShowRouteTemplate = UnfollowShowMethod + "/{showId:int}";
+
+    // The info hash rather than a row index: the list reorders itself as downloads
+    // progress, so a click on row three has to mean the torrent that was on row three.
+    internal const string PauseDownloadRouteTemplate = PauseDownloadMethod + "/{infoHash}";
+    internal const string ResumeDownloadRouteTemplate = ResumeDownloadMethod + "/{infoHash}";
+    internal const string CancelDownloadRouteTemplate = CancelDownloadMethod + "/{infoHash}";
 
     /// <summary>A show the library knows about, and whether this plugin is following it.</summary>
     public sealed record FollowableShow(int ShowId, string Title, bool Followed);
@@ -100,7 +109,32 @@ public static class DownloadsView
                 // label that lives inside the bar is one a reader walking the page - or a
                 // screen reader - may never reach.
                 Ui.Text($"downloads-percent-{transfer.InfoHash}", Percentage(transfer), "caption"),
-                Ui.Text($"downloads-peers-{transfer.InfoHash}", Peers(transfer.Peers), "caption")));
+
+                // Rate and estimate beside the peers, because percentage alone cannot tell
+                // a download apart from a stall. A torrent sitting at 34% with four peers
+                // looks healthy right up until you notice it looked that way an hour ago.
+                Ui.Text($"downloads-rate-{transfer.InfoHash}", Rate(transfer), "caption"),
+                Ui.Text($"downloads-peers-{transfer.InfoHash}", Peers(transfer.Peers), "caption"),
+
+                transfer.Paused
+                    ? Ui.Button(
+                        $"downloads-resume-{transfer.InfoHash}",
+                        "Resume",
+                        PluginActionIntent.CallPlugin($"{ResumeDownloadMethod}/{transfer.InfoHash}"))
+                    : Ui.Button(
+                        $"downloads-pause-{transfer.InfoHash}",
+                        "Pause",
+                        PluginActionIntent.CallPlugin($"{PauseDownloadMethod}/{transfer.InfoHash}")),
+
+                // Confirmed, because it deletes the bytes and blacklists the release for a
+                // fortnight. That is not an undo away.
+                Ui.DestructiveButton(
+                    $"downloads-cancel-{transfer.InfoHash}",
+                    "Cancel",
+                    $"{CancelDownloadMethod}/{transfer.InfoHash}",
+                    "Cancel this download?",
+                    $"The files are deleted and {grab?.ReleaseTitle ?? "this release"} is skipped for 14 days. "
+                        + "The episode goes back on the queue and the plugin looks for a different release.")));
         }
 
         // A list of rows rather than a table. The design system turns a table's cells
@@ -226,4 +260,30 @@ public static class DownloadsView
         transfer.BytesTotal > 0 ? $"{transfer.Progress * 100:0}%" : "starting";
 
     private static string Peers(int peers) => peers == 1 ? "1 peer" : $"{peers} peers";
+
+    /// <summary>
+    /// The rate and what is left of the wait, or a plain word when there is no honest
+    /// number to give. "Stalled" is more use than "0.0 MB/s", and an estimate off a rate
+    /// of nothing is not an estimate.
+    /// </summary>
+    private static string Rate(Transfer transfer)
+    {
+        if (transfer.Paused)
+            return "Paused";
+
+        if (transfer.BytesPerSecond <= 0)
+            return "Stalled";
+
+        string rate = $"{transfer.BytesPerSecond / (1024d * 1024d):0.0} MB/s";
+
+        return transfer.Remaining is { } left ? $"{rate}, {Left(left)} left" : rate;
+    }
+
+    private static string Left(TimeSpan remaining) => remaining switch
+    {
+        { TotalDays: >= 1 } => $"{remaining.TotalDays:0} d",
+        { TotalHours: >= 1 } => $"{remaining.TotalHours:0} h",
+        { TotalMinutes: >= 1 } => $"{remaining.TotalMinutes:0} min",
+        _ => "under a minute",
+    };
 }

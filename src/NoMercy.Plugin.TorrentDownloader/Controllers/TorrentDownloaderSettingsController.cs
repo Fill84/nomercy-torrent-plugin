@@ -61,6 +61,18 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
     public Task<IActionResult> UnfollowShow(int showId, CancellationToken ct) =>
         RespondAsync(plugin => plugin.UnfollowShowAsync(showId, ct));
 
+    [HttpPost(DownloadsView.PauseDownloadRouteTemplate)]
+    public Task<IActionResult> PauseDownload(string infoHash, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.PauseDownloadAsync(infoHash, ct));
+
+    [HttpPost(DownloadsView.ResumeDownloadRouteTemplate)]
+    public Task<IActionResult> ResumeDownload(string infoHash, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.ResumeDownloadAsync(infoHash, ct));
+
+    [HttpPost(DownloadsView.CancelDownloadRouteTemplate)]
+    public Task<IActionResult> CancelDownload(string infoHash, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.CancelDownloadAsync(infoHash, ct));
+
     [HttpPost(SettingsView.AddIndexerMethod)]
     public Task<IActionResult> AddIndexer(CancellationToken ct) =>
         RespondAsync(plugin => plugin.AddIndexerAsync(ct));
@@ -79,7 +91,7 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
         SaveSettingsOutcome outcome = await save(plugin);
 
         return outcome.Succeeded
-            ? Status<object?>(null, message: "Settings saved.")
+            ? Status<object?>(null, message: outcome.Message ?? "Settings saved.")
             : Status<object?>(null, status: "error", message: outcome.Error);
     }
 }

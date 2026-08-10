@@ -99,6 +99,53 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public Task<SaveSettingsOutcome> UnfollowShowAsync(int showId, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleUnfollowShowAsync(showId, ct));
 
+    public Task<SaveSettingsOutcome> PauseDownloadAsync(string infoHash, CancellationToken ct = default) =>
+        OnDownloadAsync(orchestrator => orchestrator.PauseDownloadAsync(infoHash, ct), "Paused.", ct);
+
+    public Task<SaveSettingsOutcome> ResumeDownloadAsync(string infoHash, CancellationToken ct = default) =>
+        OnDownloadAsync(orchestrator => orchestrator.ResumeDownloadAsync(infoHash, ct), "Resumed.", ct);
+
+    public Task<SaveSettingsOutcome> CancelDownloadAsync(string infoHash, CancellationToken ct = default) =>
+        OnDownloadAsync(
+            orchestrator => orchestrator.CancelDownloadAsync(infoHash, ct),
+            "Cancelled. The episode is back on the queue and this release is skipped for now.",
+            ct);
+
+    /// <summary>
+    /// A button on the downloads page, applied to the running engine.
+    ///
+    /// <para>
+    /// These go through the pipeline rather than the store because pausing something means
+    /// pausing it, not writing down that it is paused. The pipeline is the one the cadences
+    /// use, so the engine acted on here is the engine actually holding the torrent.
+    /// </para>
+    /// </summary>
+    private async Task<SaveSettingsOutcome> OnDownloadAsync(
+        Func<DownloadOrchestrator, Task<bool>> act,
+        string done,
+        CancellationToken ct)
+    {
+        if (_disposed || _context is null)
+            return SaveSettingsOutcome.Failure("Torrent Downloader is unavailable.");
+
+        try
+        {
+            DownloadPipeline pipeline = await PipelineAsync(_context, ct);
+
+            return await act(pipeline.Orchestrator)
+                ? SaveSettingsOutcome.Done(done)
+                : SaveSettingsOutcome.Failure("That download is no longer one this plugin is holding.");
+        }
+        catch (Exception failure)
+        {
+            // Reported rather than thrown: this is a button, and a stack trace in the
+            // dashboard tells its reader nothing they can act on.
+            _context.Logger.LogWarning(failure, "Torrent Downloader could not act on a download.");
+
+            return SaveSettingsOutcome.Failure("That did not work. The server log says why.");
+        }
+    }
+
     public Task<SaveSettingsOutcome> AddIndexerAsync(CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleAddIndexerAsync(ct));
 

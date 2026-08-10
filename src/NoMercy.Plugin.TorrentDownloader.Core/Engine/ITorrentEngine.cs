@@ -14,6 +14,13 @@ public enum EngineState
 
     /// <summary>Given up on. <c>FailureReason</c> says what actually happened.</summary>
     Failed,
+
+    /// <summary>
+    /// Stopped by the owner, and still theirs. The pieces already on disk are kept and a
+    /// resume picks up from them - the same recovery a server restart uses, which is why
+    /// pausing does not need a half-alive state of its own to go wrong in.
+    /// </summary>
+    Paused,
 }
 
 public sealed record EngineTransfer
@@ -23,6 +30,14 @@ public sealed record EngineTransfer
     public long BytesDone { get; init; }
     public long BytesTotal { get; init; }
     public int Peers { get; init; }
+
+    /// <summary>
+    /// How fast it is actually going, measured rather than averaged over the whole
+    /// download. Percentage answers "how far"; this answers "is it moving", and on a
+    /// torrent those are different questions - a stalled one sits at 34% all evening.
+    /// </summary>
+    public long BytesPerSecond { get; init; }
+
     public string? FailureReason { get; init; }
     public string? CompletedFolder { get; init; }
 }
@@ -63,6 +78,15 @@ public interface ITorrentEngine
     Task<string> AddAsync(TorrentRequest request, CancellationToken ct);
 
     Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct);
+
+    /// <summary>
+    /// Stops a torrent without forgetting it. The bytes stay, and a resume starts it again
+    /// from what is on disk.
+    /// </summary>
+    Task PauseAsync(string infoHash, CancellationToken ct);
+
+    /// <summary>Starts a paused torrent again. Does nothing to one that was never paused.</summary>
+    Task ResumeAsync(string infoHash, CancellationToken ct);
 
     Task<IReadOnlyList<EngineTransfer>> TransfersAsync(CancellationToken ct);
 }

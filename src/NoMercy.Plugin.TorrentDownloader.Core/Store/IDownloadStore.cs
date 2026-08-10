@@ -92,9 +92,24 @@ public sealed record Transfer
     public long BytesDone { get; init; }
     public long BytesTotal { get; init; }
     public int Peers { get; init; }
+    public long BytesPerSecond { get; init; }
+
+    /// <summary>Whether the owner stopped this one. A paused transfer keeps its bar and stops claiming to be busy.</summary>
+    public bool Paused { get; init; }
+
     public DateTimeOffset UpdatedAt { get; init; }
 
     public double Progress => BytesTotal > 0 ? (double)BytesDone / BytesTotal : 0;
+
+    /// <summary>
+    /// How long the rest will take at the rate it is going, or null when that cannot
+    /// honestly be said. A stalled torrent has no estimate, and "a very long time" is a
+    /// worse answer than no answer.
+    /// </summary>
+    public TimeSpan? Remaining =>
+        !Paused && BytesPerSecond > 0 && BytesTotal > BytesDone
+            ? TimeSpan.FromSeconds((BytesTotal - BytesDone) / (double)BytesPerSecond)
+            : null;
 }
 
 /// <summary>
