@@ -33,6 +33,48 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
     // No request body: SettingsView's "Add indexer" button carries only the method, so
     // there is nothing here for a submitted field to collide with. See ApplyAddIndexer for
     // why the new entry's name still has to be chosen carefully despite that.
+    /// <summary>
+    /// Adds a complete source in one go, from wherever the owner happens to be.
+    ///
+    /// <para>
+    /// The settings page adds a blank row and expects it to be filled in afterwards, which
+    /// is fine when you are already on the settings page and wrong everywhere else. The
+    /// moment somebody realises they need another source is the moment an episode found
+    /// nothing - and sending them to a different page to add one is how it does not get
+    /// added.
+    /// </para>
+    /// </summary>
+    public async Task<SaveSettingsOutcome> HandleAddSourceAsync(SaveSettingsRequest request, CancellationToken ct = default)
+    {
+        LoadedSettings current = await gateway.LoadAsync(ct);
+
+        string name = (request.Name ?? string.Empty).Trim();
+        string kind = (request.Kind ?? "rss").Trim().ToLowerInvariant();
+        string url = (request.Url ?? string.Empty).Trim();
+
+        if (name.Length == 0)
+            return SaveSettingsOutcome.Failure("Give the source a name.");
+
+        if (current.Settings.Indexers.Any(indexer => string.Equals(indexer.Name, name, StringComparison.OrdinalIgnoreCase)))
+            return SaveSettingsOutcome.Failure($"There is already a source called {name}.");
+
+        if (!IsAbsoluteUrl(url))
+            return SaveSettingsOutcome.Failure("The address must be a full URL, starting with https://.");
+
+        if (IsSiteKind(kind) && !SiteIndexer.IsUsableTemplate(url))
+        {
+            return SaveSettingsOutcome.Failure(
+                $"A site's search address needs {SiteIndexer.QueryPlaceholder} where the search terms go.");
+        }
+
+        TorrentDownloaderSettings merged = Clone(current.Settings);
+        merged.Indexers = [.. current.Settings.Indexers, new IndexerSettings { Name = name, Kind = kind, Url = url }];
+
+        return await PersistIfSucceededAsync(
+            SaveSettingsOutcome.Success(new LoadedSettings(merged, [])),
+            ct);
+    }
+
     public async Task<SaveSettingsOutcome> HandleAddIndexerAsync(CancellationToken ct = default)
     {
         LoadedSettings current = await gateway.LoadAsync(ct);

@@ -198,6 +198,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
     }
 
+    public Task<SaveSettingsOutcome> AddSourceAsync(SaveSettingsRequest request, CancellationToken ct = default) =>
+        SaveAsync(handler => handler.HandleAddSourceAsync(request, ct));
+
     public Task<SaveSettingsOutcome> AddIndexerAsync(CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleAddIndexerAsync(ct));
 

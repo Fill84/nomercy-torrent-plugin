@@ -85,6 +85,10 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
     public Task<IActionResult> AddTorrent([FromBody] SaveSettingsRequest request, CancellationToken ct) =>
         RespondAsync(plugin => plugin.AddTorrentAsync(request, ct));
 
+    [HttpPost(DownloadsView.AddSourceMethod)]
+    public Task<IActionResult> AddSource([FromBody] SaveSettingsRequest request, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.AddSourceAsync(request, ct));
+
     [HttpPost(SettingsView.AddIndexerMethod)]
     public Task<IActionResult> AddIndexer(CancellationToken ct) =>
         RespondAsync(plugin => plugin.AddIndexerAsync(ct));

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
+using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
 using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugins.Abstractions;
 
@@ -48,6 +49,7 @@ public static class DownloadsView
     internal const string AllowReleaseMethod = "AllowRelease";
     internal const string SearchNowMethod = "SearchNow";
     internal const string AddTorrentMethod = "AddTorrent";
+    internal const string AddSourceMethod = "AddSource";
     internal const string UnfollowShowMethod = "UnfollowShow";
 
     internal const string FollowShowRouteTemplate = FollowShowMethod + "/{showId:int}";
@@ -123,6 +125,38 @@ public static class DownloadsView
                     "Add",
                     PluginActionIntent.CallPlugin(AddTorrentMethod),
                     new PluginFormField { Name = "source", Label = "Magnet link", Required = true })),
+
+            // Here as well as in the settings, because the moment somebody realises they
+            // need another source is the moment an episode found nothing - and that
+            // happens while looking at this page, not that one.
+            Ui.Section(
+                "downloads-source",
+                "Add a source",
+                "A feed announces which releases exist; a site is where the torrent is, searched by that name.",
+                Ui.Form(
+                    "downloads-source-form",
+                    "Add source",
+                    PluginActionIntent.CallPlugin(AddSourceMethod),
+                    new PluginFormField { Name = "name", Label = "Name", Required = true },
+                    new PluginFormField
+                    {
+                        Name = "kind",
+                        Label = "Kind",
+                        Type = PluginFormFieldType.Select,
+                        Value = "rss",
+                        Options =
+                        [
+                            new() { Value = "rss", Label = "Feed - announces releases by name" },
+                            new() { Value = "site", Label = "Site - searched for a release, has the torrents" },
+                            new() { Value = "torznab", Label = "Torznab - Jackett or Prowlarr" },
+                        ],
+                    },
+                    new PluginFormField
+                    {
+                        Name = "url",
+                        Label = $"Address - a site needs {SiteIndexer.QueryPlaceholder} where the search terms go",
+                        Required = true,
+                    })),
 
             Ui.Section(
                 "downloads-queue",
