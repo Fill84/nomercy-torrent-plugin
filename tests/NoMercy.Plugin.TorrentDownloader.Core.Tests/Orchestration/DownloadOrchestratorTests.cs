@@ -254,6 +254,48 @@ public class DownloadOrchestratorTests
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
+    // --- episodes that have not happened yet -------------------------------------------
+
+    // Seen on a real server: the queue was offering South Park S29E01, which has not
+    // aired. Nobody can seed it. Searching for it spends an attempt per cycle on a
+    // question with no possible answer, and after twelve of those the plugin parks it as
+    // unavailable - giving up on it shortly before it becomes the one thing worth looking
+    // for.
+    [Fact]
+    public async Task RefreshWantedAsync_DoesNotWantAnEpisodeThatHasNotAiredYet()
+    {
+        _library.Add(showId: 1, "Some Show", "/media/some-show",
+        [
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: false),
+        ]);
+        _library.SetAirDate(1, 1, 2, Now.AddDays(9));
+
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task RefreshWantedAsync_WantsAnEpisodeTheDayItAirs()
+    {
+        _library.Add(showId: 1, "Some Show", "/media/some-show",
+        [
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: false),
+        ]);
+        _library.SetAirDate(1, 1, 2, Now.AddHours(-1));
+
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(1);
+    }
+
+    // Unknown is not the same as future, and old libraries are full of undated episodes.
+    [Fact]
+    public async Task RefreshWantedAsync_StillWantsAnEpisodeWithNoAirDateAtAll()
+    {
+        _library.Add(showId: 1, "Some Show", "/media/some-show", [(1, 1, true), (1, 2, false)]);
+
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(1);
+    }
+
     // --- the owner overruling it -------------------------------------------------------
 
     [Fact]
@@ -1014,6 +1056,15 @@ public class DownloadOrchestratorTests
 
             _shows.Add(new LibraryShow(showId, title, 2026, "lib-1", folder, list.Count, list.Count(e => e.HasFile)));
             _episodes[showId] = list;
+        }
+
+        /// <summary>Gives one episode an air date. Everything else stays undated, as most test libraries are.</summary>
+        public void SetAirDate(int showId, int season, int episode, DateTimeOffset airs)
+        {
+            List<LibraryEpisode> list = _episodes[showId];
+            int index = list.FindIndex(known => known.SeasonNumber == season && known.EpisodeNumber == episode);
+
+            list[index] = list[index] with { AirDate = airs };
         }
 
         public Task<IReadOnlyList<LibraryShow>> GetShowsAsync(CancellationToken ct) =>

@@ -237,6 +237,18 @@ public sealed class DownloadOrchestrator(
                 if (episode.SeasonNumber == 0 && !options.IncludeSpecials)
                     continue;
 
+                // Nobody can seed an episode that has not aired. Wanting one costs a
+                // search per cycle, spends its attempts on a question with no possible
+                // answer, and eventually parks it as unavailable - so the plugin gives up
+                // on it shortly before it is the one thing worth looking for. A library
+                // lists a whole ordered season the moment the first part of it airs, so
+                // this is most of a season's worth of pointless searching per show.
+                //
+                // An episode with no air date at all is still wanted: unknown is not the
+                // same as future, and old libraries are full of episodes nobody dated.
+                if (episode.AirDate is DateTimeOffset airs && airs > now())
+                    continue;
+
                 if (!seen.Add(new EpisodeKey(show.ShowId, episode.SeasonNumber, episode.EpisodeNumber)))
                     continue;
 
