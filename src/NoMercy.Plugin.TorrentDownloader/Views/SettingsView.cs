@@ -3,6 +3,7 @@
 
 using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Views;
@@ -87,7 +88,8 @@ public static class SettingsView
                 Ui.EmptyState(
                     "settings-indexers-empty",
                     "No indexer configured",
-                    "Add an indexer so Torrent Downloader knows where to search for releases."
+                    "A feed announces which releases exist and what they are called; a site is where the torrent "
+                    + "actually is, searched by that name. Most setups want one of each."
                 )
             );
         }
@@ -211,6 +213,20 @@ public static class SettingsView
         return Ui.Form("settings-general-form", SaveLabel, PluginActionIntent.CallPlugin(SaveSettingsMethod), fields);
     }
 
+    /// <summary>
+    /// What to put in the URL box, which is not the same question for all three kinds.
+    ///
+    /// <para>
+    /// A site needs its search address with a placeholder in it, and that is not guessable
+    /// - so the label asks for exactly what the owner can copy out of their own address
+    /// bar after searching the site once by hand.
+    /// </para>
+    /// </summary>
+    private static string UrlLabel(string kind) =>
+        kind.Equals("site", StringComparison.OrdinalIgnoreCase)
+            ? $"Search address, with {SiteIndexer.QueryPlaceholder} where the search terms go"
+            : "URL";
+
     private static PluginComponent BuildIndexerForm(int index, IndexerSettings indexer, IReadOnlySet<string> storedSecretKeys)
     {
         bool hasStoredKey = storedSecretKeys.Contains(SettingsGateway.IndexerSecretKey(indexer.Name));
@@ -218,8 +234,29 @@ public static class SettingsView
         PluginFormField[] fields =
         [
             new() { Name = "name", Label = "Name", Value = indexer.Name, Required = true },
-            new() { Name = "kind", Label = "Kind", Value = indexer.Kind },
-            new() { Name = "url", Label = "URL", Value = indexer.Url, Required = true },
+            // A list rather than a text box. The three kinds do genuinely different jobs,
+            // and typing one of them from memory is how an indexer ends up silently
+            // skipped for a spelling nobody can see on the page.
+            new()
+            {
+                Name = "kind",
+                Label = "Kind",
+                Type = PluginFormFieldType.Select,
+                Value = indexer.Kind,
+                Options =
+                [
+                    new() { Value = "rss", Label = "Feed - announces releases by name" },
+                    new() { Value = "site", Label = "Site - searched for a release, has the torrents" },
+                    new() { Value = "torznab", Label = "Torznab - Jackett or Prowlarr" },
+                ],
+            },
+            new()
+            {
+                Name = "url",
+                Label = UrlLabel(indexer.Kind),
+                Value = indexer.Url,
+                Required = true,
+            },
             new() { Name = "priority", Label = "Priority", Type = PluginFormFieldType.Number, Value = indexer.Priority },
             new() { Name = "enabled", Label = "Enabled", Type = PluginFormFieldType.Toggle, Value = indexer.Enabled },
             new()

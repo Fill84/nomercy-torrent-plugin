@@ -175,6 +175,17 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             return SaveSettingsOutcome.Failure("Indexer URL must be an absolute URL.");
         }
 
+        // Refused here rather than at search time. A site address without the placeholder
+        // searches the same page for every query, which returns the same rows for every
+        // episode - a failure that looks like a working site with bad results, and one
+        // nobody would think to blame on a missing word in a settings box.
+        if (IsSiteKind(request.Kind) && !SiteIndexer.IsUsableTemplate(request.Url))
+        {
+            return SaveSettingsOutcome.Failure(
+                $"A site's search address needs {SiteIndexer.QueryPlaceholder} where the search terms go. "
+                + "Search the site once by hand and copy the address, then replace what you searched for.");
+        }
+
         IndexerSettings existing = current.Settings.Indexers[index];
         string newName = string.IsNullOrWhiteSpace(request.Name) ? oldName : request.Name!;
 
@@ -371,6 +382,9 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
 
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, []));
     }
+
+    private static bool IsSiteKind(string? kind) =>
+        kind?.Trim().Equals("site", StringComparison.OrdinalIgnoreCase) == true;
 
     private static bool IsAbsoluteUrl(string? url) =>
         !string.IsNullOrWhiteSpace(url) && Uri.TryCreate(url, UriKind.Absolute, out _);
