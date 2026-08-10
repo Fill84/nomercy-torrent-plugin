@@ -237,18 +237,6 @@ public sealed class DownloadOrchestrator(
                 if (episode.SeasonNumber == 0 && !options.IncludeSpecials)
                     continue;
 
-                // Nobody can seed an episode that has not aired. Wanting one costs a
-                // search per cycle, spends its attempts on a question with no possible
-                // answer, and eventually parks it as unavailable - so the plugin gives up
-                // on it shortly before it is the one thing worth looking for. A library
-                // lists a whole ordered season the moment the first part of it airs, so
-                // this is most of a season's worth of pointless searching per show.
-                //
-                // An episode with no air date at all is still wanted: unknown is not the
-                // same as future, and old libraries are full of episodes nobody dated.
-                if (episode.AirDate is DateTimeOffset airs && airs > now())
-                    continue;
-
                 if (!seen.Add(new EpisodeKey(show.ShowId, episode.SeasonNumber, episode.EpisodeNumber)))
                     continue;
 
@@ -295,6 +283,15 @@ public sealed class DownloadOrchestrator(
             // was read before that happened, so without this the plugin searches for an
             // episode it just grabbed and pays an indexer's rate limit to be told so.
             if (settled.Contains(episode.Key))
+                continue;
+
+            // Skipped, not dropped. Nobody can seed an episode that has not aired, so
+            // searching for it spends an attempt on a question with no possible answer -
+            // twelve of those and the plugin parks it as unavailable, giving up shortly
+            // before it becomes the one thing worth looking for. But it still belongs on
+            // the page: a library lists a whole ordered season the moment its first
+            // episode airs, and what is coming is exactly what its owner wants to see.
+            if (NotOutYet(episode))
                 continue;
 
             IReadOnlyList<EpisodeKey>? covered = await TryGrabAsync(episode, ct);
@@ -436,6 +433,18 @@ public sealed class DownloadOrchestrator(
 
         return offers.Values;
     }
+
+    /// <summary>
+    /// Whether this one is still in the future.
+    ///
+    /// <para>
+    /// No air date means wanted. Unknown is not the same as future, and old libraries are
+    /// full of episodes nobody ever dated - refusing to look for those would quietly
+    /// abandon them.
+    /// </para>
+    /// </summary>
+    private bool NotOutYet(WantedEpisode episode) =>
+        episode.AirDate is DateOnly airs && airs > DateOnly.FromDateTime(now().UtcDateTime);
 
     /// <summary>The episodes the grab settled, or null when nothing was grabbed.</summary>
     private async Task<IReadOnlyList<EpisodeKey>?> TryGrabAsync(WantedEpisode episode, CancellationToken ct)
@@ -651,7 +660,9 @@ public sealed class DownloadOrchestrator(
     {
         WantedEpisode? episode = await store.FindWantedAsync(key, ct);
 
-        return episode is not null && await TryGrabAsync(episode, ct) is not null;
+        // Refused rather than searched, same as the cadence, and for the same reason -
+        // but this one has somebody watching, so the caller turns it into a sentence.
+        return episode is not null && !NotOutYet(episode) && await TryGrabAsync(episode, ct) is not null;
     }
 
     /// <summary>

@@ -262,7 +262,7 @@ public class DownloadOrchestratorTests
     // unavailable - giving up on it shortly before it becomes the one thing worth looking
     // for.
     [Fact]
-    public async Task RefreshWantedAsync_DoesNotWantAnEpisodeThatHasNotAiredYet()
+    public async Task RefreshWantedAsync_KeepsAnUnairedEpisodeOnTheQueueButNeverSearchesForIt()
     {
         _library.Add(showId: 1, "Some Show", "/media/some-show",
         [
@@ -271,7 +271,25 @@ public class DownloadOrchestratorTests
         ]);
         _library.SetAirDate(1, 1, 2, Now.AddDays(9));
 
-        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(0);
+        // Still on the queue - it is what the owner is waiting for - but never searched
+        // for, because nobody can seed it yet.
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(1);
+
+        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Should().Be(0);
+        _search.Queries.Should().BeEmpty();
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().ContainSingle()
+            .Which.SearchAttempts.Should().Be(0, "an unaired episode is skipped, not spent");
+    }
+
+    [Fact]
+    public async Task SearchNowAsync_RefusesAnEpisodeThatHasNotAiredYet()
+    {
+        _library.Add(showId: 1, "Some Show", "/media/some-show", [(1, 1, true), (1, 2, false)]);
+        _library.SetAirDate(1, 1, 2, Now.AddDays(9));
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        (await Orchestrator().SearchNowAsync(new EpisodeKey(1, 1, 2), CancellationToken.None)).Should().BeFalse();
+        _search.Queries.Should().BeEmpty();
     }
 
     [Fact]

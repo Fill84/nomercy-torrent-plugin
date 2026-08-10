@@ -291,6 +291,7 @@ public static class DownloadsView
             $"downloads-wanted-state-{episode.Key}",
             episode.State switch
             {
+                _ when NotOutYet(episode) => $"Airs {episode.AirDate:d MMM}",
                 WantedState.Searching => "Searching",
                 WantedState.Grabbed => "Downloading",
                 WantedState.Unavailable => "Not found",
@@ -301,6 +302,7 @@ public static class DownloadsView
             // business and changes between light, dark and a television.
             episode.State switch
             {
+                _ when NotOutYet(episode) => PluginBadgeVariant.Neutral,
                 WantedState.Unavailable => PluginBadgeVariant.Warning,
                 WantedState.Grabbed => PluginBadgeVariant.Success,
                 _ => PluginBadgeVariant.Neutral,
@@ -339,6 +341,14 @@ public static class DownloadsView
 
     private static string Percentage(Transfer transfer) =>
         transfer.BytesTotal > 0 ? $"{transfer.Progress * 100:0}%" : "starting";
+
+    /// <summary>
+    /// Whether this one has not aired. It stays on the queue either way - what is coming
+    /// is exactly what its owner wants to see - but it says so rather than sitting there
+    /// looking like something the plugin is failing to find.
+    /// </summary>
+    private static bool NotOutYet(WantedEpisode episode) =>
+        episode.AirDate is DateOnly airs && airs > DateOnly.FromDateTime(DateTime.UtcNow);
 
     private static string Peers(int peers) => peers == 1 ? "1 peer" : $"{peers} peers";
 
