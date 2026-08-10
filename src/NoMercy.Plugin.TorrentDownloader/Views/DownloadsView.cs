@@ -46,6 +46,8 @@ public static class DownloadsView
     internal const string ResumeDownloadMethod = "ResumeDownload";
     internal const string CancelDownloadMethod = "CancelDownload";
     internal const string AllowReleaseMethod = "AllowRelease";
+    internal const string SearchNowMethod = "SearchNow";
+    internal const string AddTorrentMethod = "AddTorrent";
     internal const string UnfollowShowMethod = "UnfollowShow";
 
     internal const string FollowShowRouteTemplate = FollowShowMethod + "/{showId:int}";
@@ -57,6 +59,7 @@ public static class DownloadsView
     internal const string ResumeDownloadRouteTemplate = ResumeDownloadMethod + "/{infoHash}";
     internal const string CancelDownloadRouteTemplate = CancelDownloadMethod + "/{infoHash}";
     internal const string AllowReleaseRouteTemplate = AllowReleaseMethod + "/{handle}";
+    internal const string SearchNowRouteTemplate = SearchNowMethod + "/{showId:int}/{season:int}/{episode:int}";
 
     /// <summary>A show the library knows about, and whether this plugin is following it.</summary>
     public sealed record FollowableShow(int ShowId, string Title, bool Followed);
@@ -108,6 +111,18 @@ public static class DownloadsView
                 Count("Downloading", transfers.Count(transfer => !transfer.Paused)),
                 Speed(transfers),
                 ActiveTable(transfers, byHash)),
+
+            // The escape hatch. Everything above is the plugin deciding; this is the owner
+            // overruling it with a link they found themselves.
+            Ui.Section(
+                "downloads-add",
+                "Add a link",
+                "A magnet link for an episode already on the queue below. It is matched by name and taken as-is.",
+                Ui.Form(
+                    "downloads-add-form",
+                    "Add",
+                    PluginActionIntent.CallPlugin(AddTorrentMethod),
+                    new PluginFormField { Name = "source", Label = "Magnet link", Required = true })),
 
             Ui.Section(
                 "downloads-queue",
@@ -224,7 +239,16 @@ public static class DownloadsView
                 $"downloads-wanted-{episode.Key}",
                 Ui.Text($"downloads-wanted-show-{episode.Key}", episode.ShowTitle),
                 Ui.Text($"downloads-wanted-slot-{episode.Key}", Slot(episode.Key), "caption"),
-                StateBadge(episode)));
+                StateBadge(episode),
+
+                // The cadence works least-recently-searched first, ten at a time, which is
+                // the right order for a machine and the wrong one for somebody who wants
+                // tonight's episode.
+                Ui.Button(
+                    $"downloads-search-now-{episode.Key}",
+                    "Search now",
+                    PluginActionIntent.CallPlugin(
+                        $"{SearchNowMethod}/{episode.Key.ShowId}/{episode.Key.Season}/{episode.Key.Episode}"))));
         }
 
         return Ui.List("downloads-queue", [.. rows]);

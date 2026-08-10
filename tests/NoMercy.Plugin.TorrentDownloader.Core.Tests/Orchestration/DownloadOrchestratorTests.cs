@@ -254,6 +254,85 @@ public class DownloadOrchestratorTests
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
+    // --- the owner overruling it -------------------------------------------------------
+
+    [Fact]
+    public async Task SearchNowAsync_GoesAndGetsOneEpisodeWithoutWaitingForItsTurn()
+    {
+        await WantEpisodesAsync(20);
+        _search.Results = [Release("Some.Show.S01E19.1080p.WEB-DL", "now")];
+
+        (await Orchestrator().SearchNowAsync(new EpisodeKey(1, 1, 19), CancellationToken.None)).Should().BeTrue();
+
+        _search.Queries.Should().ContainSingle("only the one asked for, not the batch");
+        _engine.Added.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task SearchNowAsync_SaysNoForAnEpisodeThatIsNotWanted()
+    {
+        (await Orchestrator().SearchNowAsync(new EpisodeKey(1, 1, 1), CancellationToken.None)).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task AddManuallyAsync_TakesALinkAndFilesItUnderTheEpisodeItMatches()
+    {
+        await WantEpisodesAsync(3);
+
+        ManualAdd added = await Orchestrator().AddManuallyAsync(
+            "magnet:?xt=urn:btih:deadbeef&dn=Some.Show.S01E02.1080p.WEB-DL-GROUP",
+            CancellationToken.None);
+
+        added.Added.Should().BeTrue();
+        (await _store.ActiveGrabsAsync(CancellationToken.None)).Should().ContainSingle()
+            .Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
+    }
+
+    // A torrent nobody can tie to an episode downloads perfectly and then has no library
+    // to be imported into. Refusing while the owner is still looking at the box beats a
+    // complete file sitting in the finished folder for good.
+    [Fact]
+    public async Task AddManuallyAsync_RefusesALinkThatMatchesNothingOnTheQueue()
+    {
+        await WantEpisodesAsync(3);
+
+        ManualAdd added = await Orchestrator().AddManuallyAsync(
+            "magnet:?xt=urn:btih:deadbeef&dn=Some.Other.Show.S09E09.1080p",
+            CancellationToken.None);
+
+        added.Added.Should().BeFalse();
+        added.Message.Should().Contain("Nothing on the queue matches");
+        _engine.Added.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task AddManuallyAsync_RefusesALinkWithNoNameInIt()
+    {
+        await WantEpisodesAsync(3);
+
+        ManualAdd added = await Orchestrator().AddManuallyAsync(
+            "magnet:?xt=urn:btih:deadbeef",
+            CancellationToken.None);
+
+        added.Added.Should().BeFalse();
+        _engine.Added.Should().BeEmpty();
+    }
+
+    // The owner picked this one. A plugin that second-guesses a link somebody pasted by
+    // hand is a plugin they stop pasting into.
+    [Fact]
+    public async Task AddManuallyAsync_TakesTheLinkEvenWhenTheProfileWouldHaveRefusedIt()
+    {
+        await WantEpisodesAsync(3);
+        _chooser.Accept = false;
+
+        ManualAdd added = await Orchestrator().AddManuallyAsync(
+            "magnet:?xt=urn:btih:deadbeef&dn=Some.Show.S01E02.2160p.REMUX",
+            CancellationToken.None);
+
+        added.Added.Should().BeTrue();
+    }
+
     // --- what is being skipped, and taking it back -------------------------------------
 
     // The list was invisible before. A release skipped for a fortnight is the likeliest

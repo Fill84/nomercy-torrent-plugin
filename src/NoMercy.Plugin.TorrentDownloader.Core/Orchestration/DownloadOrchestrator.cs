@@ -150,6 +150,9 @@ public sealed record WantedRefresh(int Wanted, int ShowsFollowed, int ShowsNotSt
 /// </summary>
 public sealed record FeedCycle(int Matched, int Grabbed);
 
+/// <summary>Whether a pasted link was taken, and what to tell the person who pasted it.</summary>
+public sealed record ManualAdd(bool Added, string Message);
+
 /// <summary>
 /// The loop: notice what is missing, find something for it, hand it to the engine,
 /// and put the result where the server will import it.
@@ -621,6 +624,119 @@ public sealed class DownloadOrchestrator(
         }, ct);
 
         return true;
+    }
+
+    /// <summary>
+    /// Searches for one episode right now, instead of when its turn comes round.
+    ///
+    /// <para>
+    /// The search cadence works through a backlog ten at a time and least-recently-searched
+    /// first, which is the right order for a machine and the wrong one for a person who
+    /// wants tonight's episode. This is that person's button.
+    /// </para>
+    /// </summary>
+    public async Task<bool> SearchNowAsync(EpisodeKey key, CancellationToken ct)
+    {
+        WantedEpisode? episode = await store.FindWantedAsync(key, ct);
+
+        return episode is not null && await TryGrabAsync(episode, ct) is not null;
+    }
+
+    /// <summary>
+    /// Takes a link the owner pasted, and files it under the episode it turns out to be.
+    ///
+    /// <para>
+    /// Matched against the wanted list rather than taken on trust, and refused when it
+    /// matches nothing. A torrent nobody can tie to an episode is one that downloads
+    /// perfectly and then has no library to be imported into - it would sit complete in
+    /// the finished folder for good. Refusing up front says so while the owner is still
+    /// looking at the box they typed into.
+    /// </para>
+    ///
+    /// <para>
+    /// The name comes from the magnet's own <c>dn</c>. Whoever posted the torrent named it
+    /// after the release, which is the same string every other part of this plugin reads.
+    /// </para>
+    /// </summary>
+    public async Task<ManualAdd> AddManuallyAsync(string source, CancellationToken ct)
+    {
+        string trimmed = source.Trim();
+
+        if (!trimmed.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase)
+            && !Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+        {
+            return new ManualAdd(false, "That is not a magnet link or a torrent URL.");
+        }
+
+        string? name = DisplayName(trimmed);
+
+        if (name is null)
+            return new ManualAdd(false, "That link does not say what it is. Use a magnet link with a name in it.");
+
+        IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(int.MaxValue, ct);
+
+        ReleaseInfo release = new()
+        {
+            IndexerName = "added by hand",
+            TorrentId = name,
+            Title = name,
+            MagnetUri = trimmed.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase) ? trimmed : null,
+            DownloadUrl = trimmed.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase) ? null : trimmed,
+        };
+
+        (WantedEpisode Episode, List<ReleaseInfo> Candidates) match = Offers([release], wanted).FirstOrDefault();
+
+        if (match.Episode is null)
+            return new ManualAdd(false, $"Nothing on the queue matches {name}.");
+
+        // Past the profile deliberately. The owner picked this one, and a plugin that
+        // second-guesses a link somebody pasted by hand is a plugin they stop pasting into.
+        string infoHash = await engine.AddAsync(new TorrentRequest
+        {
+            Source = trimmed,
+            DestinationFolder = options.DownloadFolder,
+            Origin = privateTrackers.OriginFor([]),
+        }, ct);
+
+        await store.AddGrabAsync(new Grab
+        {
+            InfoHash = infoHash,
+            Key = match.Episode.Key,
+            Covers = [match.Episode.Key],
+            ReleaseTitle = name,
+            Indexer = "added by hand",
+            GrabbedAt = now(),
+        }, ct);
+
+        await store.MarkSearchedAsync(match.Episode.Key, now(), WantedState.Grabbed, ct);
+
+        await store.RecordHistoryAsync(new HistoryEntry
+        {
+            At = now(),
+            Event = HistoryEvent.Grabbed,
+            Key = match.Episode.Key,
+            ShowTitle = match.Episode.ShowTitle,
+            ReleaseTitle = name,
+            Indexer = "added by hand",
+        }, ct);
+
+        return new ManualAdd(true, $"Added for {match.Episode.ShowTitle}.");
+    }
+
+    /// <summary>The <c>dn</c> of a magnet, which is what the poster called the release.</summary>
+    private static string? DisplayName(string source)
+    {
+        int start = source.IndexOf("dn=", StringComparison.OrdinalIgnoreCase);
+
+        if (start < 0)
+            return null;
+
+        string rest = source[(start + 3)..];
+        int end = rest.IndexOf('&');
+
+        string name = Uri.UnescapeDataString(end < 0 ? rest : rest[..end]).Replace('+', ' ');
+
+        return string.IsNullOrWhiteSpace(name) ? null : name;
     }
 
     /// <summary>

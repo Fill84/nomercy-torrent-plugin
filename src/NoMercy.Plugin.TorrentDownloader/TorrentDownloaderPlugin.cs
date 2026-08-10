@@ -111,6 +111,36 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             "Cancelled. The episode is back on the queue and this release is skipped for now.",
             ct);
 
+    public Task<SaveSettingsOutcome> SearchNowAsync(int showId, int season, int episode, CancellationToken ct = default) =>
+        OnDownloadAsync(
+            orchestrator => orchestrator.SearchNowAsync(new EpisodeKey(showId, season, episode), ct),
+            "Grabbed it.",
+            ct,
+            nothingHappened: "Nothing usable was found for that one just now.");
+
+    public async Task<SaveSettingsOutcome> AddTorrentAsync(SaveSettingsRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Source))
+            return SaveSettingsOutcome.Failure("Paste a magnet link first.");
+
+        if (_disposed || _context is null)
+            return SaveSettingsOutcome.Failure("Torrent Downloader is unavailable.");
+
+        try
+        {
+            DownloadPipeline pipeline = await PipelineAsync(_context, ct);
+            ManualAdd added = await pipeline.Orchestrator.AddManuallyAsync(request.Source, ct);
+
+            return added.Added ? SaveSettingsOutcome.Done(added.Message) : SaveSettingsOutcome.Failure(added.Message);
+        }
+        catch (Exception failure)
+        {
+            _context.Logger.LogWarning(failure, "Torrent Downloader could not add a link by hand.");
+
+            return SaveSettingsOutcome.Failure("That link could not be added. The server log says why.");
+        }
+    }
+
     /// <summary>
     /// Lifts a skip, so the release can be chosen again.
     ///
@@ -144,7 +174,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private async Task<SaveSettingsOutcome> OnDownloadAsync(
         Func<DownloadOrchestrator, Task<bool>> act,
         string done,
-        CancellationToken ct)
+        CancellationToken ct,
+        string nothingHappened = "That download is no longer one this plugin is holding.")
     {
         if (_disposed || _context is null)
             return SaveSettingsOutcome.Failure("Torrent Downloader is unavailable.");
@@ -155,7 +186,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
             return await act(pipeline.Orchestrator)
                 ? SaveSettingsOutcome.Done(done)
-                : SaveSettingsOutcome.Failure("That download is no longer one this plugin is holding.");
+                : SaveSettingsOutcome.Failure(nothingHappened);
         }
         catch (Exception failure)
         {

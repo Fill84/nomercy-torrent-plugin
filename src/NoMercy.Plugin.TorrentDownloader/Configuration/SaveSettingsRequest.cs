@@ -19,6 +19,9 @@ public sealed class SaveSettingsRequest
     // General form.
     public string? TransfersCron { get; init; }
     public string? FeedCron { get; init; }
+
+    /// <summary>A magnet link somebody pasted on the downloads page.</summary>
+    public string? Source { get; init; }
     public string? SearchCron { get; init; }
     public string? MaintenanceCron { get; init; }
     public string? IncompleteFolder { get; init; }
