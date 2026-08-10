@@ -302,6 +302,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         using CancellationTokenSource linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, _lifecycleCts.Token);
         linkedCts.Token.ThrowIfCancellationRequested();
 
+        AnnounceOnce(context, jobName);
+
         switch (jobName)
         {
             case JobNames.Transfers:
@@ -319,6 +321,35 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             default:
                 throw new ArgumentOutOfRangeException(nameof(jobName), jobName, "Unknown job name.");
         }
+    }
+
+    private int _announced;
+
+    /// <summary>
+    /// Says the plugin is alive, once, on whichever cadence fires first.
+    ///
+    /// <para>
+    /// Every other line this plugin writes reports something happening. That leaves an idle
+    /// plugin and a dead one looking exactly alike in the log, and they are not the same
+    /// problem at all - one waits, the other needs fixing. Chasing that difference on a
+    /// real server cost the better part of an hour, watching a quarter-hourly cadence that
+    /// might simply not have come round yet.
+    /// </para>
+    ///
+    /// <para>
+    /// The transfers cadence runs every minute, so this appears within a minute of the
+    /// plugin loading rather than within fifteen.
+    /// </para>
+    /// </summary>
+    private void AnnounceOnce(IPluginContext context, string jobName)
+    {
+        if (Interlocked.Exchange(ref _announced, 1) != 0)
+            return;
+
+        context.Logger.LogInformation(
+            "Torrent Downloader is awake: version {Version}, first cadence to fire was {Job}.",
+            Version,
+            jobName);
     }
 
     // The engine holds running torrents, so the pipeline outlives a job tick and is built

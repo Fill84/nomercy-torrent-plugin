@@ -456,8 +456,15 @@ public class PluginLifecycleTests
         // that found no finished downloads and started none should not log every minute.
         // The two that always report do, and they report different things, which is what
         // proves the switch is not funnelling every job into one body.
-        logger.Messages.Should().HaveCount(2);
-        logger.Messages.Distinct().Should().HaveCount(2);
+        List<string> work = [.. logger.Messages.Where(message => !message.Contains("is awake"))];
+
+        work.Should().HaveCount(2);
+        work.Distinct().Should().HaveCount(2);
+
+        // Said once for the process, not once per cadence - four ticks, one line. An idle
+        // plugin and a dead one look identical in a log otherwise, and only one of them
+        // needs fixing.
+        logger.Messages.Should().ContainSingle(message => message.Contains("is awake"));
     }
 
     [Fact]
