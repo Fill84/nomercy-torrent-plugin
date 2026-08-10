@@ -101,7 +101,13 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new IndexerReleaseFeed(new IndexerAggregator(
                 [.. indexers.Where(indexer => indexer.IsFeed).Select(indexer => indexer.Indexer)])),
 
-            FreeSpaceOn);
+            FreeSpaceOn,
+
+            // Sites only. A feed cannot resolve what a feed announced - asking SCNSRC
+            // where to get the release it just named is asking the notice board for the
+            // shop's address.
+            new IndexerReleaseResolver(
+                [.. indexers.Where(indexer => indexer.IsSite).Select(indexer => indexer.Indexer)]));
 
         return new DownloadPipeline(engine, orchestrator);
     }
@@ -182,7 +188,13 @@ internal sealed class DownloadPipeline : IAsyncDisposable
     /// it a question. The two cadences want different subsets of the same instances - the
     /// pacer's rate limiting only works if both go through the one object per endpoint.
     /// </summary>
-    private sealed record ConfiguredIndexer(PacedIndexer Indexer, bool IsFeed);
+    private sealed record ConfiguredIndexer(PacedIndexer Indexer, bool IsFeed, bool IsSite);
+
+    /// <summary>
+    /// Shared by every site, because Cloudflare issues clearance per host and two sites on
+    /// one host would otherwise solve the same gate twice.
+    /// </summary>
+    private static readonly ClearanceStore Clearances = new(() => DateTimeOffset.UtcNow);
 
     private static IReadOnlyList<ConfiguredIndexer> Indexers(IPluginContext context, LoadedSettings loaded)
     {
@@ -211,7 +223,8 @@ internal sealed class DownloadPipeline : IAsyncDisposable
                     maxConcurrency: 2,
                     failureThreshold: 3,
                     cooldown: TimeSpan.FromMinutes(15))),
-                IsFeed: settings.Kind.Equals("rss", StringComparison.OrdinalIgnoreCase)));
+                IsFeed: settings.Kind.Equals("rss", StringComparison.OrdinalIgnoreCase),
+                IsSite: settings.Kind.Equals("site", StringComparison.OrdinalIgnoreCase)));
         }
 
         return indexers;
@@ -238,6 +251,23 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
             case "rss":
                 return new RssIndexer(settings.Name, settings.Priority, url, context.HttpClient, settings.Categories);
+
+            case "site" when SiteIndexer.IsUsableTemplate(settings.Url):
+                return new SiteIndexer(
+                    settings.Name,
+                    settings.Priority,
+                    settings.Url,
+                    new ChallengeAwareFetch(context.HttpClient, Clearances, new BrowserIdentitySolver()));
+
+            case "site":
+                // Said once here rather than failing every search: a template without the
+                // placeholder searches the same page forever and looks like a dead site.
+                context.Logger.LogWarning(
+                    "Skipping site {Name}: its search address needs {Placeholder} where the search terms go.",
+                    settings.Name,
+                    SiteIndexer.QueryPlaceholder);
+
+                return null;
 
             default:
                 context.Logger.LogWarning("Skipping indexer {Name}: '{Kind}' is not a kind this plugin knows.", settings.Name, settings.Kind);

@@ -175,7 +175,8 @@ public sealed class DownloadOrchestrator(
     PrivateTrackerRegistry privateTrackers,
     Func<DateTimeOffset> now,
     IReleaseFeed? feed = null,
-    Func<string, long?>? freeSpace = null)
+    Func<string, long?>? freeSpace = null,
+    IReleaseResolver? resolver = null)
 {
     /// <summary>
     /// Brings the wanted list in line with the library.
@@ -509,10 +510,48 @@ public sealed class DownloadOrchestrator(
         if (await NoRoomForAsync(chosen, episode, ct))
             return null;
 
+        // An announcement carries no torrent, so the winner may be a name and nothing
+        // more. Resolving it is a second question - not "which release" but "who has
+        // this one" - and it is asked of the sites rather than of the feed that named it.
+        if (chosen.MagnetUri is null && chosen.DownloadUrl is null && resolver is not null)
+        {
+            ReleaseInfo? resolved = await resolver.ResolveAsync(chosen, ct);
+
+            if (resolved is not null)
+            {
+                // The announcement's identity, the resolved copy's whereabouts. Trackers
+                // and seeders belong to whoever is actually serving it; the title stays
+                // the announced one, because that is what the pack detection below and
+                // the blacklist both key on.
+                chosen = chosen with
+                {
+                    MagnetUri = resolved.MagnetUri,
+                    DownloadUrl = resolved.DownloadUrl,
+                    InfoHash = resolved.InfoHash ?? chosen.InfoHash,
+                    Seeders = resolved.Seeders,
+                    Trackers = resolved.Trackers.Count > 0 ? resolved.Trackers : chosen.Trackers,
+                };
+            }
+        }
+
         string? source = chosen.MagnetUri ?? chosen.DownloadUrl;
 
         if (source is null)
         {
+            // Announced and nobody has it - which happens, and is not the episode's fault.
+            // Recorded so the page can say so, because otherwise this is indistinguishable
+            // from a feed that never mentioned it.
+            await store.RecordHistoryAsync(new HistoryEntry
+            {
+                At = now(),
+                Event = HistoryEvent.Skipped,
+                Key = episode.Key,
+                ShowTitle = episode.ShowTitle,
+                ReleaseTitle = chosen.Title,
+                Indexer = chosen.IndexerName,
+                Detail = "announced, but no site had it yet",
+            }, ct);
+
             if (countsAsSearch)
                 await store.MarkSearchedAsync(episode.Key, now(), WantedState.Wanted, ct);
 

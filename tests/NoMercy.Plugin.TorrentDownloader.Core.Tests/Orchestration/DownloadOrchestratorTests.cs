@@ -25,6 +25,7 @@ public class DownloadOrchestratorTests
     private readonly FakeIntake _intake = new();
     private readonly FakeChooser _chooser = new();
     private readonly FakeFeed _feed = new();
+    private readonly FakeResolver _resolver = new();
 
     private DownloadOrchestrator Orchestrator(OrchestratorOptions? options = null) => new(
         _library,
@@ -37,7 +38,8 @@ public class DownloadOrchestratorTests
         new PrivateTrackerRegistry([]),
         () => Now,
         _feed,
-        _ => FreeBytes);
+        _ => FreeBytes,
+        _resolver);
 
     /// <summary>What the disk claims to have left. Enough for anything, unless a test says otherwise.</summary>
     private long? FreeBytes { get; set; } = 500L * 1024 * 1024 * 1024;
@@ -252,6 +254,60 @@ public class DownloadOrchestratorTests
 
         IReadOnlyList<WantedEpisode> wanted = await _store.WantedAsync(10, CancellationToken.None);
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
+    }
+
+    // --- announced here, downloaded from there -----------------------------------------
+
+    private static ReleaseInfo Announcement(string title) => new()
+    {
+        IndexerName = "scene-feed",
+        TorrentId = title,
+        Title = title,
+
+        // The whole point of an announcement: it says what exists, not where it is.
+        MagnetUri = null,
+        DownloadUrl = null,
+    };
+
+    // Without this the plugin matches an episode perfectly and has nothing to hand the
+    // engine - which from outside looks exactly like a feed that found nothing at all.
+    [Fact]
+    public async Task SearchCycleAsync_ResolvesAnAnnouncementAgainstTheSitesAndGrabsWhatTheyHave()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Announcement("Some.Show.S01E01.1080p.WEB-DL-GROUP")];
+        _resolver.Answer = Release("Some.Show.S01E01.1080p.WEB-DL-GROUP", "fromsite");
+
+        int grabbed = await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        grabbed.Should().Be(1);
+        _resolver.Asked.Should().ContainSingle().Which.Should().Be("Some.Show.S01E01.1080p.WEB-DL-GROUP");
+        _engine.Added.Should().ContainSingle();
+    }
+
+    // A release that already carries its own magnet is not an announcement, and asking the
+    // sites about it would be a search per grab for nothing.
+    [Fact]
+    public async Task SearchCycleAsync_DoesNotResolveWhatAlreadyHasAMagnet()
+    {
+        await GrabOneAsync();
+
+        _resolver.Asked.Should().BeEmpty();
+    }
+
+    // Announced and nobody has it yet is a real outcome, and not the episode's fault.
+    [Fact]
+    public async Task SearchCycleAsync_SaysOnThePageWhenNothingCouldBeResolved()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Announcement("Some.Show.S01E01.1080p.WEB-DL-GROUP")];
+        _resolver.Answer = null;
+
+        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Should().Be(0);
+
+        HistoryEntry entry = _store.History.Should().ContainSingle().Subject;
+        entry.Event.Should().Be(HistoryEvent.Skipped);
+        entry.Detail.Should().Contain("no site had it");
     }
 
     // --- episodes that have not happened yet -------------------------------------------
@@ -1126,6 +1182,20 @@ public class DownloadOrchestratorTests
                     MagnetUri = $"magnet:?xt=urn:btih:{hash}",
                 }),
             ]);
+        }
+    }
+
+    /// <summary>Stands in for the sites: hands back where to get whatever it is asked about.</summary>
+    private sealed class FakeResolver : IReleaseResolver
+    {
+        public ReleaseInfo? Answer { get; set; }
+
+        public List<string> Asked { get; } = [];
+
+        public Task<ReleaseInfo?> ResolveAsync(ReleaseInfo announced, CancellationToken ct)
+        {
+            Asked.Add(announced.Title);
+            return Task.FromResult(Answer);
         }
     }
 
