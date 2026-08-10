@@ -147,6 +147,29 @@ public static class Ui
             Props = new() { ["value"] = value, ["label"] = label },
         };
 
+    /// <summary>
+    /// A titled block of the page: heading, an optional line saying what is in it, then the
+    /// body.
+    ///
+    /// <para>
+    /// The count belongs in the heading rather than left to be worked out by scrolling. A
+    /// page that says "Downloading (3)" has answered the question the reader arrived with;
+    /// one that shows three rows makes them do the counting, and makes "nothing here" and
+    /// "nothing loaded" look identical.
+    /// </para>
+    /// </summary>
+    public static PluginComponent Section(string id, string heading, string? note, PluginComponent body)
+    {
+        List<PluginComponent> children = [Text($"{id}-heading", heading, "subtitle")];
+
+        if (!string.IsNullOrWhiteSpace(note))
+            children.Add(Text($"{id}-note", note, "caption"));
+
+        children.Add(body);
+
+        return Container(id, children);
+    }
+
     public static PluginComponent Badge(string id, string label, string variant) =>
         new()
         {

@@ -32,6 +32,12 @@ public static class DownloadsView
     /// </summary>
     public const int RefreshSeconds = 30;
 
+    /// <summary>
+    /// How much history the page shows. The store keeps far more; this is what fits on a
+    /// screen without turning an overview into an archive.
+    /// </summary>
+    public const int HistoryLimit = 15;
+
     internal const string FollowShowMethod = "FollowShow";
     internal const string PauseDownloadMethod = "PauseDownload";
     internal const string ResumeDownloadMethod = "ResumeDownload";
@@ -54,13 +60,21 @@ public static class DownloadsView
         IReadOnlyList<Transfer> transfers,
         IReadOnlyList<Grab> grabs,
         IReadOnlyList<WantedEpisode> wanted)
-        => Build(transfers, grabs, wanted, []);
+        => Build(transfers, grabs, wanted, [], []);
 
     public static PluginView Build(
         IReadOnlyList<Transfer> transfers,
         IReadOnlyList<Grab> grabs,
         IReadOnlyList<WantedEpisode> wanted,
         IReadOnlyList<FollowableShow> unstartedShows)
+        => Build(transfers, grabs, wanted, unstartedShows, []);
+
+    public static PluginView Build(
+        IReadOnlyList<Transfer> transfers,
+        IReadOnlyList<Grab> grabs,
+        IReadOnlyList<WantedEpisode> wanted,
+        IReadOnlyList<FollowableShow> unstartedShows,
+        IReadOnlyList<HistoryEntry> history)
     {
         Dictionary<string, Grab> byHash = grabs
             .GroupBy(grab => grab.InfoHash)
@@ -69,23 +83,43 @@ public static class DownloadsView
         List<PluginComponent> children =
         [
             Ui.Text("downloads-heading", "Downloads", "title"),
-            Ui.Text("downloads-active-heading", "Active", "subtitle"),
-            ActiveTable(transfers, byHash),
-            Ui.Text("downloads-queue-heading", QueueHeading(wanted), "subtitle"),
-            Queue(wanted),
+
+            // One line before any list, because the first question is "is it doing
+            // anything", and answering that by counting rows is work the page should have
+            // done for the reader.
+            Ui.Text("downloads-summary", Summary(transfers, wanted, history), "caption"),
+
+            Ui.Section(
+                "downloads-active",
+                Count("Downloading", transfers.Count(transfer => !transfer.Paused)),
+                Speed(transfers),
+                ActiveTable(transfers, byHash)),
+
+            Ui.Section(
+                "downloads-queue",
+                QueueHeading(wanted),
+                wanted.Count > QueuePreviewLength
+                    ? "The next few; the rest follow as these finish."
+                    : null,
+                Queue(wanted)),
         ];
+
+        if (history.Count > 0)
+        {
+            children.Add(Ui.Section(
+                "downloads-history",
+                "Recently",
+                "What became of the last downloads, after they left the list above.",
+                History(history)));
+        }
 
         if (unstartedShows.Count > 0)
         {
-            children.Add(Ui.Text("downloads-unstarted-heading", "Not started", "subtitle"));
-            children.Add(
-                Ui.Text(
-                    "downloads-unstarted-explainer",
-                    "These shows have no episode on the server, so nothing is downloaded for them. Follow one and it joins the queue.",
-                    "caption"
-                )
-            );
-            children.Add(Unstarted(unstartedShows));
+            children.Add(Ui.Section(
+                "downloads-unstarted",
+                Count("Not started", unstartedShows.Count),
+                "These shows have no episode on the server, so nothing is downloaded for them. Follow one and it joins the queue.",
+                Unstarted(unstartedShows)));
         }
 
         return PluginViews.Declarative(RefreshSeconds, Ui.Container("downloads-root", [.. children]));
@@ -260,6 +294,103 @@ public static class DownloadsView
         transfer.BytesTotal > 0 ? $"{transfer.Progress * 100:0}%" : "starting";
 
     private static string Peers(int peers) => peers == 1 ? "1 peer" : $"{peers} peers";
+
+    /// <summary>A heading that carries its own count, so an empty section reads as empty rather than as unloaded.</summary>
+    private static string Count(string heading, int count) => count == 0 ? heading : $"{heading} ({count})";
+
+    /// <summary>
+    /// The whole page in one sentence: what is moving, what is waiting, what has landed.
+    /// </summary>
+    private static string Summary(
+        IReadOnlyList<Transfer> transfers,
+        IReadOnlyList<WantedEpisode> wanted,
+        IReadOnlyList<HistoryEntry> history)
+    {
+        int active = transfers.Count(transfer => !transfer.Paused);
+        int paused = transfers.Count(transfer => transfer.Paused);
+
+        List<string> parts =
+        [
+            active == 1 ? "1 downloading" : $"{active} downloading",
+            wanted.Count == 1 ? "1 episode wanted" : $"{wanted.Count} episodes wanted",
+        ];
+
+        if (paused > 0)
+            parts.Insert(1, paused == 1 ? "1 paused" : $"{paused} paused");
+
+        int imported = history.Count(entry => entry.Event == HistoryEvent.Imported);
+
+        if (imported > 0)
+            parts.Add(imported == 1 ? "1 imported recently" : $"{imported} imported recently");
+
+        return string.Join(" · ", parts);
+    }
+
+    /// <summary>The whole page's rate, which is the number an owner actually watches.</summary>
+    private static string? Speed(IReadOnlyList<Transfer> transfers)
+    {
+        long total = transfers.Where(transfer => !transfer.Paused).Sum(transfer => transfer.BytesPerSecond);
+
+        return total > 0 ? $"{total / (1024d * 1024d):0.0} MB/s in total" : null;
+    }
+
+    /// <summary>
+    /// What happened, newest first. Each line says the outcome, the release, and when -
+    /// and for the ones that went wrong, why, because "Failed" on its own sends a reader
+    /// to the log file this page exists to save them from.
+    /// </summary>
+    private static PluginComponent History(IReadOnlyList<HistoryEntry> history)
+    {
+        List<PluginComponent> rows = [];
+
+        foreach (HistoryEntry entry in history.Take(HistoryLimit))
+        {
+            string id = $"{entry.At.ToUnixTimeMilliseconds()}-{entry.Key}";
+
+            rows.Add(Ui.Row(
+                $"downloads-history-row-{id}",
+                Ui.Badge($"downloads-history-badge-{id}", Outcome(entry.Event), OutcomeVariant(entry.Event)),
+                Ui.Text($"downloads-history-title-{id}", entry.ReleaseTitle),
+                Ui.Text($"downloads-history-slot-{id}", Slot(entry.Key), "caption"),
+                Ui.Text($"downloads-history-when-{id}", Ago(entry.At), "caption"),
+                Ui.Text($"downloads-history-detail-{id}", entry.Detail ?? "", "caption")));
+        }
+
+        return Ui.List("downloads-history-list", [.. rows]);
+    }
+
+    private static string Outcome(HistoryEvent outcome) => outcome switch
+    {
+        HistoryEvent.Imported => "Imported",
+        HistoryEvent.Failed => "Failed",
+        HistoryEvent.Cancelled => "Cancelled",
+        _ => "Grabbed",
+    };
+
+    private static string OutcomeVariant(HistoryEvent outcome) => outcome switch
+    {
+        HistoryEvent.Imported => PluginBadgeVariant.Success,
+        HistoryEvent.Failed => PluginBadgeVariant.Warning,
+        _ => PluginBadgeVariant.Neutral,
+    };
+
+    /// <summary>
+    /// How long ago, rather than a timestamp. "3 hours ago" is read at a glance; a date and
+    /// time has to be subtracted from now before it means anything.
+    /// </summary>
+    private static string Ago(DateTimeOffset when)
+    {
+        TimeSpan since = DateTimeOffset.UtcNow - when;
+
+        return since switch
+        {
+            { TotalDays: >= 2 } => $"{since.TotalDays:0} days ago",
+            { TotalDays: >= 1 } => "yesterday",
+            { TotalHours: >= 1 } => $"{since.TotalHours:0} h ago",
+            { TotalMinutes: >= 1 } => $"{since.TotalMinutes:0} min ago",
+            _ => "just now",
+        };
+    }
 
     /// <summary>
     /// The rate and what is left of the wait, or a plain word when there is no honest

@@ -86,6 +86,40 @@ public sealed record Grab
     public string? FailureReason { get; init; }
 }
 
+/// <summary>What became of a release, in the order it happened.</summary>
+public enum HistoryEvent
+{
+    Grabbed,
+    Imported,
+    Failed,
+    Cancelled,
+}
+
+/// <summary>
+/// One thing that happened, kept after the download itself is gone.
+///
+/// <para>
+/// The pages before this showed only the present: what is downloading now, what is wanted
+/// now. That is enough right up to the first morning an episode is missing and there is
+/// nothing anywhere to say whether it was never found, grabbed and failed, or imported
+/// into a library nobody was looking at. A queue answers "what next"; only a history
+/// answers "what happened".
+/// </para>
+/// </summary>
+public sealed record HistoryEntry
+{
+    public required DateTimeOffset At { get; init; }
+    public required HistoryEvent Event { get; init; }
+    public required EpisodeKey Key { get; init; }
+    public required string ReleaseTitle { get; init; }
+    public string? ShowTitle { get; init; }
+    public string? Indexer { get; init; }
+    public long SizeBytes { get; init; }
+
+    /// <summary>Why, for the events that need a why. Null for the ones that do not.</summary>
+    public string? Detail { get; init; }
+}
+
 public sealed record Transfer
 {
     public required string InfoHash { get; init; }
@@ -185,6 +219,11 @@ public interface IDownloadStore
     Task RecordTransferAsync(Transfer transfer, CancellationToken ct);
 
     Task<IReadOnlyList<Transfer>> TransfersAsync(CancellationToken ct);
+
+    Task RecordHistoryAsync(HistoryEntry entry, CancellationToken ct);
+
+    /// <summary>The most recent first, capped at <paramref name="limit"/>.</summary>
+    Task<IReadOnlyList<HistoryEntry>> HistoryAsync(int limit, CancellationToken ct);
 
     Task BlacklistAsync(BlacklistEntry entry, CancellationToken ct);
 

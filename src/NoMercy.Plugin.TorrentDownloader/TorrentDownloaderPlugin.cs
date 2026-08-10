@@ -534,7 +534,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // store answers from memory, so the cost of the full list is the allocation.
         IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(int.MaxValue, ct);
 
-        return DownloadsView.Build(transfers, grabs, wanted, await UnstartedShowsAsync(store, ct));
+        return DownloadsView.Build(
+            transfers,
+            grabs,
+            wanted,
+            await UnstartedShowsAsync(store, ct),
+            await store.HistoryAsync(DownloadsView.HistoryLimit, ct));
     }
 
     /// <summary>

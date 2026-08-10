@@ -25,6 +25,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Store;
 /// </summary>
 public sealed class FileDownloadStore(string path) : IDownloadStore
 {
+    /// <summary>How much history is kept. See <see cref="RecordHistoryAsync"/> for why there is a bound at all.</summary>
+    private const int MaxHistoryEntries = 500;
+
     private static readonly JsonSerializerOptions Format = new()
     {
         WriteIndented = false,
@@ -137,6 +140,32 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
     public async Task<IReadOnlyList<Transfer>> TransfersAsync(CancellationToken ct) =>
         await ReadAsync(state => (IReadOnlyList<Transfer>)[.. state.Transfers], ct);
 
+    /// <summary>
+    /// Appends to the history, oldest trimmed away.
+    ///
+    /// <para>
+    /// Capped because this store is one JSON file rewritten in full on every change, and a
+    /// history nobody prunes turns every later write into a slower one. Five hundred is
+    /// months of an ordinary server and still a file that saves instantly.
+    /// </para>
+    /// </summary>
+    public async Task RecordHistoryAsync(HistoryEntry entry, CancellationToken ct) =>
+        await MutateAsync(state =>
+        {
+            state.History.Add(entry);
+
+            if (state.History.Count > MaxHistoryEntries)
+                state.History.RemoveRange(0, state.History.Count - MaxHistoryEntries);
+        }, ct);
+
+    public async Task<IReadOnlyList<HistoryEntry>> HistoryAsync(int limit, CancellationToken ct) =>
+        await ReadAsync(state => (IReadOnlyList<HistoryEntry>)
+        [
+            .. state.History
+                .OrderByDescending(entry => entry.At)
+                .Take(Math.Max(0, limit)),
+        ], ct);
+
     public async Task BlacklistAsync(BlacklistEntry entry, CancellationToken ct) =>
         await MutateAsync(state => state.Blacklist.Add(entry), ct);
 
@@ -235,5 +264,7 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
         public List<Transfer> Transfers { get; set; } = [];
 
         public List<BlacklistEntry> Blacklist { get; set; } = [];
+
+        public List<HistoryEntry> History { get; set; } = [];
     }
 }

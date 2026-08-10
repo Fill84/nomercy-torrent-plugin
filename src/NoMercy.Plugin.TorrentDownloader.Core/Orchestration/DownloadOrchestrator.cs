@@ -509,6 +509,18 @@ public sealed class DownloadOrchestrator(
         foreach (EpisodeKey key in covers)
             await store.MarkSearchedAsync(key, now(), WantedState.Grabbed, ct);
 
+        await store.RecordHistoryAsync(new HistoryEntry
+        {
+            At = now(),
+            Event = HistoryEvent.Grabbed,
+            Key = episode.Key,
+            ShowTitle = episode.ShowTitle,
+            ReleaseTitle = chosen.Title,
+            Indexer = chosen.IndexerName,
+            SizeBytes = chosen.SizeBytes,
+            Detail = covers.Count > 1 ? $"a season pack covering {covers.Count} episodes" : null,
+        }, ct);
+
         return covers;
     }
 
@@ -577,6 +589,19 @@ public sealed class DownloadOrchestrator(
 
         foreach (EpisodeKey key in grab.Covered)
             await store.MarkSearchedAsync(key, now(), WantedState.Done, ct);
+
+        // The one line that survives the download disappearing off the page. An episode
+        // that is missing tomorrow morning is answered from here or from nowhere.
+        await store.RecordHistoryAsync(new HistoryEntry
+        {
+            At = now(),
+            Event = HistoryEvent.Imported,
+            Key = grab.Key,
+            ReleaseTitle = grab.ReleaseTitle,
+            Indexer = grab.Indexer,
+            SizeBytes = grab.SizeBytes,
+            Detail = grab.Covered.Count > 1 ? $"{grab.Covered.Count} episodes" : null,
+        }, ct);
 
         return true;
     }
@@ -648,6 +673,17 @@ public sealed class DownloadOrchestrator(
 
         await engine.RemoveAsync(infoHash, deleteFiles: true, ct);
 
+        await store.RecordHistoryAsync(new HistoryEntry
+        {
+            At = now(),
+            Event = HistoryEvent.Cancelled,
+            Key = grab.Key,
+            ReleaseTitle = grab.ReleaseTitle,
+            Indexer = grab.Indexer,
+            SizeBytes = grab.SizeBytes,
+            Detail = "cancelled by the owner, and skipped for now",
+        }, ct);
+
         return true;
     }
 
@@ -675,5 +711,16 @@ public sealed class DownloadOrchestrator(
             await store.MarkSearchedAsync(key, now(), WantedState.Wanted, ct);
 
         await engine.RemoveAsync(grab.InfoHash, deleteFiles: true, ct);
+
+        await store.RecordHistoryAsync(new HistoryEntry
+        {
+            At = now(),
+            Event = HistoryEvent.Failed,
+            Key = grab.Key,
+            ReleaseTitle = grab.ReleaseTitle,
+            Indexer = grab.Indexer,
+            SizeBytes = grab.SizeBytes,
+            Detail = transfer.FailureReason ?? "the download failed",
+        }, ct);
     }
 }

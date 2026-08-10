@@ -128,6 +128,18 @@ public sealed class InMemoryDownloadStore : IDownloadStore
     public Task<IReadOnlyList<Transfer>> TransfersAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Transfer>>([.. _transfers.Values]);
 
+    public List<HistoryEntry> History { get; } = [];
+
+    public Task RecordHistoryAsync(HistoryEntry entry, CancellationToken ct)
+    {
+        History.Add(entry);
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<HistoryEntry>> HistoryAsync(int limit, CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<HistoryEntry>>(
+            [.. History.OrderByDescending(entry => entry.At).Take(Math.Max(0, limit))]);
+
     public Task BlacklistAsync(BlacklistEntry entry, CancellationToken ct)
     {
         _blacklist.Add(entry);

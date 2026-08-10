@@ -250,6 +250,47 @@ public class DownloadOrchestratorTests
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
+    // --- history ---------------------------------------------------------------------
+
+    // The page only ever showed the present. This is the line that answers "what happened
+    // to that episode" the morning after it left the list.
+    [Fact]
+    public async Task SearchCycleAsync_WritesDownWhatItGrabbedAndWhereFrom()
+    {
+        await GrabOneAsync();
+
+        HistoryEntry entry = _store.History.Should().ContainSingle().Subject;
+        entry.Event.Should().Be(HistoryEvent.Grabbed);
+        entry.ShowTitle.Should().Be("Some Show");
+        entry.Indexer.Should().Be("site-a");
+    }
+
+    [Fact]
+    public async Task TransfersCycleAsync_WritesDownAnImport()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+        _engine.Transfers = [Completed(hash, "/downloads/Some.Show.S01E01")];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _store.History.Should().Contain(entry => entry.Event == HistoryEvent.Imported);
+    }
+
+    // Failed on its own sends a reader to the log file this page exists to save them from.
+    [Fact]
+    public async Task TransfersCycleAsync_WritesDownWhyAFailureFailed()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+        _engine.Transfers = [Failed(hash, "no peers after 30 minutes")];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        HistoryEntry entry = _store.History.Should().ContainSingle(entry => entry.Event == HistoryEvent.Failed).Subject;
+        entry.Detail.Should().Be("no peers after 30 minutes");
+    }
+
     // --- the owner's own hands ------------------------------------------------------
 
     [Fact]
