@@ -25,10 +25,36 @@ did not carry it. `PluginLibraryShow.Status` and the `PluginShowStatus` enum now
 older server refuses this plugin by name instead of failing on a member it does not have. The
 plugin's `targetAbi` is 10.1 to match.
 
-That change is on media-server branch `feat/plugin-library-show-status`, based on **master**
-(v0.1.472), and it carries the `/libraries` prefix fix too - the branch that was called
-`fix/library-plugin-prefix` was based on `dev` (0.1.404), which is 68 versions behind the line the
-server actually runs. **The server must be rebuilt from that branch before this plugin will load.**
+That change is on media-server branch `feat/plugin-show-status`, based on **`dev`**, and it carries
+the `/libraries` prefix fix too. **The server must be rebuilt from that branch before this plugin
+will load** - until it is, the old server refuses the plugin outright.
+
+### `dev` is the line, not `master`
+
+`master` looks like the release line and is not: it holds `release: v0.1.xxx` commits and nothing
+else, while every actual change is on `dev`. The server running on beast-unit reports
+`0.1.472+2c800c86` - and `2c800c8` is `dev`'s head, not master's v0.1.472 tag. The two branches have
+diverged; CI stamps the version at release time, which is why `dev`'s own
+`Directory.Build.props` still says 0.1.404 while the build made from it calls itself 0.1.472.
+
+`scripts/fetch-abstractions.*` default to `master` and say in a comment that this is deliberate
+("the contract it compiles against should be the one those servers actually ship"). On the evidence
+above that is backwards. The scripts were left alone - one server's version string is not enough to
+redesign somebody's release process on - but a session that packs from the default and finds a
+contract missing things `dev` has should read this paragraph before going looking.
+
+### Two ways to pack the wrong contract
+
+Both cost this session an hour, and neither looks like a packaging problem from the compiler error:
+
+- **`fetch-abstractions` runs `git reset --hard FETCH_HEAD`.** Any local branch work in the
+  media-server checkout is gone. Pack by hand (`dotnet pack src/NoMercy.Plugins.Abstractions/…`)
+  while a change is in flight.
+- **NuGet's global cache is keyed on version, and `dev` has said 0.1.404 for months.** Repacking
+  0.1.404 with a changed contract into `_nupkgs/` changes nothing: the extracted copy under
+  `~/.nuget/packages/nomercy.plugins.abstractions/0.1.404/` is reused, and the build fails on a type
+  that is demonstrably in the nupkg. Delete the four `~/.nuget/packages/nomercy.*` folders after
+  repacking, then restore.
 
 An earlier version of rule 2 derived "still going out" from air dates. It is gone. On this library
 it read a series cancelled last month as current and put a show on a nine-month hiatus in the past.
@@ -82,8 +108,8 @@ builds a page's address as `{prefix-for-the-section}/plugins/{id}{route}`.
 The plural is a server-side change. `PluginRoutes.PrefixFor` builds the prefix from the
 kind's own word, so `library` gives `/library/plugins/…` - one character from the
 `/libraries` where the app's own library pages live. The fix is a private `SegmentFor` that
-maps the one exception, and it now rides on `feat/plugin-library-show-status` beside the
-contract change, so one rebuild delivers both.
+maps the one exception, and it now rides on `feat/plugin-show-status` beside the contract
+change, so one rebuild delivers both.
 
 ## The eight pages
 
