@@ -62,11 +62,36 @@ public class PagesTests
     }
 
     [Fact]
-    public void Tabs_OfferEveryPage()
+    public void Tabs_OfferEveryPageReachedFromTheBar()
     {
         IEnumerable<string> labels = TabsOf(Pages.Overview).SelectMany(PluginNodes.Words);
 
-        labels.Should().BeEquivalentTo(Pages.Routes.Routes.Select(route => route.Label));
+        labels.Should().BeEquivalentTo(["Overview", "Downloads", "Queue", "History", "Sources", "Skipped", "Settings"]);
+    }
+
+    /// <summary>
+    /// A page reached from a list is declared but not offered in the bar.
+    ///
+    /// <para>
+    /// The table has to carry it - an undeclared page is one the client registers no route
+    /// for - but a bar built from the whole table would grow an entry per configured source.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Routes_DeclareASourcesOwnPageWithoutPuttingItInTheBar()
+    {
+        Pages.Routes.Resolve("/sources/2")?.Route.Name.Should().Be(Pages.Source);
+        Pages.Routes.Resolve("/sources/2")?.Param("index").Should().Be("2");
+
+        TabsOf(Pages.Overview).Should().NotContain(tab => tab.Id == $"tab-{Pages.Source}");
+    }
+
+    // Literal segments win over parameters, or /sources itself would be read as a source
+    // called "sources".
+    [Fact]
+    public void Routes_KeepTheListItselfAheadOfOneSource()
+    {
+        Pages.Routes.Resolve("/sources")?.Route.Name.Should().Be(Pages.Sources);
     }
 
     /// <summary>

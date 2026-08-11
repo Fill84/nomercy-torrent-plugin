@@ -49,7 +49,7 @@ public static class DownloadsView
             Ui.Section(
                 "downloads-add",
                 "Add a link",
-                "A magnet link for an episode already on the queue. It is matched by name and taken as-is.",
+                "For an episode already on the queue. Matched by name.",
                 Ui.Form(
                     "downloads-add-form",
                     "Add",

@@ -39,9 +39,12 @@ public static class SettingsView
             Ui.Text("settings-trackers-heading", Format.Count("Private trackers", settings.PrivateTrackers.Count), "subtitle"),
             Ui.Text(
                 "settings-trackers-explainer",
-                "Everything else is public and never uploads. A tracker added here is the only way this plugin seeds.",
-                "caption"),
-            Ui.Button("settings-trackers-add", "Add private tracker", PluginActionIntent.CallPlugin(PluginMethods.AddPrivateTracker)),
+                "Everything else is public and never uploads. Only a tracker here makes this plugin seed."),
+            // In a row. A button loose in a column is stretched to the page's full width,
+            // which is how "Remove source" became a red bar across the whole screen.
+            Ui.Row(
+                "settings-trackers-actions",
+                Ui.Button("settings-trackers-add", "Add private tracker", PluginActionIntent.CallPlugin(PluginMethods.AddPrivateTracker))),
         ];
 
         if (settings.PrivateTrackers.Count > 0)
@@ -53,7 +56,7 @@ public static class SettingsView
                 children.Add(Ui.Container(
                     $"settings-tracker-{index}",
                     BuildPrivateTrackerForm(index, settings.PrivateTrackers[index], storedSecretKeys),
-                    BuildRemovePrivateTrackerButton(index)));
+                    Ui.Row($"settings-tracker-{index}-actions", BuildRemovePrivateTrackerButton(index))));
             }
         }
         else

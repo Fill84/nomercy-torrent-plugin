@@ -75,7 +75,7 @@ public static class OverviewView
             children.Add(Ui.Section(
                 "overview-unstarted",
                 Format.Count("Not started", unstartedShows.Count),
-                "No episode of these is on the server, so nothing is downloaded for them. Click one to follow it and it joins the queue.",
+                "Nothing of these is on the server yet. Click one to follow it.",
                 Unstarted(unstartedShows)));
         }
 
@@ -86,7 +86,7 @@ public static class OverviewView
             children.Add(Ui.EmptyState(
                 "overview-idle",
                 "Nothing needs you",
-                "Nothing is downloading, nothing is waiting on you, and every show the plugin follows is up to date."));
+                "Every show it follows is up to date."));
         }
 
         return Pages.Page(Pages.Overview, RefreshSeconds, [.. children]);
@@ -167,10 +167,13 @@ public static class OverviewView
 
         if (transfers.Count > DigestLength)
         {
-            children.Add(Ui.Button(
-                "overview-now-more",
-                $"All {transfers.Count} downloads",
-                Pages.Routes.GoTo(Pages.Downloads)));
+            // In a row: a button loose in a column is stretched to the page's full width.
+            children.Add(Ui.Row(
+                "overview-now-more-actions",
+                Ui.Button(
+                    "overview-now-more",
+                    $"All {transfers.Count} downloads",
+                    Pages.Routes.GoTo(Pages.Downloads))));
         }
 
         return Ui.Container("overview-now-body", children);

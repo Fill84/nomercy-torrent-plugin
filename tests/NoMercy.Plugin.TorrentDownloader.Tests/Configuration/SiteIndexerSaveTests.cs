@@ -46,8 +46,9 @@ public class SiteIndexerSaveTests
         Render(settings).Should().Contain("\"URL\"");
     }
 
-    // The sources page, not the settings page: the indexer forms moved there when sources
-    // stopped being one section of a settings screen.
+    // One source's own page: the list on /sources shows what exists, and the form that asks
+    // for an address lives behind a click on it.
     private static string Render(TorrentDownloaderSettings settings) =>
-        System.Text.Json.JsonSerializer.Serialize(SourcesView.Build(settings, [], new HashSet<string>(), []));
+        System.Text.Json.JsonSerializer.Serialize(
+            SourcesView.Detail(0, settings.Indexers[0], new HashSet<string>(), []));
 }

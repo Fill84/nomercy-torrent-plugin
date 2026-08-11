@@ -33,7 +33,7 @@ public static class HistoryView
             Ui.Section(
                 "history-recent",
                 Format.Count("Recently", history.Count),
-                "What became of each release, after it left the downloads list.",
+                null,
                 Rows(history)));
 
     private static readonly PluginTableColumn[] Columns =
@@ -52,7 +52,7 @@ public static class HistoryView
             return Ui.EmptyState(
                 "history-empty",
                 "Nothing has happened yet",
-                "Grabs, imports and failures are recorded here as they occur.");
+                "Grabs, imports and failures land here.");
         }
 
         List<PluginComponent> rows = [];

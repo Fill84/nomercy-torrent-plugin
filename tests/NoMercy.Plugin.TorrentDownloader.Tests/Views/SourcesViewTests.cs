@@ -26,6 +26,18 @@ public class SourcesViewTests
         IReadOnlyList<HistoryEntry>? history = null) =>
         SourcesView.Build(settings, ungranted ?? [], stored ?? new HashSet<string>(), history ?? []);
 
+    /// <summary>
+    /// One source's own page. Three sources used to mean three eight-field forms open at
+    /// once - twenty-four boxes down one page - so the list says what exists and the form
+    /// for one of them is a click away.
+    /// </summary>
+    private static PluginView Detail(
+        TorrentDownloaderSettings settings,
+        int index = 0,
+        IReadOnlySet<string>? stored = null,
+        IReadOnlyList<HistoryEntry>? history = null) =>
+        SourcesView.Detail(index, settings.Indexers[index], stored ?? new HashSet<string>(), history ?? []);
+
     private static HistoryEntry Entry(string indexer, HistoryEvent outcome, int minutesAgo = 5) => new()
     {
         At = Now.AddMinutes(-minutesAgo),
@@ -70,7 +82,7 @@ public class SourcesViewTests
     [Fact]
     public void Build_RendersASecretFieldAsPassword()
     {
-        PluginView view = Build(new TorrentDownloaderSettings { Indexers = [new IndexerSettings { Name = "Prowlarr" }] });
+        PluginView view = Detail(new TorrentDownloaderSettings { Indexers = [new IndexerSettings { Name = "Prowlarr" }] });
 
         PluginFormField apiKeyField = AllFormFields(view).Should()
             .ContainSingle(field => PluginNodes.Name(field) == "apiKey").Which;
@@ -84,7 +96,7 @@ public class SourcesViewTests
         TorrentDownloaderSettings settings = new() { Indexers = [new IndexerSettings { Name = "Prowlarr" }] };
         HashSet<string> stored = new(StringComparer.Ordinal) { SettingsGateway.IndexerSecretKey("Prowlarr") };
 
-        PluginView view = Build(settings, stored: stored);
+        PluginView view = Detail(settings, stored: stored);
 
         PluginFormField apiKeyField = AllFormFields(view).Should()
             .ContainSingle(field => PluginNodes.Name(field) == "apiKey").Which;
@@ -142,17 +154,13 @@ public class SourcesViewTests
             Indexers = [new IndexerSettings { Name = "Prowlarr" }, new IndexerSettings { Name = "Jackett" }],
         };
 
-        List<PluginComponent> forms =
-        [
-            .. PluginNodes.Forms(Build(settings)).Where(form => form.Id.StartsWith("sources-indexer-", StringComparison.Ordinal)),
-        ];
-
-        forms.Should().HaveCount(2);
-
-        for (int index = 0; index < forms.Count; index++)
+        for (int index = 0; index < settings.Indexers.Count; index++)
         {
-            forms[index].Action!.Payload["method"].Should().Be($"SaveIndexer/{index}");
-            forms[index].Action!.Payload["payload"].Should().BeNull();
+            PluginComponent form = PluginNodes.Forms(Detail(settings, index)).Should()
+                .ContainSingle(form => form.Id.StartsWith("sources-indexer-", StringComparison.Ordinal)).Which;
+
+            form.Action!.Payload["method"].Should().Be($"SaveIndexer/{index}");
+            form.Action!.Payload["payload"].Should().BeNull();
         }
     }
 
@@ -167,7 +175,7 @@ public class SourcesViewTests
             Indexers = [new IndexerSettings { Name = "Prowlarr" }, new IndexerSettings { Name = "Jackett" }],
         };
 
-        PluginComponent remove = PluginNodes.All(Build(settings)).Should()
+        PluginComponent remove = PluginNodes.All(Detail(settings, 1)).Should()
             .ContainSingle(node => node.Id == "sources-1-remove").Which;
 
         remove.Component.Should().Be(Ui.ButtonComponent);
@@ -192,7 +200,7 @@ public class SourcesViewTests
                 Entry("SomewhereElse", HistoryEvent.Imported),
             ]);
 
-        PluginNodes.Says(view, "2 episodes imported from this one").Should().BeTrue();
+        PluginNodes.Says(view, "2 imported").Should().BeTrue();
     }
 
     [Fact]
@@ -202,7 +210,7 @@ public class SourcesViewTests
 
         PluginView view = Build(settings, history: [Entry("SomewhereElse", HistoryEvent.Imported)]);
 
-        PluginNodes.Says(view, "Nothing from this one yet").Should().BeTrue();
+        PluginNodes.Says(view, "Nothing yet").Should().BeTrue();
     }
 
     // Disabled is the difference between "this source found nothing" and "this source was
@@ -215,7 +223,7 @@ public class SourcesViewTests
             Indexers = [new IndexerSettings { Name = "SceneSource", Enabled = false }],
         };
 
-        PluginNodes.Says(Build(settings), "Disabled").Should().BeTrue();
+        PluginNodes.Says(Build(settings), "Off").Should().BeTrue();
     }
 
     // A site's address is not guessable, and the label is the only place the owner learns
@@ -228,7 +236,7 @@ public class SourcesViewTests
             Indexers = [new IndexerSettings { Name = "TorrentBay", Kind = "site" }],
         };
 
-        PluginFormField url = AllFormFields(Build(settings))
+        PluginFormField url = AllFormFields(Detail(settings))
             .Should().ContainSingle(field => PluginNodes.Name(field) == "url" && field.Label.Contains("Search address")).Which;
 
         url.Label.Should().Contain("{query}");

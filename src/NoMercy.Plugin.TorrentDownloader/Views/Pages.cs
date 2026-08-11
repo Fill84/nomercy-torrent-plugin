@@ -33,6 +33,17 @@ public static class Pages
     public const string Settings = "settings";
 
     /// <summary>
+    /// One source, on its own page.
+    ///
+    /// <para>
+    /// Not a tab. A source is reached from the list rather than from the bar, the way a
+    /// library page is reached from a library - putting every source in the bar would make
+    /// the bar grow with the configuration.
+    /// </para>
+    /// </summary>
+    public const string Source = "source";
+
+    /// <summary>
     /// The pages, in the order the tab bar offers them: what is happening, then what is
     /// being worked on, then what happened, then what it is all configured from.
     ///
@@ -54,7 +65,18 @@ public static class Pages
         // A form is a shape a remote control handles badly, and the client draws the shell
         // it is told to. The server stamps this onto the view for us, so the settings page
         // itself says nothing about layout.
-        new PluginRoute { Path = "/settings", Name = Settings, Label = "Settings", Layout = PluginLayout.Form });
+        new PluginRoute { Path = "/settings", Name = Settings, Label = "Settings", Layout = PluginLayout.Form },
+        new PluginRoute { Path = "/sources/:index", Name = Source, Label = "Source", Layout = PluginLayout.Form });
+
+    /// <summary>
+    /// What the bar offers, which is not everything the plugin serves.
+    ///
+    /// <para>
+    /// A page reached from a list belongs in that list, not in the navigation. A bar built
+    /// from the whole route table would grow an entry per configured source.
+    /// </para>
+    /// </summary>
+    private static readonly string[] TabOrder = [Overview, Downloads, Queue, History, Sources, Skipped, Settings];
 
     /// <summary>
     /// A page: its own name, the bar, then whatever it is about.
@@ -66,12 +88,20 @@ public static class Pages
     /// </para>
     /// </summary>
     public static PluginView Page(string name, int refreshSeconds, params PluginComponent[] body) =>
+        Page(name, null, refreshSeconds, body);
+
+    /// <inheritdoc cref="Page(string, int, PluginComponent[])"/>
+    /// <param name="heading">
+    /// What this page is called, when that is not the page's own name - a source's page is
+    /// headed by the source, not by the word "Source".
+    /// </param>
+    public static PluginView Page(string name, string? heading, int refreshSeconds, params PluginComponent[] body) =>
         PluginViews.Declarative(
             refreshSeconds,
             Ui.Container(
                 $"{name}-root",
                 [
-                    Ui.Text($"{name}-heading", LabelOf(name), "title"),
+                    Ui.Text($"{name}-heading", heading ?? LabelOf(name), "title"),
                     Tabs(name),
                     .. body,
                 ]));
@@ -89,9 +119,9 @@ public static class Pages
     public static PluginComponent Tabs(string current) =>
         Ui.Row(
             "tabs",
-            Routes.Routes.Select(route => route.Name == current
-                ? Ui.Badge($"tab-{route.Name}", route.Label!, PluginBadgeVariant.Info)
-                : Ui.Button($"tab-{route.Name}", route.Label!, Routes.GoTo(route.Name))));
+            TabOrder.Select(name => name == current
+                ? Ui.Badge($"tab-{name}", LabelOf(name), PluginBadgeVariant.Info)
+                : Ui.Button($"tab-{name}", LabelOf(name), Routes.GoTo(name))));
 
     /// <summary>
     /// What a page is called. One spelling, so a tab and the heading it leads to cannot

@@ -58,8 +58,7 @@ public static class SourcesView
         children.Add(Ui.Section(
             "sources-add",
             "Add a source",
-            "A feed announces which releases exist; a site is where the torrent is, searched by that name. Most setups want one of each. "
-                + $"For a site: search it once by hand, paste the address, and put {SiteIndexer.QueryPlaceholder} where what you searched for was.",
+            "A feed announces releases by name. A site is searched for that name and has the torrents.",
             Ui.Form(
                 "sources-add-form",
                 "Add source",
@@ -86,34 +85,65 @@ public static class SourcesView
                     Required = true,
                 })));
 
-        children.Add(Ui.Text("sources-configured-heading", Format.Count("Sources", settings.Indexers.Count), "subtitle"));
-
-        if (settings.Indexers.Count == 0)
-        {
-            children.Add(Ui.EmptyState(
-                "sources-empty",
-                "No source configured",
-                "Nothing is searched and nothing is announced until there is at least one."));
-        }
-        else
-        {
-            for (int index = 0; index < settings.Indexers.Count; index++)
-            {
-                IndexerSettings indexer = settings.Indexers[index];
-
-                // One block per source, so the yield line, the form it describes and the
-                // button that deletes it read as one thing. Loose siblings put a remove
-                // button directly above the next source's name, which is a bad place for it.
-                children.Add(Ui.Container(
-                    $"sources-{index}",
-                    Yield(index, indexer, history),
-                    IndexerForm(index, indexer, storedSecretKeys),
-                    RemoveButton(index)));
-            }
-        }
+        children.Add(Ui.Section(
+            "sources-configured",
+            Format.Count("Sources", settings.Indexers.Count),
+            settings.Indexers.Count == 0 ? null : "Click one to change it.",
+            List(settings, history)));
 
         return Pages.Page(Pages.Sources, 0, [.. children]);
     }
+
+    /// <summary>
+    /// One page for the whole configuration, not one form per source stacked on top of each
+    /// other.
+    ///
+    /// <para>
+    /// Three sources meant three eight-field forms open at once - twenty-four boxes down one
+    /// page, each with a full-width red delete bar between it and the next source's name.
+    /// The list answers what somebody comes here for (which sources exist, are they on, are
+    /// they producing anything) and the form for one of them is one click away.
+    /// </para>
+    /// </summary>
+    private static PluginComponent List(TorrentDownloaderSettings settings, IReadOnlyList<HistoryEntry> history)
+    {
+        if (settings.Indexers.Count == 0)
+        {
+            return Ui.EmptyState(
+                "sources-empty",
+                "No source configured",
+                "Nothing is searched until there is one.");
+        }
+
+        List<PluginComponent> rows = [];
+
+        for (int index = 0; index < settings.Indexers.Count; index++)
+        {
+            IndexerSettings indexer = settings.Indexers[index];
+
+            rows.Add(Ui.TableRow(
+                $"sources-row-{index}",
+                new()
+                {
+                    ["kind"] = indexer.Enabled ? KindLabel(indexer.Kind) : "Off",
+                    ["kindVariant"] = indexer.Enabled ? PluginBadgeVariant.Info : PluginBadgeVariant.Neutral,
+                    ["name"] = indexer.Name,
+                    ["address"] = indexer.Url,
+                    ["yielded"] = Yield(indexer, history),
+                },
+                Pages.Routes.GoTo(Pages.Source, new Dictionary<string, string> { ["index"] = index.ToString() })));
+        }
+
+        return Ui.Table("sources-list", ListColumns, rows);
+    }
+
+    private static readonly PluginTableColumn[] ListColumns =
+    [
+        new() { Key = "kind", Label = "Kind", Cell = PluginTableCellType.Badge, Width = "6rem" },
+        new() { Key = "name", Label = "Name", Width = "12rem" },
+        new() { Key = "address", Label = "Address" },
+        new() { Key = "yielded", Label = "Yielded", Width = "14rem" },
+    ];
 
     /// <summary>
     /// What this source has actually produced, which is the only honest way to tell a
@@ -125,34 +155,45 @@ public static class SourcesView
     /// be one more thing to keep true.
     /// </para>
     /// </summary>
-    private static PluginComponent Yield(int index, IndexerSettings indexer, IReadOnlyList<HistoryEntry> history)
+    private static string Yield(IndexerSettings indexer, IReadOnlyList<HistoryEntry> history)
     {
         List<HistoryEntry> mine =
         [
             .. history.Where(entry => string.Equals(entry.Indexer, indexer.Name, StringComparison.OrdinalIgnoreCase)),
         ];
 
+        if (mine.Count == 0)
+            return "Nothing yet";
+
         int imported = mine.Count(entry => entry.Event == HistoryEvent.Imported);
 
-        string yielded = mine.Count == 0
-            ? "Nothing from this one yet."
-            : imported == 1
-                ? "1 episode imported from this one."
-                : $"{imported} episodes imported from this one.";
-
-        string last = mine.Count == 0
-            ? ""
-            : $" Last heard from {Format.Ago(mine.Max(entry => entry.At))}.";
-
-        return Ui.Row(
-            $"sources-{index}-yield",
-            Ui.Badge(
-                $"sources-{index}-state",
-                indexer.Enabled ? KindLabel(indexer.Kind) : "Disabled",
-                indexer.Enabled ? PluginBadgeVariant.Info : PluginBadgeVariant.Neutral),
-            Ui.Text($"sources-{index}-name", indexer.Name),
-            Ui.Text($"sources-{index}-yielded", yielded + last, "caption"));
+        return $"{imported} imported, last {Format.Ago(mine.Max(entry => entry.At))}";
     }
+
+    /// <summary>One source, with room for its form and nothing else competing for the page.</summary>
+    public static PluginView Detail(
+        int index,
+        IndexerSettings indexer,
+        IReadOnlySet<string> storedSecretKeys,
+        IReadOnlyList<HistoryEntry> history) =>
+        Pages.Page(
+            Pages.Source,
+            indexer.Name,
+            0,
+            Ui.Row(
+                "source-state",
+                Ui.Badge(
+                    "source-kind",
+                    indexer.Enabled ? KindLabel(indexer.Kind) : "Off",
+                    indexer.Enabled ? PluginBadgeVariant.Info : PluginBadgeVariant.Neutral),
+                Ui.Text("source-yielded", Yield(indexer, history))),
+            IndexerForm(index, indexer, storedSecretKeys),
+
+            // In a row, not loose in the column. A button that is a direct child of a column
+            // is stretched to the width of the page, which turned a delete into a red bar
+            // across the whole screen.
+            Ui.Row("source-actions", RemoveButton(index)),
+            Ui.Row("source-back", Ui.Button("source-back-button", "Back to sources", Pages.Routes.GoTo(Pages.Sources))));
 
     // A badge plus the sentence naming the hosts, so the owner knows a grant prompt they may
     // have missed is why nothing is downloading yet.

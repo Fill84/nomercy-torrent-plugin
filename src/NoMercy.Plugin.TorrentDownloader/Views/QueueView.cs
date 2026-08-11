@@ -79,12 +79,8 @@ public static class QueueView
     /// What a row is for, said in words, because a clickable row does not announce itself
     /// the way a button labelled "Search now" did.
     /// </summary>
-    private static string Note(IReadOnlyList<WantedEpisode> wanted) =>
-        wanted.Count == 0
-            ? "Nothing is missing."
-            : wanted.Count > PreviewLength
-                ? "Click an episode to search for it now. These are the next few; the rest follow as they finish."
-                : "Click an episode to search for it now.";
+    private static string? Note(IReadOnlyList<WantedEpisode> wanted) =>
+        wanted.Count == 0 ? null : "Click an episode to search for it now.";
 
     private static (string Label, string Variant) State(WantedEpisode episode) =>
         episode switch

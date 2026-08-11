@@ -32,8 +32,8 @@ public static class SkippedView
                 "skipped-releases",
                 Format.Count("Skipped releases", skipped.Count),
                 skipped.Count == 0
-                    ? "These are passed over when choosing."
-                    : "These are passed over when choosing. Click one to allow it again, and it can be picked next time.",
+                    ? null
+                    : "Passed over when choosing. Click one to allow it again.",
                 Rows(skipped)));
 
     private static readonly PluginTableColumn[] Columns =
@@ -50,7 +50,7 @@ public static class SkippedView
             return Ui.EmptyState(
                 "skipped-empty",
                 "Nothing is being skipped",
-                "A release is skipped after it fails or is cancelled, and most stop being skipped on their own.");
+                "A release is skipped after it fails or is cancelled. Most expire on their own.");
         }
 
         List<PluginComponent> rows = [];

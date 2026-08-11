@@ -628,8 +628,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         try
         {
-            PluginView view = Pages.Routes.Resolve(request.Route)?.Route.Name switch
+            PluginRouteMatch? match = Pages.Routes.Resolve(request.Route);
+
+            PluginView view = match?.Route.Name switch
             {
+                Pages.Source => await SourcePageAsync(context, match.Param("index"), ct),
                 Pages.Overview => await OverviewPageAsync(context, ct),
                 Pages.Downloads => await DownloadsPageAsync(context, ct),
                 Pages.Queue => QueueView.Build(await WantedAsync(context, ct)),
@@ -675,6 +678,38 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return SourcesView.Build(
             loaded.Settings,
             ungrantedHosts,
+            new HashSet<string>(storedSecretKeys, StringComparer.Ordinal),
+            await HistoryAsync(context, SourcesView.HistoryDepth, ct));
+    }
+
+    /// <summary>
+    /// One source's own page, reached from the list rather than from the tab bar.
+    ///
+    /// <para>
+    /// A source that is not there any more is not an error worth a stack trace - the list it
+    /// was clicked from may simply be a render old, because removing one shifts every index
+    /// after it. Saying so and offering the list back is the whole handling.
+    /// </para>
+    /// </summary>
+    private async Task<PluginView> SourcePageAsync(IPluginContext context, string? index, CancellationToken ct)
+    {
+        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
+
+        if (!int.TryParse(index, out int position) || position < 0 || position >= loaded.Settings.Indexers.Count)
+        {
+            return Pages.Page(
+                Pages.Source,
+                "Source",
+                0,
+                Ui.EmptyState("source-missing", "That source is gone", "It may have been removed since this list was drawn."),
+                Ui.Row("source-back", Ui.Button("source-back-button", "Back to sources", Pages.Routes.GoTo(Pages.Sources))));
+        }
+
+        IReadOnlyList<string> storedSecretKeys = await context.Secrets.KeysAsync(ct);
+
+        return SourcesView.Detail(
+            position,
+            loaded.Settings.Indexers[position],
             new HashSet<string>(storedSecretKeys, StringComparer.Ordinal),
             await HistoryAsync(context, SourcesView.HistoryDepth, ct));
     }

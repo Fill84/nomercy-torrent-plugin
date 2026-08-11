@@ -174,8 +174,13 @@ public static class Ui
     {
         List<PluginComponent> children = [Text($"{id}-heading", heading, "subtitle")];
 
+        // Body, not a caption. A caption is text-xs at the faintest colour the theme has,
+        // and a note runs the full width of the page - which put the one sentence explaining
+        // a section into the least readable text on it. Captions are for a value beside
+        // something that already says what it is; a sentence somebody has to read is not
+        // that.
         if (!string.IsNullOrWhiteSpace(note))
-            children.Add(Text($"{id}-note", note, "caption"));
+            children.Add(Text($"{id}-note", note));
 
         children.Add(body);
 
