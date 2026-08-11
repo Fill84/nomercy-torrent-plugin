@@ -778,3 +778,61 @@ The current tab is a `PluginBadge` and the rest are `PluginButton`s, so the row'
 **Type consistency.** `EngineState.Resolving` (Task 1) is consumed by `TransfersCycleAsync` (Task 4). `GrabState.Resolving` (Task 4) is read by `DownloadsView` (Task 4). `SiteListingParser.Parse(html, trackers)` (Task 3) is called by `SiteIndexer` (Task 3) and by the tests updated in the same task. `ResolvingTorrent` is `internal` and never crosses the engine boundary; the transfer list is the only thing that does.
 
 **Ordering.** Tasks 1-4 are strictly ordered — 2 is what makes 1's failures visible, and 4 renders the state 1 introduces. Tasks 6-8 are independent of them and of each other.
+
+---
+
+## Addendum, 11 August: per-show rules, taken from torrent-feed
+
+The owner asked for "the same as torrent-feed". This is not a paraphrase — it is
+`f:/DevProjects/torrent-feed/matcher.py` read on 11 August 2026, so nobody has to
+re-derive it. **Everything below is per show**, with the general settings as the
+default a show inherits until it says otherwise.
+
+**Not wanted:** `max_size_gb` and `min_seeders` stay global. The owner said so
+explicitly; the plugin already has both as one setting each.
+
+### The rules, in the order torrent-feed applies them
+
+1. **The show name must lead the title.** Accepted in exactly two positions:
+   leading the title with at most a trailing year or country code
+   (`Lucky 2026 S01E02`, `Big Brother US S28E08`), or ending exactly where the
+   episode marker begins (`Special Ops Lioness S02E01`). Everywhere else is
+   refused — this is what stops `Lucky` taking `Lucky Hank` or
+   `We.Were.the.Lucky.Ones`.
+2. **Exclude terms**, per show plus a global list. Normalised substring match:
+   case and punctuation are stripped from both sides before comparing.
+3. **`english_only`** (default on). Refused when *any* foreign-audio marker is
+   present, **even alongside an English tag** — `ITA.ENG` and `FR.ENG` multi-audio
+   releases are refused. Also refused on foreign episode numbering with no
+   language tag: `Cap.101`, `capitulo`, `episodio`, `folge`, `odcinek`,
+   `staffel`, `seizoen`, `saison`. The marker list is curated to avoid codes that
+   are English substrings — `IT`, `ES` and `DE` are deliberately left out.
+4. **`codec`**: `h264` | `h265` | `any`, default `h264`.
+   - `h264` requires an explicit `x264` / `h264` / `H.264` / `H 264` / `avc` tag.
+     **An untagged release is refused**, rather than passing as "not HEVC".
+   - `h265` requires `x265` / `h265` / `H.265` / `H 265` / `hevc`.
+   - Separator between letter and number may be a dot, a space, or nothing: the
+     site renders scene dots as spaces, so `H.265` arrives as `H 265`.
+5. **`quality`**, default `1080p`. Normalised substring of the title.
+6. **Episode number must parse.** `s01e02`, `1x02`, `season 1 episode 2`.
+7. **Season packs** refused unless `allow_season_packs` (default off).
+8. **`from_season`**: refuse a season below it. Null means any.
+9. **Score is the seeder count**, and the best candidate is the most seeded.
+
+### Tasks
+
+- [ ] **Task 9: the rules, per show.** `ShowRules` in Core carrying codec,
+  quality, exclude, english-only, season packs, from-season. A `TrackedShow`
+  gains an optional one; the general settings are the fallback. Ported rule by
+  rule with torrent-feed's own cases as tests - `Lucky` must not take
+  `Lucky Hank`; `ITA.ENG` is refused; an untagged release is refused under
+  `h264`; `H 265` with a space is HEVC.
+- [ ] **Task 10: per-show editing.** The Shows detail page grows the same fields,
+  saved per show id. A show with nothing set says so and follows the general
+  settings.
+- [ ] **Task 11: only video files reach the disk.** Decided 11 August: a release
+  with an nfo or a sample still downloads, and **only files with a video
+  extension are written**. Everything else is skipped rather than refusing the
+  torrent, which would refuse almost every real scene release. The torrent is
+  still refused outright when it holds no video at all - which is what the `.scr`
+  turned out to be.
