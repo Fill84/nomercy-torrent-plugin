@@ -184,4 +184,75 @@ public class PluginLibraryQueryAdapterTests
         fake.GetLibrariesCallCount.Should().Be(1);
         fake.GetShowsCallCount.Should().Be(3);
     }
+
+    /// <summary>
+    /// The host's status, as the core's own. Two enums rather than one because the core
+    /// holds no reference to the host contract, and this adapter is the one place they meet
+    /// - so a member added to either without the other is a failure here.
+    /// </summary>
+    [Theory]
+    [InlineData(PluginShowStatus.Returning, ShowStatus.Returning)]
+    [InlineData(PluginShowStatus.Ended, ShowStatus.Ended)]
+    [InlineData(PluginShowStatus.Canceled, ShowStatus.Canceled)]
+    [InlineData(PluginShowStatus.Planned, ShowStatus.Planned)]
+    [InlineData(PluginShowStatus.InProduction, ShowStatus.InProduction)]
+    [InlineData(PluginShowStatus.Pilot, ShowStatus.Pilot)]
+    [InlineData(PluginShowStatus.Unknown, ShowStatus.Unknown)]
+    public async Task GetShowsAsync_CarriesWhetherTheShowIsStillGoingOut(
+        PluginShowStatus host,
+        ShowStatus expected)
+    {
+        IReadOnlyList<LibraryShow> shows = await WithStatus(host).GetShowsAsync(CancellationToken.None);
+
+        shows.Should().ContainSingle().Which.Status.Should().Be(expected);
+    }
+
+    /// <summary>
+    /// A server newer than this plugin naming a status it has not heard of must read as
+    /// unknown, which counts as still going out. Reading it as finished would stop the
+    /// plugin working on a show nobody ended.
+    /// </summary>
+    [Fact]
+    public async Task GetShowsAsync_TreatsAStatusItDoesNotKnowAsUnknown()
+    {
+        IReadOnlyList<LibraryShow> shows = await WithStatus((PluginShowStatus)9999).GetShowsAsync(CancellationToken.None);
+
+        shows.Should().ContainSingle().Which.Status.Should().Be(ShowStatus.Unknown);
+        shows[0].Status.StillGoing().Should().BeTrue();
+    }
+
+    /// <summary>
+    /// A server too old to carry a status leaves the property at its default, and that has
+    /// to be the same "carry on" answer.
+    /// </summary>
+    [Fact]
+    public async Task GetShowsAsync_ReadsAServerThatSaysNothingAsStillGoingOut()
+    {
+        FakeLibraryQuery fake = new()
+        {
+            Libraries = [new PluginLibrary("lib-tv", "TV Shows", "tv")],
+            ShowsByLibraryId = new Dictionary<string, List<PluginLibraryShow>>
+            {
+                ["lib-tv"] = [new PluginLibraryShow(1, "Show", 2020, "lib-tv", "/shows/one", 10, 5)],
+            },
+        };
+
+        IReadOnlyList<LibraryShow> shows = await new PluginLibraryQueryAdapter(fake).GetShowsAsync(CancellationToken.None);
+
+        shows[0].Status.Should().Be(ShowStatus.Unknown);
+        shows[0].Status.StillGoing().Should().BeTrue();
+    }
+
+    private static PluginLibraryQueryAdapter WithStatus(PluginShowStatus status) =>
+        new(new FakeLibraryQuery
+        {
+            Libraries = [new PluginLibrary("lib-tv", "TV Shows", "tv")],
+            ShowsByLibraryId = new Dictionary<string, List<PluginLibraryShow>>
+            {
+                ["lib-tv"] =
+                [
+                    new PluginLibraryShow(1, "Show", 2020, "lib-tv", "/shows/one", 10, 5) { Status = status },
+                ],
+            },
+        });
 }

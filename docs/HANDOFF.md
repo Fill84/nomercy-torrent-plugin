@@ -2,6 +2,47 @@
 
 Rewritten 11 August 2026. Everything below is committed locally; nothing is pushed.
 
+## Which shows the plugin holds, and why the server has to be rebuilt
+
+Two rules decide, and everything else follows from them:
+
+1. **At least one episode of the show is on the server.** Measured from the episodes, not from
+   the host's `HaveEpisodeCount`, which reports zero for shows with hundreds of episodes.
+2. **The show is still going out** - not ended, not cancelled.
+
+A show that fails either is recorded nowhere: no page lists it, no count mentions it, nothing is
+queued for it. The one way past both is naming it in **Follow another show** on the Shows page,
+which is also the only way to start a show the server holds nothing of.
+
+Measured on the owner's server, 11 August: 67 shows in the library, **12 of them with no episode at
+all** - rows from an *add content* nobody followed through on, or folders since deleted, including
+The Simpsons and Family Guy. Of the 55 that remain, 35 have ended or been cancelled. So the Shows
+page goes from 67 entries to 20, and only those 20 cost a search.
+
+**Rule 2 needed a server change.** `Tvs.Status` was in the database all along; the plugin contract
+did not carry it. `PluginLibraryShow.Status` and the `PluginShowStatus` enum now do, mapped in
+`PluginLibraryQuery` from the provider's wording, and `PluginAbi.Current` went to **10.1** so an
+older server refuses this plugin by name instead of failing on a member it does not have. The
+plugin's `targetAbi` is 10.1 to match.
+
+That change is on media-server branch `feat/plugin-library-show-status`, based on **master**
+(v0.1.472), and it carries the `/libraries` prefix fix too - the branch that was called
+`fix/library-plugin-prefix` was based on `dev` (0.1.404), which is 68 versions behind the line the
+server actually runs. **The server must be rebuilt from that branch before this plugin will load.**
+
+An earlier version of rule 2 derived "still going out" from air dates. It is gone. On this library
+it read a series cancelled last month as current and put a show on a nine-month hiatus in the past.
+
+## An announced season is not a wanted season
+
+A season the metadata provider lists with no air date on any episode is skipped. This is what
+"Dune: Prophecy S02E01..E08" was - eight rows called "Episode 1" to "Episode 8", none of them made
+yet, each burning twelve rate-limited searches before being parked as unavailable shortly before the
+season was due to arrive.
+
+The rule is off entirely for a library that dates nothing, because undated only means "unscheduled"
+where a date is the norm. One dated episode anywhere in the show turns it on.
+
 ## Where the plugin is
 
 The loop works end to end in code and is tested: the library decides what is missing, a
@@ -40,10 +81,9 @@ builds a page's address as `{prefix-for-the-section}/plugins/{id}{route}`.
 
 The plural is a server-side change. `PluginRoutes.PrefixFor` builds the prefix from the
 kind's own word, so `library` gives `/library/plugins/…` - one character from the
-`/libraries` where the app's own library pages live. A fix is committed on branch
-`fix/library-plugin-prefix` in the media-server checkout: a private `SegmentFor` that maps
-the one exception. It compiles; its tests could not be run here (sparse checkout), and the
-server must be rebuilt before the URL changes.
+`/libraries` where the app's own library pages live. The fix is a private `SegmentFor` that
+maps the one exception, and it now rides on `feat/plugin-library-show-status` beside the
+contract change, so one rebuild delivers both.
 
 ## The eight pages
 
@@ -53,7 +93,7 @@ through `Pages.Page` so no page can be missing its bar.
 | route | page |
 | --- | --- |
 | `/` | Overview - is it working, what needs me |
-| `/shows`, `/shows/:showId` | Per show: missing, running, arrived. Follow and unfollow |
+| `/shows`, `/shows/:showId` | Per show: missing, running, arrived. Follow one by name, unfollow one |
 | `/downloads` | Only what is active, and a magnet by hand |
 | `/queue` | Every wanted episode, click a row to search it now |
 | `/history` | What became of each release |
@@ -101,7 +141,12 @@ without ever looking broken.
 - History records the source for a grab but not for a *failed* search, so a source that is
   asked and answers nothing looks the same as one never asked. Worth fixing when the
   resolver runs for real.
-- An empty `Library 3` on the owner's server, created by accident. Ask before removing it.
+- Nothing has ever been grabbed on the owner's server: every wanted episode is at one search
+  attempt with no history behind it, so the three configured sources answered nothing. Whether
+  that is the cadences never firing (see the blocker above) or the sites themselves is the next
+  thing to find out, and it is the last thing between here and a first download.
+- `FolderLibrary` on the owner's server has a row joining the Series library to a folder with an
+  empty path. Harmless to the plugin; the owner's to clean up.
 - The sidebar draws nothing for a `library` or `video` mount
   (`Sidebar.vue` calls `pluginsInSection` for `Music`, `Dashboard` and `Settings` only). It
   matters less now the tab bar exists, but the entry point is still hard to find. Belongs in

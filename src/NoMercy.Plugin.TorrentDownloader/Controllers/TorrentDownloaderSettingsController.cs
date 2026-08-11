@@ -60,6 +60,12 @@ public sealed class TorrentDownloaderSettingsController(IPluginManager pluginMan
     public Task<IActionResult> UnfollowShow(int showId, CancellationToken ct) =>
         RespondAsync(plugin => plugin.UnfollowShowAsync(showId, ct));
 
+    // A form rather than a row, so the name arrives in the body like every other form's
+    // fields do.
+    [HttpPost(PluginMethods.FollowByName)]
+    public Task<IActionResult> FollowByName([FromBody] SaveSettingsRequest request, CancellationToken ct) =>
+        RespondAsync(plugin => plugin.FollowByNameAsync(request, ct));
+
     [HttpPost(PluginMethods.PauseDownloadRoute)]
     public Task<IActionResult> PauseDownload(string infoHash, CancellationToken ct) =>
         RespondAsync(plugin => plugin.PauseDownloadAsync(infoHash, ct));

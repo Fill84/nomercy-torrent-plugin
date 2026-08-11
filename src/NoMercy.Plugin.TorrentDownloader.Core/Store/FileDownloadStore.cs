@@ -75,12 +75,6 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
                 .Take(limit),
         ], ct);
 
-    public async Task RecordUnstartedShowsAsync(IReadOnlyList<UnstartedShow> shows, CancellationToken ct) =>
-        await MutateAsync(state => state.UnstartedShows = [.. shows.DistinctBy(show => show.ShowId)], ct);
-
-    public async Task<IReadOnlyList<UnstartedShow>> UnstartedShowsAsync(CancellationToken ct) =>
-        await ReadAsync(state => (IReadOnlyList<UnstartedShow>)[.. state.UnstartedShows], ct);
-
     public async Task RecordShowsAsync(IReadOnlyList<TrackedShow> shows, CancellationToken ct) =>
         await MutateAsync(state => state.Shows = [.. shows.DistinctBy(show => show.ShowId)], ct);
 
@@ -280,11 +274,14 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
     /// <summary>Everything the plugin remembers, as one serialisable object.</summary>
     private sealed class State
     {
-        public int Version { get; set; } = 1;
+        // 2: shows the plugin is not working on stopped being recorded at all, so the
+        // separate UnstartedShows list went with them. Nothing migrates - every list here
+        // is what the last refresh concluded, and the next one rewrites it. A version 1
+        // file simply carries a property this class no longer has, which the deserialiser
+        // skips.
+        public int Version { get; set; } = 2;
 
         public List<WantedEpisode> Wanted { get; set; } = [];
-
-        public List<UnstartedShow> UnstartedShows { get; set; } = [];
 
         // Added after the store already existed. An older file has none until the next
         // refresh writes them, which is fine: this is what the last refresh concluded, not

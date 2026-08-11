@@ -128,12 +128,19 @@ public sealed record OrchestratorOptions
 /// What one refresh concluded.
 ///
 /// <para>
-/// More than a count, because a plugin that decides to want nothing has to be able to
-/// say why. Without <see cref="ShowsNotStarted"/> an owner whose library is all
-/// unstarted shows sees "missing 0 episodes" and concludes the thing is broken.
+/// More than a count, because a plugin that decides to want nothing has to be able to say
+/// why. A library of sixty-seven shows can produce "0 episodes wanted" for two entirely
+/// different reasons, and an owner reading only the zero concludes the thing is broken.
 /// </para>
 /// </summary>
-public sealed record WantedRefresh(int Wanted, int ShowsFollowed, int ShowsNotStarted);
+/// <param name="Shows">How many the plugin is working on.</param>
+/// <param name="NotOnTheServer">
+/// Shows the library lists with no episode on the server. Rows from a metadata provider,
+/// not media anybody has - and not this plugin's business unless it is asked for one by
+/// name.
+/// </param>
+/// <param name="Finished">Shows that are on the server and have ended or been cancelled, so nothing more of them will ever exist.</param>
+public sealed record WantedRefresh(int Wanted, int Shows, int NotOnTheServer, int Finished);
 
 /// <summary>
 /// What one pass over the feeds came to.
@@ -182,12 +189,31 @@ public sealed class DownloadOrchestrator(
     /// Brings the wanted list in line with the library.
     ///
     /// <para>
-    /// Which shows are followed is decided here, and it is decided by the shelf rather
-    /// than by a list somebody maintains: a show with at least one episode on the server
-    /// is one its owner started, and the rest of it is worth completing. A show with
-    /// nothing is one the metadata provider knows about and nobody asked for. Without
-    /// that line the library's whole catalogue is a download queue - on a real server it
-    /// was 1973 episodes, which is not a backlog, it is a bill.
+    /// Two rules decide what the plugin holds, and both are about the difference between a
+    /// catalogue and a shelf. The library lists every show its metadata provider knows
+    /// about; the owner's server holds a much smaller set of them.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>At least one episode has to be on the server.</b> A show with none is a row left
+    /// behind - an "add content" nobody followed through on, a folder deleted years ago -
+    /// and it is not this plugin's business. Without that line the whole catalogue is a
+    /// download queue: on a real server that was 1973 episodes, which is not a backlog, it
+    /// is a bill. On the same server twelve of sixty-seven shows had no episode at all,
+    /// and every page listed them.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>It has to be still going out.</b> A series that ended is complete or it is not,
+    /// and either way nothing new will appear - so searching for its gaps every five
+    /// minutes forever buys nothing. The library is asked; this is not derived from air
+    /// dates, which reads a series cancelled last month as current.
+    /// </para>
+    ///
+    /// <para>
+    /// A show named in <see cref="OrchestratorOptions.FollowedShowIds"/> is past both. That
+    /// is the owner saying "this one anyway", and it is how a new show is started and how a
+    /// finished one is filled in.
     /// </para>
     ///
     /// <para>
@@ -198,11 +224,10 @@ public sealed class DownloadOrchestrator(
     public async Task<WantedRefresh> RefreshWantedAsync(CancellationToken ct)
     {
         List<WantedEpisode> missing = [];
-        List<UnstartedShow> unstarted = [];
         List<TrackedShow> tracked = [];
         HashSet<int> askedFor = [.. options.FollowedShowIds];
-        int followed = 0;
-        int notStarted = 0;
+        int notOnTheServer = 0;
+        int finished = 0;
 
         foreach (LibraryShow show in await library.GetShowsAsync(ct))
         {
@@ -213,34 +238,41 @@ public sealed class DownloadOrchestrator(
 
             IReadOnlyList<LibraryEpisode> episodes = await library.GetEpisodesAsync(show.ShowId, ct);
 
-            // Read from the episodes rather than the show's own have-count: both come
-            // from the host, and the one this loop already trusts to decide "missing"
-            // is the one that should decide "started", or the two can disagree.
-            bool started = episodes.Any(episode => episode.HasFile);
-            DateOnly? next = NextAirDate(episodes);
+            // Read from the episodes rather than the show's own have-count: both come from
+            // the host, and the one this loop already trusts to decide "missing" is the one
+            // that should decide "on the server", or the two can disagree. On a real server
+            // the have-count is zero for shows with hundreds of episodes.
+            bool onTheServer = episodes.Any(episode => episode.HasFile);
+            bool asked = askedFor.Contains(show.ShowId);
 
-            // Recorded for every show the refresh looks at, before any decision about it. A
-            // show that is up to date has no wanted episodes and no history, so it lived in
-            // none of the lists this plugin kept - and a running series with an episode due
-            // next week is up to date most of the time. It was invisible until it fell
-            // behind, which is the wrong way round.
+            if (!asked)
+            {
+                if (!onTheServer)
+                {
+                    notOnTheServer++;
+                    continue;
+                }
+
+                if (!show.Status.StillGoing())
+                {
+                    finished++;
+                    continue;
+                }
+            }
+
+            // Recorded whether or not anything is missing from it. A running series is up to
+            // date most of the time - the week between one episode and the next - and a list
+            // built from wanted episodes alone makes it vanish for exactly that week.
             tracked.Add(new TrackedShow
             {
                 ShowId = show.ShowId,
                 Title = show.Title,
-                Started = started,
-                Running = IsRunning(episodes),
-                NextAirDate = next,
+                Started = onTheServer,
+                Status = show.Status,
+                NextAirDate = NextAirDate(episodes),
             });
 
-            if (!started && !askedFor.Contains(show.ShowId))
-            {
-                notStarted++;
-                unstarted.Add(new UnstartedShow { ShowId = show.ShowId, Title = show.Title });
-                continue;
-            }
-
-            followed++;
+            IReadOnlySet<int> unscheduled = UnscheduledSeasons(episodes);
 
             // By key, because the library can hand the same slot twice - one show reachable
             // through two libraries, or two rows for one episode. Left alone it reached the
@@ -254,6 +286,9 @@ public sealed class DownloadOrchestrator(
                     continue;
 
                 if (episode.SeasonNumber == 0 && !options.IncludeSpecials)
+                    continue;
+
+                if (unscheduled.Contains(episode.SeasonNumber))
                     continue;
 
                 if (!seen.Add(new EpisodeKey(show.ShowId, episode.SeasonNumber, episode.EpisodeNumber)))
@@ -276,40 +311,38 @@ public sealed class DownloadOrchestrator(
         // host reports as zero for shows that plainly have episodes - so it offered to
         // follow shows whose missing episodes were in the queue directly above it. This
         // loop already walked the episodes to decide; the decision is the thing to keep.
-        await store.RecordUnstartedShowsAsync(unstarted, ct);
         await store.RecordShowsAsync(tracked, ct);
 
-        return new WantedRefresh(missing.Count, followed, notStarted);
+        return new WantedRefresh(missing.Count, tracked.Count, notOnTheServer, finished);
     }
 
     /// <summary>
-    /// How long after its last episode a show still counts as running.
+    /// Seasons the library knows of but has not put a date on anywhere.
     ///
     /// <para>
-    /// Wide enough to survive a mid-season break, short enough that a series which ended
-    /// years ago does not read as current. A show whose next episode is already scheduled
-    /// stays running on that alone, whatever the gap.
+    /// A metadata provider lists an announced season as placeholder rows - "Episode 1" to
+    /// "Episode 8", no air dates - the moment it is ordered. Nobody can seed an episode
+    /// that has not been made, so every one of those is searched for until it is parked as
+    /// unavailable: on a real library that was eight episodes burning twelve rate-limited
+    /// searches each, and then giving up shortly before the season actually arrived.
     /// </para>
-    /// </summary>
-    private const int RunningWindowDays = 120;
-
-    /// <summary>
-    /// Whether a show is still going out, worked out from its air dates.
     ///
     /// <para>
-    /// The host's show record carries no status - no "returning", no "ended" - so this is
-    /// what there is. An episode airing recently or still to come is the difference between
-    /// a show that is up to date because nothing more is coming and one that is up to date
-    /// until Tuesday, and only the second is worth watching for.
+    /// The rule is off entirely for a library that dates nothing. Old libraries are full of
+    /// episodes nobody ever dated, and undated only means "not scheduled" where a date is
+    /// the norm - otherwise this would quietly abandon every episode of every show. One
+    /// dated episode anywhere in the show is enough to turn it on.
     /// </para>
     /// </summary>
-    private static bool IsRunning(IReadOnlyList<LibraryEpisode> episodes)
+    private static IReadOnlySet<int> UnscheduledSeasons(IReadOnlyList<LibraryEpisode> episodes)
     {
-        DateOnly cutoff = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-RunningWindowDays);
+        if (!episodes.Any(episode => episode.AirDate is not null))
+            return new HashSet<int>();
 
-        return episodes.Any(episode =>
-            episode.AirDate is DateTimeOffset aired
-            && DateOnly.FromDateTime(aired.UtcDateTime) >= cutoff);
+        return new HashSet<int>(episodes
+            .GroupBy(episode => episode.SeasonNumber)
+            .Where(season => season.All(episode => episode.AirDate is null))
+            .Select(season => season.Key));
     }
 
     /// <summary>When the next episode airs, when the library knows of one that has not yet.</summary>

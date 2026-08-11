@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
+using NoMercy.Plugin.TorrentDownloader.Core.Library;
 using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugins.Abstractions;
 
@@ -41,7 +42,21 @@ public static class ShowsView
                 "shows-all",
                 Format.Count("Shows", shows.Count),
                 shows.Count == 0 ? null : "Click one to see what is missing from it.",
-                Rows(shows)));
+                Rows(shows)),
+
+            // The way past the two rules that decide the list above. Without it the plugin
+            // can only ever finish a show somebody started by hand and can never begin one,
+            // or go back to one that has ended - and a list of every show the library has
+            // heard of is exactly what this page is not.
+            Ui.Section(
+                "shows-follow",
+                "Follow another show",
+                "Type the name of a show in your library. Add the year in brackets if two have the same name.",
+                Ui.Form(
+                    "shows-follow-form",
+                    "Follow",
+                    PluginActionIntent.CallPlugin(PluginMethods.FollowByName),
+                    new PluginFormField { Name = "name", Label = "Show", Required = true })));
 
     private static PluginComponent Rows(IReadOnlyList<ShowSummary> shows)
     {
@@ -50,7 +65,7 @@ public static class ShowsView
             return Ui.EmptyState(
                 "shows-empty",
                 "No shows yet",
-                "A show appears here once the library knows about it.");
+                "A show appears here once at least one of its episodes is on the server and it is still going out. Anything else can be followed by name below.");
         }
 
         List<PluginComponent> rows = [];
@@ -199,22 +214,29 @@ public static class ShowsView
     /// Where a show stands, in one word.
     ///
     /// <para>
-    /// "Not started" is first because it is the one state that means the plugin is
-    /// deliberately doing nothing - and an owner reading "0 missing" against a show they
-    /// have never watched would otherwise conclude it was complete.
+    /// "Waiting" is first because it is the one state that means the plugin has nothing of
+    /// the show yet - an owner reading "0 missing" against a show they asked for and have
+    /// never seen an episode of would otherwise conclude it had arrived.
+    /// </para>
+    ///
+    /// <para>
+    /// Ended and Cancelled appear only for a show the owner followed by hand: the refresh
+    /// passes over every other finished series. They are named rather than both reading
+    /// "Complete", because which of the two it is is the thing worth knowing about a show
+    /// that stopped.
     /// </para>
     /// </summary>
     private static (string Label, string Variant) State(ShowSummary show) => show switch
     {
-        { Started: false } => ("Not started", PluginBadgeVariant.Neutral),
+        { Started: false } => ("Waiting", PluginBadgeVariant.Neutral),
         { Downloading: > 0 } => ("Downloading", PluginBadgeVariant.Success),
         { Missing: > 0 } => ("Missing", PluginBadgeVariant.Warning),
+        { Status: ShowStatus.Ended } => ("Ended", PluginBadgeVariant.Neutral),
+        { Status: ShowStatus.Canceled } => ("Cancelled", PluginBadgeVariant.Neutral),
 
-        // Up to date and still going out is not the same as up to date and finished. Both
-        // have nothing missing today; only one of them will have something missing next
-        // week, and that is the whole difference an owner is looking for in this column.
-        { Running: true } => ("Airing", PluginBadgeVariant.Success),
-        _ => ("Complete", PluginBadgeVariant.Neutral),
+        // Up to date and still going out. Nothing is missing today and something will be
+        // next week, which is the difference this column exists for.
+        _ => ("Airing", PluginBadgeVariant.Success),
     };
 
     private static (string Label, string Variant) EpisodeState(WantedEpisode episode) => episode switch
@@ -229,7 +251,7 @@ public static class ShowsView
     private static string Summary(ShowSummary show)
     {
         if (!show.Started)
-            return "Nothing of this is on the server, so the plugin leaves it alone.";
+            return "Nothing of this is on the server yet. You asked for it, so the plugin is looking.";
 
         List<string> parts = [];
 
@@ -249,8 +271,9 @@ public static class ShowsView
 /// One show as the pages need it: the counts already worked out, so a view stays a view.
 /// </summary>
 /// <param name="Started">
-/// Whether anything of it is on the server. A show nobody has watched is one the plugin
-/// deliberately leaves alone, which is a different thing from a show with nothing missing.
+/// Whether anything of it is on the server. False only for a show the owner asked for by
+/// name and none of which has arrived - every other show here has an episode, because that
+/// is what got it onto this list.
 /// </param>
 public sealed record ShowSummary(
     int ShowId,
@@ -262,15 +285,15 @@ public sealed record ShowSummary(
     bool Followed)
 {
     /// <summary>
-    /// Whether it is still going out.
+    /// Where the library says the show stands.
     ///
     /// <para>
-    /// The state an owner most wants to pick out of a library: a show that is up to date and
-    /// finished needs nothing, and one that is up to date until Tuesday needs watching. Both
-    /// read as "0 missing" without this.
+    /// The state an owner most wants to pick out: a show that is up to date and finished
+    /// needs nothing, and one that is up to date until Tuesday needs watching. Both read as
+    /// "0 missing" without this.
     /// </para>
     /// </summary>
-    public bool Running { get; init; }
+    public ShowStatus Status { get; init; } = ShowStatus.Unknown;
 
     /// <summary>When the next episode airs, when one is scheduled.</summary>
     public DateOnly? NextAirDate { get; init; }

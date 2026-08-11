@@ -97,59 +97,14 @@ public class DownloadOrchestratorTests
         show.Started.Should().BeTrue();
     }
 
-    // Up to date and finished is not up to date and still going out. Both have nothing
-    // missing today; only one of them will have something missing next week.
+    // --- only what is on the server, and only while it is still going out ---------
+
+    // The library is a catalogue, not a shelf. A show it lists with no episode on the
+    // server is one the metadata provider knows about - a row left behind by an "add
+    // content" nobody followed through on, or a folder deleted years ago. On a real
+    // server twelve of sixty-seven were in exactly that state, and every page listed them.
     [Fact]
-    public async Task RefreshWantedAsync_TellsAShowStillAiringApartFromOneThatEnded()
-    {
-        _library.Add(showId: 1, "Airing", folder: "/media/airing", episodes: [(1, 1, HasFile: true)]);
-        _library.SetAirDate(1, 1, 1, Now.AddDays(-3));
-
-        _library.Add(showId: 2, "Ended", folder: "/media/ended", episodes: [(1, 1, HasFile: true)]);
-        _library.SetAirDate(2, 1, 1, Now.AddYears(-6));
-
-        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
-
-        IReadOnlyList<TrackedShow> shows = await _store.ShowsAsync(CancellationToken.None);
-
-        shows.Single(show => show.ShowId == 1).Running.Should().BeTrue();
-        shows.Single(show => show.ShowId == 2).Running.Should().BeFalse();
-    }
-
-    // A scheduled episode keeps a show current however long the gap before it, which is what
-    // a mid-season break looks like from here.
-    [Fact]
-    public async Task RefreshWantedAsync_CountsAShowWithAnEpisodeStillToComeAsAiring()
-    {
-        _library.Add(showId: 1, "On A Break", folder: "/media/break", episodes:
-        [
-            (1, 1, HasFile: true),
-            (2, 1, HasFile: false),
-        ]);
-        _library.SetAirDate(1, 1, 1, Now.AddYears(-2));
-        _library.SetAirDate(1, 2, 1, Now.AddDays(40));
-
-        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
-
-        TrackedShow show = (await _store.ShowsAsync(CancellationToken.None)).Single();
-
-        show.Running.Should().BeTrue();
-        show.NextAirDate.Should().Be(DateOnly.FromDateTime(Now.AddDays(40).UtcDateTime));
-    }
-
-    [Fact]
-    public async Task RefreshWantedAsync_SkipsAShowWithNoFolderToDownloadInto()
-    {
-        _library.Add(showId: 1, "Homeless Show", folder: null, episodes: [(1, 1, false)]);
-
-        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(0);
-    }
-
-    // The rule that keeps a first run from being a thousand downloads: a show nobody has
-    // a single episode of is a show nobody asked for. The library lists everything the
-    // metadata provider knows about, not everything the owner wants.
-    [Fact]
-    public async Task RefreshWantedAsync_LeavesAloneAShowWithNothingOnTheServerYet()
+    public async Task RefreshWantedAsync_RecordsNothingAtAllForAShowWithNoEpisodeOnTheServer()
     {
         _library.Add(showId: 1, "Never Watched", folder: "/media/never", episodes:
         [
@@ -160,7 +115,200 @@ public class DownloadOrchestratorTests
         WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
 
         refresh.Wanted.Should().Be(0);
-        (await _store.WantedAsync(10, CancellationToken.None)).Should().BeEmpty();
+        refresh.Shows.Should().Be(0);
+        refresh.NotOnTheServer.Should().Be(1);
+        (await _store.ShowsAsync(CancellationToken.None)).Should().BeEmpty("a show nobody has is not this plugin's business");
+    }
+
+    // Half an episode is still an episode: one file anywhere in the show is what makes it
+    // the owner's rather than the catalogue's.
+    [Fact]
+    public async Task RefreshWantedAsync_HoldsAShowWithASingleEpisodeOnTheServer()
+    {
+        _library.Add(showId: 1, "Barely Started", folder: "/media/barely", episodes:
+        [
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: false),
+        ], status: ShowStatus.Returning);
+
+        WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Shows.Should().Be(1);
+        refresh.Wanted.Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData(ShowStatus.Ended)]
+    [InlineData(ShowStatus.Canceled)]
+    public async Task RefreshWantedAsync_LeavesAFinishedShowAloneEvenWithGaps(ShowStatus finished)
+    {
+        _library.Add(showId: 1, "Finished", folder: "/media/finished", episodes:
+        [
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: false),
+        ], status: finished);
+
+        WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(0);
+        refresh.Shows.Should().Be(0);
+        refresh.Finished.Should().Be(1);
+        (await _store.ShowsAsync(CancellationToken.None)).Should().BeEmpty();
+    }
+
+    [Theory]
+    [InlineData(ShowStatus.Returning)]
+    [InlineData(ShowStatus.Planned)]
+    [InlineData(ShowStatus.InProduction)]
+    [InlineData(ShowStatus.Pilot)]
+    public async Task RefreshWantedAsync_WorksOnAnythingThatIsNotFinished(ShowStatus going)
+    {
+        _library.Add(showId: 1, "Going", folder: "/media/going", episodes:
+        [
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: false),
+        ], status: going);
+
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(1);
+    }
+
+    // A server too old to answer the question reports Unknown for every show. Reading that
+    // as finished would stop the plugin working on an entire library the moment somebody
+    // upgraded the plugin without upgrading the server.
+    [Fact]
+    public async Task RefreshWantedAsync_TreatsAnUnknownStatusAsStillGoing()
+    {
+        _library.Add(showId: 1, "No Status", folder: "/media/unknown", episodes:
+        [
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: false),
+        ], status: ShowStatus.Unknown);
+
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(1);
+    }
+
+    // The owner's override, and the only way past either rule. Asking for a finished show
+    // is how a back catalogue gets filled in, and it is a decision the plugin has no
+    // business second-guessing.
+    [Fact]
+    public async Task RefreshWantedAsync_WorksOnAFinishedShowThatWasAskedForByHand()
+    {
+        _library.Add(showId: 7, "Long Over", folder: "/media/over", episodes:
+        [
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: false),
+        ], status: ShowStatus.Ended);
+
+        WantedRefresh refresh = await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            FollowedShowIds = [7],
+        }).RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(1);
+        refresh.Shows.Should().Be(1);
+        refresh.Finished.Should().Be(0, "it was asked for, so it is not being left alone");
+    }
+
+    [Fact]
+    public async Task RefreshWantedAsync_KeepsTheStatusSoAPageCanSayWhichItIs()
+    {
+        _library.Add(showId: 1, "Airing", folder: "/media/airing", episodes: [(1, 1, HasFile: true)],
+            status: ShowStatus.Returning);
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        TrackedShow show = (await _store.ShowsAsync(CancellationToken.None)).Should().ContainSingle().Subject;
+
+        show.Status.Should().Be(ShowStatus.Returning);
+        show.Running.Should().BeTrue();
+    }
+
+    // A scheduled episode is what the page puts next to a show that is up to date today.
+    [Fact]
+    public async Task RefreshWantedAsync_RecordsWhenTheNextEpisodeAirs()
+    {
+        _library.Add(showId: 1, "On A Break", folder: "/media/break", episodes:
+        [
+            (1, 1, HasFile: true),
+            (2, 1, HasFile: false),
+        ], status: ShowStatus.Returning);
+        _library.SetAirDate(1, 1, 1, Now.AddYears(-2));
+        _library.SetAirDate(1, 2, 1, Now.AddDays(40));
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        TrackedShow show = (await _store.ShowsAsync(CancellationToken.None)).Single();
+
+        show.NextAirDate.Should().Be(DateOnly.FromDateTime(Now.AddDays(40).UtcDateTime));
+    }
+
+    // --- a season that has not been scheduled -------------------------------------
+
+    // Seen on a real library: an announced season two carried eight rows called
+    // "Episode 1".."Episode 8" with no air date on any of them. Nobody can seed an episode
+    // that has not been made, so every one of those was searched for until it was parked
+    // as unavailable - twelve wasted searches each, against sites that rate limit.
+    [Fact]
+    public async Task RefreshWantedAsync_DoesNotWantASeasonNothingHasBeenScheduledIn()
+    {
+        _library.Add(showId: 1, "Announced", folder: "/media/announced", episodes:
+        [
+            (1, 1, HasFile: true),
+            (1, 2, HasFile: true),
+            (2, 1, HasFile: false),
+            (2, 2, HasFile: false),
+        ], status: ShowStatus.Returning);
+
+        _library.SetAirDate(1, 1, 1, Now.AddYears(-1));
+        _library.SetAirDate(1, 1, 2, Now.AddYears(-1).AddDays(7));
+
+        WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        refresh.Wanted.Should().Be(0);
+        refresh.Shows.Should().Be(1, "the show itself is still held - only the unscheduled season is passed over");
+    }
+
+    // The moment one episode of it has a date, the season is real and the rest of it is
+    // wanted: a weekly season lists every slot as soon as the first one airs.
+    [Fact]
+    public async Task RefreshWantedAsync_WantsASeasonAsSoonAsAnythingInItIsScheduled()
+    {
+        _library.Add(showId: 1, "Started Airing", folder: "/media/started", episodes:
+        [
+            (1, 1, HasFile: true),
+            (2, 1, HasFile: false),
+            (2, 2, HasFile: false),
+        ], status: ShowStatus.Returning);
+
+        _library.SetAirDate(1, 1, 1, Now.AddYears(-1));
+        _library.SetAirDate(1, 2, 1, Now.AddDays(-2));
+
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(2);
+    }
+
+    // Old libraries are full of episodes nobody ever dated. Undated is only evidence of
+    // "not scheduled" when the library dates anything at all - otherwise this rule would
+    // quietly abandon every episode of every show.
+    [Fact]
+    public async Task RefreshWantedAsync_StillWantsAnUndatedSeasonWhenTheLibraryDatesNothing()
+    {
+        _library.Add(showId: 1, "Undated Everywhere", folder: "/media/undated", episodes:
+        [
+            (1, 1, HasFile: true),
+            (2, 1, HasFile: false),
+            (2, 2, HasFile: false),
+        ], status: ShowStatus.Returning);
+
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(2);
+    }
+
+    [Fact]
+    public async Task RefreshWantedAsync_SkipsAShowWithNoFolderToDownloadInto()
+    {
+        _library.Add(showId: 1, "Homeless Show", folder: null, episodes: [(1, 1, false)]);
+
+        (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(0);
     }
 
     // The counterpart of the shelf rule: without this the plugin can only ever finish a
@@ -177,8 +325,8 @@ public class DownloadOrchestratorTests
         }).RefreshWantedAsync(CancellationToken.None);
 
         refresh.Wanted.Should().Be(2);
-        refresh.ShowsFollowed.Should().Be(1);
-        refresh.ShowsNotStarted.Should().Be(0, "it was asked for, so it is not being left alone");
+        refresh.Shows.Should().Be(1);
+        refresh.NotOnTheServer.Should().Be(0, "it was asked for, so it is not being left alone");
     }
 
     [Fact]
@@ -194,52 +342,30 @@ public class DownloadOrchestratorTests
         }).RefreshWantedAsync(CancellationToken.None);
 
         refresh.Wanted.Should().Be(1);
-        refresh.ShowsNotStarted.Should().Be(1);
+        refresh.NotOnTheServer.Should().Be(1);
+        (await _store.ShowsAsync(CancellationToken.None)).Should().ContainSingle()
+            .Which.ShowId.Should().Be(7);
     }
 
-    // Seen on a real server: the page listed 65 shows to follow while the log said 12,
-    // and among the 65 were shows whose missing episodes were in the queue directly
-    // above. The page was reading the host's HaveEpisodeCount, which is zero for shows
-    // that plainly have episodes. One question, one answer: whoever decides, records.
+    // Skipping quietly is how an owner concludes the plugin is broken. The counts are what
+    // the log line is built from, and each one answers a different "why is it doing
+    // nothing": nobody has it, or nobody is making any more of it.
     [Fact]
-    public async Task RefreshWantedAsync_WritesDownTheShowsItLeftAloneAndNoOthers()
+    public async Task RefreshWantedAsync_CountsWhatItPassedOverAndWhy()
     {
-        _library.Add(showId: 1, "Started", folder: "/media/started", episodes: [(1, 1, true), (1, 2, false)]);
-        _library.Add(showId: 2, "Never Watched", folder: "/media/never", episodes: [(1, 1, false)]);
-
-        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
-
-        IReadOnlyList<UnstartedShow> unstarted = await _store.UnstartedShowsAsync(CancellationToken.None);
-        unstarted.Should().ContainSingle();
-        unstarted[0].ShowId.Should().Be(2);
-        unstarted[0].Title.Should().Be("Never Watched");
-    }
-
-    [Fact]
-    public async Task RefreshWantedAsync_StopsListingAShowOnceItIsFollowed()
-    {
-        _library.Add(showId: 7, "Asked For", folder: "/media/asked", episodes: [(1, 1, false)]);
-
-        await Orchestrator(new OrchestratorOptions { DownloadFolder = "/downloads", FollowedShowIds = [7] })
-            .RefreshWantedAsync(CancellationToken.None);
-
-        (await _store.UnstartedShowsAsync(CancellationToken.None)).Should().BeEmpty();
-    }
-
-    // Skipping quietly is how a user concludes the plugin is broken. The counts are what
-    // the log line is built from.
-    [Fact]
-    public async Task RefreshWantedAsync_CountsTheShowsItLeftAlone()
-    {
-        _library.Add(showId: 1, "Started", folder: "/media/started", episodes: [(1, 1, true), (1, 2, false)]);
+        _library.Add(showId: 1, "Held", folder: "/media/held", episodes: [(1, 1, true), (1, 2, false)],
+            status: ShowStatus.Returning);
         _library.Add(showId: 2, "Never Watched", folder: "/media/never", episodes: [(1, 1, false)]);
         _library.Add(showId: 3, "Also Never", folder: "/media/also", episodes: [(1, 1, false)]);
+        _library.Add(showId: 4, "Finished", folder: "/media/finished", episodes: [(1, 1, true), (1, 2, false)],
+            status: ShowStatus.Ended);
 
         WantedRefresh refresh = await Orchestrator().RefreshWantedAsync(CancellationToken.None);
 
         refresh.Wanted.Should().Be(1);
-        refresh.ShowsFollowed.Should().Be(1);
-        refresh.ShowsNotStarted.Should().Be(2);
+        refresh.Shows.Should().Be(1);
+        refresh.NotOnTheServer.Should().Be(2);
+        refresh.Finished.Should().Be(1);
     }
 
     [Fact]
@@ -1186,12 +1312,25 @@ public class DownloadOrchestratorTests
         private readonly List<LibraryShow> _shows = [];
         private readonly Dictionary<int, List<LibraryEpisode>> _episodes = [];
 
-        public void Add(int showId, string title, string? folder, IEnumerable<(int Season, int Episode, bool HasFile)> episodes)
+        /// <summary>
+        /// The status defaults to what the record itself defaults to, so a test that does
+        /// not care about it exercises the same value a server too old to answer produces.
+        /// </summary>
+        public void Add(
+            int showId,
+            string title,
+            string? folder,
+            IEnumerable<(int Season, int Episode, bool HasFile)> episodes,
+            ShowStatus status = ShowStatus.Unknown)
         {
             List<LibraryEpisode> list = [.. episodes.Select(episode =>
                 new LibraryEpisode(showId, episode.Season, episode.Episode, $"Episode {episode.Episode}", null, episode.HasFile))];
 
-            _shows.Add(new LibraryShow(showId, title, 2026, "lib-1", folder, list.Count, list.Count(e => e.HasFile)));
+            _shows.Add(new LibraryShow(showId, title, 2026, "lib-1", folder, list.Count, list.Count(e => e.HasFile))
+            {
+                Status = status,
+            });
+
             _episodes[showId] = list;
         }
 

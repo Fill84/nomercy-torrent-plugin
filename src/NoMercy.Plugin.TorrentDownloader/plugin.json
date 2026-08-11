@@ -3,7 +3,7 @@
   "name": "Torrent Downloader",
   "description": "Keeps a TV library complete by downloading missing episodes over BitTorrent.",
   "version": "0.1.0",
-  "targetAbi": "10.0",
+  "targetAbi": "10.1",
   "author": "Phillippe Pelzer",
   "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
   "assembly": "NoMercy.Plugin.TorrentDownloader.dll",

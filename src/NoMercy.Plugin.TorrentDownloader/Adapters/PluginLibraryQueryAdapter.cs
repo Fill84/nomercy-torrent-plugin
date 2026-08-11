@@ -50,7 +50,39 @@ public sealed class PluginLibraryQueryAdapter(IPluginLibraryQuery library) : ILi
             show.Folder,
             show.EpisodeCount,
             show.HaveEpisodeCount
-        );
+        )
+        {
+            Status = ToStatus(show.Status),
+        };
+
+    /// <summary>
+    /// The host's word for where a show stands, as the core's own.
+    ///
+    /// <para>
+    /// The core assembly holds no reference to the host contract - that is what makes it
+    /// testable without a server - so the two enums are separate types and this is the one
+    /// place they meet. Written as a switch rather than a cast on the numeric value: they
+    /// happen to line up today, and a cast would keep compiling on the day one of them
+    /// gains a member in the middle.
+    /// </para>
+    ///
+    /// <para>
+    /// Anything unrecognised is <see cref="ShowStatus.Unknown"/>, which counts as still
+    /// going out. A newer server naming a status this plugin has not heard of must not
+    /// read as "finished" - that is the reading that would stop the plugin working on a
+    /// show nobody ended.
+    /// </para>
+    /// </summary>
+    private static ShowStatus ToStatus(PluginShowStatus status) => status switch
+    {
+        PluginShowStatus.Planned => ShowStatus.Planned,
+        PluginShowStatus.InProduction => ShowStatus.InProduction,
+        PluginShowStatus.Pilot => ShowStatus.Pilot,
+        PluginShowStatus.Returning => ShowStatus.Returning,
+        PluginShowStatus.Ended => ShowStatus.Ended,
+        PluginShowStatus.Canceled => ShowStatus.Canceled,
+        _ => ShowStatus.Unknown,
+    };
 
     private static LibraryEpisode ToEpisode(PluginLibraryEpisode episode) =>
         new(

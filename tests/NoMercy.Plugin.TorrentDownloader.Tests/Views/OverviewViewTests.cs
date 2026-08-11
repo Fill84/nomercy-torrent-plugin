@@ -49,9 +49,8 @@ public class OverviewViewTests
         IReadOnlyList<Grab>? grabs = null,
         IReadOnlyList<WantedEpisode>? wanted = null,
         IReadOnlyList<HistoryEntry>? history = null,
-        IReadOnlyList<FollowableShow>? shows = null,
         IReadOnlyList<string>? ungranted = null) =>
-        OverviewView.Build(transfers ?? [], grabs ?? [], wanted ?? [], history ?? [], shows ?? [], ungranted ?? []);
+        OverviewView.Build(transfers ?? [], grabs ?? [], wanted ?? [], history ?? [], ungranted ?? []);
 
     [Fact]
     public void Build_DrawsOnlyTagsAClientKnows()
@@ -60,7 +59,6 @@ public class OverviewViewTests
             [Transfer("abc")],
             [Grab("abc", "Some.Show.S01E01.1080p")],
             [Wanted(2)],
-            shows: [new FollowableShow(42, "Never Watched", Followed: false)],
             ungranted: ["scnsrc.me"]);
 
         PluginNodes.All(view).Select(node => node.Component)
@@ -146,27 +144,13 @@ public class OverviewViewTests
     }
 
     /// <summary>
-    /// Named, not listed. Deciding about one show belongs on Shows, which is the page for
-    /// deciding about a show; what belongs here is that there are some at all, because an
-    /// owner who does not know that concludes the plugin is ignoring half their library.
+    /// The page used to count the library rows with no episode on the server, so an owner
+    /// would know the plugin was passing over them. Those shows are not the plugin's, and
+    /// reporting on them here is the page that answers "what is this plugin doing" spending
+    /// space on somebody else's business. Following one by name lives on Shows.
     /// </summary>
     [Fact]
-    public void Build_SaysHowManyShowsItIsLeavingAloneAndSendsYouToThem()
-    {
-        PluginView view = Build(shows: [new FollowableShow(42, "Never Watched", Followed: false)]);
-
-        PluginNodes.Says(view, "One show has nothing on the server").Should().BeTrue();
-
-        PluginComponent more = PluginNodes.All(view).Should()
-            .ContainSingle(node => node.Id == "overview-unstarted-more").Which;
-
-        more.Action!.Payload[PluginNavigation.RouteKey].Should().Be("/shows");
-    }
-
-    // A library where every show has files is the normal case, and a heading over an empty
-    // list reads as something being broken.
-    [Fact]
-    public void Build_SaysNothingAboutUnstartedShowsWhenThereAreNone()
+    public void Build_SaysNothingAboutShowsThatAreNotThePluginsBusiness()
     {
         PluginNodes.All(Build()).Should().NotContain(node => node.Id == "overview-unstarted");
     }

@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
 using FluentAssertions;
+using NoMercy.Plugin.TorrentDownloader.Core.Library;
 using NoMercy.Plugin.TorrentDownloader.Core.Store;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -22,8 +23,9 @@ public class ShowsViewTests
         int downloading = 0,
         bool started = true,
         bool followed = false,
-        DateTimeOffset? arrived = null) =>
-        new(id, title, missing, downloading, arrived, started, followed);
+        DateTimeOffset? arrived = null,
+        ShowStatus status = ShowStatus.Returning) =>
+        new(id, title, missing, downloading, arrived, started, followed) { Status = status };
 
     private static WantedEpisode Wanted(int episode, WantedState state = WantedState.Wanted) => new()
     {
@@ -77,17 +79,42 @@ public class ShowsViewTests
     }
 
     /// <summary>
-    /// "Not started" beats "Complete" for a show nobody has watched. Both have nothing
-    /// missing, and only one of them means the plugin has decided to do nothing about it.
+    /// "Waiting" beats "Airing" for a show the owner asked for and none of which has
+    /// arrived. Both have nothing missing, and only one of them means an episode has ever
+    /// landed.
     /// </summary>
     [Fact]
-    public void Build_TellsAShowItIsLeavingAloneApartFromOneThatIsFinished()
+    public void Build_TellsAShowWithNothingYetApartFromOneThatIsUpToDate()
     {
         PluginNodes.Cell(PluginNodes.TableRows(ShowsView.Build([Show(started: false)])).Single(), "state")
-            .Should().Be("Not started");
+            .Should().Be("Waiting");
 
         PluginNodes.Cell(PluginNodes.TableRows(ShowsView.Build([Show(started: true)])).Single(), "state")
-            .Should().Be("Complete");
+            .Should().Be("Airing");
+    }
+
+    /// <summary>
+    /// Only a show the owner followed by hand can be finished and still on this page - the
+    /// refresh passes over every other one. Which of the two it is is the thing worth
+    /// knowing about a show that stopped, so they are not both "Complete".
+    /// </summary>
+    [Theory]
+    [InlineData(ShowStatus.Ended, "Ended")]
+    [InlineData(ShowStatus.Canceled, "Cancelled")]
+    public void Build_NamesWhichWayAFollowedShowStopped(ShowStatus status, string expected)
+    {
+        PluginNodes.Cell(PluginNodes.TableRows(ShowsView.Build([Show(status: status)])).Single(), "state")
+            .Should().Be(expected);
+    }
+
+    /// <summary>
+    /// The one entry point to a show this page deliberately does not list. Without it the
+    /// two rules that keep the list honest also make it impossible to start a new show.
+    /// </summary>
+    [Fact]
+    public void Build_TakesTheNameOfAShowToFollow()
+    {
+        PluginNodes.All(ShowsView.Build([])).Should().Contain(node => node.Id == "shows-follow-form");
     }
 
     // A list ordered by title alone buries the one show that is stuck behind twenty that are
@@ -157,12 +184,13 @@ public class ShowsViewTests
         PluginNodes.All(view).Should().NotContain(node => node.Id == "show-follow-42");
     }
 
-    // "0 missing" against a show nobody has watched reads as complete, which is the opposite
-    // of what it means.
+    // "0 missing" against a show none of which has arrived reads as complete, which is the
+    // opposite of what it means.
     [Fact]
-    public void Detail_SaysWhyItIsDoingNothingForAnUnstartedShow()
+    public void Detail_SaysWhyThereIsNothingYetForAShowThatWasAskedFor()
     {
-        PluginNodes.Says(ShowsView.Detail(Show(started: false), [], []), "leaves it alone").Should().BeTrue();
+        PluginNodes.Says(ShowsView.Detail(Show(started: false), [], []), "Nothing of this is on the server yet")
+            .Should().BeTrue();
     }
 
     [Fact]

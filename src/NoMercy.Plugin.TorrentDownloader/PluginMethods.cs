@@ -41,6 +41,10 @@ public static class PluginMethods
     public const string FollowShow = "FollowShow";
     public const string UnfollowShow = "UnfollowShow";
 
+    // By name rather than by id, because this is the one entry point reached without a row
+    // to click: the shows it can reach are precisely the ones no page lists.
+    public const string FollowByName = "FollowByName";
+
     public const string PauseDownload = "PauseDownload";
     public const string ResumeDownload = "ResumeDownload";
     public const string CancelDownload = "CancelDownload";

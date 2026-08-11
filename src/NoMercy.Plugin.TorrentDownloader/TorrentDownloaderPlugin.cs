@@ -99,6 +99,58 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public Task<SaveSettingsOutcome> UnfollowShowAsync(int showId, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleUnfollowShowAsync(showId, ct));
 
+    /// <summary>
+    /// Follows a show the owner named, rather than one they clicked.
+    ///
+    /// <para>
+    /// The only way to reach a show no page lists - which, since the refresh holds only
+    /// shows with an episode on the server that are still going out, is most of a library.
+    /// The library itself is asked every time; nothing about the shows this can reach is
+    /// stored, because storing them is exactly the list an owner does not want to look at.
+    /// </para>
+    ///
+    /// <para>
+    /// The library is asked directly rather than through the pipeline: naming a show should
+    /// not be what starts an engine dialling peers.
+    /// </para>
+    /// </summary>
+    public async Task<SaveSettingsOutcome> FollowByNameAsync(SaveSettingsRequest request, CancellationToken ct = default)
+    {
+        if (_disposed || _context is null)
+            return Remember(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
+
+        if (string.IsNullOrWhiteSpace(request.Name))
+            return Remember(SaveSettingsOutcome.Failure("Type the name of a show first."));
+
+        try
+        {
+            IReadOnlyList<LibraryShow> shows =
+                await new PluginLibraryQueryAdapter(_context.Library).GetShowsAsync(ct);
+
+            ShowMatch match = LibraryShowFinder.Find(shows, request.Name);
+
+            return match switch
+            {
+                { Outcome: ShowLookup.One, Show: { } show } => Remember(
+                    await SaveAsync(handler => handler.HandleFollowShowAsync(show.ShowId, ct)) is { Succeeded: true }
+                        ? SaveSettingsOutcome.Done($"Following {show.Title}. The next refresh picks up what is missing.")
+                        : SaveSettingsOutcome.Failure($"{show.Title} could not be followed. The server log says why.")),
+
+                { Outcome: ShowLookup.Several } => Remember(SaveSettingsOutcome.Failure(
+                    $"More than one show matches that: {string.Join(", ", match.Candidates)}. Type the year in brackets too.")),
+
+                _ => Remember(SaveSettingsOutcome.Failure(
+                    $"Nothing in your library is called \"{request.Name.Trim()}\". Add it to the library first.")),
+            };
+        }
+        catch (Exception failure)
+        {
+            _context.Logger.LogWarning(failure, "Torrent Downloader could not follow a show by name.");
+
+            return Remember(SaveSettingsOutcome.Failure("That show could not be followed. The server log says why."));
+        }
+    }
+
     public Task<SaveSettingsOutcome> PauseDownloadAsync(string infoHash, CancellationToken ct = default) =>
         OnDownloadAsync(orchestrator => orchestrator.PauseDownloadAsync(infoHash, ct), "Paused.", ct);
 
@@ -447,10 +499,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             context.Logger.LogInformation("Torrent Downloader handed {Count} finished download(s) to the intake.", imported);
     }
 
-    // A show with at least one episode on the server is one its owner started watching,
-    // and that is what decides which shows this plugin follows - not the library's full
-    // catalogue, which on a real server was 1973 episodes of things nobody had ever put
-    // a file of on disk.
+    // A show with at least one episode on the server, still going out, is one this plugin
+    // works on - not the library's full catalogue, which on a real server was 1973 episodes
+    // of things nobody had ever put a file of on disk.
     private async Task RunFeedAsync(IPluginContext context, CancellationToken ct)
     {
         DownloadPipeline pipeline = await PipelineAsync(context, ct);
@@ -460,15 +511,24 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         context.Logger.LogInformation(
             "Torrent Downloader is missing {Count} episode(s) across {Shows} show(s) it follows.",
             refresh.Wanted,
-            refresh.ShowsFollowed);
+            refresh.Shows);
 
         // Said out loud, because a plugin that quietly decides to want nothing is one the
-        // owner concludes is broken. This is the line that answers "why is it idle".
-        if (refresh.ShowsNotStarted > 0)
+        // owner concludes is broken. These are the lines that answer "why is it idle", and
+        // they are separate because the two answers are: nobody has it, and nobody is
+        // making any more of it.
+        if (refresh.NotOnTheServer > 0)
         {
             context.Logger.LogInformation(
-                "Torrent Downloader is leaving {Count} show(s) alone: nothing of them is on the server yet.",
-                refresh.ShowsNotStarted);
+                "Torrent Downloader is leaving {Count} show(s) alone: the library lists them but no episode of them is on the server.",
+                refresh.NotOnTheServer);
+        }
+
+        if (refresh.Finished > 0)
+        {
+            context.Logger.LogInformation(
+                "Torrent Downloader is leaving {Count} show(s) alone: they have ended or been cancelled, so nothing more of them is coming.",
+                refresh.Finished);
         }
 
         // Then whatever the feeds have posted since the last quarter of an hour. This runs
@@ -717,7 +777,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// Every show the plugin knows about, with its counts already worked out.
+    /// The shows the plugin is working on, with their counts already worked out.
+    ///
+    /// <para>
+    /// The list is exactly what the last refresh recorded, and nothing is added to it from
+    /// anywhere else. An earlier version also took titles from the wanted list, from
+    /// history and from a stored list of shows with nothing on the server - which meant a
+    /// show the refresh had deliberately passed over reappeared on the page through one of
+    /// the other three doors. One question, one answer: whoever decides, records.
+    /// </para>
     ///
     /// <para>
     /// Assembled here rather than in the view, for the same reason every other page's data
@@ -735,51 +803,24 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         IReadOnlyList<HistoryEntry> history = await store.HistoryAsync(int.MaxValue, ct);
         HashSet<int> followed = [.. ReadSettingsOrDefault().FollowedShowIds];
 
-        IReadOnlyList<TrackedShow> tracked = await store.ShowsAsync(ct);
-
-        Dictionary<int, string> titles = [];
-        Dictionary<int, TrackedShow> known = tracked.ToDictionary(show => show.ShowId);
-
-        // What the last refresh actually looked at, which is the only list that includes a
-        // show with nothing missing. A running series is up to date most of the time - the
-        // week between one episode and the next - and building this list from wanted
-        // episodes alone made it vanish for exactly that week.
-        foreach (TrackedShow show in tracked)
-            titles.TryAdd(show.ShowId, show.Title);
-
-        // The rest are for a store written before shows were recorded, and for anything the
-        // refresh has not seen since.
-        foreach (WantedEpisode episode in wanted)
-            titles.TryAdd(episode.Key.ShowId, episode.ShowTitle);
-
-        foreach (HistoryEntry entry in history.Where(entry => entry.ShowTitle is not null))
-            titles.TryAdd(entry.Key.ShowId, entry.ShowTitle!);
-
-        foreach (UnstartedShow show in await store.UnstartedShowsAsync(ct))
-            titles.TryAdd(show.ShowId, show.Title);
-
-        HashSet<int> unstarted = [.. (await store.UnstartedShowsAsync(ct)).Select(show => show.ShowId)];
-
         List<ShowSummary> summaries = [];
 
-        foreach ((int showId, string title) in titles)
+        foreach (TrackedShow show in await store.ShowsAsync(ct))
         {
-            known.TryGetValue(showId, out TrackedShow? show);
-
             summaries.Add(new ShowSummary(
-                showId,
-                title,
-                wanted.Count(episode => episode.Key.ShowId == showId),
-                grabs.Count(grab => grab.Key.ShowId == showId),
+                show.ShowId,
+                show.Title,
+                wanted.Count(episode => episode.Key.ShowId == show.ShowId),
+                grabs.Count(grab => grab.Key.ShowId == show.ShowId),
                 history
-                    .Where(entry => entry.Key.ShowId == showId && entry.Event == HistoryEvent.Imported)
+                    .Where(entry => entry.Key.ShowId == show.ShowId && entry.Event == HistoryEvent.Imported)
                     .Select(entry => (DateTimeOffset?)entry.At)
                     .Max(),
-                show?.Started ?? !unstarted.Contains(showId),
-                followed.Contains(showId))
+                show.Started,
+                followed.Contains(show.ShowId))
             {
-                Running = show?.Running ?? false,
-                NextAirDate = show?.NextAirDate,
+                Status = show.Status,
+                NextAirDate = show.NextAirDate,
             });
         }
 
@@ -819,7 +860,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             await store.ActiveGrabsAsync(ct),
             await store.WantedAsync(int.MaxValue, ct),
             await store.HistoryAsync(OverviewView.DigestLength, ct),
-            await UnstartedShowsAsync(store, ct),
             await hostGrants.EnsureAsync(loaded.Settings, ct));
     }
 
@@ -849,34 +889,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     private async Task<IReadOnlyList<HistoryEntry>> HistoryAsync(IPluginContext context, int limit, CancellationToken ct) =>
         await (await StoreAsync(context, ct)).HistoryAsync(limit, ct);
-
-    /// <summary>
-    /// The shows this plugin is leaving alone, as the last refresh concluded them.
-    ///
-    /// <para>
-    /// Read back rather than worked out here. The first version asked the library and
-    /// filtered on <c>HaveEpisodeCount</c>, and the host reports that as zero for shows
-    /// that plainly have episodes: the page offered to follow Silo, Sugar and South Park
-    /// while their missing episodes sat in the queue directly above. Two sources for one
-    /// question, and the page had the worse one.
-    /// </para>
-    ///
-    /// <para>
-    /// A show already followed is not in that list at all - the refresh counts it as
-    /// started - so the followed set here only ever marks one whose refresh has not
-    /// happened yet, which is what lets the button say "Stop following" straight away.
-    /// </para>
-    /// </summary>
-    private async Task<IReadOnlyList<FollowableShow>> UnstartedShowsAsync(IDownloadStore store, CancellationToken ct)
-    {
-        HashSet<int> followed = [.. ReadSettingsOrDefault().FollowedShowIds];
-
-        return
-        [
-            .. (await store.UnstartedShowsAsync(ct))
-                .Select(show => new FollowableShow(show.ShowId, show.Title, followed.Contains(show.ShowId))),
-        ];
-    }
 
     // Null-safe before Initialize (the host may dispose a plugin whose load failed) and
     // idempotent (a double dispose is not a bug worth throwing over). Cancelling before

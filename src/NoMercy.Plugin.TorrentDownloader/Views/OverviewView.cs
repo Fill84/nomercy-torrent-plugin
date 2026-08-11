@@ -28,7 +28,6 @@ public static class OverviewView
         IReadOnlyList<Grab> grabs,
         IReadOnlyList<WantedEpisode> wanted,
         IReadOnlyList<HistoryEntry> history,
-        IReadOnlyList<FollowableShow> unstartedShows,
         IReadOnlyList<string> ungrantedHosts)
     {
         Dictionary<string, Grab> byHash = grabs
@@ -70,21 +69,11 @@ public static class OverviewView
                 Now(transfers, byHash)));
         }
 
-        // Named, not listed. Following one is a decision per show and Shows is where a show
-        // is decided about; what belongs here is that there are some, because an owner who
-        // does not know that concludes the plugin is ignoring half their library.
-        if (unstartedShows.Count > 0)
-        {
-            children.Add(Ui.Section(
-                "overview-unstarted",
-                Format.Count("Not started", unstartedShows.Count),
-                unstartedShows.Count == 1
-                    ? "One show has nothing on the server, so the plugin leaves it alone."
-                    : $"{unstartedShows.Count} shows have nothing on the server, so the plugin leaves them alone.",
-                Ui.Row(
-                    "overview-unstarted-actions",
-                    Ui.Button("overview-unstarted-more", "Shows", Pages.Routes.GoTo(Pages.Shows)))));
-        }
+        // There used to be a "Not started" section here, counting the library rows with no
+        // episode on the server so an owner would know the plugin was passing over them.
+        // It is gone with the list behind it: those shows are not the plugin's, so counting
+        // them was reporting on somebody else's business on the page that answers "what is
+        // this plugin doing". Following one by name is on the Shows page.
 
         // The one case an empty state belongs in: the whole page has nothing, rather than
         // one section of it.

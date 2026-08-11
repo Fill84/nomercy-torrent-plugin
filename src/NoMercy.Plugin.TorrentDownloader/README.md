@@ -25,13 +25,23 @@ have consented; `false` would make you re-enable it every time the server starts
 
 ## What it downloads, and what it leaves alone
 
-**A show with at least one episode already on the server is one you started, so the rest of it is
-worth completing. A show with nothing is one nobody asked for.** The library lists everything the
-metadata provider knows about; it is not a statement of intent. Without that rule a first run on a
+Two rules, and both are about the difference between a catalogue and a shelf. The library lists
+every show its metadata provider has heard of; your server holds a much smaller set of them.
+
+**At least one episode has to be on the server.** A show with none is a row left behind — an *add
+content* nobody followed through on, a folder deleted years ago. Without that rule a first run on a
 real library queued 1973 episodes, nearly all of them shows their owner had never held a file of.
 
-The downloads page lists the shows being left alone with a **Follow** button beside each, which is
-how you start one deliberately. Specials (season 0) are excluded unless you turn them on.
+**It has to be still going out.** A series that has ended or been cancelled is complete or it is
+not, and either way nothing new will appear, so searching its gaps every five minutes forever buys
+nothing. The library is asked outright — this is not guessed from air dates, which reads a series
+cancelled last month as current.
+
+Everything else is invisible to the plugin: not listed, not counted, not queued. **Follow another
+show** on the Shows page is the way past both rules — type a name, and that show is worked on
+whether or not anything of it is on the server and whether or not it has ended. A season the
+provider has announced but put no air date on is skipped until it is scheduled; specials (season 0)
+are excluded unless you turn them on.
 
 Nothing is ever uploaded unless you add a private tracker and switch seeding on for it. Every other
 torrent is treated as public, and public never seeds.
@@ -97,7 +107,12 @@ no folder picker; the plugin's own docs record what would be needed for one.
 
 ## Requirements
 
-NoMercy MediaServer with the plugin ABI **10.0** contract, on .NET 10.
+NoMercy MediaServer with the plugin ABI **10.1** contract, on .NET 10.
+
+10.1 is where the library contract gained a show's status — whether it has ended, been cancelled or
+is still returning. An older server refuses to load this plugin with a sentence naming the ABI,
+which is the intended failure: without the status the plugin would have to guess from air dates,
+and guessing is what the rule above exists to stop.
 
 ## Licence
 

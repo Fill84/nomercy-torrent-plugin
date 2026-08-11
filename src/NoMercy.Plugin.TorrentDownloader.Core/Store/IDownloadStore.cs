@@ -2,6 +2,7 @@
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
 using System.Text.Json.Serialization;
+using NoMercy.Plugin.TorrentDownloader.Core.Library;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Store;
 
@@ -152,25 +153,14 @@ public sealed record Transfer
 }
 
 /// <summary>
-/// A show the refresh decided to leave alone, so a page can offer to stop leaving it
-/// alone.
+/// A show the plugin is working on, and what the last refresh concluded about it.
 ///
 /// <para>
-/// Written by the refresh rather than worked out again by whoever renders it. The first
-/// version had the page ask the library and read <c>HaveEpisodeCount</c>, which the host
-/// reports as zero for shows that plainly have episodes: the page offered to follow Silo
-/// while Silo's missing episodes sat in the queue above it. The refresh already walks the
-/// episodes to make the decision, so the decision is what gets recorded.
+/// This list is the plugin's answer to "which shows are yours". Everything the refresh
+/// passed over - a library row with no episode on the server, a series that has ended -
+/// is not in it and is not recorded anywhere else either. A show nobody has is not a
+/// thing to show somebody a list of.
 /// </para>
-/// </summary>
-public sealed record UnstartedShow
-{
-    public required int ShowId { get; init; }
-    public required string Title { get; init; }
-}
-
-/// <summary>
-/// A show the refresh looked at, and what it concluded.
 ///
 /// <para>
 /// Recorded whether or not anything is missing from it. Only wanted episodes were kept
@@ -184,19 +174,30 @@ public sealed record TrackedShow
     public required int ShowId { get; init; }
     public required string Title { get; init; }
 
-    /// <summary>Whether anything of it is on the server. A show with nothing is one the plugin leaves alone.</summary>
-    public required bool Started { get; init; }
-
     /// <summary>
-    /// Whether it is still going out.
+    /// Whether anything of it is on the server.
     ///
     /// <para>
-    /// Derived from air dates, because the host's show record carries no status: a show is
-    /// running when the library knows of an episode airing recently or still to come. That is
-    /// what separates "up to date and nothing more is coming" from "up to date until Tuesday".
+    /// False only for a show the owner asked for by name before anything of it has
+    /// arrived. Every other show in this list has at least one episode, because that is
+    /// what got it in.
     /// </para>
     /// </summary>
-    public required bool Running { get; init; }
+    public required bool Started { get; init; }
+
+    /// <summary>Where the library says the show stands. The one thing that decides whether more of it is coming.</summary>
+    public required ShowStatus Status { get; init; }
+
+    /// <summary>
+    /// Whether more of it is ever coming.
+    ///
+    /// <para>
+    /// Computed, not stored: it is a reading of <see cref="Status"/> and storing both
+    /// invites a file where they disagree.
+    /// </para>
+    /// </summary>
+    [JsonIgnore]
+    public bool Running => Status.StillGoing();
 
     /// <summary>When the next episode airs, when the library knows of one that has not yet.</summary>
     public DateOnly? NextAirDate { get; init; }
@@ -253,15 +254,14 @@ public interface IDownloadStore
 
     Task<IReadOnlyList<WantedEpisode>> WantedAsync(int limit, CancellationToken ct);
 
-    /// <summary>Replaces the list wholesale, like the wanted list: it is a conclusion, not an accumulation.</summary>
-    Task RecordUnstartedShowsAsync(IReadOnlyList<UnstartedShow> shows, CancellationToken ct);
-
-    /// <summary>Every show the last refresh looked at, so a page can list one that is simply up to date.</summary>
+    /// <summary>
+    /// Every show the plugin is working on. Replaced wholesale, like the wanted list: it is
+    /// a conclusion, not an accumulation, so a show that stops qualifying disappears on the
+    /// next refresh rather than needing anyone to clear anything by hand.
+    /// </summary>
     Task RecordShowsAsync(IReadOnlyList<TrackedShow> shows, CancellationToken ct);
 
     Task<IReadOnlyList<TrackedShow>> ShowsAsync(CancellationToken ct);
-
-    Task<IReadOnlyList<UnstartedShow>> UnstartedShowsAsync(CancellationToken ct);
 
     Task<WantedEpisode?> FindWantedAsync(EpisodeKey key, CancellationToken ct);
 
