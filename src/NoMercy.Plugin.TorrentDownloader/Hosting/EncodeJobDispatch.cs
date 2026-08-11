@@ -101,16 +101,10 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         if (library is null)
             return false;
 
-        // The first folder of the library, which is what the Add content screen defaults
-        // to - it reads folder_library[0] and offers the rest as a choice nobody has to
-        // make. A library with no folder has nowhere to put this.
-        object? folderId = FirstFolderId(library);
+        (object? folderId, string folderPath) = ChooseFolder(library);
 
         if (folderId is null)
-        {
-            logger.LogError("Torrent Downloader cannot queue an encode: library {Library} has no folder.", libraryId);
             return false;
-        }
 
         object job = Activator.CreateInstance(jobType)!;
 
@@ -140,7 +134,15 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 
         dispatch.Invoke(dispatcher, [job, Get(job, "QueueName"), Get(job, "Priority")]);
 
-        logger.LogInformation("Torrent Downloader queued an encode for {File} in library {Library}.", inputFile, libraryId);
+        // Names the folder, because that is what the job resolves first and what it gives
+        // up on silently when it cannot.
+        logger.LogInformation(
+            "Torrent Downloader queued an encode for {File} into folder {Folder} ({FolderId}) of library {Library}, preset {Preset}.",
+            inputFile,
+            folderPath,
+            folderId,
+            libraryId,
+            Get(library, "EncodePresetId")?.ToString() ?? "the folder's own");
 
         return true;
     }
@@ -232,21 +234,63 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     }
 
     /// <summary>
-    /// The library's first folder id, read the way the dashboard reads it. The join row
-    /// carries the id; the folder object beside it is for showing a path to a human.
+    /// A folder of the library that actually has a path.
+    ///
+    /// <para>
+    /// This took the first join row it found, the way the Add content screen defaults to
+    /// folder_library[0]. That screen has a human in front of it who can pick a different
+    /// one; this does not. On a real library the first row was a folder with an empty
+    /// path, and <c>VideoEncodeJob</c> begins by resolving the folder and
+    /// <em>returns without a word</em> if it cannot - so the job ran, did nothing, and left
+    /// no trace anywhere. Two episodes reported as queued, no encode, nothing in the log.
+    /// </para>
+    ///
+    /// <para>
+    /// So: a folder with a path, and the choice is logged. A silent wrong answer here is
+    /// indistinguishable from success, which is the worst thing a step this deep in a chain
+    /// can be.
+    /// </para>
     /// </summary>
-    private static object? FirstFolderId(object library)
+    private (object? Id, string Path) ChooseFolder(object library)
     {
-        if (Get(library, "FolderLibraries") is not System.Collections.IEnumerable folders)
-            return null;
+        if (Get(library, "FolderLibraries") is not System.Collections.IEnumerable rows)
+            return (null, string.Empty);
 
-        foreach (object? folder in folders)
+        List<(object Id, string Path)> candidates = [];
+
+        foreach (object? row in rows)
         {
-            if (folder is not null && Get(folder, "FolderId") is { } id)
-                return id;
+            if (row is null || Get(row, "FolderId") is not { } id)
+                continue;
+
+            string path = Get(row, "Folder") is { } folder ? Get(folder, "Path") as string ?? string.Empty : string.Empty;
+
+            candidates.Add((id, path));
         }
 
-        return null;
+        if (candidates.Count == 0)
+            return (null, string.Empty);
+
+        (object Id, string Path) chosen = candidates.FirstOrDefault(candidate => candidate.Path.Length > 0);
+
+        if (chosen.Id is null)
+        {
+            logger.LogError(
+                "Torrent Downloader cannot queue an encode: none of the library's {Count} folder(s) has a path.",
+                candidates.Count);
+
+            return (null, string.Empty);
+        }
+
+        if (candidates.Count > 1)
+        {
+            logger.LogInformation(
+                "Torrent Downloader is encoding into {Path}, the first of {Count} folders on this library that has one.",
+                chosen.Path,
+                candidates.Count);
+        }
+
+        return chosen;
     }
 
     private object? Resolve(string typeName)
