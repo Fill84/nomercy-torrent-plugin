@@ -35,6 +35,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </summary>
 public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 {
+    private readonly HostServices _host = new(services, logger);
+
     private const string DispatcherType = "NoMercy.MediaProcessing.Jobs.IJobDispatcher";
     private const string JobType = "NoMercy.MediaProcessing.Jobs.MediaJobs.VideoEncodeJob";
     /// <summary>
@@ -97,15 +99,15 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 
     private async Task<bool> DispatchAsync(Ulid libraryId, string inputFile, CancellationToken ct)
     {
-        object? dispatcher = Resolve(DispatcherType);
-        Type? jobType = FindType(JobType);
+        object? dispatcher = _host.Resolve(DispatcherType);
+        Type? jobType = _host.FindType(JobType);
 
         if (dispatcher is null || jobType is null)
         {
             logger.LogError(
                 "Torrent Downloader cannot queue an encode: the server does not expose {Missing}. {Alternatives}",
                 dispatcher is null ? DispatcherType : JobType,
-                WhatIsThere());
+                HostServices.WhatIsThere());
 
             return false;
         }
@@ -124,7 +126,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         // What the server itself thinks this file is. Asked the way the Add content screen
         // asks it, because the answer has to be the server's, not a guess assembled from a
         // filename by a plugin that cannot see the episode table.
-        string? mediaId = await MatchAsync(inputFile, Get(library, "Type") as string ?? "tv", ct);
+        string? mediaId = await MatchAsync(inputFile, HostServices.Get(library, "Type") as string ?? "tv", ct);
 
         if (mediaId is null)
             return false;
@@ -146,14 +148,14 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         // Id is a string on AbstractEncoderJob, not a number. It was the int 0 here, which
         // threw out of the reflection call, and then an empty string, which made the job
         // find no episode and return in silence.
-        if (!Set(job, "LibraryId", libraryId)
-            || !Set(job, "FolderId", folderId)
-            || !Set(job, "Id", mediaId)
-            || !Set(job, "InputFile", Path.GetFullPath(inputFile)))
+        if (!_host.Set(job, "LibraryId", libraryId)
+            || !_host.Set(job, "FolderId", folderId)
+            || !_host.Set(job, "Id", mediaId)
+            || !_host.Set(job, "InputFile", Path.GetFullPath(inputFile)))
             return false;
 
         // Null keeps the folder's own presets, which is what a library with none set means.
-        Set(job, "PresetId", Get(library, "EncodePresetId"));
+        _host.Set(job, "PresetId", HostServices.Get(library, "EncodePresetId"));
 
         MethodInfo? dispatch = dispatcher.GetType()
             .GetMethods()
@@ -165,7 +167,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
             return false;
         }
 
-        dispatch.Invoke(dispatcher, [job, Get(job, "QueueName"), Get(job, "Priority")]);
+        dispatch.Invoke(dispatcher, [job, HostServices.Get(job, "QueueName"), HostServices.Get(job, "Priority")]);
 
         // Names the folder, because that is what the job resolves first and what it gives
         // up on silently when it cannot.
@@ -175,7 +177,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
             folderPath,
             folderId,
             libraryId,
-            Get(library, "EncodePresetId")?.ToString() ?? "the folder's own");
+            HostServices.Get(library, "EncodePresetId")?.ToString() ?? "the folder's own");
 
         return true;
     }
@@ -199,7 +201,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     /// </summary>
     private async Task<string?> MatchAsync(string inputFile, string libraryType, CancellationToken ct)
     {
-        Type? contract = FindType(FileListServiceType);
+        Type? contract = _host.FindType(FileListServiceType);
 
         if (contract is null)
         {
@@ -238,12 +240,12 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         if (list.Invoke(service, [folder, libraryType]) is not Task pending)
             return null;
 
-        if (await Unwrap(pending) is not System.Collections.IEnumerable items)
+        if (await HostServices.Unwrap(pending) is not System.Collections.IEnumerable items)
             return null;
 
         foreach (object? item in items)
         {
-            if (item is null || Get(item, "Path") is not string path)
+            if (item is null || HostServices.Get(item, "Path") is not string path)
                 continue;
 
             if (!string.Equals(Path.GetFullPath(path), Path.GetFullPath(inputFile), StringComparison.OrdinalIgnoreCase))
@@ -251,7 +253,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 
             // Id is declared dynamic on the match, so it arrives boxed as whatever the
             // provider put there. The job wants the string form either way.
-            string? id = (Get(item, "Match") is { } match ? Get(match, "Id") : null)?.ToString();
+            string? id = (HostServices.Get(item, "Match") is { } match ? HostServices.Get(match, "Id") : null)?.ToString();
 
             if (!string.IsNullOrWhiteSpace(id) && id != "0")
                 return id;
@@ -289,7 +291,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     /// </summary>
     private async Task<object?> LibraryAsync(Ulid libraryId, CancellationToken ct)
     {
-        Type? contract = FindType(LibraryRepositoryType);
+        Type? contract = _host.FindType(LibraryRepositoryType);
 
         if (contract is null)
         {
@@ -308,7 +310,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         // the library came back real and folderless and the encode was refused for having
         // nowhere to go - on a library with two folders. This one includes
         // FolderLibraries, which is the whole reason it is being asked.
-        MethodInfo? get = Method(repository, "GetLibraryByIdAsync") ?? Method(repository, "GetLibraryById");
+        MethodInfo? get = HostServices.Method(repository, "GetLibraryByIdAsync") ?? HostServices.Method(repository, "GetLibraryById");
 
         if (repository is null || get is null)
         {
@@ -321,40 +323,9 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
             return null;
         }
 
-        object? pending = get.Invoke(repository, Arguments(get, libraryId, ct));
+        object? pending = get.Invoke(repository, HostServices.Arguments(get, libraryId, ct));
 
-        return pending is Task task ? await Unwrap(task) : pending;
-    }
-
-    /// <summary>
-    /// A method by exact name, then by prefix, taking only ones this can actually call -
-    /// every parameter is either the id or a cancellation token, and anything else would be
-    /// passed null and mean something nobody here intended.
-    /// </summary>
-    private static MethodInfo? Method(object? target, string name) =>
-        target?.GetType()
-            .GetMethods()
-            .Where(method => method.Name.StartsWith(name, StringComparison.Ordinal))
-            .Where(method => method.GetParameters().All(parameter =>
-                parameter.ParameterType == typeof(Ulid) || parameter.ParameterType == typeof(CancellationToken)))
-            .OrderBy(method => method.Name.Length)
-            .FirstOrDefault();
-
-    private static object?[] Arguments(MethodInfo method, Ulid libraryId, CancellationToken ct) =>
-        [
-            .. method.GetParameters().Select(parameter =>
-                parameter.ParameterType == typeof(CancellationToken)
-                    ? ct
-                    : parameter.ParameterType == typeof(Ulid)
-                        ? libraryId
-                        : (object?)null),
-        ];
-
-    private static async Task<object?> Unwrap(Task task)
-    {
-        await task;
-
-        return task.GetType().GetProperty("Result")?.GetValue(task);
+        return pending is Task task ? await HostServices.Unwrap(task) : pending;
     }
 
     /// <summary>
@@ -377,17 +348,17 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     /// </summary>
     private (object? Id, string Path) ChooseFolder(object library)
     {
-        if (Get(library, "FolderLibraries") is not System.Collections.IEnumerable rows)
+        if (HostServices.Get(library, "FolderLibraries") is not System.Collections.IEnumerable rows)
             return (null, string.Empty);
 
         List<(object Id, string Path)> candidates = [];
 
         foreach (object? row in rows)
         {
-            if (row is null || Get(row, "FolderId") is not { } id)
+            if (row is null || HostServices.Get(row, "FolderId") is not { } id)
                 continue;
 
-            string path = Get(row, "Folder") is { } folder ? Get(folder, "Path") as string ?? string.Empty : string.Empty;
+            string path = HostServices.Get(row, "Folder") is { } folder ? HostServices.Get(folder, "Path") as string ?? string.Empty : string.Empty;
 
             candidates.Add((id, path));
         }
@@ -401,142 +372,4 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         return candidates[0];
     }
 
-    private object? Resolve(string typeName)
-    {
-        Type? type = FindType(typeName);
-
-        return type is null ? null : services.GetService(type);
-    }
-
-    /// <summary>
-    /// The type by its full name, or failing that by its short name anywhere.
-    ///
-    /// <para>
-    /// The fallback is what keeps this working when the server rearranges its namespaces,
-    /// which is a refactor nobody would think to tell a plugin about. There is exactly one
-    /// <c>IJobDispatcher</c> in that process and exactly one <c>VideoEncodeJob</c>, so a
-    /// short-name match is not a guess. Two of either would be ambiguous, and the type
-    /// then stays unresolved rather than being picked at random - a named failure beats a
-    /// coin toss over which encoder runs.
-    /// </para>
-    /// </summary>
-    /// <summary>
-    /// The job and dispatcher types that <em>do</em> exist in the process, for the log line
-    /// that reports a miss.
-    ///
-    /// <para>
-    /// A plugin ships as a file somebody drops next to a server they did not build, and the
-    /// server is a single-file bundle whose type names cannot be read from outside it. So a
-    /// miss has to answer its own question: not "it is not there", but "it is not there,
-    /// and here is what is". That turns diagnosing this from a restart per guess into one
-    /// restart.
-    /// </para>
-    /// </summary>
-    private static string WhatIsThere()
-    {
-        List<string> candidates =
-        [
-            .. AppDomain.CurrentDomain.GetAssemblies()
-                .SelectMany(Types)
-                .Where(type => type.Name.EndsWith("EncodeJob", StringComparison.Ordinal)
-                    || type.Name.EndsWith("JobDispatcher", StringComparison.Ordinal))
-                .Select(type => type.FullName ?? type.Name)
-                .Distinct()
-                .Order()
-                .Take(20),
-        ];
-
-        return candidates.Count == 0
-            ? "Nothing in this process looks like a job dispatcher or an encode job at all."
-            : $"What the process does have: {string.Join(", ", candidates)}.";
-    }
-
-    private Type? FindType(string fullName)
-    {
-        Assembly[] loaded = AppDomain.CurrentDomain.GetAssemblies();
-
-        Type? exact = loaded
-            .Select(assembly => assembly.GetType(fullName, throwOnError: false))
-            .FirstOrDefault(type => type is not null);
-
-        if (exact is not null)
-            return exact;
-
-        string shortName = fullName[(fullName.LastIndexOf('.') + 1)..];
-
-        // Only reached when the full name missed, so the cost of walking every assembly is
-        // paid once on a server that moved the type and never on one that did not.
-        List<Type> named = [.. loaded.SelectMany(Types).Where(type => type.Name == shortName).Distinct()];
-
-        if (named.Count != 1)
-            return null;
-
-        logger.LogWarning(
-            "Torrent Downloader found {Short} at {Actual} rather than {Expected}. The server moved it; this still works, but the plugin is out of date.",
-            shortName,
-            named[0].FullName,
-            fullName);
-
-        return named[0];
-    }
-
-    private static IEnumerable<Type> Types(Assembly assembly)
-    {
-        try
-        {
-            return assembly.GetTypes();
-        }
-        catch (ReflectionTypeLoadException)
-        {
-            // An assembly whose dependencies are not all loaded cannot be walked, and is
-            // not the one holding the server's own job types either.
-            return [];
-        }
-    }
-
-    private static object? Get(object target, string property) =>
-        target.GetType().GetProperty(property)?.GetValue(target);
-
-    /// <summary>
-    /// Sets a property, and says whether it took.
-    ///
-    /// <para>
-    /// It used to be void, which made a missing property and a wrong type look the same
-    /// from the caller: one did nothing quietly, the other threw out through the cadence.
-    /// Both now answer false, and the caller refuses to dispatch a job it could not fill in
-    /// - a half-built encode job is worse than no encode job.
-    /// </para>
-    /// </summary>
-    private bool Set(object target, string property, object? value)
-    {
-        PropertyInfo? slot = target.GetType().GetProperty(property);
-
-        if (slot is null || !slot.CanWrite)
-        {
-            logger.LogError(
-                "Torrent Downloader cannot queue an encode: {Job} has no writable {Property}.",
-                target.GetType().Name,
-                property);
-
-            return false;
-        }
-
-        Type wanted = Nullable.GetUnderlyingType(slot.PropertyType) ?? slot.PropertyType;
-
-        if (value is not null && !wanted.IsInstanceOfType(value))
-        {
-            logger.LogError(
-                "Torrent Downloader cannot queue an encode: {Job}.{Property} is {Wanted}, and this offered {Offered}.",
-                target.GetType().Name,
-                property,
-                wanted.Name,
-                value.GetType().Name);
-
-            return false;
-        }
-
-        slot.SetValue(target, value);
-
-        return true;
-    }
 }
