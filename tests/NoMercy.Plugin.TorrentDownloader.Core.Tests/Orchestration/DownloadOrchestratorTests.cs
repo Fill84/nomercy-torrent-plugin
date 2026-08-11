@@ -1689,9 +1689,9 @@ public class DownloadOrchestratorTests
         string hash = _engine.Added[0].Source;
         _engine.Transfers = [Completed(hash, "/downloads/some.show.s01e01")];
 
-        int imported = await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+        TransfersCycle cycle = await Orchestrator().TransfersCycleAsync(CancellationToken.None);
 
-        imported.Should().Be(1);
+        cycle.Imported.Should().Be(1);
         _intake.Moved.Should().ContainSingle().Which.Folder.Should().Be("/downloads/some.show.s01e01");
 
         (await _store.FindGrabAsync(hash, CancellationToken.None))!.State.Should().Be(GrabState.Imported);
@@ -1706,7 +1706,7 @@ public class DownloadOrchestratorTests
         _engine.Transfers = [Completed(hash, "/downloads/some.show.s01e01")];
         _intake.Succeed = false;
 
-        (await Orchestrator().TransfersCycleAsync(CancellationToken.None)).Should().Be(0);
+        (await Orchestrator().TransfersCycleAsync(CancellationToken.None)).Imported.Should().Be(0);
 
         // An incomplete handoff is never recorded as a finished one - the same invariant
         // the engine keeps for pieces, one layer up.
@@ -1725,7 +1725,34 @@ public class DownloadOrchestratorTests
         await orchestrator.TransfersCycleAsync(CancellationToken.None);
 
         _intake.Succeed = true;
-        (await orchestrator.TransfersCycleAsync(CancellationToken.None)).Should().Be(1);
+        (await orchestrator.TransfersCycleAsync(CancellationToken.None)).Imported.Should().Be(1);
+    }
+
+    /// <summary>
+    /// A failed download leaves its episodes exactly as missing as they were before
+    /// anything was grabbed, so the caller is told how many went back and searches for them
+    /// at once. Waiting for the next cadence is the plugin sitting on work it already knows
+    /// about - on a six-hourly search, half a day per dead swarm.
+    /// </summary>
+    [Fact]
+    public async Task TransfersCycleAsync_ReportsTheEpisodesAFailedDownloadPutBack()
+    {
+        string hash = await GrabAPackAsync(4);
+        _engine.Transfers = [Failed(hash, "no peers after 30 minutes")];
+
+        TransfersCycle cycle = await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        // Every episode the pack covered, not just the one that triggered it.
+        cycle.PutBack.Should().Be(4);
+    }
+
+    [Fact]
+    public async Task TransfersCycleAsync_ReportsNothingPutBackWhenNothingFailed()
+    {
+        await GrabOneAsync();
+        _engine.Transfers = [Completed(_engine.Added[0].Source, "/downloads/some.show.s01e01")];
+
+        (await Orchestrator().TransfersCycleAsync(CancellationToken.None)).PutBack.Should().Be(0);
     }
 
     [Fact]

@@ -170,6 +170,23 @@ public sealed record WantedRefresh(int Wanted, int Shows, int NotOnTheServer, in
 public sealed record FeedCycle(int Matched, int Grabbed);
 
 /// <summary>
+/// What one pass over the engine came to.
+/// </summary>
+/// <param name="Imported">Downloads handed to the intake.</param>
+/// <param name="PutBack">
+/// Episodes a failed download returned to the queue.
+///
+/// <para>
+/// Reported so the caller can search for them at once instead of at the next cadence. A
+/// failed download is not a state an episode rests in - the episode is simply missing
+/// again, exactly as it was before anything was grabbed, and the answer is the same answer:
+/// look for another release. Waiting six hours to do that is the plugin sitting on work it
+/// already knows about.
+/// </para>
+/// </param>
+public sealed record TransfersCycle(int Imported, int PutBack);
+
+/// <summary>
 /// What one pass of the search cadence came to.
 ///
 /// <para>
@@ -847,12 +864,13 @@ public sealed class DownloadOrchestrator(
     }
 
     /// <summary>
-    /// Polls the engine and acts on what changed. Returns how many downloads were
-    /// handed to the intake this cycle.
+    /// Polls the engine and acts on what changed: what finished, what failed, and what the
+    /// engine has forgotten since the last restart.
     /// </summary>
-    public async Task<int> TransfersCycleAsync(CancellationToken ct)
+    public async Task<TransfersCycle> TransfersCycleAsync(CancellationToken ct)
     {
         int imported = 0;
+        int putBack = 0;
 
         await ResumeForgottenAsync(ct);
 
@@ -912,12 +930,12 @@ public sealed class DownloadOrchestrator(
                     break;
 
                 case EngineState.Failed:
-                    await FailAsync(grab, transfer, ct);
+                    putBack += await FailAsync(grab, transfer, ct);
                     break;
             }
         }
 
-        return imported;
+        return new TransfersCycle(imported, putBack);
     }
 
     /// <summary>
@@ -1278,10 +1296,10 @@ public sealed class DownloadOrchestrator(
 
     private static string Gigabytes(long bytes) => $"{bytes / (1024d * 1024 * 1024):0.#} GB";
 
-    private async Task FailAsync(Grab grab, EngineTransfer transfer, CancellationToken ct)
+    private async Task<int> FailAsync(Grab grab, EngineTransfer transfer, CancellationToken ct)
     {
         if (grab.State == GrabState.Failed)
-            return;
+            return 0;
 
         await store.UpdateGrabAsync(grab.InfoHash, GrabState.Failed, transfer.FailureReason, now(), ct);
 
@@ -1308,7 +1326,7 @@ public sealed class DownloadOrchestrator(
         // can do about it - so a line saying so is noise that hides the failures somebody
         // could act on. Everything else is written down.
         if (NobodyWasSeeding(transfer.FailureReason))
-            return;
+            return grab.Covered.Count;
 
         await store.RecordHistoryAsync(new HistoryEntry
         {
@@ -1320,5 +1338,7 @@ public sealed class DownloadOrchestrator(
             SizeBytes = grab.SizeBytes,
             Detail = transfer.FailureReason ?? "the download failed",
         }, ct);
+
+        return grab.Covered.Count;
     }
 }

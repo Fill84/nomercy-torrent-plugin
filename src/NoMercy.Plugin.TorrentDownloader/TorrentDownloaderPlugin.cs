@@ -493,10 +493,25 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     {
         DownloadPipeline pipeline = await PipelineAsync(context, ct);
 
-        int imported = await pipeline.Orchestrator.TransfersCycleAsync(ct);
+        TransfersCycle cycle = await pipeline.Orchestrator.TransfersCycleAsync(ct);
 
-        if (imported > 0)
-            context.Logger.LogInformation("Torrent Downloader handed {Count} finished download(s) to the intake.", imported);
+        if (cycle.Imported > 0)
+            context.Logger.LogInformation("Torrent Downloader handed {Count} finished download(s) to the intake.", cycle.Imported);
+
+        if (cycle.PutBack == 0)
+            return;
+
+        // At once, not at the next cadence. A download that failed leaves its episodes
+        // exactly as missing as they were before anything was grabbed, and the answer to a
+        // missing episode is the same answer as always: look for another release. The
+        // failed one is blacklisted, so this cannot pick it again. Waiting six hours to do
+        // something the plugin already knows needs doing is the difference between a queue
+        // that drains and one that looks stuck.
+        context.Logger.LogInformation(
+            "Torrent Downloader put {Count} episode(s) back after a failed download; looking again now.",
+            cycle.PutBack);
+
+        await RunSearchAsync(context, ct);
     }
 
     // A show with at least one episode on the server, still going out, is one this plugin
