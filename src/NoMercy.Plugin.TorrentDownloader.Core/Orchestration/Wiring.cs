@@ -118,16 +118,46 @@ public sealed class FinishedFolderMover(string finishedFolder)
     /// <summary>Samples and extras are not the episode. Moving them makes the server import junk.</summary>
     private const long SmallestPlausibleEpisodeBytes = 50 * 1024 * 1024;
 
-    public async Task<string?> MoveAsync(string completedFolder, CancellationToken ct)
+    /// <param name="completedPath">
+    /// Where the engine put the torrent's content. A folder for a multi-file torrent, and
+    /// the file itself for a single-file one - a torrent's "name" is a directory in the
+    /// first case and a filename in the second, and the engine honestly reports both.
+    /// </param>
+    public async Task<string?> MoveAsync(string completedPath, CancellationToken ct)
     {
         try
         {
-            if (!Directory.Exists(completedFolder))
+            // Single file. This method began by testing Directory.Exists and giving up, so
+            // on a real server three finished episodes sat at 100% in the download folder
+            // and were retried every minute forever: the move never happened, so no encode
+            // was ever queued and nothing reached the library. Every one of them was a
+            // single-file torrent, which is what most episode releases are.
+            if (File.Exists(completedPath))
+            {
+                FileInfo only = new(completedPath);
+
+                if (!VideoExtensions.Contains(only.Extension))
+                    return null;
+
+                string singleDestination = Path.Combine(finishedFolder, Path.GetFileNameWithoutExtension(only.Name));
+                Directory.CreateDirectory(singleDestination);
+
+                string target = Path.Combine(singleDestination, only.Name);
+
+                if (!File.Exists(target))
+                    only.MoveTo(target);
+
+                await Task.CompletedTask;
+
+                return singleDestination;
+            }
+
+            if (!Directory.Exists(completedPath))
                 return null;
 
             List<FileInfo> videos =
             [
-                .. new DirectoryInfo(completedFolder)
+                .. new DirectoryInfo(completedPath)
                     .EnumerateFiles("*", SearchOption.AllDirectories)
                     .Where(file => VideoExtensions.Contains(file.Extension))
                     .Where(file => file.Length >= SmallestPlausibleEpisodeBytes || file.Length == 0)
@@ -139,7 +169,7 @@ public sealed class FinishedFolderMover(string finishedFolder)
 
             // Named after the download, because that name is the release name and the
             // server reads it to work out what this is.
-            string destinationFolder = Path.Combine(finishedFolder, new DirectoryInfo(completedFolder).Name);
+            string destinationFolder = Path.Combine(finishedFolder, new DirectoryInfo(completedPath).Name);
             Directory.CreateDirectory(destinationFolder);
 
             foreach (FileInfo video in videos)

@@ -36,6 +36,53 @@ public class FinishedFolderMoverTests
         File.Exists(Path.Combine(completed, "S01E01.mkv")).Should().BeFalse();
     }
 
+    /// <summary>
+    /// The single-file torrent, which is what most episode releases are - and the case this
+    /// method silently did nothing for.
+    ///
+    /// <para>
+    /// A torrent's "name" is a directory for a multi-file torrent and a filename for a
+    /// single-file one, and the engine reports whichever it is as the completed path. This
+    /// began by testing Directory.Exists and giving up, so on a real server three finished
+    /// episodes sat at 100% in the download folder and were retried every minute forever:
+    /// the move never happened, no encode was ever queued, and nothing reached the library.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task MoveAsync_TakesASingleFileTorrentWhereTheCompletedPathIsTheFile()
+    {
+        using TempFolder downloads = new();
+        using TempFolder intake = new();
+
+        string completed = Path.Combine(downloads.Path, "Sugar.2024.S02E05.1080p.WEB.h264-ETHEL.mkv");
+        await WriteAsync(completed, BigEnough);
+
+        string? moved = await new FinishedFolderMover(intake.Path).MoveAsync(completed, CancellationToken.None);
+
+        string expected = Path.Combine(intake.Path, "Sugar.2024.S02E05.1080p.WEB.h264-ETHEL");
+
+        moved.Should().Be(expected, "the server reads the release name off the folder");
+        File.Exists(Path.Combine(expected, "Sugar.2024.S02E05.1080p.WEB.h264-ETHEL.mkv")).Should().BeTrue();
+        File.Exists(completed).Should().BeFalse("it moved rather than copied");
+    }
+
+    // The same guard the folder path has: something that is not video is not the episode,
+    // whatever the torrent called itself.
+    [Fact]
+    public async Task MoveAsync_RefusesASingleFileThatIsNotVideo()
+    {
+        using TempFolder downloads = new();
+        using TempFolder intake = new();
+
+        string completed = Path.Combine(downloads.Path, "Lucky 2026 S01E06 1080p WEB h264-ETHEL.scr");
+        await WriteAsync(completed, BigEnough);
+
+        (await new FinishedFolderMover(intake.Path).MoveAsync(completed, CancellationToken.None))
+            .Should().BeNull();
+
+        File.Exists(completed).Should().BeTrue("it was left where it was rather than moved into the library's path");
+    }
+
     [Fact]
     public async Task MoveAsync_TakesEveryEpisodeInASeasonPack()
     {
