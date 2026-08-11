@@ -185,6 +185,19 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             merged.MaximumResolution = request.MaximumResolution!;
         }
 
+        // Absent means "not submitted, leave it alone", like every other optional field.
+        // Submitted empty is honoured: an owner who wants DHT only is entitled to say so,
+        // and a list this silently refused to empty would be a setting that lies.
+        if (request.DefaultTrackers is not null)
+        {
+            merged.DefaultTrackers =
+            [
+                .. request.DefaultTrackers
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Where(tracker => Uri.TryCreate(tracker, UriKind.Absolute, out _)),
+            ];
+        }
+
         // Clamped rather than refused. Zero seeders means every dead release is a
         // candidate and the queue fills with downloads that never start; a negative is
         // somebody testing the box. Neither is worth failing a save the owner made for
@@ -504,5 +517,12 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             Indexers = source.Indexers,
             PrivateTrackers = source.PrivateTrackers,
             FollowedShowIds = source.FollowedShowIds,
+
+            // Every property has to be here, and this one is the second time that was
+            // learned the hard way - the first was the private trackers, which this method
+            // quietly dropped on every save of the general form. A test for "not submitted
+            // leaves it alone" is what catches it, because from outside a forgotten field
+            // and a deliberately cleared one look identical.
+            DefaultTrackers = source.DefaultTrackers,
         };
 }

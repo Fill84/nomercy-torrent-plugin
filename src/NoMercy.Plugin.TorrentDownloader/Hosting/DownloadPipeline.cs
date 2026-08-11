@@ -210,7 +210,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
             string? apiKey = loaded.IndexerSecrets.FirstOrDefault(secret => secret.Name == settings.Name)?.ApiKey;
 
-            IIndexer? indexer = Build(settings, url, apiKey, context);
+            IIndexer? indexer = Build(settings, url, apiKey, context, loaded.Settings.DefaultTrackers);
 
             if (indexer is null)
                 continue;
@@ -230,7 +230,12 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         return indexers;
     }
 
-    private static IIndexer? Build(IndexerSettings settings, Uri url, string? apiKey, IPluginContext context)
+    private static IIndexer? Build(
+        IndexerSettings settings,
+        Uri url,
+        string? apiKey,
+        IPluginContext context,
+        IReadOnlyList<string> trackers)
     {
         switch (settings.Kind.ToLowerInvariant())
         {
@@ -257,7 +262,8 @@ internal sealed class DownloadPipeline : IAsyncDisposable
                     settings.Name,
                     settings.Priority,
                     settings.Url,
-                    new ChallengeAwareFetch(context.HttpClient, Clearances, new BrowserIdentitySolver()));
+                    new ChallengeAwareFetch(context.HttpClient, Clearances, new BrowserIdentitySolver()),
+                    trackers);
 
             case "site":
                 // Said once here rather than failing every search: a template without the

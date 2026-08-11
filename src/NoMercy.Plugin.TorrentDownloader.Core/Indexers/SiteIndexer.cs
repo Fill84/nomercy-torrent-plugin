@@ -27,7 +27,12 @@ public sealed class SiteIndexer(
     string name,
     int priority,
     string searchUrlTemplate,
-    ChallengeAwareFetch fetch
+    ChallengeAwareFetch fetch,
+
+    // Handed in rather than known here, because which trackers are worth announcing to
+    // changes and is the owner's business. Only ever used for a magnet this has to build
+    // itself - see SiteListingParser.
+    IReadOnlyList<string> trackers
 ) : IIndexer
 {
     /// <summary>What the owner puts in the URL where the search terms belong.</summary>
@@ -121,7 +126,7 @@ public sealed class SiteIndexer(
 
         return
         [
-            .. SiteListingParser.Parse(html).Select(row => new ReleaseInfo
+            .. SiteListingParser.Parse(html, trackers).Select(row => new ReleaseInfo
             {
                 IndexerName = name,
                 TorrentId = row.InfoHash ?? row.Title,

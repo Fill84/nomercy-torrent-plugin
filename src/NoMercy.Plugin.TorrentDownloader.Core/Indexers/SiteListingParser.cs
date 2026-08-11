@@ -126,7 +126,13 @@ public static partial class SiteListingParser
     /// </summary>
     private const int RowWindow = 600;
 
-    public static IReadOnlyList<SiteRow> Parse(string html)
+    /// <param name="trackers">
+    /// Added to a magnet this has to build, and never to one the site published. Required
+    /// rather than defaulted: a caller that forgets them gets a magnet with nothing but DHT
+    /// behind it, which is a download that waits five minutes and dies, and no compiler
+    /// error to warn them.
+    /// </param>
+    public static IReadOnlyList<SiteRow> Parse(string html, IReadOnlyList<string> trackers)
     {
         if (string.IsNullOrWhiteSpace(html))
             return [];
@@ -165,7 +171,15 @@ public static partial class SiteListingParser
             if (title is null)
                 continue;
 
-            string magnet = $"magnet:?xt=urn:btih:{hash}&dn={Uri.EscapeDataString(title)}";
+            // Trackers on a magnet this built, never on one the site published: that one
+            // already names the swarm its own users are in, and appending to it is
+            // guesswork on top of fact. A hash-only magnet has nothing but DHT, and DHT
+            // alone answered nobody on a real swarm - five minutes of asking, then a
+            // MetadataException that took the caller's whole cycle with it.
+            string announce = string.Concat(
+                trackers.Select(tracker => $"&tr={Uri.EscapeDataString(tracker)}"));
+
+            string magnet = $"magnet:?xt=urn:btih:{hash}&dn={Uri.EscapeDataString(title)}{announce}";
 
             // A site that offers both forms for one torrent - the magnet on the row and the
             // file on the details link - must still count once, and the magnet found above

@@ -39,6 +39,8 @@ public class RealSiteChainTests
         AllowSeasonPacks = true,
     };
 
+    private static readonly string[] Trackers = ["udp://tracker.example:1337/announce"];
+
     private static WantedEpisode Silo() => new()
     {
         Key = new EpisodeKey(125988, 3, 4),
@@ -56,7 +58,12 @@ public class RealSiteChainTests
                 new HttpClient(StubHttpMessageHandler.Returning(
                     Fixtures.Text("limetorrents-search.html"),
                     contentType: "text/html")),
-                new ClearanceStore(() => DateTimeOffset.UtcNow)));
+                new ClearanceStore(() => DateTimeOffset.UtcNow)),
+
+            // A swarm to ask. Named here rather than taken from the settings type, which
+            // lives in the shell: this assembly is the part that needs no host to test.
+            // The value does not matter; that there is one is the failure this proves gone.
+            Trackers);
 
         return await indexer.SearchAsync(
             new SearchQuery("Silo", new EpisodeSlot(3, 4)),
@@ -73,6 +80,18 @@ public class RealSiteChainTests
     public async Task Step2_EveryReleaseHasSomewhereToGetItFrom()
     {
         (await SearchAsync()).Should().OnlyContain(release => release.MagnetUri != null);
+    }
+
+    /// <summary>
+    /// And somewhere to find people who have it. A magnet built from a hash alone has only
+    /// DHT behind it, and on a real swarm DHT alone answered nobody: five minutes of asking
+    /// and then a MetadataException, every cycle, for a fortnight.
+    /// </summary>
+    [Fact]
+    public async Task Step2b_EveryBuiltMagnetNamesASwarmToAsk()
+    {
+        (await SearchAsync()).Should().OnlyContain(
+            release => release.MagnetUri!.Contains("&tr="));
     }
 
     /// <summary>

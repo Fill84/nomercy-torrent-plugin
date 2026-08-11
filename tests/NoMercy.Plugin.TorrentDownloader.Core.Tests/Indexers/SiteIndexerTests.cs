@@ -24,7 +24,7 @@ public class SiteIndexerTests
     [Fact]
     public void Parse_ReadsTheReleaseNameOutOfTheMagnetItself()
     {
-        SiteRow row = SiteListingParser.Parse(Row).Should().ContainSingle().Subject;
+        SiteRow row = SiteListingParser.Parse(Row, []).Should().ContainSingle().Subject;
 
         row.Title.Should().Be("South.Park.S29E02.1080p.WEB.h264-GROUP");
         row.InfoHash.Should().Be("0123456789abcdef0123456789abcdef01234567");
@@ -36,7 +36,7 @@ public class SiteIndexerTests
     {
         string html = Row.Replace("Seeders: 148", "148 seeders");
 
-        SiteListingParser.Parse(html).Should().ContainSingle().Which.Seeders.Should().Be(148);
+        SiteListingParser.Parse(html, []).Should().ContainSingle().Which.Seeders.Should().Be(148);
     }
 
     // Zero is honest. The profile's minimum-seeders rule then refuses the row, which is
@@ -46,14 +46,14 @@ public class SiteIndexerTests
     {
         string html = Row.Replace("Seeders: 148", "").Replace("<td>3</td>", "");
 
-        SiteListingParser.Parse(html).Should().ContainSingle().Which.Seeders.Should().Be(0);
+        SiteListingParser.Parse(html, []).Should().ContainSingle().Which.Seeders.Should().Be(0);
     }
 
     // A listing and its details panel are one torrent, not two.
     [Fact]
     public void Parse_CountsARepeatedMagnetOnce()
     {
-        SiteListingParser.Parse(Row + Row).Should().ContainSingle();
+        SiteListingParser.Parse(Row + Row, []).Should().ContainSingle();
     }
 
     // A torrent nobody can name cannot be matched to an episode, so it would download and
@@ -61,7 +61,7 @@ public class SiteIndexerTests
     [Fact]
     public void Parse_SkipsAMagnetWithNoNameInIt()
     {
-        SiteListingParser.Parse("<a href=\"magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567\">x</a>")
+        SiteListingParser.Parse("<a href=\"magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567\">x</a>", [])
             .Should().BeEmpty();
     }
 
@@ -70,14 +70,14 @@ public class SiteIndexerTests
     {
         string html = "<button data-magnet='magnet:?xt=urn:btih:abc&dn=Some.Show.S01E01.1080p'>get</button>";
 
-        SiteListingParser.Parse(html).Should().ContainSingle().Which.Title.Should().Be("Some.Show.S01E01.1080p");
+        SiteListingParser.Parse(html, []).Should().ContainSingle().Which.Title.Should().Be("Some.Show.S01E01.1080p");
     }
 
     [Fact]
     public void Parse_SurvivesAPageWithNothingInIt()
     {
-        SiteListingParser.Parse("<html><body>no results</body></html>").Should().BeEmpty();
-        SiteListingParser.Parse("").Should().BeEmpty();
+        SiteListingParser.Parse("<html><body>no results</body></html>", []).Should().BeEmpty();
+        SiteListingParser.Parse("", []).Should().BeEmpty();
     }
 
     // The owner reads the template off their own address bar, so it has to be checked when
@@ -98,7 +98,7 @@ public class SiteIndexerTests
     public async Task SearchAsync_AsksForTheShowAndTheSlotTogether()
     {
         RecordingFetch fetch = new(Row);
-        SiteIndexer indexer = new("site-a", 30, "https://site.test/search/{query}/", fetch.Fetch());
+        SiteIndexer indexer = new("site-a", 30, "https://site.test/search/{query}/", fetch.Fetch(), []);
 
         IReadOnlyList<ReleaseInfo> found = await indexer.SearchAsync(
             new SearchQuery("South Park", new EpisodeSlot(29, 2)),
@@ -116,7 +116,7 @@ public class SiteIndexerTests
     public async Task SearchAsync_RefusesToAskASiteForEverything()
     {
         RecordingFetch fetch = new(Row);
-        SiteIndexer indexer = new("site-a", 30, "https://site.test/search/{query}/", fetch.Fetch());
+        SiteIndexer indexer = new("site-a", 30, "https://site.test/search/{query}/", fetch.Fetch(), []);
 
         (await indexer.SearchAsync(new SearchQuery(""), CancellationToken.None)).Should().BeEmpty();
         fetch.LastUrl.Should().BeNull("nothing was worth asking");

@@ -30,7 +30,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Indexers;
 public class SiteListingParserRealSiteTests
 {
     private static IReadOnlyList<SiteRow> Rows() =>
-        SiteListingParser.Parse(Fixtures.Text("limetorrents-search.html"));
+        SiteListingParser.Parse(Fixtures.Text("limetorrents-search.html"), []);
 
     [Fact]
     public void Parse_FindsTheReleasesOnAPageWithNoMagnetInIt()
@@ -83,6 +83,39 @@ public class SiteListingParserRealSiteTests
     {
         Rows().Should().OnlyContain(row => row.MagnetUri.StartsWith("magnet:?xt=urn:btih:"));
         Rows().Should().NotContain(row => row.Title.Contains("Download", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// A magnet built from a hash names a torrent and no way to find anybody who has it.
+    /// DHT alone answered nobody on a real swarm: five minutes of asking, then a
+    /// MetadataException. The trackers are the owner's setting, so a site that publishes
+    /// none still resolves.
+    /// </summary>
+    [Fact]
+    public void Parse_PutsTheConfiguredTrackersOnAMagnetItBuilt()
+    {
+        IReadOnlyList<SiteRow> rows = SiteListingParser.Parse(
+            Fixtures.Text("limetorrents-search.html"),
+            ["udp://tracker.example:1337/announce", "udp://other.example:80/announce"]);
+
+        string magnet = rows.First().MagnetUri;
+
+        magnet.Should().Contain($"tr={Uri.EscapeDataString("udp://tracker.example:1337/announce")}");
+        magnet.Should().Contain($"tr={Uri.EscapeDataString("udp://other.example:80/announce")}");
+    }
+
+    /// <summary>
+    /// A site that publishes its own magnet already names the swarm its users are in.
+    /// Appending to that is guesswork on top of fact.
+    /// </summary>
+    [Fact]
+    public void Parse_LeavesAMagnetTheSitePublishedExactlyAsItFoundIt()
+    {
+        const string html =
+            """<a href="magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567&dn=A.Show.S01E01">x</a>""";
+
+        SiteListingParser.Parse(html, ["udp://tracker.example:1337/announce"])
+            .Should().ContainSingle().Which.MagnetUri.Should().NotContain("tracker.example");
     }
 
     [Fact]

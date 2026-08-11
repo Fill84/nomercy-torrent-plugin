@@ -322,6 +322,79 @@ public class SettingsSaveHandlerTests
         ((TorrentDownloaderSettings)configuration.Stored!).IncludeSpecials.Should().BeTrue();
     }
 
+    /// <summary>
+    /// A magnet built from a hash has only DHT behind it, and DHT alone answered nobody on
+    /// a real swarm. These trackers are what makes such a magnet resolvable, so a setting
+    /// that silently did not save would be a plugin that silently does not download.
+    /// </summary>
+    [Fact]
+    public async Task HandleGeneralAsync_SavesTheTrackersForBuiltMagnets()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleGeneralAsync(
+            General("udp://one.test:1337/announce, udp://two.test:80/announce"),
+            CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).DefaultTrackers
+            .Should().Equal("udp://one.test:1337/announce", "udp://two.test:80/announce");
+    }
+
+    // An owner who wants DHT only is entitled to say so, and a list that refused to empty
+    // would be a setting that lies about what the server is talking to.
+    [Fact]
+    public async Task HandleGeneralAsync_LetsTheTrackerListBeEmptied()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(
+            new TorrentDownloaderSettings { DefaultTrackers = ["udp://one.test:1337/announce"] });
+
+        await handler.HandleGeneralAsync(General(""), CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).DefaultTrackers.Should().BeEmpty();
+    }
+
+    // Not submitted is not the same as emptied. Saving some other field on this form must
+    // not take the trackers with it.
+    [Fact]
+    public async Task HandleGeneralAsync_LeavesTheTrackersAloneWhenTheFieldIsAbsent()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(
+            new TorrentDownloaderSettings { DefaultTrackers = ["udp://one.test:1337/announce"] });
+
+        await handler.HandleGeneralAsync(General(), CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).DefaultTrackers
+            .Should().Equal("udp://one.test:1337/announce");
+    }
+
+    // A typo is dropped rather than saved and announced to. The engine would refuse it
+    // later anyway, and there it would be one more thing that fails without a reason.
+    [Fact]
+    public async Task HandleGeneralAsync_DropsATrackerThatIsNotAnAddress()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleGeneralAsync(
+            General("udp://good.test:1337/announce, not a url"),
+            CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).DefaultTrackers
+            .Should().Equal("udp://good.test:1337/announce");
+    }
+
+    /// <summary>
+    /// The four schedules ApplyGeneral demands together, plus whatever one field a test is
+    /// about. SaveSettingsRequest is a class rather than a record, so there is no `with`.
+    /// </summary>
+    private static SaveSettingsRequest General(string? defaultTrackers = null) => new()
+    {
+        TransfersCron = "* * * * *",
+        FeedCron = "*/15 * * * *",
+        SearchCron = "*/5 * * * *",
+        MaintenanceCron = "0 4 * * *",
+        DefaultTrackers = defaultTrackers,
+    };
+
     [Fact]
     public async Task HandleGeneralAsync_SavesTheQualityAnswers()
     {

@@ -37,6 +37,36 @@ public class TorrentDownloaderSettings
     public List<IndexerSettings> Indexers { get; set; } = [];
     public List<PrivateTrackerSettings> PrivateTrackers { get; set; } = [];
 
+    /// <summary>
+    /// Trackers added to a magnet this plugin had to build itself.
+    ///
+    /// <para>
+    /// A site that lists a torrent file rather than a magnet gives an info hash and no
+    /// swarm. DHT alone is not enough: on a real server it asked for five minutes and
+    /// nobody answered, every cycle, and nothing downloaded for a fortnight because of it.
+    /// </para>
+    ///
+    /// <para>
+    /// Ordinary public trackers, and a setting rather than a constant for two reasons -
+    /// which ones work changes over time, and an owner is entitled to see and change what
+    /// their server talks to. Emptied deliberately means DHT only, which is a choice
+    /// somebody may want and this will not override.
+    /// </para>
+    ///
+    /// <para>
+    /// Never used for a magnet a site published. That one already names the swarm its own
+    /// users are in.
+    /// </para>
+    /// </summary>
+    public List<string> DefaultTrackers { get; set; } =
+    [
+        "udp://tracker.opentrackr.org:1337/announce",
+        "udp://open.demonii.com:1337/announce",
+        "udp://open.stealth.si:80/announce",
+        "udp://tracker.torrent.eu.org:451/announce",
+        "udp://explodie.org:6969/announce",
+    ];
+
     // Shows to follow that have no episode on the server yet. The plugin otherwise only
     // finishes what somebody already started by hand, which is a coherent tool and not
     // the one anybody wants - see the "monitored" section of the design spec.

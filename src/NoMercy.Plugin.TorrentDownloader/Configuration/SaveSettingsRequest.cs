@@ -31,6 +31,9 @@ public sealed class SaveSettingsRequest
     public int? MinimumSeeders { get; init; }
     public bool? AllowSeasonPacks { get; init; }
 
+    /// <summary>Comma separated, because a form field is one line and a tracker list is short.</summary>
+    public string? DefaultTrackers { get; init; }
+
     // Shared by the indexer and private tracker forms - never both submitted in the same
     // request, since SettingsView renders one form per entry.
     public string? Name { get; init; }

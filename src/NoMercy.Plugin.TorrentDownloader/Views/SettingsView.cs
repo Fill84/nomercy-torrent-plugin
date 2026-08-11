@@ -153,6 +153,13 @@ public static class SettingsView
                 Type = PluginFormFieldType.Toggle,
                 Value = settings.AllowSeasonPacks,
             },
+            new()
+            {
+                Name = "defaultTrackers",
+                Label = "Trackers for magnets built from a hash",
+                Value = string.Join(", ", settings.DefaultTrackers),
+                Placeholder = "Leave empty to rely on DHT alone.",
+            },
         ];
 
         return Ui.Form("settings-general-form", SaveLabel, PluginActionIntent.CallPlugin(PluginMethods.SaveSettings), fields);
