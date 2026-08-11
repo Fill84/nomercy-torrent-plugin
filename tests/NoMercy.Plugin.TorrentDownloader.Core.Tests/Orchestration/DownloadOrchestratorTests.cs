@@ -445,6 +445,65 @@ public class DownloadOrchestratorTests
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
+    // --- one failure costs one episode -------------------------------------------------
+
+    /// <summary>
+    /// A cadence that stops at the first bad episode never reaches the good ones, and on a
+    /// real server the first one was bad every single cycle - for a fortnight.
+    /// </summary>
+    [Fact]
+    public async Task SearchCycleAsync_AnEpisodeThatThrowsDoesNotStopTheOnesBehindIt()
+    {
+        _library.Add(showId: 1, "First", "/media/first", [(1, 1, true), (1, 2, false)],
+            status: ShowStatus.Returning);
+        _library.Add(showId: 2, "Second", "/media/second", [(1, 1, true), (1, 2, false)],
+            status: ShowStatus.Returning);
+        _library.SetAirDate(1, 1, 2, Now.AddDays(-2));
+        _library.SetAirDate(2, 1, 2, Now.AddDays(-2));
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        _search.UniquePerQuery = true;
+        _search.Results = [Release()];
+        _engine.ThrowOnceWith = new InvalidOperationException("the swarm hung up");
+
+        SearchCycle cycle = await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        cycle.Searched.Should().Be(2, "the second episode is still owed a search");
+        cycle.Grabbed.Should().Be(1);
+    }
+
+    // Without this the failure is as invisible as it was before: the throw happened before
+    // AddGrabAsync, so nothing anywhere remembered that a release had been chosen.
+    [Fact]
+    public async Task SearchCycleAsync_SaysOnThePageWhyAnEpisodeCouldNotBeStarted()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        _engine.ThrowOnceWith = new InvalidOperationException("the swarm hung up");
+
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        HistoryEntry entry = _store.History.Should().ContainSingle().Subject;
+        entry.Event.Should().Be(HistoryEvent.Failed);
+        entry.Detail.Should().Contain("the swarm hung up");
+    }
+
+    // Cancellation is the server shutting down, not the episode failing. Recording it as a
+    // failure would fill history with noise every restart.
+    [Fact]
+    public async Task SearchCycleAsync_DoesNotRecordAShutdownAsAnEpisodeFailure()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        _engine.ThrowOnceWith = new OperationCanceledException();
+
+        Func<Task> cycle = () => Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        await cycle.Should().ThrowAsync<OperationCanceledException>();
+        _store.History.Should().BeEmpty();
+    }
+
     // --- announced here, downloaded from there -----------------------------------------
 
     private static ReleaseInfo Announcement(string title) => new()
@@ -1495,10 +1554,23 @@ public class DownloadOrchestratorTests
         public List<string> Removed { get; } = [];
         public IReadOnlyList<EngineTransfer> Transfers { get; set; } = [];
 
+        /// <summary>
+        /// Throws on the next Add and then behaves. Stands in for a swarm that will not
+        /// answer, a disk that will not take the file, or anything else the engine can
+        /// fail on - the orchestrator's job is the same whichever it was.
+        /// </summary>
+        public Exception? ThrowOnceWith { get; set; }
+
         // The source doubles as the info hash so a test can tie a request to a transfer
         // without inventing a mapping the real engine would not have.
         public Task<string> AddAsync(TorrentRequest request, CancellationToken ct)
         {
+            if (ThrowOnceWith is Exception failure)
+            {
+                ThrowOnceWith = null;
+                throw failure;
+            }
+
             Added.Add(request);
             return Task.FromResult(request.Source);
         }

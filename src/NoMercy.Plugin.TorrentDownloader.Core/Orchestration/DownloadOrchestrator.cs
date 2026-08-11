@@ -408,7 +408,31 @@ public sealed class DownloadOrchestrator(
 
             searched++;
 
-            IReadOnlyList<EpisodeKey>? covered = await TryGrabAsync(episode, ct);
+            IReadOnlyList<EpisodeKey>? covered;
+
+            try
+            {
+                covered = await TryGrabAsync(episode, ct);
+            }
+            catch (Exception failure) when (failure is not OperationCanceledException)
+            {
+                // One episode, one failure. This used to unwind the whole cycle: every
+                // episode behind the bad one went unsearched, and because the throw came
+                // out of the engine before AddGrabAsync, nothing anywhere recorded that a
+                // release had been chosen and lost. Written down here so a page can say
+                // what happened, and on to the next one.
+                await store.RecordHistoryAsync(new HistoryEntry
+                {
+                    At = now(),
+                    Event = HistoryEvent.Failed,
+                    Key = episode.Key,
+                    ShowTitle = episode.ShowTitle,
+                    ReleaseTitle = episode.EpisodeTitle ?? Slot(episode.Key),
+                    Detail = failure.Message,
+                }, ct);
+
+                continue;
+            }
 
             if (covered is null)
                 continue;
@@ -419,6 +443,9 @@ public sealed class DownloadOrchestrator(
 
         return new SearchCycle(searched, grabbed);
     }
+
+    /// <summary>An episode named the way history reads best when no release got far enough to have a name.</summary>
+    private static string Slot(EpisodeKey key) => $"S{key.Season:D2}E{key.Episode:D2}";
 
     /// <summary>
     /// The next few episodes worth asking an indexer about, least recently searched first.
