@@ -108,6 +108,24 @@ public class ReleaseFilter
                     + string.Join(", ", language.Required)
             );
 
+        if (language.RefuseForeignAudio)
+        {
+            if (parsed.IsMultiLanguage)
+                return FilterVerdict.Reject("a multi-language release, and only English was asked for");
+
+            // Named alongside English rather than instead of it: ITA.ENG, FR.ENG. The
+            // required check above passes these, because English really is in there.
+            string[] besideEnglish =
+            [
+                .. parsed.Languages.Where(spoken =>
+                    !language.Required.Contains(spoken, StringComparer.OrdinalIgnoreCase)),
+            ];
+
+            if (besideEnglish.Length > 0)
+                return FilterVerdict.Reject(
+                    $"carries {string.Join("/", besideEnglish)} audio beside English, and only English was asked for");
+        }
+
         if (language.RequireDualAudio && !parsed.IsDualAudio)
             return FilterVerdict.Reject("not a dual audio release");
 

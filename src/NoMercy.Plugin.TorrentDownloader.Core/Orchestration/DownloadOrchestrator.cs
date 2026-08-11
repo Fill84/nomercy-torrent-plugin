@@ -23,8 +23,9 @@ public interface IReleaseSearch
 /// A feed is not a search. A search asks "who has this episode" and pays a rate limit per
 /// question; a feed is handed over whole and costs one request no matter how much of it
 /// turns out to be useful. That difference is the whole reason to have both: the search
-/// cadence works through a backlog ten episodes at a time, and the feed catches tonight's
-/// airing within a quarter of an hour of it being posted, without asking anybody anything.
+/// cadence works through the whole backlog and then has nothing left to do, and the feed
+/// catches tonight's airing within a quarter of an hour of it being posted, without asking
+/// anybody anything.
 /// </para>
 /// </summary>
 public interface IReleaseFeed
@@ -62,8 +63,6 @@ public sealed record OrchestratorOptions
     /// </summary>
     public int MaxConcurrentDownloads { get; init; } = 5;
 
-    /// <summary>How many wanted episodes to search per cycle. Indexers are rate limited; a cycle that asks for everything gets throttled.</summary>
-    public int SearchBatchSize { get; init; } = 10;
 
     /// <summary>
     /// How many episodes of a season have to be missing before a season pack is worth
@@ -408,7 +407,7 @@ public sealed class DownloadOrchestrator(
         int searched = 0;
         HashSet<EpisodeKey> settled = [];
 
-        foreach (WantedEpisode episode in await SearchableBatchAsync(ct))
+        foreach (WantedEpisode episode in await SearchableAsync(ct))
         {
             if (grabbed >= room)
                 break;
@@ -497,11 +496,20 @@ public sealed class DownloadOrchestrator(
     private static string Slot(EpisodeKey key) => $"S{key.Season:D2}E{key.Episode:D2}";
 
     /// <summary>
-    /// The next few episodes worth asking an indexer about, least recently searched first.
+    /// Every episode worth asking an indexer about, least recently searched first.
+    ///
+    /// <para>
+    /// Every one, across every show, in one cycle. It used to be ten per cycle, so a
+    /// library behind on twenty shows was worked through a few episodes at a time and took
+    /// hours to say anything about most of them - which reads, correctly, as a plugin
+    /// doing one show at a time. Catching up is a burst and then nothing; capping the
+    /// burst only makes the nothing arrive later. The indexer pacer is what keeps the
+    /// asking polite, and it does that per indexer, which is where politeness is owed.
+    /// </para>
     ///
     /// <para>
     /// Unaired episodes are dropped here rather than skipped inside the loop, and that
-    /// distinction is the whole method. Nobody can seed an episode that has not aired, so
+    /// distinction still matters. Nobody can seed an episode that has not aired, so
     /// searching for one spends an attempt on a question with no possible answer - twelve of
     /// those and the plugin parks it as unavailable, giving up shortly before it becomes the
     /// one thing worth looking for. So it is skipped without being marked, which is right,
@@ -510,24 +518,15 @@ public sealed class DownloadOrchestrator(
     /// </para>
     ///
     /// <para>
-    /// Taking the batch first and skipping afterwards therefore starves the cadence. On a
-    /// real server nineteen unaired episodes sat in front of a batch of ten: the same ten
-    /// were fetched, skipped and refetched every five minutes, the twenty-three episodes
-    /// that could have been searched were never reached, and nothing anywhere said so. The
-    /// batch has to be that many <em>searchable</em> episodes, not that many rows.
-    /// </para>
-    ///
-    /// <para>
     /// The whole list is read to do it. The store answers from memory, so the cost is one
     /// allocation - and it is the same read <see cref="FeedCycleAsync"/> and
     /// <see cref="GrabAsync"/> already make.
     /// </para>
     /// </summary>
-    private async Task<IReadOnlyList<WantedEpisode>> SearchableBatchAsync(CancellationToken ct) =>
+    private async Task<IReadOnlyList<WantedEpisode>> SearchableAsync(CancellationToken ct) =>
     [
         .. (await store.WantedAsync(int.MaxValue, ct))
-            .Where(episode => !NotOutYet(episode))
-            .Take(options.SearchBatchSize),
+            .Where(episode => !NotOutYet(episode)),
     ];
 
     /// <summary>

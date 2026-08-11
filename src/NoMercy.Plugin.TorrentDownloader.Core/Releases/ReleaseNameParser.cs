@@ -231,6 +231,7 @@ public static partial class ReleaseNameParser
             IsRepack = IsRepack(text),
             Languages = tags.Languages,
             IsDualAudio = tags.IsDualAudio,
+            IsMultiLanguage = tags.IsMultiLanguage,
         };
     }
 }

@@ -87,6 +87,12 @@ public static partial class LanguageTagExtractor
     [GeneratedRegex(@"\bdual([\s._-]?audio)?\b|\bmulti\d?\b|\bdubbed\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex DualAudioPattern();
 
+    // MULTI names no language, so nothing above catches it and the release reads as English
+    // by default - which is how "Silo S03E06 MULTI 1080p WEB H264" was grabbed for an
+    // English-only library. DUBBED is the same claim in a different word.
+    [GeneratedRegex(@"\bmulti\d?\b|\bdubbed\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MultiLanguagePattern();
+
     // "cap" must be followed by a number so it never matches "Captain".
     [GeneratedRegex(@"\bcap\.?\s*\d|\bcapitulo\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex CapituloPattern();
@@ -130,7 +136,10 @@ public static partial class LanguageTagExtractor
         if (languages.Count == 0)
             languages.Add(English);
 
-        return new LanguageTags(languages, DualAudioPattern().IsMatch(scope));
+        return new LanguageTags(
+            languages,
+            DualAudioPattern().IsMatch(scope),
+            MultiLanguagePattern().IsMatch(scope));
     }
 
     // Tags follow the episode marker or season token; the show name precedes it. Scanning

@@ -433,4 +433,65 @@ public class ReleaseFilterTests
 
         verdict.Accepted.Should().BeTrue();
     }
+
+    /// <summary>
+    /// Every one of these was grabbed on the owner's server against an English-only
+    /// profile. MULTI names no language, so the extractor found none and defaulted to
+    /// English; ITA.ENG names English among others, and "at least one of the required" is
+    /// satisfied by that. Both readings were wrong in the same way: "only" was being
+    /// checked as "among".
+    /// </summary>
+    [Theory]
+    [InlineData("Silo S03E04 MULTI 1080p WEB H264-HiggsBoson")]
+    [InlineData("Silo.S03E04.MULTi3.1080p.WEB.H264-GROUP")]
+    [InlineData("Silo.S03E04.ITA.ENG.1080p.WEB.H264-GROUP")]
+    [InlineData("Silo.S03E04.FR.ENG.1080p.WEB.H264-GROUP")]
+    [InlineData("Silo.S03E04.DUBBED.1080p.WEB.H264-GROUP")]
+    [InlineData("Silo.S03E04.Cap.304.1080p.WEB.H264-GROUP")]
+    public void Evaluate_RefusesASecondLanguageEvenWhenEnglishIsOneOfThem(string title)
+    {
+        FilterVerdict verdict = Evaluate(
+            Release(title),
+            Context(Profile() with { Language = LanguageProfile.EnglishOnly }));
+
+        verdict.Accepted.Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("Silo.S03E04.1080p.WEB.H264-CAKES")]
+    [InlineData("Silo.S03E04.ENG.1080p.WEB.H264-CAKES")]
+    public void Evaluate_LeavesAnEnglishReleaseAlone(string title)
+    {
+        FilterVerdict verdict = Evaluate(
+            Release(title),
+            Context(Profile() with { Language = LanguageProfile.EnglishOnly }));
+
+        verdict.Accepted.Should().BeTrue();
+    }
+
+    /// <summary>A library that is not English asks nothing, and the MULTI copy is fine.</summary>
+    [Fact]
+    public void Evaluate_AsksNothingAboutLanguageWhenTheOwnerTurnedTheRuleOff()
+    {
+        FilterVerdict verdict = Evaluate(
+            Release("Silo S03E04 MULTI 1080p WEB H264-HiggsBoson"),
+            Context(Profile() with { Language = LanguageProfile.Any }));
+
+        verdict.Accepted.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Evaluate_RefusesATermTheOwnerExcluded()
+    {
+        ReleaseProfile excluding = Profile() with
+        {
+            Terms = [new TermRule("HiggsBoson", TermKind.Forbidden, 0)],
+        };
+
+        Evaluate(Release("Silo.S03E04.1080p.WEB.H264-HiggsBoson"), Context(excluding))
+            .Accepted.Should().BeFalse();
+
+        Evaluate(Release("Silo.S03E04.1080p.WEB.H264-CAKES"), Context(excluding))
+            .Accepted.Should().BeTrue();
+    }
 }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
 
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Adapters;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
@@ -308,7 +309,28 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         // "at least it is not HEVC". An untagged rip is exactly where the unwanted codec
         // hides. Naming no codec asks nothing, so the flag is irrelevant there.
         RequireCodecTag = CodecFor(settings.Codec) != VideoCodec.Unknown,
+
+        Language = settings.EnglishOnly ? LanguageProfile.EnglishOnly : LanguageProfile.Any,
+
+        Terms = ExcludeTerms(settings.ExcludeTerms),
     };
+
+    /// <summary>
+    /// The owner's own list of things they never want, as forbidden term rules.
+    ///
+    /// <para>
+    /// Matched as plain text, not as a pattern: an owner typing <c>HiggsBoson</c> means
+    /// that word, and the one who types <c>x265 (HEVC)</c> should not have their brackets
+    /// read as a group and silently match nothing. <c>TermMatcher</c> runs a regex, so the
+    /// text is escaped on the way in.
+    /// </para>
+    /// </summary>
+    private static IReadOnlyList<TermRule> ExcludeTerms(IEnumerable<string> terms) =>
+    [
+        .. terms
+            .Where(term => !string.IsNullOrWhiteSpace(term))
+            .Select(term => new TermRule(Regex.Escape(term.Trim()), TermKind.Forbidden, 0)),
+    ];
 
     /// <summary>
     /// The owner's word, as the filter's own value. Anything unrecognised asks nothing

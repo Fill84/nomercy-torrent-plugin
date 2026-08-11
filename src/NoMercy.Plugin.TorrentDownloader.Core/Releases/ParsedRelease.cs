@@ -15,4 +15,7 @@ public record ParsedRelease
     public bool IsRepack { get; init; }
     public IReadOnlyList<string> Languages { get; init; } = [];
     public bool IsDualAudio { get; init; }
+
+    /// <inheritdoc cref="LanguageTags.IsMultiLanguage"/>
+    public bool IsMultiLanguage { get; init; }
 }

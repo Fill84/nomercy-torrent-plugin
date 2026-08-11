@@ -386,7 +386,11 @@ public class SettingsSaveHandlerTests
     /// The four schedules ApplyGeneral demands together, plus whatever one field a test is
     /// about. SaveSettingsRequest is a class rather than a record, so there is no `with`.
     /// </summary>
-    private static SaveSettingsRequest General(string? defaultTrackers = null, string? codec = null) => new()
+    private static SaveSettingsRequest General(
+        string? defaultTrackers = null,
+        string? codec = null,
+        bool? englishOnly = null,
+        string? excludeTerms = null) => new()
     {
         TransfersCron = "* * * * *",
         FeedCron = "*/15 * * * *",
@@ -394,7 +398,52 @@ public class SettingsSaveHandlerTests
         MaintenanceCron = "0 4 * * *",
         DefaultTrackers = defaultTrackers,
         Codec = codec,
+        EnglishOnly = englishOnly,
+        ExcludeTerms = excludeTerms,
     };
+
+    [Fact]
+    public async Task HandleGeneralAsync_SavesTheExcludeTermsAsTheOwnerTypedThem()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleGeneralAsync(
+            General(excludeTerms: "HiggsBoson, MULTI , HiggsBoson"),
+            CancellationToken.None);
+
+        // Trimmed and de-duplicated, and otherwise left exactly as typed - the filter
+        // escapes them, so nothing here has to guess at punctuation.
+        ((TorrentDownloaderSettings)configuration.Stored!).ExcludeTerms
+            .Should().Equal("HiggsBoson", "MULTI");
+    }
+
+    [Fact]
+    public async Task HandleGeneralAsync_TurnsTheEnglishRuleOffWhenAsked()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleGeneralAsync(General(englishOnly: false), CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).EnglishOnly.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The Clone-forgot-a-field trap, which has caught two settings already. From outside,
+    /// a field the merge never copies and a field the owner deliberately cleared look
+    /// exactly the same.
+    /// </summary>
+    [Fact]
+    public async Task HandleGeneralAsync_LeavesTheExcludeTermsAloneWhenTheFormSubmitsNone()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(
+            new TorrentDownloaderSettings { ExcludeTerms = ["HiggsBoson"], EnglishOnly = false });
+
+        await handler.HandleGeneralAsync(General(), CancellationToken.None);
+
+        TorrentDownloaderSettings saved = (TorrentDownloaderSettings)configuration.Stored!;
+        saved.ExcludeTerms.Should().Equal("HiggsBoson");
+        saved.EnglishOnly.Should().BeFalse();
+    }
 
     /// <summary>
     /// The three answers torrent-feed gives, and the ones the filter understands.

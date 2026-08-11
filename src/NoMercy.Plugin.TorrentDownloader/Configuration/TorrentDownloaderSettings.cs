@@ -53,6 +53,36 @@ public class TorrentDownloaderSettings
     /// </summary>
     public string Codec { get; set; } = "any";
 
+    /// <summary>
+    /// Refuse anything that is not English audio only.
+    ///
+    /// <para>
+    /// On by default, and it means what it says: a release carrying a second language is
+    /// refused even when English is one of them. <c>MULTI</c>, <c>ITA.ENG</c> and
+    /// <c>FR.ENG</c> all go, along with foreign episode numbering like <c>Cap.101</c>.
+    /// Turned off, no language rule is applied at all - which is the answer for a library
+    /// that is not English.
+    /// </para>
+    /// </summary>
+    public bool EnglishOnly { get; set; } = true;
+
+    /// <summary>
+    /// Words that disqualify a release outright, whatever else is right about it.
+    ///
+    /// <para>
+    /// The escape hatch for what no rule can express: a release group whose rips are
+    /// broken, a tag this library never wants. Matched as plain text against the release
+    /// title, case-insensitively.
+    /// </para>
+    ///
+    /// <para>
+    /// Empty by default. This is the owner's list and nothing is on it until they say so -
+    /// a shipped blocklist is a list somebody else maintains against a library they cannot
+    /// see.
+    /// </para>
+    /// </summary>
+    public List<string> ExcludeTerms { get; set; } = [];
+
     public List<PrivateTrackerSettings> PrivateTrackers { get; set; } = [];
 
     /// <summary>

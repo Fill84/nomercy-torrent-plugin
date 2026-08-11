@@ -37,6 +37,11 @@ public sealed class SaveSettingsRequest
     /// <summary>h264, h265 or any.</summary>
     public string? Codec { get; init; }
 
+    public bool? EnglishOnly { get; init; }
+
+    /// <summary>Comma separated, like the tracker list, and for the same reason.</summary>
+    public string? ExcludeTerms { get; init; }
+
     // Shared by the indexer and private tracker forms - never both submitted in the same
     // request, since SettingsView renders one form per entry.
     public string? Name { get; init; }

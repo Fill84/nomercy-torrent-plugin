@@ -548,7 +548,32 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
     }
 
+    // A cycle now asks about every episode that could be searched rather than ten of them,
+    // so on a library that is behind it can outlast the cadence that started it. Two
+    // overlapping cycles read the same wanted list and would grab the same episode twice,
+    // from two indexers, into two files. Skipped rather than queued: the next tick is five
+    // minutes away and the work is the same work.
+    private readonly SemaphoreSlim _searchLock = new(1, 1);
+
     private async Task RunSearchAsync(IPluginContext context, CancellationToken ct)
+    {
+        if (!await _searchLock.WaitAsync(0, ct))
+        {
+            context.Logger.LogInformation("Torrent Downloader is still working through the last search; skipping this one.");
+            return;
+        }
+
+        try
+        {
+            await SearchOnceAsync(context, ct);
+        }
+        finally
+        {
+            _searchLock.Release();
+        }
+    }
+
+    private async Task SearchOnceAsync(IPluginContext context, CancellationToken ct)
     {
         DownloadPipeline pipeline = await PipelineAsync(context, ct);
 

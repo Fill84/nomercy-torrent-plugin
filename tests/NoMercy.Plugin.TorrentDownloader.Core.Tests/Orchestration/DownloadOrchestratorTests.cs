@@ -1535,12 +1535,30 @@ public class DownloadOrchestratorTests
         {
             DownloadFolder = "/downloads",
             MaxConcurrentDownloads = 3,
-            SearchBatchSize = 20,
         }).SearchCycleAsync(CancellationToken.None)).Grabbed;
 
         // The bound that turns a first run on a library with years of gaps into a steady
         // stream rather than two hundred downloads fighting over one connection.
         grabbed.Should().Be(3);
+    }
+
+    /// <summary>
+    /// One cycle asks about every show, not the first few. It used to take ten per cycle,
+    /// which on a library behind on twenty shows meant most of them were not looked at for
+    /// hours - indistinguishable, from outside, from a plugin working one show at a time.
+    /// </summary>
+    [Fact]
+    public async Task SearchCycleAsync_AsksAboutEveryEpisodeThatCouldBeSearched()
+    {
+        await WantEpisodesAsync(40);
+        _search.Results = [];
+
+        SearchCycle cycle = await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+        }).SearchCycleAsync(CancellationToken.None);
+
+        cycle.Searched.Should().Be(40);
     }
 
     [Fact]

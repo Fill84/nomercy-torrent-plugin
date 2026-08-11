@@ -191,6 +191,22 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         if (request.Codec is string codec && codec.Trim().ToLowerInvariant() is "any" or "h264" or "h265")
             merged.Codec = codec.Trim().ToLowerInvariant();
 
+        if (request.EnglishOnly is bool englishOnly)
+            merged.EnglishOnly = englishOnly;
+
+        // Submitted empty clears the list, the same bargain the trackers make. Terms are
+        // kept as the owner typed them - the filter escapes them, so no punctuation here
+        // needs defending against.
+        if (request.ExcludeTerms is not null)
+        {
+            merged.ExcludeTerms =
+            [
+                .. request.ExcludeTerms
+                    .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                    .Distinct(StringComparer.OrdinalIgnoreCase),
+            ];
+        }
+
         // Absent means "not submitted, leave it alone", like every other optional field.
         // Submitted empty is honoured: an owner who wants DHT only is entitled to say so,
         // and a list this silently refused to empty would be a setting that lies.
@@ -531,5 +547,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             // and a deliberately cleared one look identical.
             DefaultTrackers = source.DefaultTrackers,
             Codec = source.Codec,
+            EnglishOnly = source.EnglishOnly,
+            ExcludeTerms = source.ExcludeTerms,
         };
 }

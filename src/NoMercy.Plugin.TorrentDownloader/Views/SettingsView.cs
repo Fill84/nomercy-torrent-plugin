@@ -154,6 +154,20 @@ public static class SettingsView
             },
             new()
             {
+                Name = "englishOnly",
+                Label = "English audio only",
+                Type = PluginFormFieldType.Toggle,
+                Value = settings.EnglishOnly,
+            },
+            new()
+            {
+                Name = "excludeTerms",
+                Label = "Never grab a release containing",
+                Type = PluginFormFieldType.Text,
+                Value = string.Join(", ", settings.ExcludeTerms),
+            },
+            new()
+            {
                 Name = "minimumSeeders",
                 Label = "Minimum seeders",
                 Type = PluginFormFieldType.Number,
