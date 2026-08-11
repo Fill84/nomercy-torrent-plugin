@@ -126,6 +126,16 @@ public sealed class InMemoryDownloadStore : IDownloadStore
         return Task.CompletedTask;
     }
 
+    // Faithful to the real store, because the last two bugs this double could have caught
+    // were both a field it quietly did not carry.
+    public Task RecordCompletedPathAsync(string infoHash, string completedPath, CancellationToken ct)
+    {
+        if (_grabs.TryGetValue(infoHash, out Grab? grab))
+            _grabs[infoHash] = grab with { CompletedPath = completedPath };
+
+        return Task.CompletedTask;
+    }
+
     public Task RecordTransferAsync(Transfer transfer, CancellationToken ct)
     {
         _transfers[transfer.InfoHash] = transfer;

@@ -111,6 +111,26 @@ public sealed record Grab
     /// </summary>
     public string Source { get; init; } = string.Empty;
 
+    /// <summary>
+    /// Where the engine put the bytes, written down the moment it says the download is
+    /// complete.
+    ///
+    /// <para>
+    /// A finished download does not need the engine any more - every piece is in and
+    /// verified, and what is left is a file move. But the import used to be driven entirely
+    /// off an engine transfer, so a grab that reached Downloaded and then failed its move
+    /// could only be retried while the engine still remembered it. Two episodes were
+    /// stranded exactly there: complete on disk, marked Downloaded, and grabbed before
+    /// <see cref="Source"/> existed, so nothing could hand them back to the engine either.
+    /// Unreachable, permanently, while holding two of the five download slots.
+    /// </para>
+    ///
+    /// <para>
+    /// Empty on a grab that has not finished, and on one written before this existed.
+    /// </para>
+    /// </summary>
+    public string CompletedPath { get; init; } = string.Empty;
+
     public required string Indexer { get; init; }
     public long SizeBytes { get; init; }
     public GrabState State { get; init; } = GrabState.Grabbed;
@@ -304,6 +324,12 @@ public interface IDownloadStore
     Task<IReadOnlyList<Grab>> ActiveGrabsAsync(CancellationToken ct);
 
     Task UpdateGrabAsync(string infoHash, GrabState state, string? failureReason, DateTimeOffset? finishedAt, CancellationToken ct);
+
+    /// <summary>
+    /// Remembers where a finished download's bytes are, so the import no longer depends on
+    /// the engine still holding the torrent. See <see cref="Grab.CompletedPath"/>.
+    /// </summary>
+    Task RecordCompletedPathAsync(string infoHash, string completedPath, CancellationToken ct);
 
     Task RecordTransferAsync(Transfer transfer, CancellationToken ct);
 

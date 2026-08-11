@@ -1166,6 +1166,36 @@ public class DownloadOrchestratorTests
         trace.Should().Equal($"released {hash}", "moved /downloads/Some.Show.S01E01.mkv");
     }
 
+    /// <summary>
+    /// The bytes are on disk and verified; the engine has nothing left to contribute. It
+    /// used to be the only thing that could start an import, so a grab that reached
+    /// Downloaded and then failed its move was retried only while the engine still held the
+    /// torrent - and never again after a restart. Two episodes were stranded there,
+    /// complete, with no way back: grabbed before the source was kept, so nothing could
+    /// hand them to the engine either.
+    /// </summary>
+    [Fact]
+    public async Task TransfersCycleAsync_FinishesADownloadTheEngineNoLongerKnowsAbout()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+        _engine.Transfers = [Completed(hash, "/downloads/Some.Show.S01E01.mkv")];
+
+        // The move fails once, which is how a grab gets to Downloaded and stays there.
+        _intake.Succeed = false;
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+        (await _store.FindGrabAsync(hash, CancellationToken.None))!.State.Should().Be(GrabState.Downloaded);
+
+        // The engine is emptied, as a restart empties it.
+        _engine.Transfers = [];
+        _intake.Succeed = true;
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _intake.Moved.Should().ContainSingle().Which.Folder.Should().Be("/downloads/Some.Show.S01E01.mkv");
+        (await _store.FindGrabAsync(hash, CancellationToken.None))!.State.Should().Be(GrabState.Imported);
+    }
+
     [Fact]
     public async Task TransfersCycleAsync_WritesDownAnImport()
     {

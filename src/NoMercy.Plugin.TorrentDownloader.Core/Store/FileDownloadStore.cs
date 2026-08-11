@@ -139,6 +139,15 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
                 state.Grabs[index] = state.Grabs[index] with { State = grabState, FailureReason = failureReason, FinishedAt = finishedAt };
         }, ct);
 
+    public async Task RecordCompletedPathAsync(string infoHash, string completedPath, CancellationToken ct) =>
+        await MutateAsync(state =>
+        {
+            int index = state.Grabs.FindIndex(grab => grab.InfoHash == infoHash);
+
+            if (index >= 0)
+                state.Grabs[index] = state.Grabs[index] with { CompletedPath = completedPath };
+        }, ct);
+
     public async Task RecordTransferAsync(Transfer transfer, CancellationToken ct) =>
         await MutateAsync(state =>
         {

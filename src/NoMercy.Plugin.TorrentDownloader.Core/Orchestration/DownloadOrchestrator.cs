@@ -843,6 +843,8 @@ public sealed class DownloadOrchestrator(
 
         await ResumeForgottenAsync(ct);
 
+        imported += await ImportFinishedAsync(ct);
+
         foreach (EngineTransfer transfer in await engine.TransfersAsync(ct))
         {
             Grab? grab = await store.FindGrabAsync(transfer.InfoHash, ct);
@@ -891,7 +893,7 @@ public sealed class DownloadOrchestrator(
                     break;
 
                 case EngineState.Completed when grab.State != GrabState.Imported:
-                    if (await ImportAsync(grab, transfer, ct))
+                    if (transfer.CompletedFolder is string completed && await ImportAsync(grab, completed, ct))
                         imported++;
 
                     break;
@@ -944,12 +946,49 @@ public sealed class DownloadOrchestrator(
         }
     }
 
-    private async Task<bool> ImportAsync(Grab grab, EngineTransfer transfer, CancellationToken ct)
+    /// <summary>
+    /// Finishes any download whose bytes are already on disk, whether or not the engine
+    /// still remembers it.
+    ///
+    /// <para>
+    /// The import used to run only from an engine transfer, so a grab that reached
+    /// Downloaded and then failed its move was retried only while the engine held the
+    /// torrent. After a restart it was stranded - and if it was grabbed before the source
+    /// was kept, <see cref="ResumeForgottenAsync"/> could not hand it back either, so
+    /// nothing would ever look at it again. That is exactly what happened to two finished
+    /// episodes: complete on disk, marked Downloaded, unreachable, and each holding one of
+    /// the five concurrent download slots for as long as it sat there.
+    /// </para>
+    ///
+    /// <para>
+    /// A finished download does not need the engine. Every piece is in and verified; what
+    /// is left is a file move, and the path to move is on the grab.
+    /// </para>
+    /// </summary>
+    private async Task<int> ImportFinishedAsync(CancellationToken ct)
     {
-        if (transfer.CompletedFolder is null)
-            return false;
+        int imported = 0;
 
+        foreach (Grab grab in await store.ActiveGrabsAsync(ct))
+        {
+            if (grab.State != GrabState.Downloaded || grab.CompletedPath.Length == 0)
+                continue;
+
+            if (await ImportAsync(grab, grab.CompletedPath, ct))
+                imported++;
+        }
+
+        return imported;
+    }
+
+    private async Task<bool> ImportAsync(Grab grab, string completedPath, CancellationToken ct)
+    {
         await store.UpdateGrabAsync(grab.InfoHash, GrabState.Downloaded, null, null, ct);
+
+        // Written down before anything is attempted, so a move that fails can be retried
+        // from the store alone. See Grab.CompletedPath.
+        if (grab.CompletedPath != completedPath)
+            await store.RecordCompletedPathAsync(grab.InfoHash, completedPath, ct);
 
         // Let go of the files first. The engine keeps a FileStream open per file for as
         // long as it holds the torrent, and Windows refuses to rename a file that somebody
@@ -965,7 +1004,7 @@ public sealed class DownloadOrchestrator(
         // to the engine, which finds the pieces on disk and completes again.
         await engine.RemoveAsync(grab.InfoHash, deleteFiles: false, ct);
 
-        if (!await intake.MoveIntoIntakeAsync(transfer.CompletedFolder, grab.Key, ct))
+        if (!await intake.MoveIntoIntakeAsync(completedPath, grab.Key, ct))
         {
             // The move did not happen, so the grab stays unfinished and the next cycle
             // tries again. An incomplete handoff is never recorded as a finished one.
