@@ -806,7 +806,13 @@ public sealed class DownloadOrchestrator(
 
             switch (transfer.State)
             {
-                case EngineState.Downloading when grab.State == GrabState.Grabbed:
+                // Only from Grabbed. A torrent that was already downloading and briefly
+                // reports Resolving again must not be walked backwards.
+                case EngineState.Resolving when grab.State == GrabState.Grabbed:
+                    await store.UpdateGrabAsync(transfer.InfoHash, GrabState.Resolving, null, null, ct);
+                    break;
+
+                case EngineState.Downloading when grab.State is GrabState.Grabbed or GrabState.Resolving:
                     await store.UpdateGrabAsync(transfer.InfoHash, GrabState.Downloading, null, null, ct);
                     break;
 

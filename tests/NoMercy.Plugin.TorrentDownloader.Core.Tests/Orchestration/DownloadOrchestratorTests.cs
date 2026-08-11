@@ -445,6 +445,70 @@ public class DownloadOrchestratorTests
         wanted.Should().ContainSingle().Which.Key.Should().Be(new EpisodeKey(1, 1, 2));
     }
 
+    // --- a download that has not started yet ---------------------------------------------
+
+    /// <summary>
+    /// A magnet is registered before anybody has said what it contains, so there is a real
+    /// span with a grab, no bytes and no size. Recorded as its own state rather than left
+    /// at Grabbed, because the page reads the grab to decide what to draw.
+    /// </summary>
+    [Fact]
+    public async Task TransfersCycleAsync_MarksAGrabThatIsStillLookingForPeers()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        string hash = _engine.Added.Should().ContainSingle().Subject.Source;
+        _engine.Transfers = [new EngineTransfer { InfoHash = hash, State = EngineState.Resolving }];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        (await _store.FindGrabAsync(hash, CancellationToken.None))!
+            .State.Should().Be(GrabState.Resolving);
+    }
+
+    // Forwards only. A torrent already downloading that briefly reports Resolving again
+    // must not be walked backwards into a state the page draws as "not started".
+    [Fact]
+    public async Task TransfersCycleAsync_DoesNotWalkADownloadingTorrentBackToResolving()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        string hash = _engine.Added.Should().ContainSingle().Subject.Source;
+
+        _engine.Transfers = [new EngineTransfer { InfoHash = hash, State = EngineState.Downloading }];
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _engine.Transfers = [new EngineTransfer { InfoHash = hash, State = EngineState.Resolving }];
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        (await _store.FindGrabAsync(hash, CancellationToken.None))!
+            .State.Should().Be(GrabState.Downloading);
+    }
+
+    // The bytes start arriving after the swarm answers, and the grab has to follow.
+    [Fact]
+    public async Task TransfersCycleAsync_MovesFromResolvingToDownloadingWhenTheBytesStart()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        string hash = _engine.Added.Should().ContainSingle().Subject.Source;
+
+        _engine.Transfers = [new EngineTransfer { InfoHash = hash, State = EngineState.Resolving }];
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _engine.Transfers = [new EngineTransfer { InfoHash = hash, State = EngineState.Downloading }];
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        (await _store.FindGrabAsync(hash, CancellationToken.None))!
+            .State.Should().Be(GrabState.Downloading);
+    }
+
     // --- one failure costs one episode -------------------------------------------------
 
     /// <summary>

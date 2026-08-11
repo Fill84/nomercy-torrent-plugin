@@ -42,6 +42,18 @@ public sealed record WantedEpisode
 public enum GrabState
 {
     Grabbed,
+
+    /// <summary>
+    /// Handed to the engine, which is asking the swarm what this torrent actually contains.
+    ///
+    /// <para>
+    /// No bytes yet, and none owed. A magnet names an info hash and nothing else, so until
+    /// some peer answers there is no size to be a fraction of - which is why this is not
+    /// Downloading with a zero in it.
+    /// </para>
+    /// </summary>
+    Resolving,
+
     Downloading,
     Downloaded,
 

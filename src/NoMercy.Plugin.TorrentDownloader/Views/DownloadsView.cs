@@ -136,6 +136,16 @@ public static class DownloadsView
         if (grab is not null)
             parts.Add(Format.Covers(grab));
 
+        // No percentage and no rate: there is nothing to be a fraction of until a peer says
+        // how big the torrent is. "0%" here reads as a download that has stalled, which is
+        // a different thing to worry about from one that has not begun.
+        if (grab?.State == GrabState.Resolving)
+        {
+            parts.Add("Finding peers…");
+
+            return string.Join(" · ", parts);
+        }
+
         parts.Add(Format.Percentage(transfer));
         parts.Add(Format.Rate(transfer));
         parts.Add(Format.Peers(transfer.Peers));

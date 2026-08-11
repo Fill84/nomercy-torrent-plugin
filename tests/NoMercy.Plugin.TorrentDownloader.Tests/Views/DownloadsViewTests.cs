@@ -204,4 +204,20 @@ public class DownloadsViewTests
         PluginNodes.All(view).Should().Contain(node => node.Id == "downloads-resume-abc");
         PluginNodes.All(view).Should().NotContain(node => node.Id == "downloads-pause-abc");
     }
+
+    /// <summary>
+    /// No percentage and no rate until a peer says how big the torrent is. "0%" reads as a
+    /// download that has stalled, which is a different thing to worry about from one that
+    /// has not begun.
+    /// </summary>
+    [Fact]
+    public void Build_SaysWhenATorrentIsStillLookingForPeers()
+    {
+        PluginView view = DownloadsView.Build(
+            [new Transfer { InfoHash = "abc" }],
+            [Grab("abc", 1, "Some.Show.S01E01") with { State = GrabState.Resolving }]);
+
+        PluginNodes.Says(view, "Finding peers").Should().BeTrue();
+        PluginNodes.Says(view, "0%").Should().BeFalse();
+    }
 }
