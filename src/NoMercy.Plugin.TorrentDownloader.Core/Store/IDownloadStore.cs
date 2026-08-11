@@ -169,6 +169,39 @@ public sealed record UnstartedShow
     public required string Title { get; init; }
 }
 
+/// <summary>
+/// A show the refresh looked at, and what it concluded.
+///
+/// <para>
+/// Recorded whether or not anything is missing from it. Only wanted episodes were kept
+/// before, so a show that was up to date existed in no list the plugin held - and a running
+/// series with a new episode due next week is exactly the show that is up to date most of
+/// the time. It was invisible on every page until it fell behind.
+/// </para>
+/// </summary>
+public sealed record TrackedShow
+{
+    public required int ShowId { get; init; }
+    public required string Title { get; init; }
+
+    /// <summary>Whether anything of it is on the server. A show with nothing is one the plugin leaves alone.</summary>
+    public required bool Started { get; init; }
+
+    /// <summary>
+    /// Whether it is still going out.
+    ///
+    /// <para>
+    /// Derived from air dates, because the host's show record carries no status: a show is
+    /// running when the library knows of an episode airing recently or still to come. That is
+    /// what separates "up to date and nothing more is coming" from "up to date until Tuesday".
+    /// </para>
+    /// </summary>
+    public required bool Running { get; init; }
+
+    /// <summary>When the next episode airs, when the library knows of one that has not yet.</summary>
+    public DateOnly? NextAirDate { get; init; }
+}
+
 public sealed record BlacklistEntry
 {
     /// <summary>Either identifies a bad release. Some sources give no hash, so a title has to do.</summary>
@@ -222,6 +255,11 @@ public interface IDownloadStore
 
     /// <summary>Replaces the list wholesale, like the wanted list: it is a conclusion, not an accumulation.</summary>
     Task RecordUnstartedShowsAsync(IReadOnlyList<UnstartedShow> shows, CancellationToken ct);
+
+    /// <summary>Every show the last refresh looked at, so a page can list one that is simply up to date.</summary>
+    Task RecordShowsAsync(IReadOnlyList<TrackedShow> shows, CancellationToken ct);
+
+    Task<IReadOnlyList<TrackedShow>> ShowsAsync(CancellationToken ct);
 
     Task<IReadOnlyList<UnstartedShow>> UnstartedShowsAsync(CancellationToken ct);
 

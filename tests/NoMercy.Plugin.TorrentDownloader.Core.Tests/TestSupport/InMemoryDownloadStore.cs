@@ -61,6 +61,17 @@ public sealed class InMemoryDownloadStore : IDownloadStore
     public Task<IReadOnlyList<UnstartedShow>> UnstartedShowsAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<UnstartedShow>>([.. _unstarted]);
 
+    private List<TrackedShow> _shows = [];
+
+    public Task RecordShowsAsync(IReadOnlyList<TrackedShow> shows, CancellationToken ct)
+    {
+        _shows = [.. shows.DistinctBy(show => show.ShowId)];
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<TrackedShow>> ShowsAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<TrackedShow>>([.. _shows]);
+
     public Task<IReadOnlyList<WantedEpisode>> WantedAsync(int limit, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<WantedEpisode>>(
         [

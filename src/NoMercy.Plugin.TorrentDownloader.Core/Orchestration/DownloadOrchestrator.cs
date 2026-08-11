@@ -199,6 +199,7 @@ public sealed class DownloadOrchestrator(
     {
         List<WantedEpisode> missing = [];
         List<UnstartedShow> unstarted = [];
+        List<TrackedShow> tracked = [];
         HashSet<int> askedFor = [.. options.FollowedShowIds];
         int followed = 0;
         int notStarted = 0;
@@ -215,7 +216,24 @@ public sealed class DownloadOrchestrator(
             // Read from the episodes rather than the show's own have-count: both come
             // from the host, and the one this loop already trusts to decide "missing"
             // is the one that should decide "started", or the two can disagree.
-            if (!episodes.Any(episode => episode.HasFile) && !askedFor.Contains(show.ShowId))
+            bool started = episodes.Any(episode => episode.HasFile);
+            DateOnly? next = NextAirDate(episodes);
+
+            // Recorded for every show the refresh looks at, before any decision about it. A
+            // show that is up to date has no wanted episodes and no history, so it lived in
+            // none of the lists this plugin kept - and a running series with an episode due
+            // next week is up to date most of the time. It was invisible until it fell
+            // behind, which is the wrong way round.
+            tracked.Add(new TrackedShow
+            {
+                ShowId = show.ShowId,
+                Title = show.Title,
+                Started = started,
+                Running = IsRunning(episodes),
+                NextAirDate = next,
+            });
+
+            if (!started && !askedFor.Contains(show.ShowId))
             {
                 notStarted++;
                 unstarted.Add(new UnstartedShow { ShowId = show.ShowId, Title = show.Title });
@@ -259,8 +277,53 @@ public sealed class DownloadOrchestrator(
         // follow shows whose missing episodes were in the queue directly above it. This
         // loop already walked the episodes to decide; the decision is the thing to keep.
         await store.RecordUnstartedShowsAsync(unstarted, ct);
+        await store.RecordShowsAsync(tracked, ct);
 
         return new WantedRefresh(missing.Count, followed, notStarted);
+    }
+
+    /// <summary>
+    /// How long after its last episode a show still counts as running.
+    ///
+    /// <para>
+    /// Wide enough to survive a mid-season break, short enough that a series which ended
+    /// years ago does not read as current. A show whose next episode is already scheduled
+    /// stays running on that alone, whatever the gap.
+    /// </para>
+    /// </summary>
+    private const int RunningWindowDays = 120;
+
+    /// <summary>
+    /// Whether a show is still going out, worked out from its air dates.
+    ///
+    /// <para>
+    /// The host's show record carries no status - no "returning", no "ended" - so this is
+    /// what there is. An episode airing recently or still to come is the difference between
+    /// a show that is up to date because nothing more is coming and one that is up to date
+    /// until Tuesday, and only the second is worth watching for.
+    /// </para>
+    /// </summary>
+    private static bool IsRunning(IReadOnlyList<LibraryEpisode> episodes)
+    {
+        DateOnly cutoff = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-RunningWindowDays);
+
+        return episodes.Any(episode =>
+            episode.AirDate is DateTimeOffset aired
+            && DateOnly.FromDateTime(aired.UtcDateTime) >= cutoff);
+    }
+
+    /// <summary>When the next episode airs, when the library knows of one that has not yet.</summary>
+    private static DateOnly? NextAirDate(IReadOnlyList<LibraryEpisode> episodes)
+    {
+        DateOnly today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        return episodes
+            .Where(episode => episode.AirDate is not null)
+            .Select(episode => DateOnly.FromDateTime(episode.AirDate!.Value.UtcDateTime))
+            .Where(aired => aired >= today)
+            .OrderBy(aired => aired)
+            .Cast<DateOnly?>()
+            .FirstOrDefault();
     }
 
     /// <summary>Searches for what is wanted and grabs what is worth grabbing. Returns how many were handed to the engine.</summary>

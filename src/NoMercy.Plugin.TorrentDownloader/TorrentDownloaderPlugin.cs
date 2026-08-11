@@ -735,26 +735,38 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         IReadOnlyList<HistoryEntry> history = await store.HistoryAsync(int.MaxValue, ct);
         HashSet<int> followed = [.. ReadSettingsOrDefault().FollowedShowIds];
 
-        Dictionary<int, string> titles = [];
-        Dictionary<int, ShowSummary> summaries = [];
+        IReadOnlyList<TrackedShow> tracked = await store.ShowsAsync(ct);
 
+        Dictionary<int, string> titles = [];
+        Dictionary<int, TrackedShow> known = tracked.ToDictionary(show => show.ShowId);
+
+        // What the last refresh actually looked at, which is the only list that includes a
+        // show with nothing missing. A running series is up to date most of the time - the
+        // week between one episode and the next - and building this list from wanted
+        // episodes alone made it vanish for exactly that week.
+        foreach (TrackedShow show in tracked)
+            titles.TryAdd(show.ShowId, show.Title);
+
+        // The rest are for a store written before shows were recorded, and for anything the
+        // refresh has not seen since.
         foreach (WantedEpisode episode in wanted)
             titles.TryAdd(episode.Key.ShowId, episode.ShowTitle);
 
         foreach (HistoryEntry entry in history.Where(entry => entry.ShowTitle is not null))
             titles.TryAdd(entry.Key.ShowId, entry.ShowTitle!);
 
-        // The shows the refresh decided to leave alone. They have nothing wanted and nothing
-        // in history, so they exist in no other list here - and they are the ones an owner
-        // most needs to find, because following one is what starts the whole loop for it.
         foreach (UnstartedShow show in await store.UnstartedShowsAsync(ct))
             titles.TryAdd(show.ShowId, show.Title);
 
         HashSet<int> unstarted = [.. (await store.UnstartedShowsAsync(ct)).Select(show => show.ShowId)];
 
+        List<ShowSummary> summaries = [];
+
         foreach ((int showId, string title) in titles)
         {
-            summaries[showId] = new ShowSummary(
+            known.TryGetValue(showId, out TrackedShow? show);
+
+            summaries.Add(new ShowSummary(
                 showId,
                 title,
                 wanted.Count(episode => episode.Key.ShowId == showId),
@@ -763,11 +775,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     .Where(entry => entry.Key.ShowId == showId && entry.Event == HistoryEvent.Imported)
                     .Select(entry => (DateTimeOffset?)entry.At)
                     .Max(),
-                !unstarted.Contains(showId),
-                followed.Contains(showId));
+                show?.Started ?? !unstarted.Contains(showId),
+                followed.Contains(showId))
+            {
+                Running = show?.Running ?? false,
+                NextAirDate = show?.NextAirDate,
+            });
         }
 
-        return [.. summaries.Values];
+        return summaries;
     }
 
     private async Task<PluginView> ShowPageAsync(IPluginContext context, string? showId, CancellationToken ct)

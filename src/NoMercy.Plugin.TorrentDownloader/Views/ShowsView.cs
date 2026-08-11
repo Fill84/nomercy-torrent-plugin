@@ -209,7 +209,12 @@ public static class ShowsView
         { Started: false } => ("Not started", PluginBadgeVariant.Neutral),
         { Downloading: > 0 } => ("Downloading", PluginBadgeVariant.Success),
         { Missing: > 0 } => ("Missing", PluginBadgeVariant.Warning),
-        _ => ("Complete", PluginBadgeVariant.Info),
+
+        // Up to date and still going out is not the same as up to date and finished. Both
+        // have nothing missing today; only one of them will have something missing next
+        // week, and that is the whole difference an owner is looking for in this column.
+        { Running: true } => ("Airing", PluginBadgeVariant.Success),
+        _ => ("Complete", PluginBadgeVariant.Neutral),
     };
 
     private static (string Label, string Variant) EpisodeState(WantedEpisode episode) => episode switch
@@ -254,4 +259,19 @@ public sealed record ShowSummary(
     int Downloading,
     DateTimeOffset? LastArrived,
     bool Started,
-    bool Followed);
+    bool Followed)
+{
+    /// <summary>
+    /// Whether it is still going out.
+    ///
+    /// <para>
+    /// The state an owner most wants to pick out of a library: a show that is up to date and
+    /// finished needs nothing, and one that is up to date until Tuesday needs watching. Both
+    /// read as "0 missing" without this.
+    /// </para>
+    /// </summary>
+    public bool Running { get; init; }
+
+    /// <summary>When the next episode airs, when one is scheduled.</summary>
+    public DateOnly? NextAirDate { get; init; }
+}

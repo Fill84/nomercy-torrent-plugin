@@ -74,6 +74,69 @@ public class DownloadOrchestratorTests
         (await _store.WantedAsync(10, CancellationToken.None)).Should().HaveCount(2);
     }
 
+    /// <summary>
+    /// The gap that made a running series disappear.
+    ///
+    /// <para>
+    /// Only wanted episodes and unstarted shows were recorded, so a show with a file for
+    /// every episode the library knows about existed in no list this plugin held. A weekly
+    /// series is in exactly that state for six days out of seven - up to date, with one more
+    /// coming - and it was invisible on every page until it fell behind.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task RefreshWantedAsync_RecordsAShowThatIsUpToDate()
+    {
+        _library.Add(showId: 1, "Silo", folder: "/media/silo", episodes: [(1, 1, HasFile: true)]);
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        TrackedShow show = (await _store.ShowsAsync(CancellationToken.None)).Should().ContainSingle().Subject;
+
+        show.Title.Should().Be("Silo");
+        show.Started.Should().BeTrue();
+    }
+
+    // Up to date and finished is not up to date and still going out. Both have nothing
+    // missing today; only one of them will have something missing next week.
+    [Fact]
+    public async Task RefreshWantedAsync_TellsAShowStillAiringApartFromOneThatEnded()
+    {
+        _library.Add(showId: 1, "Airing", folder: "/media/airing", episodes: [(1, 1, HasFile: true)]);
+        _library.SetAirDate(1, 1, 1, Now.AddDays(-3));
+
+        _library.Add(showId: 2, "Ended", folder: "/media/ended", episodes: [(1, 1, HasFile: true)]);
+        _library.SetAirDate(2, 1, 1, Now.AddYears(-6));
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        IReadOnlyList<TrackedShow> shows = await _store.ShowsAsync(CancellationToken.None);
+
+        shows.Single(show => show.ShowId == 1).Running.Should().BeTrue();
+        shows.Single(show => show.ShowId == 2).Running.Should().BeFalse();
+    }
+
+    // A scheduled episode keeps a show current however long the gap before it, which is what
+    // a mid-season break looks like from here.
+    [Fact]
+    public async Task RefreshWantedAsync_CountsAShowWithAnEpisodeStillToComeAsAiring()
+    {
+        _library.Add(showId: 1, "On A Break", folder: "/media/break", episodes:
+        [
+            (1, 1, HasFile: true),
+            (2, 1, HasFile: false),
+        ]);
+        _library.SetAirDate(1, 1, 1, Now.AddYears(-2));
+        _library.SetAirDate(1, 2, 1, Now.AddDays(40));
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        TrackedShow show = (await _store.ShowsAsync(CancellationToken.None)).Single();
+
+        show.Running.Should().BeTrue();
+        show.NextAirDate.Should().Be(DateOnly.FromDateTime(Now.AddDays(40).UtcDateTime));
+    }
+
     [Fact]
     public async Task RefreshWantedAsync_SkipsAShowWithNoFolderToDownloadInto()
     {

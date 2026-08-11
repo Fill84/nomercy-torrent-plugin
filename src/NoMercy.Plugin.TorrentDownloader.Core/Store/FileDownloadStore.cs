@@ -81,6 +81,12 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
     public async Task<IReadOnlyList<UnstartedShow>> UnstartedShowsAsync(CancellationToken ct) =>
         await ReadAsync(state => (IReadOnlyList<UnstartedShow>)[.. state.UnstartedShows], ct);
 
+    public async Task RecordShowsAsync(IReadOnlyList<TrackedShow> shows, CancellationToken ct) =>
+        await MutateAsync(state => state.Shows = [.. shows.DistinctBy(show => show.ShowId)], ct);
+
+    public async Task<IReadOnlyList<TrackedShow>> ShowsAsync(CancellationToken ct) =>
+        await ReadAsync(state => (IReadOnlyList<TrackedShow>)[.. state.Shows], ct);
+
     public async Task<WantedEpisode?> FindWantedAsync(EpisodeKey key, CancellationToken ct) =>
         await ReadAsync(state => state.Wanted.FirstOrDefault(episode => episode.Key == key), ct);
 
@@ -279,6 +285,11 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
         public List<WantedEpisode> Wanted { get; set; } = [];
 
         public List<UnstartedShow> UnstartedShows { get; set; } = [];
+
+        // Added after the store already existed. An older file has none until the next
+        // refresh writes them, which is fine: this is what the last refresh concluded, not
+        // something only recorded once.
+        public List<TrackedShow> Shows { get; set; } = [];
 
         public List<Grab> Grabs { get; set; } = [];
 
