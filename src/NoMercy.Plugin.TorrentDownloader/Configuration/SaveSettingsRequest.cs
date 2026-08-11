@@ -30,9 +30,6 @@ public sealed class SaveSettingsRequest
     public string? MaximumResolution { get; init; }
     public int? MinimumSeeders { get; init; }
     public int? MaxConcurrentDownloads { get; init; }
-
-    /// <summary>The id of the library folder finished downloads are encoded into.</summary>
-    public string? EncodeFolderId { get; init; }
     public bool? AllowSeasonPacks { get; init; }
 
     /// <summary>Comma separated, because a form field is one line and a tracker list is short.</summary>

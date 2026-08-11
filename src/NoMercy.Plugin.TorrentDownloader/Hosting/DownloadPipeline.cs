@@ -86,12 +86,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new AggregatorReleaseSearch(new IndexerAggregator([.. indexers.Select(indexer => indexer.Indexer)])),
             new ProfileReleaseChooser(ProfileFor(settings)),
             engine,
-            new LibraryImportHandoff(
-                new FinishedFolderMover(intake),
-                context.Library,
-                new EncodeJobDispatch(context.Services, context.Logger),
-                settings.EncodeFolderId,
-                context.Logger),
+            new LibraryImportHandoff(new FinishedFolderMover(intake), context.Library, new EncodeJobDispatch(context.Services, context.Logger), context.Logger),
             new OrchestratorOptions
             {
                 DownloadFolder = downloads,

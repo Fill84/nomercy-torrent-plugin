@@ -764,44 +764,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
         IReadOnlyList<string> storedSecretKeys = await Context.Secrets.KeysAsync(ct);
 
-        // Asked of the server every time this page is drawn, not cached: the folder list is
-        // the server's, and one the owner has just added has to be pickable now rather than
-        // after a restart.
-        IReadOnlyList<(string Id, string Label)> folders = await FolderChoicesAsync(ct);
-
-        return SettingsView.Build(
-            loaded.Settings,
-            new HashSet<string>(storedSecretKeys, StringComparer.Ordinal),
-            folders);
-    }
-
-    /// <summary>
-    /// Every library folder the server has, as the settings page's choices.
-    ///
-    /// <para>
-    /// The libraries come from the plugin contract; their folders do not, so those are read
-    /// through the host the same way the encode dispatch reads them. Failure is an empty
-    /// list and a warning: a settings page that will not render because a folder list could
-    /// not be built is a page the owner cannot use to fix anything else either.
-    /// </para>
-    /// </summary>
-    private async Task<IReadOnlyList<(string Id, string Label)>> FolderChoicesAsync(CancellationToken ct)
-    {
-        try
-        {
-            IReadOnlyList<(string, string)> libraries =
-            [
-                .. (await Context.Library.GetLibrariesAsync(ct)).Select(library => (library.Id, library.Title)),
-            ];
-
-            return await new EncodeJobDispatch(Context.Services, Context.Logger).FoldersAsync(libraries, ct);
-        }
-        catch (Exception failure) when (failure is not OperationCanceledException)
-        {
-            Context.Logger.LogWarning(failure, "Torrent Downloader could not read the server's library folders.");
-
-            return [];
-        }
+        return SettingsView.Build(loaded.Settings, new HashSet<string>(storedSecretKeys, StringComparer.Ordinal));
     }
 
     // The grant check lives here rather than on the settings page now: a host is asked for

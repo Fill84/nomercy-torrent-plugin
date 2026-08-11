@@ -32,7 +32,6 @@ public sealed class LibraryImportHandoff(
     FinishedFolderMover mover,
     IPluginLibraryQuery library,
     EncodeJobDispatch encodes,
-    string encodeFolderId,
     ILogger logger
 ) : IIntakeHandoff
 {
@@ -65,7 +64,7 @@ public sealed class LibraryImportHandoff(
         // it does that from the path.
         foreach (string video in Directory.EnumerateFiles(finished, "*", SearchOption.AllDirectories))
         {
-            await encodes.QueueAsync(libraryId, video, encodeFolderId, ct);
+            await encodes.QueueAsync(libraryId, video, ct);
         }
 
         return true;

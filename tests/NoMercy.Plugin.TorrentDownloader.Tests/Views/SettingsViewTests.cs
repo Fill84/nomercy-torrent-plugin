@@ -210,38 +210,4 @@ public class SettingsViewTests
         PluginNodes.All(view).Select(node => node.Component)
             .Should().OnlyContain(component => PluginNodes.KnownComponents.Contains(component!));
     }
-
-    /// <summary>
-    /// The same choice the Add content screen offers, made once instead of per file. The
-    /// options are the server's own folders, so the owner picks a destination rather than
-    /// this plugin deciding one for them.
-    /// </summary>
-    [Fact]
-    public void Build_OffersEveryLibraryFolderAsAnEncodeDestination()
-    {
-        PluginView view = SettingsView.Build(
-            new TorrentDownloaderSettings(),
-            new HashSet<string>(),
-            [("01HQ5W78", "Series - Y:/media/TV.Shows"), ("01KJP6VX", "Series - (no path)")]);
-
-        PluginFormField field = AllFormFields(view).Should()
-            .ContainSingle(field => PluginNodes.Name(field) == "encodeFolderId").Which;
-
-        field.Options.Should().HaveCount(3, "the two folders plus the library's-first default");
-        field.Options.Select(option => option.Value).Should().Contain(["", "01HQ5W78", "01KJP6VX"]);
-        field.Options.Select(option => option.Label).Should().Contain("Series - Y:/media/TV.Shows");
-    }
-
-    [Fact]
-    public void Build_ShowsTheFolderTheOwnerAlreadyChose()
-    {
-        PluginView view = SettingsView.Build(
-            new TorrentDownloaderSettings { EncodeFolderId = "01KJP6VX" },
-            new HashSet<string>(),
-            [("01HQ5W78", "Series - Y:/media/TV.Shows"), ("01KJP6VX", "Series - (no path)")]);
-
-        AllFormFields(view).Should()
-            .ContainSingle(field => PluginNodes.Name(field) == "encodeFolderId")
-            .Which.Value.Should().Be("01KJP6VX");
-    }
 }
