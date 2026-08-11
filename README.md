@@ -70,9 +70,8 @@ Two projects, and the split is the point:
   supplies `Core` with its ports. It is the only project that references
   `NoMercy.Plugins.Abstractions`, which is what keeps `Core` testable without a server.
 
-The full design is in [`docs/superpowers/specs/`](docs/superpowers/specs/), and the implementation
-plans in [`docs/superpowers/plans/`](docs/superpowers/plans/). They are written to be read: the
-spec records the decisions and the reasons, including the ones that went the other way.
+The full design is in [`docs/superpowers/specs/`](docs/superpowers/specs/). They are written to be
+read: a spec records the decisions and the reasons, including the ones that went the other way.
 
 ## Tested against real captures, deliberately
 

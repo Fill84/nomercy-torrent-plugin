@@ -64,6 +64,15 @@ public sealed record TorrentRequest
     /// <summary>Decides whether this torrent may ever upload. Public unless a configured private tracker says otherwise.</summary>
     public TorrentOrigin Origin { get; init; } = TorrentOrigin.Public;
 
+    /// <summary>
+    /// Where seeding stops, taken from the private tracker this came from. Null on every
+    /// public torrent, which is the ordinary case, and then the engine's own policy stands.
+    /// </summary>
+    public double? SeedRatioTarget { get; init; }
+
+    /// <inheritdoc cref="SeedRatioTarget"/>
+    public TimeSpan? SeedTimeTarget { get; init; }
+
     /// <summary>Every tracker the indexers named for this info hash, merged. A bigger swarm is a faster download.</summary>
     public IReadOnlyList<string> ExtraTrackers { get; init; } = [];
 }

@@ -188,7 +188,22 @@ public sealed class TorrentEngine(
 
         Bitfield have = await resume.LoadAsync(metadata, ct) ?? new Bitfield(metadata.PieceCount);
 
-        TorrentSession session = new(metadata, store, resume, have, options.Policy);
+        // The engine's policy, with the originating tracker's own targets over the top. A
+        // private tracker sets its own ratio; the defaults underneath are what a torrent
+        // with no tracker of its own gets, and it will never upload anyway.
+        SwarmPolicy policy = options.Policy with
+        {
+            SeedRatioTarget = request.SeedRatioTarget ?? options.Policy.SeedRatioTarget,
+            SeedTimeTarget = request.SeedTimeTarget ?? options.Policy.SeedTimeTarget,
+        };
+
+        TorrentSession session = new(
+            metadata,
+            store,
+            resume,
+            have,
+            policy,
+            PieceServer.For(metadata, store, policy, request.Origin, have, metadata.TotalLength));
 
         RunningTorrent running = new(infoHash, metadata, session, store, request, now());
         _torrents[infoHash] = running;

@@ -796,11 +796,19 @@ public sealed class DownloadOrchestrator(
         // torrent announced to every swarm the owner knows about.
         IReadOnlyList<string> trackers = Announce(chosen.Trackers);
 
+        // Where this came from decides whether it may ever upload, and the same tracker
+        // carries the targets that say when to stop. Both travel with the request: the
+        // engine has no registry and is not going to grow one.
+        TorrentOrigin origin = privateTrackers.OriginFor(chosen.Trackers);
+        SwarmPolicy seeding = privateTrackers.PolicyFor(SwarmPolicy.Default, chosen.Trackers);
+
         string infoHash = await engine.AddAsync(new TorrentRequest
         {
             Source = source,
             DestinationFolder = options.DownloadFolder,
-            Origin = privateTrackers.OriginFor(chosen.Trackers),
+            Origin = origin,
+            SeedRatioTarget = origin == TorrentOrigin.PrivateSeeding ? seeding.SeedRatioTarget : null,
+            SeedTimeTarget = origin == TorrentOrigin.PrivateSeeding ? seeding.SeedTimeTarget : null,
             ExtraTrackers = trackers,
         }, ct);
 

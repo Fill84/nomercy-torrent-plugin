@@ -142,4 +142,47 @@ public class PieceServerTests
         // Target met: this account has given back what it agreed to, and stops.
         (await server.ServeAsync(new Request(0, 0, 4), CancellationToken.None)).Should().BeNull();
     }
+
+    /// <summary>
+    /// The factory the engine calls. Pinned because the engine used to skip it entirely and
+    /// hand every session a null server, which made the whole upload path unreachable while
+    /// the settings page went on offering a ratio target for it.
+    /// </summary>
+    [Theory]
+    [InlineData(TorrentOrigin.Public, false)]
+    [InlineData(TorrentOrigin.PrivateWithoutSeeding, false)]
+    [InlineData(TorrentOrigin.PrivateSeeding, true)]
+    public void For_BuildsAServerOnlyForATrackerTheOwnerAskedToSeedOn(TorrentOrigin origin, bool expected)
+    {
+        using TempFolder folder = new();
+        TorrentMetadata metadata = Metadata();
+
+        PieceServer? server = PieceServer.For(
+            metadata,
+            new FilePieceStore(metadata, folder.Path),
+            SwarmPolicy.Default,
+            origin,
+            Everything(metadata.PieceCount),
+            metadata.TotalLength);
+
+        (server is not null).Should().Be(expected);
+    }
+
+    [Fact]
+    public void For_MeasuresTheRatioAgainstWhatTheTorrentCostToFetch()
+    {
+        using TempFolder folder = new();
+        TorrentMetadata metadata = Metadata();
+
+        PieceServer server = PieceServer.For(
+            metadata,
+            new FilePieceStore(metadata, folder.Path),
+            SwarmPolicy.Default,
+            TorrentOrigin.PrivateSeeding,
+            Everything(metadata.PieceCount),
+            metadata.TotalLength)!;
+
+        // Without this the ratio divides by zero, reads as 0, and the torrent seeds forever.
+        server.DownloadedBytes.Should().Be(metadata.TotalLength);
+    }
 }

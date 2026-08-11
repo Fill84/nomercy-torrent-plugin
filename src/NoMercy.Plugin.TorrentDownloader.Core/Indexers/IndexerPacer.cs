@@ -28,8 +28,6 @@ public sealed class IndexerPacer(
 
     public bool IsParked => RemainingPark() is not null;
 
-    public TimeSpan? ParkRemaining => RemainingPark();
-
     public async Task<T> RunAsync<T>(Func<CancellationToken, Task<T>> work, CancellationToken ct)
     {
         if (RemainingPark() is TimeSpan remaining)

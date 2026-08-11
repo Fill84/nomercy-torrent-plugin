@@ -33,6 +33,29 @@ public sealed class PieceServer(
     /// <summary>No peer needs more than this in one message, and a bigger one is a peer deciding our memory use.</summary>
     private const int MaxRequestLength = 128 * 1024;
 
+    /// <summary>
+    /// One of these, or nothing at all - and nothing at all is the ordinary answer.
+    ///
+    /// <para>
+    /// A named factory rather than the engine deciding inline, because "does this torrent
+    /// get an upload path" is the single most consequential question in this file and it
+    /// belongs where the gate is, next to <see cref="CanUpload"/>. It was decided inline
+    /// once, by never supplying a server at all: the engine built every session without
+    /// one, so a private tracker configured to seed still uploaded nothing, and the ratio
+    /// and time targets on the settings page described something that could not happen.
+    /// </para>
+    /// </summary>
+    public static PieceServer? For(
+        TorrentMetadata metadata,
+        IPieceStore store,
+        SwarmPolicy policy,
+        TorrentOrigin origin,
+        Bitfield have,
+        long downloadedBytes) =>
+        policy.MayUpload(origin)
+            ? new PieceServer(metadata, store, policy, origin, have) { DownloadedBytes = downloadedBytes }
+            : null;
+
     private readonly DateTimeOffset _startedAt = DateTimeOffset.UtcNow;
 
     public long UploadedBytes { get; private set; }

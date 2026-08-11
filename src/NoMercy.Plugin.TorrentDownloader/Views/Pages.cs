@@ -150,7 +150,7 @@ public static class Pages
     /// What a page is called. One spelling, so a tab and the heading it leads to cannot
     /// disagree about which page the viewer is looking at.
     /// </summary>
-    public static string LabelOf(string name) =>
+    private static string LabelOf(string name) =>
         Routes.Routes.FirstOrDefault(route => route.Name == name)?.Label ?? name;
 
     /// <summary>
