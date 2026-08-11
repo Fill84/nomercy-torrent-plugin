@@ -54,6 +54,21 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     private const string LibraryRepositoryType = "NoMercy.Data.Repositories.ILibraryRepository";
 
     /// <summary>
+    /// The service behind the Add content file browser: it walks a folder and matches every
+    /// video in it to a movie or an episode the server already knows.
+    ///
+    /// <para>
+    /// That match is the missing piece. <c>VideoEncodeJob</c> looks its media up by
+    /// <c>Id.ToInt()</c> and returns without a word when nothing matches - so a job dispatched
+    /// with no id is taken off the queue and does nothing, which is exactly what happened
+    /// here: the queue's row counter moved, the encode never ran, and no line anywhere said
+    /// why. The operator's screen does not guess that id either; it asks this, shows what came
+    /// back, and sends it along. So does this.
+    /// </para>
+    /// </summary>
+    private const string FileListServiceType = "NoMercy.MediaProcessing.Files.IFileListService";
+
+    /// <summary>
     /// Queues the encode for one file, and reports whether it was queued.
     ///
     /// <para>
@@ -106,17 +121,23 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         if (folderId is null)
             return false;
 
+        // What the server itself thinks this file is. Asked the way the Add content screen
+        // asks it, because the answer has to be the server's, not a guess assembled from a
+        // filename by a plugin that cannot see the episode table.
+        string? mediaId = await MatchAsync(inputFile, Get(library, "Type") as string ?? "tv", ct);
+
+        if (mediaId is null)
+            return false;
+
         object job = Activator.CreateInstance(jobType)!;
 
-        // Id is a string on AbstractEncoderJob, not a number - it is the id of the media
-        // this file was matched to, and empty is what an unmatched file carries. It was
-        // set to the int 0 here, which threw straight out of the reflection call and took
-        // the whole transfers cadence with it, every minute, for as long as one finished
-        // download sat in the folder.
+        // Id is a string on AbstractEncoderJob, not a number, and it is the media this file
+        // was matched to. Empty is what an unmatched file carries - and an unmatched file is
+        // a job that runs and does nothing, so it never gets dispatched from here.
         if (!Set(job, "LibraryId", libraryId)
             || !Set(job, "FolderId", folderId)
             || !Set(job, "InputFile", inputFile)
-            || !Set(job, "Id", string.Empty))
+            || !Set(job, "Id", mediaId))
             return false;
 
         // Optional: a library with no preset encodes with the server's defaults.
@@ -145,6 +166,97 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
             Get(library, "EncodePresetId")?.ToString() ?? "the folder's own");
 
         return true;
+    }
+
+    /// <summary>
+    /// Which episode or film the server says this file is, as its own id.
+    ///
+    /// <para>
+    /// The file browser lists a folder, shows the match beside every video, and the operator
+    /// presses Add - and what travels to the server is that match's id, decided by the
+    /// server, never by the screen. This does the same call on the folder the download was
+    /// just moved into and reads the same field. It is not a shortcut around the operator's
+    /// workflow; it is the operator's workflow with nobody having to be at the keyboard.
+    /// </para>
+    ///
+    /// <para>
+    /// Null when nothing matched, and it says so. A job with no id is one the encoder takes
+    /// off the queue and silently drops, so dispatching one is worse than not: it reports
+    /// success and leaves the episode in a folder nobody is watching.
+    /// </para>
+    /// </summary>
+    private async Task<string?> MatchAsync(string inputFile, string libraryType, CancellationToken ct)
+    {
+        Type? contract = FindType(FileListServiceType);
+
+        if (contract is null)
+        {
+            logger.LogError(
+                "Torrent Downloader cannot queue an encode: the server does not expose {Missing}, so nothing can say which episode {File} is.",
+                FileListServiceType,
+                inputFile);
+
+            return null;
+        }
+
+        using IServiceScope scope = services.CreateScope();
+
+        object? service = scope.ServiceProvider.GetService(contract);
+
+        // Two arguments: the folder and the library's type. The three-argument overload
+        // takes a storage driver, which is for a folder on a remote share - a finished
+        // download is on this machine.
+        MethodInfo? list = service?.GetType()
+            .GetMethods()
+            .FirstOrDefault(method => method.Name == "GetFilesInDirectory" && method.GetParameters().Length == 2);
+
+        if (service is null || list is null)
+        {
+            logger.LogError(
+                "Torrent Downloader cannot queue an encode: {Contract} resolved to {Service} and GetFilesInDirectory(folder, type) {Found}.",
+                FileListServiceType,
+                service?.GetType().FullName ?? "nothing",
+                list is null ? "is not on it" : "is");
+
+            return null;
+        }
+
+        string folder = Path.GetDirectoryName(inputFile) ?? inputFile;
+
+        if (list.Invoke(service, [folder, libraryType]) is not Task pending)
+            return null;
+
+        if (await Unwrap(pending) is not System.Collections.IEnumerable items)
+            return null;
+
+        foreach (object? item in items)
+        {
+            if (item is null || Get(item, "Path") is not string path)
+                continue;
+
+            if (!string.Equals(Path.GetFullPath(path), Path.GetFullPath(inputFile), StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            // Id is declared dynamic on the match, so it arrives boxed as whatever the
+            // provider put there. The job wants the string form either way.
+            string? id = (Get(item, "Match") is { } match ? Get(match, "Id") : null)?.ToString();
+
+            if (!string.IsNullOrWhiteSpace(id) && id != "0")
+                return id;
+
+            logger.LogWarning(
+                "Torrent Downloader will not queue an encode for {File}: the server scanned it and matched no episode. It stays in the finished folder.",
+                inputFile);
+
+            return null;
+        }
+
+        logger.LogWarning(
+            "Torrent Downloader will not queue an encode for {File}: the server's own scan of {Folder} did not list it.",
+            inputFile,
+            folder);
+
+        return null;
     }
 
     /// <summary>
