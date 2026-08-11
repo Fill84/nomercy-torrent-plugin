@@ -136,10 +136,13 @@ public class OverviewViewTests
         more.Action.Payload[PluginNavigation.RouteKey].Should().Be("/downloads");
     }
 
+    // Idle is the common case, and a page that looks like an error when nothing is happening
+    // trains a reader to ignore it. Said in the summary line rather than in a section of its
+    // own - see Build_DoesNotSpendHalfAScreenSayingNothingIsDownloading.
     [Fact]
     public void Build_SaysNothingIsDownloadingRatherThanLookingBroken()
     {
-        PluginNodes.Says(Build(), "Nothing is downloading right now.").Should().BeTrue();
+        PluginNodes.Says(Build(wanted: [Wanted(1)]), "0 downloading").Should().BeTrue();
     }
 
     // The counterpart of the rule that keeps a first run from being a thousand downloads:
@@ -156,20 +159,41 @@ public class OverviewViewTests
         PluginNodes.Says(view, "Never Watched").Should().BeTrue();
     }
 
-    // Tiles, not a column of buttons: a card is the one component with a surface of its own,
-    // so twenty shows read as twenty things. The whole tile is the button, which is why the
-    // subtitle has to say what pressing it does.
+    // Not tiles. A card truncates at ten rem, and these are titles like "GINTAMA - Mr.
+    // Ginpachi's Zany Class": twelve tiles of clipped text is a worse answer than twelve
+    // lines you can read.
     [Fact]
-    public void Build_DrawsTheShowsAsTilesThatSayWhatAClickDoes()
+    public void Build_ListsTheShowsWithTheirNamesReadableInFull()
     {
-        PluginView view = Build(shows: [new FollowableShow(42, "Never Watched", Followed: false)]);
+        PluginView view = Build(shows: [new FollowableShow(42, "GINTAMA - Mr. Ginpachi's Zany Class", Followed: false)]);
 
-        PluginNodes.All(view).Should().Contain(node => node.Component == Ui.GridComponent);
+        PluginComponent row = PluginNodes.TableRows(view).Should()
+            .ContainSingle(node => node.Id == "overview-follow-42").Which;
 
-        PluginComponent tile = PluginNodes.All(view).Single(node => node.Id == "overview-follow-42");
+        PluginNodes.Cell(row, "show").Should().Be("GINTAMA - Mr. Ginpachi's Zany Class");
+        PluginNodes.Cell(row, "follow").Should().Be("Follow");
+    }
 
-        tile.Component.Should().Be(Ui.CardComponent);
-        tile.Props["subtitle"].Should().Be("Click to follow");
+    /// <summary>
+    /// An empty state is half a screen of icon and heading. On the page somebody opens to
+    /// check whether anything is wrong, a section saying "nothing here" in that much space
+    /// is space the things that are wrong should be using - and the line at the top already
+    /// says "0 downloading".
+    /// </summary>
+    [Fact]
+    public void Build_DoesNotSpendHalfAScreenSayingNothingIsDownloading()
+    {
+        PluginView view = Build(wanted: [Wanted(1)], ungranted: ["www.scnsrc.me"]);
+
+        PluginNodes.All(view).Should().NotContain(node => node.Id == "overview-now");
+        PluginNodes.Says(view, "0 downloading").Should().BeTrue();
+    }
+
+    // The one case an empty state belongs in: the whole page has nothing, not one section.
+    [Fact]
+    public void Build_SaysSoWhenThereIsGenuinelyNothingToReport()
+    {
+        PluginNodes.All(Build()).Should().Contain(node => node.Id == "overview-idle");
     }
 
     [Fact]

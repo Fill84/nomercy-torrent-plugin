@@ -37,36 +37,56 @@ public static class OverviewView
 
         List<PluginComponent> children =
         [
-            // One line before any list, because the first question is "is it doing
-            // anything", and answering that by counting rows is work the page should have
-            // done for the reader.
-            Ui.Text("overview-summary", Summary(transfers, wanted, history), "caption"),
+            // The first line, and not a caption: it is the answer to the question somebody
+            // opened the page with, and the faintest text on the page is the wrong place for
+            // it. Everything below is the same answer in more detail.
+            Ui.Text("overview-summary", Summary(transfers, wanted, history)),
         ];
 
         List<PluginComponent> attention = [.. Attention(wanted, ungrantedHosts)];
 
         if (attention.Count > 0)
         {
+            // No explanatory line under the heading. Each item below already says what it is
+            // and what it is stopping, and a sentence repeating that is one more thing
+            // between the reader and the thing they came for.
             children.Add(Ui.Section(
                 "overview-attention",
                 "Needs you",
-                "Nothing below will move until these are dealt with.",
+                null,
                 Ui.List("overview-attention-list", attention)));
         }
 
-        children.Add(Ui.Section(
-            "overview-now",
-            Format.Count("Downloading", transfers.Count(transfer => !transfer.Paused)),
-            Format.TotalRate(transfers),
-            Now(transfers, byHash)));
+        // Only when there is something. "0 downloading" is already in the line at the top,
+        // and an empty state is half a screen of icon and heading saying it a second time -
+        // which on the page you open to check whether anything is wrong is exactly the space
+        // the things that are wrong should be using.
+        if (transfers.Count > 0)
+        {
+            children.Add(Ui.Section(
+                "overview-now",
+                Format.Count("Downloading", transfers.Count(transfer => !transfer.Paused)),
+                Format.TotalRate(transfers),
+                Now(transfers, byHash)));
+        }
 
         if (unstartedShows.Count > 0)
         {
             children.Add(Ui.Section(
                 "overview-unstarted",
                 Format.Count("Not started", unstartedShows.Count),
-                "These shows have no episode on the server, so nothing is downloaded for them. Follow one and it joins the queue.",
+                "No episode of these is on the server, so nothing is downloaded for them. Click one to follow it and it joins the queue.",
                 Unstarted(unstartedShows)));
+        }
+
+        // The one case an empty state belongs in: the whole page has nothing, rather than
+        // one section of it.
+        if (children.Count == 1)
+        {
+            children.Add(Ui.EmptyState(
+                "overview-idle",
+                "Nothing needs you",
+                "Nothing is downloading, nothing is waiting on you, and every show the plugin follows is up to date."));
         }
 
         return Pages.Page(Pages.Overview, RefreshSeconds, [.. children]);
@@ -125,14 +145,6 @@ public static class OverviewView
     /// </summary>
     private static PluginComponent Now(IReadOnlyList<Transfer> transfers, IReadOnlyDictionary<string, Grab> byHash)
     {
-        if (transfers.Count == 0)
-        {
-            return Ui.EmptyState(
-                "overview-now-empty",
-                "Nothing is downloading right now.",
-                "Finished downloads move to the intake and leave this list.");
-        }
-
         List<PluginComponent> rows = [];
 
         foreach (Transfer transfer in transfers.OrderByDescending(transfer => transfer.Progress).Take(DigestLength))
@@ -173,31 +185,42 @@ public static class OverviewView
     /// can never start a show at all. This is that somewhere until the Shows page exists.
     /// </para>
     /// </summary>
+    private static readonly PluginTableColumn[] ShowColumns =
+    [
+        new() { Key = "show", Label = "Show" },
+        new() { Key = "follow", Label = "", Width = "10rem", Align = "right" },
+    ];
+
+    /// <summary>
+    /// The shows the plugin is leaving alone, each with the one click that changes that.
+    ///
+    /// <para>
+    /// A row and not a tile, though a tile is the only component with a surface of its own.
+    /// A tile is ten rem wide and truncates, and these are titles like "GINTAMA - Mr.
+    /// Ginpachi's Zany Class" and "Backstabbed in a Backwater Dungeon": twelve tiles of
+    /// clipped text is a worse answer than twelve lines you can read. Tiles are for things
+    /// with artwork, and this plugin cannot get a poster path.
+    /// </para>
+    /// </summary>
     private static PluginComponent Unstarted(IReadOnlyList<FollowableShow> shows)
     {
-        List<PluginComponent> tiles = [];
+        List<PluginComponent> rows = [];
 
         foreach (FollowableShow show in shows.OrderBy(show => show.Title, StringComparer.CurrentCultureIgnoreCase))
         {
-            // Tiles rather than a list of buttons, because a card is the one component with
-            // a surface of its own - twenty shows read as twenty things instead of forty
-            // words in a column. The whole tile is the button, so its subtitle has to say
-            // what pressing it does; a card that only named the show would be a click into
-            // the dark.
-            tiles.Add(show.Followed
-                ? Ui.Card(
-                    $"overview-unfollow-{show.ShowId}",
-                    show.Title,
-                    "Following - click to stop",
-                    PluginActionIntent.CallPlugin($"{PluginMethods.UnfollowShow}/{show.ShowId}"))
-                : Ui.Card(
-                    $"overview-follow-{show.ShowId}",
-                    show.Title,
-                    "Click to follow",
-                    PluginActionIntent.CallPlugin($"{PluginMethods.FollowShow}/{show.ShowId}")));
+            rows.Add(Ui.TableRow(
+                show.Followed ? $"overview-unfollow-{show.ShowId}" : $"overview-follow-{show.ShowId}",
+                new()
+                {
+                    ["show"] = show.Title,
+                    ["follow"] = show.Followed ? "Stop following" : "Follow",
+                },
+                PluginActionIntent.CallPlugin(show.Followed
+                    ? $"{PluginMethods.UnfollowShow}/{show.ShowId}"
+                    : $"{PluginMethods.FollowShow}/{show.ShowId}")));
         }
 
-        return Ui.Grid("overview-unstarted-list", tiles);
+        return Ui.Table("overview-unstarted-list", ShowColumns, rows);
     }
 
     /// <summary>The whole plugin in one sentence: what is moving, what is waiting, what has landed.</summary>

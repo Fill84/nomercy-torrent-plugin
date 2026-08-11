@@ -47,9 +47,13 @@ public static class Ui
     public const string ProgressComponent = "PluginProgress";
     public const string BadgeComponent = "PluginBadge";
     public const string TableComponent = "PluginTable";
-    public const string CardComponent = "PluginCard";
-    public const string GridComponent = "PluginGrid";
     public const string DetailComponent = "PluginDetail";
+
+    // PluginCard and PluginGrid are drawn by the client and are deliberately not built here.
+    // A card is ten rem wide and truncates its title, and this plugin's rows are show names
+    // and release names - the two things that do not survive truncation. A card also exists
+    // to carry artwork, and IPluginLibraryQuery hands a plugin no poster path. When it does,
+    // the Shows page is where they belong.
 
     /// <summary>A column of children.</summary>
     public static PluginComponent Container(string id, params PluginComponent[] items) =>
@@ -235,24 +239,6 @@ public static class Ui
             Props = cells,
             Action = action,
         };
-
-    /// <summary>A tile: the one component with a surface of its own, and a whole-tile action.</summary>
-    public static PluginComponent Card(
-        string id,
-        string title,
-        string? subtitle = null,
-        PluginActionIntent? action = null) =>
-        new()
-        {
-            Id = id,
-            Component = CardComponent,
-            Props = new() { ["title"] = title, ["subtitle"] = subtitle },
-            Action = action,
-        };
-
-    /// <summary>Tiles, laid out as many per line as fit.</summary>
-    public static PluginComponent Grid(string id, IEnumerable<PluginComponent> items) =>
-        new() { Id = id, Component = GridComponent, Items = [.. items] };
 
     /// <summary>
     /// One thing, with a heading of its own and whatever it needs underneath.
