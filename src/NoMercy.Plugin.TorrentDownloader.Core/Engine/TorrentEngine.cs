@@ -154,6 +154,10 @@ public sealed class TorrentEngine(
     /// </summary>
     private static string Explain(Exception failure) => failure switch
     {
+        // Its own message, and it is the one worth reading: it names the file that got the
+        // torrent refused.
+        TorrentContentException refused => refused.Message,
+
         MetadataException or OperationCanceledException or TimeoutException =>
             "no peer offered this torrent's contents within the time allowed - the swarm may have nobody in it",
         _ => failure.Message,
@@ -167,6 +171,15 @@ public sealed class TorrentEngine(
 
         if (_torrents.ContainsKey(infoHash))
             return infoHash;
+
+        // Before a single piece is asked for. A release named like an episode turned out on
+        // a real server to be one 1.2 GB .scr - a Windows executable padded out to look like
+        // video - and the engine wrote it to disk and marked it executable, because nothing
+        // between the release name and the file system ever looked at the file list. The
+        // import refused it afterwards, which is the wrong place to find out: by then a
+        // gigabyte of somebody else's program is on the owner's machine.
+        if (TorrentContents.Refuse(metadata) is string refusal)
+            throw new TorrentContentException(refusal);
 
         Directory.CreateDirectory(options.StateFolder);
 
