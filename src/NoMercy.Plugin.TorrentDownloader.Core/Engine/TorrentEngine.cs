@@ -51,6 +51,20 @@ public sealed class TorrentEngine(
 {
     private readonly ConcurrentDictionary<string, RunningTorrent> _torrents = new();
     private readonly ConcurrentDictionary<string, PausedTorrent> _paused = new();
+
+    /// <summary>Magnets whose swarm has not answered yet. See <see cref="ResolvingTorrent"/>.</summary>
+    private readonly ConcurrentDictionary<string, ResolvingTorrent> _resolving = new();
+
+    /// <summary>
+    /// Cancelled by Dispose, so a background resolution cannot outlive the engine.
+    ///
+    /// <para>
+    /// Load-bearing on Windows: a task still running holds the plugin's collectible load
+    /// context alive, which keeps its files locked and makes the plugin impossible to
+    /// update without stopping the server.
+    /// </para>
+    /// </summary>
+    private readonly CancellationTokenSource _lifetime = new();
     private readonly byte[] _peerId = Handshake.NewPeerId();
     private bool _disposed;
 
@@ -60,11 +74,81 @@ public sealed class TorrentEngine(
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
 
-        TorrentMetadata metadata = await ResolveAsync(request, ct);
-        string infoHash = Convert.ToHexStringLower(metadata.InfoHash);
+        // A .torrent URL is a fetch and a parse: quick, and it fails in a way the caller can
+        // act on straight away. A magnet is a conversation with a swarm that may not exist,
+        // so it must not be had on the caller's thread. This used to await BEP 9 for five
+        // minutes and then throw, which took the caller's whole cycle with it - and threw
+        // before the grab was ever recorded, so nothing anywhere remembered the attempt.
+        if (!request.Source.StartsWith("magnet:", StringComparison.OrdinalIgnoreCase))
+            return await StartAsync(await ResolveAsync(request, ct), request, ct);
+
+        MagnetLink magnet = MagnetLink.Parse(request.Source);
+        string infoHash = Convert.ToHexStringLower(magnet.InfoHash);
 
         // Adding the same torrent twice is not an error - two episodes can want one
         // season pack, and a retry can arrive while the first attempt is still running.
+        if (_torrents.ContainsKey(infoHash) || _resolving.ContainsKey(infoHash))
+            return infoHash;
+
+        _resolving[infoHash] = new ResolvingTorrent
+        {
+            InfoHash = infoHash,
+            Request = request,
+            StartedAt = now(),
+        };
+
+        ResolveInBackground(infoHash, request);
+
+        return infoHash;
+    }
+
+    /// <summary>
+    /// Asks the swarm what the torrent contains, and starts it when the answer arrives.
+    ///
+    /// <para>
+    /// Fire and forget on purpose, and the only place in this engine that is. Nothing awaits
+    /// it because the point is that the caller does not: the transfer list is how anybody
+    /// learns how it went, which is how they learn about every other change of state here.
+    /// </para>
+    /// </summary>
+    private void ResolveInBackground(string infoHash, TorrentRequest request)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                TorrentMetadata metadata = await ResolveAsync(request, _lifetime.Token);
+
+                await StartAsync(metadata, request, _lifetime.Token);
+
+                _resolving.TryRemove(infoHash, out _);
+            }
+            catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+            {
+                // The engine is going away. Not this torrent's failure, and not worth
+                // reporting as one.
+                _resolving.TryRemove(infoHash, out _);
+            }
+            catch (Exception failure)
+            {
+                // Recorded on the torrent rather than thrown into nothing. A background
+                // task's exception has nowhere to go, and the whole reason this moved off
+                // the caller's thread is that throwing there destroyed the caller's cycle.
+                if (_resolving.TryGetValue(infoHash, out ResolvingTorrent? waiting))
+                {
+                    waiting.FailureReason = failure is MetadataException
+                        ? "no peer offered this torrent's contents - the swarm may be dead"
+                        : failure.Message;
+                }
+            }
+        });
+    }
+
+    /// <summary>Everything after the metadata is known, whichever of the two ways it was learned.</summary>
+    private async Task<string> StartAsync(TorrentMetadata metadata, TorrentRequest request, CancellationToken ct)
+    {
+        string infoHash = Convert.ToHexStringLower(metadata.InfoHash);
+
         if (_torrents.ContainsKey(infoHash))
             return infoHash;
 
@@ -163,6 +247,17 @@ public sealed class TorrentEngine(
         Task.FromResult<IReadOnlyList<EngineTransfer>>(
         [
             .. _torrents.Values.Select(Describe),
+
+            // Listed with no bytes and no total, because until a peer answers there is
+            // nothing to be a fraction of. A magnet that gave up stays in this list rather
+            // than vanishing: the reason is the only thing anybody can act on, and a
+            // torrent that disappears silently is what this whole state was added to end.
+            .. _resolving.Values.Select(waiting => new EngineTransfer
+            {
+                InfoHash = waiting.InfoHash,
+                State = waiting.FailureReason is null ? EngineState.Resolving : EngineState.Failed,
+                FailureReason = waiting.FailureReason,
+            }),
             .. _paused.Select(entry => new EngineTransfer
             {
                 InfoHash = entry.Key,
@@ -326,6 +421,13 @@ public sealed class TorrentEngine(
             return;
 
         _disposed = true;
+
+        // First, so a resolution in flight stops asking rather than finishing into an
+        // engine that is going away - and so its task cannot hold this plugin's load
+        // context alive, which on Windows leaves the plugin's own files locked.
+        await _lifetime.CancelAsync();
+        _lifetime.Dispose();
+        _resolving.Clear();
 
         foreach (RunningTorrent running in _torrents.Values)
             await running.StopAsync();

@@ -7,6 +7,18 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Engine;
 
 public enum EngineState
 {
+    /// <summary>
+    /// Added, and waiting for a peer to hand over what the torrent actually contains.
+    ///
+    /// <para>
+    /// Its own state rather than Downloading-at-nought-per-cent, because the two fail for
+    /// different reasons and only one of them is worth a progress bar. A magnet names an
+    /// info hash and nothing else; until some peer answers, the engine does not know how
+    /// many bytes there are to be at nought per cent of.
+    /// </para>
+    /// </summary>
+    Resolving,
+
     Downloading,
 
     /// <summary>Every piece is in and verified. The files are at <c>CompletedFolder</c>.</summary>

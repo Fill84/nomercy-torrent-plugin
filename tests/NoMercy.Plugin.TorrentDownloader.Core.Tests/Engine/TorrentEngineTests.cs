@@ -89,8 +89,23 @@ public class TorrentEngineTests
         (await engine.TransfersAsync(deadline.Token)).Should().ContainSingle();
     }
 
+    /// <summary>
+    /// A magnet nobody will describe is reported, not thrown.
+    ///
+    /// <para>
+    /// This test used to assert the opposite - that AddAsync threw MetadataException and
+    /// listed nothing - and the behaviour it was pinning is what kept a real server silent
+    /// for a fortnight. The throw came out of the caller's search cycle before the grab was
+    /// recorded, so the episodes behind it went unsearched and no page anywhere could say
+    /// that a release had been chosen and lost.
+    /// </para>
+    ///
+    /// <para>
+    /// Giving up is still right. Doing it where somebody can see it is the change.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task AddAsync_GivesUpOnAMagnetNobodyWillDescribe()
+    public async Task AddAsync_ReportsAMagnetNobodyWillDescribeRatherThanThrowingIt()
     {
         using CancellationTokenSource deadline = Deadline();
         using TempFolder downloads = new();
@@ -100,14 +115,47 @@ public class TorrentEngineTests
             downloads, state, new FakeTracker(), new RefusingDialer(), SeasonPack().Build(),
             metadataTimeout: TimeSpan.FromSeconds(2));
 
-        Func<Task> add = () => engine.AddAsync(
-            Request() with { Source = "magnet:?xt=urn:btih:123456789abcdef00020417e2d5f2e7aff010203" },
+        const string hash = "123456789abcdef00020417e2d5f2e7aff010203";
+
+        string infoHash = await engine.AddAsync(
+            Request() with { Source = $"magnet:?xt=urn:btih:{hash}" },
             deadline.Token);
 
-        // A magnet whose swarm nobody answers for cannot become a torrent, and saying so
-        // beats holding a download that will never start.
-        await add.Should().ThrowAsync<MetadataException>();
-        (await engine.TransfersAsync(deadline.Token)).Should().BeEmpty();
+        infoHash.Should().Be(hash);
+
+        EngineTransfer failed = await Eventually(
+            engine,
+            transfer => transfer.State == EngineState.Failed,
+            deadline.Token);
+
+        failed.FailureReason.Should().Contain("no peer");
+    }
+
+    /// <summary>
+    /// Polls the transfer list until it says what the test is waiting for.
+    ///
+    /// <para>
+    /// The engine is deliberately polled rather than event-driven, and resolution now
+    /// happens on a background task, so "wait for the state to change" is the honest shape
+    /// of the assertion. The deadline is the test's own; there is no sleep-and-hope.
+    /// </para>
+    /// </summary>
+    private static async Task<EngineTransfer> Eventually(
+        TorrentEngine engine,
+        Func<EngineTransfer, bool> until,
+        CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            EngineTransfer? found = (await engine.TransfersAsync(ct)).FirstOrDefault(until);
+
+            if (found is not null)
+                return found;
+
+            await Task.Delay(50, ct);
+        }
+
+        throw new TimeoutException("the transfer list never reached the state the test was waiting for");
     }
 
     [Fact]
