@@ -135,14 +135,30 @@ public sealed class TorrentEngine(
                 // task's exception has nowhere to go, and the whole reason this moved off
                 // the caller's thread is that throwing there destroyed the caller's cycle.
                 if (_resolving.TryGetValue(infoHash, out ResolvingTorrent? waiting))
-                {
-                    waiting.FailureReason = failure is MetadataException
-                        ? "no peer offered this torrent's contents - the swarm may be dead"
-                        : failure.Message;
-                }
+                    waiting.FailureReason = Explain(failure);
             }
         });
     }
+
+    /// <summary>
+    /// What to tell the owner, out of what the exception happens to be.
+    ///
+    /// <para>
+    /// A metadata timeout arrives as a cancellation rather than a
+    /// <see cref="MetadataException"/>, because that is how the resolver enforces the
+    /// deadline - so on a real server every dead swarm was reported as "The operation was
+    /// canceled", which reads as the plugin having given up on itself rather than as
+    /// nobody answering. Any cancellation reaching here that is not this engine shutting
+    /// down is that deadline expiring; shutdown is caught above.
+    /// </para>
+    /// </summary>
+    private static string Explain(Exception failure) => failure switch
+    {
+        MetadataException or OperationCanceledException or TimeoutException =>
+            "no peer offered this torrent's contents within the time allowed - the swarm may have nobody in it",
+        _ => failure.Message,
+    };
+
 
     /// <summary>Everything after the metadata is known, whichever of the two ways it was learned.</summary>
     private async Task<string> StartAsync(TorrentMetadata metadata, TorrentRequest request, CancellationToken ct)

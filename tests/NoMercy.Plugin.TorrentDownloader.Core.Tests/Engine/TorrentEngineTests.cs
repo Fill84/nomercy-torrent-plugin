@@ -128,7 +128,11 @@ public class TorrentEngineTests
             transfer => transfer.State == EngineState.Failed,
             deadline.Token);
 
+        // A metadata timeout arrives as a cancellation rather than a MetadataException,
+        // and on a real server that reported "The operation was canceled" - which reads as
+        // the plugin giving up on itself rather than as nobody answering.
         failed.FailureReason.Should().Contain("no peer");
+        failed.FailureReason.Should().NotContain("canceled");
     }
 
     /// <summary>
