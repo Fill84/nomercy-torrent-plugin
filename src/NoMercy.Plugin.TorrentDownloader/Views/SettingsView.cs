@@ -141,6 +141,19 @@ public static class SettingsView
             },
             new()
             {
+                Name = "codec",
+                Label = "Video codec to accept",
+                Type = PluginFormFieldType.Select,
+                Value = settings.Codec,
+                Options =
+                [
+                    new PluginFormOption { Value = "any", Label = "Any codec" },
+                    new PluginFormOption { Value = "h264", Label = "h264 / x264 only" },
+                    new PluginFormOption { Value = "h265", Label = "h265 / HEVC only" },
+                ],
+            },
+            new()
+            {
                 Name = "minimumSeeders",
                 Label = "Minimum seeders",
                 Type = PluginFormFieldType.Number,

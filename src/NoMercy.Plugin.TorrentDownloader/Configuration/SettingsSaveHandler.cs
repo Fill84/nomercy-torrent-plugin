@@ -185,6 +185,12 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             merged.MaximumResolution = request.MaximumResolution!;
         }
 
+        // One of three words, and anything else is left alone rather than stored. A value
+        // the filter does not recognise asks nothing, which would quietly turn the rule off
+        // - so a typo must not be able to reach the settings file in the first place.
+        if (request.Codec is string codec && codec.Trim().ToLowerInvariant() is "any" or "h264" or "h265")
+            merged.Codec = codec.Trim().ToLowerInvariant();
+
         // Absent means "not submitted, leave it alone", like every other optional field.
         // Submitted empty is honoured: an owner who wants DHT only is entitled to say so,
         // and a list this silently refused to empty would be a setting that lies.
@@ -524,5 +530,6 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             // leaves it alone" is what catches it, because from outside a forgotten field
             // and a deliberately cleared one look identical.
             DefaultTrackers = source.DefaultTrackers,
+            Codec = source.Codec,
         };
 }

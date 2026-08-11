@@ -35,6 +35,24 @@ public class TorrentDownloaderSettings
     public bool AllowSeasonPacks { get; set; } = true;
 
     public List<IndexerSettings> Indexers { get; set; } = [];
+    /// <summary>
+    /// Which video codec to accept: <c>h264</c>, <c>h265</c> or <c>any</c>.
+    ///
+    /// <para>
+    /// The same three answers torrent-feed gives, and the same meanings. <c>h264</c>
+    /// requires an explicit x264 / h264 / AVC tag, so an untagged release is refused rather
+    /// than passing as "at least it is not HEVC" - which is the point, because an untagged
+    /// rip is exactly where an unwanted codec hides. <c>h265</c> requires HEVC. <c>any</c>
+    /// stops asking.
+    /// </para>
+    ///
+    /// <para>
+    /// Defaults to <c>any</c>, which is what this plugin did before the setting existed. An
+    /// owner who does not want x265 says so; one who only wants x265 says that instead.
+    /// </para>
+    /// </summary>
+    public string Codec { get; set; } = "any";
+
     public List<PrivateTrackerSettings> PrivateTrackers { get; set; } = [];
 
     /// <summary>

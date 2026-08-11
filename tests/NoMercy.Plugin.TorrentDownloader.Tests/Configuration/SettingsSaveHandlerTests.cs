@@ -386,14 +386,58 @@ public class SettingsSaveHandlerTests
     /// The four schedules ApplyGeneral demands together, plus whatever one field a test is
     /// about. SaveSettingsRequest is a class rather than a record, so there is no `with`.
     /// </summary>
-    private static SaveSettingsRequest General(string? defaultTrackers = null) => new()
+    private static SaveSettingsRequest General(string? defaultTrackers = null, string? codec = null) => new()
     {
         TransfersCron = "* * * * *",
         FeedCron = "*/15 * * * *",
         SearchCron = "*/5 * * * *",
         MaintenanceCron = "0 4 * * *",
         DefaultTrackers = defaultTrackers,
+        Codec = codec,
     };
+
+    /// <summary>
+    /// The three answers torrent-feed gives, and the ones the filter understands.
+    /// </summary>
+    [Theory]
+    [InlineData("h264")]
+    [InlineData("h265")]
+    [InlineData("any")]
+    public async Task HandleGeneralAsync_SavesTheCodecChoice(string codec)
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(new TorrentDownloaderSettings());
+
+        await handler.HandleGeneralAsync(General(codec: codec), CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).Codec.Should().Be(codec);
+    }
+
+    // A word the filter does not recognise asks nothing, which would quietly turn the rule
+    // off. A typo must not be able to reach the settings file at all.
+    [Theory]
+    [InlineData("h624")]
+    [InlineData("")]
+    [InlineData("  ")]
+    public async Task HandleGeneralAsync_RefusesACodecTheFilterCannotRead(string codec)
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(
+            new TorrentDownloaderSettings { Codec = "h264" });
+
+        await handler.HandleGeneralAsync(General(codec: codec), CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).Codec.Should().Be("h264");
+    }
+
+    [Fact]
+    public async Task HandleGeneralAsync_LeavesTheCodecAloneWhenTheFieldIsAbsent()
+    {
+        (FakeConfiguration configuration, _, SettingsSaveHandler handler) = await SeededAsync(
+            new TorrentDownloaderSettings { Codec = "h265" });
+
+        await handler.HandleGeneralAsync(General(), CancellationToken.None);
+
+        ((TorrentDownloaderSettings)configuration.Stored!).Codec.Should().Be("h265");
+    }
 
     [Fact]
     public async Task HandleGeneralAsync_SavesTheQualityAnswers()

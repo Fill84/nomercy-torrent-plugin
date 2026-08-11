@@ -296,6 +296,25 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         Quality = QualityLadders.UpTo(QualityLadders.ParseResolution(settings.MaximumResolution, Resolution.Fhd1080)),
         MinSeeders = Math.Max(1, settings.MinimumSeeders),
         AllowSeasonPacks = settings.AllowSeasonPacks,
+        Codec = CodecFor(settings.Codec),
+
+        // Set together with the codec, and the pair is what makes "h264" mean what
+        // torrent-feed means by it: an untagged release is refused rather than passing as
+        // "at least it is not HEVC". An untagged rip is exactly where the unwanted codec
+        // hides. Naming no codec asks nothing, so the flag is irrelevant there.
+        RequireCodecTag = CodecFor(settings.Codec) != VideoCodec.Unknown,
+    };
+
+    /// <summary>
+    /// The owner's word, as the filter's own value. Anything unrecognised asks nothing
+    /// rather than refusing everything, because a typo in a settings box should not silently
+    /// stop every download.
+    /// </summary>
+    private static VideoCodec CodecFor(string? codec) => codec?.Trim().ToLowerInvariant() switch
+    {
+        "h264" or "x264" or "avc" => VideoCodec.H264,
+        "h265" or "x265" or "hevc" => VideoCodec.H265,
+        _ => VideoCodec.Unknown,
     };
 
     public ValueTask DisposeAsync() => _engine.DisposeAsync();

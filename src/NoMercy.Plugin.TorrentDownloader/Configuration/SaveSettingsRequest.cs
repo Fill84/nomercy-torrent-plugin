@@ -34,6 +34,9 @@ public sealed class SaveSettingsRequest
     /// <summary>Comma separated, because a form field is one line and a tracker list is short.</summary>
     public string? DefaultTrackers { get; init; }
 
+    /// <summary>h264, h265 or any.</summary>
+    public string? Codec { get; init; }
+
     // Shared by the indexer and private tracker forms - never both submitted in the same
     // request, since SettingsView renders one form per entry.
     public string? Name { get; init; }
