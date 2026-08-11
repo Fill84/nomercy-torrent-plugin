@@ -951,6 +951,20 @@ public sealed class DownloadOrchestrator(
 
         await store.UpdateGrabAsync(grab.InfoHash, GrabState.Downloaded, null, null, ct);
 
+        // Let go of the files first. The engine keeps a FileStream open per file for as
+        // long as it holds the torrent, and Windows refuses to rename a file that somebody
+        // has open without share-delete - so the move threw, the mover swallowed it and
+        // answered null, and the grab stayed Downloaded. Which is not a retry: the retry
+        // only fires while the engine still reports the transfer, so after the next restart
+        // it was stranded. Two finished episodes sat in the download folder for a day.
+        //
+        // Nothing is lost by letting go. Every piece is in and verified, and a public
+        // torrent - which is all of them, unless the owner added a private tracker and
+        // asked it to seed - has no business staying in the engine afterwards. If the move
+        // still fails, the grab is left active and the next transfers cadence hands it back
+        // to the engine, which finds the pieces on disk and completes again.
+        await engine.RemoveAsync(grab.InfoHash, deleteFiles: false, ct);
+
         if (!await intake.MoveIntoIntakeAsync(transfer.CompletedFolder, grab.Key, ct))
         {
             // The move did not happen, so the grab stays unfinished and the next cycle

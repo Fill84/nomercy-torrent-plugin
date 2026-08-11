@@ -1142,6 +1142,30 @@ public class DownloadOrchestratorTests
         _store.History.Should().ContainSingle();
     }
 
+    /// <summary>
+    /// The engine holds an open FileStream per file for as long as it holds the torrent,
+    /// and Windows will not rename a file somebody has open without share-delete. So the
+    /// move threw IOException, the mover swallowed it and returned null, and the grab stayed
+    /// Downloaded - forever, because the retry only fires while the engine still reports the
+    /// transfer. Two finished episodes sat in the download folder for a day that way, each
+    /// holding one of the five concurrent download slots.
+    /// </summary>
+    [Fact]
+    public async Task TransfersCycleAsync_LetsGoOfTheTorrentBeforeMovingItsFiles()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+        _engine.Transfers = [Completed(hash, "/downloads/Some.Show.S01E01.mkv")];
+
+        List<string> trace = [];
+        _engine.Trace = trace;
+        _intake.Trace = trace;
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        trace.Should().Equal($"released {hash}", "moved /downloads/Some.Show.S01E01.mkv");
+    }
+
     [Fact]
     public async Task TransfersCycleAsync_WritesDownAnImport()
     {
@@ -1849,6 +1873,9 @@ public class DownloadOrchestratorTests
     {
         public List<TorrentRequest> Added { get; } = [];
         public List<string> Removed { get; } = [];
+
+        /// <summary>Shared with <see cref="FakeIntake"/> when a test is about the order the two happen in.</summary>
+        public List<string>? Trace { get; set; }
         public IReadOnlyList<EngineTransfer> Transfers { get; set; } = [];
 
         /// <summary>
@@ -1875,6 +1902,7 @@ public class DownloadOrchestratorTests
         public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct)
         {
             Removed.Add(infoHash);
+            Trace?.Add($"released {infoHash}");
             return Task.CompletedTask;
         }
 
@@ -1904,8 +1932,13 @@ public class DownloadOrchestratorTests
 
         public List<(string Folder, EpisodeKey Key)> Moved { get; } = [];
 
+        /// <inheritdoc cref="FakeEngine.Trace"/>
+        public List<string>? Trace { get; set; }
+
         public Task<bool> MoveIntoIntakeAsync(string completedFolder, EpisodeKey key, CancellationToken ct)
         {
+            Trace?.Add($"moved {completedFolder}");
+
             if (Succeed)
                 Moved.Add((completedFolder, key));
 
