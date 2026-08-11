@@ -85,12 +85,40 @@ public class TorrentContentsTests
         TorrentContents.Refuse(metadata).Should().Contain("codec.exe");
     }
 
-    // A torrent of images or archives is not what was searched for. Not dangerous, and
-    // still not something to spend the owner's disk on.
+    // A torrent of nothing but companions is not what was searched for.
     [Fact]
     public void Refuse_ATorrentWithNoVideoInIt()
     {
         TorrentContents.Refuse(With("cover.jpg", "readme.nfo")).Should().Contain("no video");
+    }
+
+    /// <summary>
+    /// The property that matters, and the reason this is an allowlist rather than a list of
+    /// dangerous extensions: something nobody thought of is refused by default. None of
+    /// these is on any blocklist in this file, and every one of them is refused.
+    /// </summary>
+    [Theory]
+    [InlineData("release.rar")]
+    [InlineData("release.zip")]
+    [InlineData("release.7z")]
+    [InlineData("disc.iso")]
+    [InlineData("thing.dmg")]
+    [InlineData("thing.deb")]
+    [InlineData("payload.scpt")]
+    [InlineData("macro.xlsm")]
+    [InlineData("weird.qqq")]
+    public void Refuse_AnythingNobodyPutOnAList(string name)
+    {
+        TorrentContents.Refuse(With("Show.S01E01.1080p.mkv", name))
+            .Should().NotBeNull("the allowlist refuses what it does not recognise, which is the point of it");
+    }
+
+    // A file with no extension at all is not on the list either, and a torrent is free to
+    // ship one.
+    [Fact]
+    public void Refuse_AFileWithNoExtension()
+    {
+        TorrentContents.Refuse(With("Show.S01E01.mkv", "README")).Should().NotBeNull();
     }
 
     [Fact]
@@ -117,8 +145,8 @@ public class TorrentContentsTests
     [InlineData("Show.S01E01.avi")]
     public void Refuse_LetsAnOrdinaryReleaseThrough(string video)
     {
-        TorrentContents.Refuse(With(video, "release.nfo", "sample.txt", "poster.jpg"))
-            .Should().BeNull();
+        TorrentContents.Refuse(With(video, "release.nfo", "sample.txt", "poster.jpg", "release.sfv"))
+            .Should().BeNull("refusing an nfo would refuse almost every real release");
     }
 
     [Fact]

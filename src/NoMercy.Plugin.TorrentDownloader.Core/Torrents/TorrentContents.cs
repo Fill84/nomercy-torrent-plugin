@@ -28,8 +28,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Torrents;
 public static class TorrentContents
 {
     /// <summary>
-    /// What this plugin exists to fetch. An allowlist, because the interesting property is
-    /// "known to be video" and not "not one of the bad ones I thought of".
+    /// What this plugin exists to fetch.
+    ///
+    /// <para>
+    /// The video is the whole point, and a torrent with none of it is not the episode that
+    /// was searched for whatever it calls itself.
+    /// </para>
     /// </summary>
     private static readonly HashSet<string> VideoExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -37,17 +41,29 @@ public static class TorrentContents
     };
 
     /// <summary>
-    /// Things that run.
+    /// The inert things a release ships beside its video, and nothing else.
     ///
     /// <para>
-    /// Separate from "not a video" so the refusal can say which of the two it is, because
-    /// they mean very different things to the person reading it: a torrent full of images
-    /// is a mistake, and a torrent carrying an executable is somebody trying something.
+    /// Refusing these would refuse almost every real release: a scene torrent ships an nfo,
+    /// a checksum, usually a subtitle and often a screenshot. None of them can do anything
+    /// on their own.
     /// </para>
+    /// </summary>
+    private static readonly HashSet<string> CompanionExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".srt", ".sub", ".idx", ".ass", ".ssa", ".vtt", ".sup",
+        ".nfo", ".txt", ".md5", ".sfv", ".sha1", ".jpg", ".jpeg", ".png", ".webp",
+    };
+
+    /// <summary>
+    /// Things that run, named only so the refusal can say which kind of wrong this is.
     ///
     /// <para>
-    /// Deliberately not a setting. Every other rule in this plugin is the owner's to
-    /// change; this one is not worth the click that turns it off.
+    /// It decides nothing. The decision is the allowlist above: anything not on it is
+    /// refused whether or not it appears here, which is the whole point of an allowlist and
+    /// the reason this list not being exhaustive does not matter. A blocklist can only ever
+    /// name the dangerous things somebody already thought of, and the next extension nobody
+    /// listed walks straight past it.
     /// </para>
     /// </summary>
     private static readonly HashSet<string> ExecutableExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -72,16 +88,22 @@ public static class TorrentContents
         if (files.Count == 0)
             return "the torrent lists no files at all";
 
-        // First, because it is the dangerous one. A torrent that carries both a video and
-        // an executable is still refused: there is no reason for one to be in the other's
-        // company, and "download the good half" is not a judgement worth making on
-        // somebody else's behalf.
-        FileEntry? program = files.FirstOrDefault(file => ExecutableExtensions.Contains(Extension(file)));
+        // The allowlist decides. Anything not on it is refused, whether or not anybody
+        // thought to put it on a list of dangerous things - which is the whole reason this
+        // is the way round it is. The first version asked "is this an executable", and a
+        // question like that is only ever as good as the answers somebody remembered.
+        FileEntry? unwanted = files.FirstOrDefault(file => !IsAllowed(Extension(file)));
 
-        if (program is not null)
+        if (unwanted is not null)
         {
-            return $"it contains a program ({Name(program)}), not just video - "
-                + "refused before anything was written to disk";
+            string extension = Extension(unwanted);
+
+            // Named differently because they mean different things to whoever reads it: a
+            // torrent carrying a program is somebody trying something, and a torrent of
+            // archives is a release this plugin simply cannot use.
+            return ExecutableExtensions.Contains(extension)
+                ? $"it contains a program ({Name(unwanted)}), not just video - refused before anything was written to disk"
+                : $"it contains {Name(unwanted)}, which is not video or anything that ships with it - refused before anything was written to disk";
         }
 
         if (!files.Any(file => VideoExtensions.Contains(Extension(file))))
@@ -89,6 +111,10 @@ public static class TorrentContents
 
         return null;
     }
+
+    /// <summary>Video, or one of the inert things that ship beside it. Nothing else, ever.</summary>
+    private static bool IsAllowed(string extension) =>
+        VideoExtensions.Contains(extension) || CompanionExtensions.Contains(extension);
 
     /// <summary>The file's own name, which is the last of the path segments a torrent carries.</summary>
     private static string Name(FileEntry file) => file.Path.Count == 0 ? string.Empty : file.Path[^1];
