@@ -157,6 +157,19 @@ public sealed record WantedRefresh(int Wanted, int Shows, int NotOnTheServer, in
 /// </summary>
 public sealed record FeedCycle(int Matched, int Grabbed);
 
+/// <summary>
+/// What one pass of the search cadence came to.
+///
+/// <para>
+/// <paramref name="Searched"/> is reported beside <paramref name="Grabbed"/> because a
+/// cadence that asks nothing and one that asks and is turned down are the same silence from
+/// outside, and only one of them is a bug. The plugin spent a day in the first state - a
+/// batch of ten filled entirely with unaired episodes, refetched and re-skipped every five
+/// minutes - and nothing anywhere said so.
+/// </para>
+/// </summary>
+public sealed record SearchCycle(int Searched, int Grabbed);
+
 /// <summary>Whether a pasted link was taken, and what to tell the person who pasted it.</summary>
 public sealed record ManualAdd(bool Added, string Message);
 
@@ -359,19 +372,30 @@ public sealed class DownloadOrchestrator(
             .FirstOrDefault();
     }
 
-    /// <summary>Searches for what is wanted and grabs what is worth grabbing. Returns how many were handed to the engine.</summary>
-    public async Task<int> SearchCycleAsync(CancellationToken ct)
+    /// <summary>
+    /// Searches for what is wanted and grabs what is worth grabbing.
+    ///
+    /// <para>
+    /// Returns what it asked as well as what it took, because those are two different
+    /// failures and they look identical from outside. A cycle that asked ten indexers and
+    /// grabbed nothing is a profile turning things down or sites with nothing to offer; a
+    /// cycle that asked nothing at all is a plugin that has quietly stopped working. The
+    /// second one went unnoticed for a day.
+    /// </para>
+    /// </summary>
+    public async Task<SearchCycle> SearchCycleAsync(CancellationToken ct)
     {
         int running = (await store.ActiveGrabsAsync(ct)).Count;
         int room = options.MaxConcurrentDownloads - running;
 
         if (room <= 0)
-            return 0;
+            return new SearchCycle(0, 0);
 
         int grabbed = 0;
+        int searched = 0;
         HashSet<EpisodeKey> settled = [];
 
-        foreach (WantedEpisode episode in await store.WantedAsync(options.SearchBatchSize, ct))
+        foreach (WantedEpisode episode in await SearchableBatchAsync(ct))
         {
             if (grabbed >= room)
                 break;
@@ -382,14 +406,7 @@ public sealed class DownloadOrchestrator(
             if (settled.Contains(episode.Key))
                 continue;
 
-            // Skipped, not dropped. Nobody can seed an episode that has not aired, so
-            // searching for it spends an attempt on a question with no possible answer -
-            // twelve of those and the plugin parks it as unavailable, giving up shortly
-            // before it becomes the one thing worth looking for. But it still belongs on
-            // the page: a library lists a whole ordered season the moment its first
-            // episode airs, and what is coming is exactly what its owner wants to see.
-            if (NotOutYet(episode))
-                continue;
+            searched++;
 
             IReadOnlyList<EpisodeKey>? covered = await TryGrabAsync(episode, ct);
 
@@ -400,8 +417,42 @@ public sealed class DownloadOrchestrator(
             grabbed++;
         }
 
-        return grabbed;
+        return new SearchCycle(searched, grabbed);
     }
+
+    /// <summary>
+    /// The next few episodes worth asking an indexer about, least recently searched first.
+    ///
+    /// <para>
+    /// Unaired episodes are dropped here rather than skipped inside the loop, and that
+    /// distinction is the whole method. Nobody can seed an episode that has not aired, so
+    /// searching for one spends an attempt on a question with no possible answer - twelve of
+    /// those and the plugin parks it as unavailable, giving up shortly before it becomes the
+    /// one thing worth looking for. So it is skipped without being marked, which is right,
+    /// and which leaves it exactly where it was: at the head of a queue ordered by least
+    /// recently searched.
+    /// </para>
+    ///
+    /// <para>
+    /// Taking the batch first and skipping afterwards therefore starves the cadence. On a
+    /// real server nineteen unaired episodes sat in front of a batch of ten: the same ten
+    /// were fetched, skipped and refetched every five minutes, the twenty-three episodes
+    /// that could have been searched were never reached, and nothing anywhere said so. The
+    /// batch has to be that many <em>searchable</em> episodes, not that many rows.
+    /// </para>
+    ///
+    /// <para>
+    /// The whole list is read to do it. The store answers from memory, so the cost is one
+    /// allocation - and it is the same read <see cref="FeedCycleAsync"/> and
+    /// <see cref="GrabAsync"/> already make.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<WantedEpisode>> SearchableBatchAsync(CancellationToken ct) =>
+    [
+        .. (await store.WantedAsync(int.MaxValue, ct))
+            .Where(episode => !NotOutYet(episode))
+            .Take(options.SearchBatchSize),
+    ];
 
     /// <summary>
     /// Grabs from what the feed just posted, rather than from what was asked for.

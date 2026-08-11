@@ -552,10 +552,24 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     {
         DownloadPipeline pipeline = await PipelineAsync(context, ct);
 
-        int grabbed = await pipeline.Orchestrator.SearchCycleAsync(ct);
+        SearchCycle cycle = await pipeline.Orchestrator.SearchCycleAsync(ct);
 
-        if (grabbed > 0)
-            context.Logger.LogInformation("Torrent Downloader started {Count} download(s).", grabbed);
+        if (cycle.Grabbed > 0)
+        {
+            context.Logger.LogInformation("Torrent Downloader started {Count} download(s).", cycle.Grabbed);
+            return;
+        }
+
+        // Said out loud, every cycle that asked. This used to log only when something was
+        // grabbed, so a cadence that had quietly stopped searching altogether looked exactly
+        // like one working through a backlog nobody is seeding - and it stayed that way for
+        // a day. One line per five minutes is worth never being in that position again.
+        if (cycle.Searched > 0)
+        {
+            context.Logger.LogInformation(
+                "Torrent Downloader searched for {Count} episode(s) and found nothing worth taking.",
+                cycle.Searched);
+        }
     }
 
     private async Task RunMaintenanceAsync(IPluginContext context, CancellationToken ct)

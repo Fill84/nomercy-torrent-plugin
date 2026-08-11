@@ -467,7 +467,7 @@ public class DownloadOrchestratorTests
         _search.Results = [Announcement("Some.Show.S01E01.1080p.WEB-DL-GROUP")];
         _resolver.Answer = Release("Some.Show.S01E01.1080p.WEB-DL-GROUP", "fromsite");
 
-        int grabbed = await Orchestrator().SearchCycleAsync(CancellationToken.None);
+        int grabbed = (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Grabbed;
 
         grabbed.Should().Be(1);
         _resolver.Asked.Should().ContainSingle().Which.Should().Be("Some.Show.S01E01.1080p.WEB-DL-GROUP");
@@ -492,7 +492,7 @@ public class DownloadOrchestratorTests
         _search.Results = [Announcement("Some.Show.S01E01.1080p.WEB-DL-GROUP")];
         _resolver.Answer = null;
 
-        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Should().Be(0);
+        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Grabbed.Should().Be(0);
 
         HistoryEntry entry = _store.History.Should().ContainSingle().Subject;
         entry.Event.Should().Be(HistoryEvent.Skipped);
@@ -520,10 +520,70 @@ public class DownloadOrchestratorTests
         // for, because nobody can seed it yet.
         (await Orchestrator().RefreshWantedAsync(CancellationToken.None)).Wanted.Should().Be(1);
 
-        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Should().Be(0);
+        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Grabbed.Should().Be(0);
         _search.Queries.Should().BeEmpty();
         (await _store.WantedAsync(10, CancellationToken.None)).Should().ContainSingle()
             .Which.SearchAttempts.Should().Be(0, "an unaired episode is skipped, not spent");
+    }
+
+    /// <summary>
+    /// The starvation this cadence sat in on a real server: nothing was searched for a day
+    /// and nothing said so.
+    ///
+    /// <para>
+    /// The batch is the least-recently-searched episodes, and an unaired one is skipped
+    /// without being marked - correctly, because nobody can seed it and spending an attempt
+    /// on it would park it as unavailable shortly before it airs. But that leaves it at the
+    /// head of the queue forever. Nineteen unaired episodes against a batch of ten meant the
+    /// same ten were fetched, skipped and refetched every five minutes, and the twenty-three
+    /// episodes that could have been searched were never reached.
+    /// </para>
+    ///
+    /// <para>
+    /// So the batch has to be that many <em>searchable</em> episodes, not that many rows of
+    /// which some happen to be searchable.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task SearchCycleAsync_ReachesPastAWholeBatchOfEpisodesThatHaveNotAiredYet()
+    {
+        _library.Add(showId: 1, "Not Out Yet", "/media/waiting",
+            [(1, 1, true), .. Enumerable.Range(2, 12).Select(episode => (1, episode, false))]);
+
+        // Every one of them still to come, and more of them than one batch holds.
+        foreach (int episode in Enumerable.Range(2, 12))
+            _library.SetAirDate(1, 1, episode, Now.AddDays(30 + episode));
+
+        // Sorts after all of those - a higher show id, and nothing has been searched yet -
+        // so it is only reached by a cycle that does not spend its batch on the unaired.
+        _library.Add(showId: 2, "Out Now", "/media/out", [(1, 1, true), (1, 2, false)]);
+        _library.SetAirDate(2, 1, 2, Now.AddDays(-3));
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+        _search.Results = [Release("Out.Now.S01E02.1080p.WEB-DL")];
+
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        SearchQuery asked = _search.Queries.Should().ContainSingle(
+            "the batch is ten searchable episodes, not ten rows").Subject;
+
+        asked.ShowName.Should().Be("Out Now");
+        asked.Slot.Should().Be(new EpisodeSlot(1, 2));
+    }
+
+    // Skipping an unaired episode must still not cost it an attempt, or twelve quiet cycles
+    // park it as unavailable shortly before it becomes the one thing worth looking for.
+    [Fact]
+    public async Task SearchCycleAsync_StillSpendsNoAttemptOnTheOnesItReachedPast()
+    {
+        _library.Add(showId: 1, "Not Out Yet", "/media/waiting", [(1, 1, true), (1, 2, false)]);
+        _library.SetAirDate(1, 1, 2, Now.AddDays(40));
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().ContainSingle()
+            .Which.SearchAttempts.Should().Be(0);
     }
 
     [Fact]
@@ -692,11 +752,11 @@ public class DownloadOrchestratorTests
         _search.Results = [Release()];
         FreeBytes = 3L * 1024 * 1024 * 1024;
 
-        int grabbed = await Orchestrator(new OrchestratorOptions
+        int grabbed = (await Orchestrator(new OrchestratorOptions
         {
             DownloadFolder = "/downloads",
             MinimumFreeBytes = 20L * 1024 * 1024 * 1024,
-        }).SearchCycleAsync(CancellationToken.None);
+        }).SearchCycleAsync(CancellationToken.None)).Grabbed;
 
         grabbed.Should().Be(0);
         _engine.Added.Should().BeEmpty();
@@ -747,7 +807,7 @@ public class DownloadOrchestratorTests
         _search.Results = [Release()];
         FreeBytes = null;
 
-        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Should().Be(1);
+        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Grabbed.Should().Be(1);
     }
 
     // --- history ---------------------------------------------------------------------
@@ -953,7 +1013,7 @@ public class DownloadOrchestratorTests
         await WantEpisodesAsync(4);
         _search.Results = [Release("Some.Show.S01.1080p.WEB-DL", "packhash")];
 
-        int grabbed = await Orchestrator().SearchCycleAsync(CancellationToken.None);
+        int grabbed = (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Grabbed;
 
         grabbed.Should().Be(1, "one torrent was added, not one per episode");
         (await _store.ActiveGrabsAsync(CancellationToken.None)).Should().ContainSingle()
@@ -1058,7 +1118,7 @@ public class DownloadOrchestratorTests
         await WantOneEpisodeAsync();
         _search.Results = [Release()];
 
-        int grabbed = await Orchestrator().SearchCycleAsync(CancellationToken.None);
+        int grabbed = (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Grabbed;
 
         grabbed.Should().Be(1);
         _engine.Added.Should().ContainSingle();
@@ -1078,7 +1138,7 @@ public class DownloadOrchestratorTests
         _search.Results = [Release()];
         _chooser.Accept = false;
 
-        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Should().Be(0);
+        (await Orchestrator().SearchCycleAsync(CancellationToken.None)).Grabbed.Should().Be(0);
 
         WantedEpisode? episode = await _store.FindWantedAsync(new EpisodeKey(1, 1, 1), CancellationToken.None);
         episode!.State.Should().Be(WantedState.Wanted);
@@ -1133,12 +1193,12 @@ public class DownloadOrchestratorTests
         _search.Results = [Release()];
         _search.UniquePerQuery = true;
 
-        int grabbed = await Orchestrator(new OrchestratorOptions
+        int grabbed = (await Orchestrator(new OrchestratorOptions
         {
             DownloadFolder = "/downloads",
             MaxConcurrentDownloads = 3,
             SearchBatchSize = 20,
-        }).SearchCycleAsync(CancellationToken.None);
+        }).SearchCycleAsync(CancellationToken.None)).Grabbed;
 
         // The bound that turns a first run on a library with years of gaps into a steady
         // stream rather than two hundred downloads fighting over one connection.
@@ -1161,7 +1221,7 @@ public class DownloadOrchestratorTests
         await orchestrator.SearchCycleAsync(CancellationToken.None);
         _engine.Added.Clear();
 
-        (await orchestrator.SearchCycleAsync(CancellationToken.None)).Should().Be(0);
+        (await orchestrator.SearchCycleAsync(CancellationToken.None)).Grabbed.Should().Be(0);
         _engine.Added.Should().BeEmpty();
     }
 
