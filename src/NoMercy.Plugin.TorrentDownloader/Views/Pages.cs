@@ -68,11 +68,20 @@ public static class Pages
         new PluginRoute { Path = "/sources", Name = Sources, Label = "Sources" },
         new PluginRoute { Path = "/skipped", Name = Skipped, Label = "Skipped" },
 
-        // A form is a shape a remote control handles badly, and the client draws the shell
-        // it is told to. The server stamps this onto the view for us, so the settings page
-        // itself says nothing about layout.
-        new PluginRoute { Path = "/settings", Name = Settings, Label = "Settings", Layout = PluginLayout.Form },
-        new PluginRoute { Path = "/sources/:index", Name = Source, Label = "Source", Layout = PluginLayout.Form });
+        // No layout on these two either, and that is the point.
+        //
+        // They asked for PluginLayout.Form, on the reasoning that a form reads badly at full
+        // width. The client obliges: the form shell is a 40rem column against the standard
+        // 64rem one. But every page in this plugin carries the same bar of eight tabs, and
+        // eight tabs do not fit in 40rem - so opening Settings shrank the page under the
+        // navigation and broke the bar onto two lines, and going back widened it again.
+        // Everything below the bar jumped by a row each way.
+        //
+        // A page that is one tab of eight has to be the width of the other seven. The form
+        // measure is for a page that is only a form, and neither of these is: they are
+        // sections of a plugin you move around inside.
+        new PluginRoute { Path = "/settings", Name = Settings, Label = "Settings" },
+        new PluginRoute { Path = "/sources/:index", Name = Source, Label = "Source" });
 
     /// <summary>
     /// What the bar offers, which is not everything the plugin serves.

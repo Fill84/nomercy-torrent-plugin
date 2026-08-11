@@ -23,6 +23,39 @@ public class PagesTests
     private static IEnumerable<PluginComponent> TabsOf(string current) =>
         Pages.Tabs(current).Items;
 
+    /// <summary>
+    /// Every page is the same width, because every page carries the same bar.
+    ///
+    /// <para>
+    /// Settings and one source's page asked for <c>PluginLayout.Form</c>, on the reasoning
+    /// that a form reads badly at full width. The client obliges - the form shell is a 40rem
+    /// column against the standard 64rem one - and eight tabs do not fit in 40rem. So
+    /// opening Settings shrank the page under the navigation, broke the bar onto two lines,
+    /// and moved everything below it down a row; going back widened it again. The owner saw
+    /// the content jump on every visit and had to ask four times before it was looked for in
+    /// the right place.
+    /// </para>
+    ///
+    /// <para>
+    /// A page that is one tab of eight has to be the width of the other seven. The form
+    /// measure is for a page that is only a form; nothing here is.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Routes_AllAskForTheSameShellSoTheBarNeverReflows()
+    {
+        string?[] layouts = [.. Pages.Routes.Routes.Select(route => route.Layout)];
+
+        layouts.Distinct().Should().ContainSingle(
+            "a page narrower than the others wraps the tab bar and moves everything under it");
+    }
+
+    [Fact]
+    public void Routes_NoPageAsksForTheNarrowFormShell()
+    {
+        Pages.Routes.Routes.Should().NotContain(route => route.Layout == PluginLayout.Form);
+    }
+
     [Fact]
     public void Routes_ResolveTheirOwnPaths()
     {

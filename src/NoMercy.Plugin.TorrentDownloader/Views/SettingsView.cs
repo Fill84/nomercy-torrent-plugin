@@ -46,18 +46,18 @@ public static class SettingsView
             // Zero: nothing on this page changes on its own, and a form that re-renders
             // under the owner's fingers loses what they were typing.
             0,
+
+            // The lead line, in the same place every other page keeps one: Overview says
+            // what is moving, a show says where it stands, a source says what it yielded.
+            // This one says whether a save reached disk - which matters here, because the
+            // client discards a successful action's response body entirely and re-fetches
+            // the view, so this line and not the response is the only confirmation there is.
+            Ui.Text("settings-last-saved", LastSavedLabel(settings.LastSavedAtUtc)),
             Ui.Section(
                 "settings-general",
                 "How it runs",
                 "Schedules are cron expressions. The folders are where a download lands while it runs and where it is put for the server to import.",
-                Ui.Container(
-                    "settings-general-body",
-
-                    // The client discards a successful action's response body entirely and
-                    // re-fetches the view itself afterwards, so this line - not the response
-                    // - is what tells the owner a save actually reached disk.
-                    Ui.Text("settings-last-saved", LastSavedLabel(settings.LastSavedAtUtc), "caption"),
-                    BuildGeneralForm(settings))),
+                BuildGeneralForm(settings)),
             Ui.Section(
                 "settings-trackers",
                 Format.Count("Private trackers", settings.PrivateTrackers.Count),

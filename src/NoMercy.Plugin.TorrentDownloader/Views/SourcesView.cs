@@ -187,7 +187,15 @@ public static class SourcesView
                     indexer.Enabled ? KindLabel(indexer.Kind) : "Off",
                     indexer.Enabled ? PluginBadgeVariant.Info : PluginBadgeVariant.Neutral),
                 Ui.Text("source-yielded", Yield(indexer, history))),
-            IndexerForm(index, indexer, storedSecretKeys),
+
+            // In a section, like every other page's content. It was a bare form under a
+            // badge, which is the shape the settings page had and the reason that one read
+            // as a different plugin.
+            Ui.Section(
+                "source-settings",
+                "How it is asked",
+                "The address is used as it is written. A site needs {query} where the search terms go.",
+                IndexerForm(index, indexer, storedSecretKeys)),
 
             // In a row, not loose in the column. A button that is a direct child of a column
             // is stretched to the width of the page, which turned a delete into a red bar
