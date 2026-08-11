@@ -27,19 +27,49 @@ public static class SettingsView
 {
     private const string SaveLabel = "Save";
 
-    public static PluginView Build(TorrentDownloaderSettings settings, IReadOnlySet<string> storedSecretKeys)
+    /// <summary>
+    /// Two sections, like every other page.
+    ///
+    /// <para>
+    /// This was the one page not built out of <see cref="Ui.Section"/>: a caption, then a
+    /// bare form of ten fields with nothing saying what any group of them was for, then a
+    /// hand-rolled subtitle where the other pages have a real section header. Beside Sources
+    /// or Shows it read as a different plugin. It is the same two parts it always was -
+    /// there is one form because there is one Save behind it - with a heading and a sentence
+    /// over each, which is all the other pages ever had.
+    /// </para>
+    /// </summary>
+    public static PluginView Build(TorrentDownloaderSettings settings, IReadOnlySet<string> storedSecretKeys) =>
+        Pages.Page(
+            Pages.Settings,
+
+            // Zero: nothing on this page changes on its own, and a form that re-renders
+            // under the owner's fingers loses what they were typing.
+            0,
+            Ui.Section(
+                "settings-general",
+                "How it runs",
+                "Schedules are cron expressions. The folders are where a download lands while it runs and where it is put for the server to import.",
+                Ui.Container(
+                    "settings-general-body",
+
+                    // The client discards a successful action's response body entirely and
+                    // re-fetches the view itself afterwards, so this line - not the response
+                    // - is what tells the owner a save actually reached disk.
+                    Ui.Text("settings-last-saved", LastSavedLabel(settings.LastSavedAtUtc), "caption"),
+                    BuildGeneralForm(settings))),
+            Ui.Section(
+                "settings-trackers",
+                Format.Count("Private trackers", settings.PrivateTrackers.Count),
+                "Everything else is public and never uploads. Only a tracker here makes this plugin seed.",
+                PrivateTrackers(settings, storedSecretKeys)));
+
+    private static PluginComponent PrivateTrackers(
+        TorrentDownloaderSettings settings,
+        IReadOnlySet<string> storedSecretKeys)
     {
         List<PluginComponent> children =
         [
-            // The client discards a successful action's response body entirely and re-fetches
-            // the view itself afterwards, so this line - not the response - is what tells the
-            // owner a save actually reached disk.
-            Ui.Text("settings-last-saved", LastSavedLabel(settings.LastSavedAtUtc), "caption"),
-            BuildGeneralForm(settings),
-            Ui.Text("settings-trackers-heading", Format.Count("Private trackers", settings.PrivateTrackers.Count), "subtitle"),
-            Ui.Text(
-                "settings-trackers-explainer",
-                "Everything else is public and never uploads. Only a tracker here makes this plugin seed."),
             // In a row. A button loose in a column is stretched to the page's full width,
             // which is how "Remove source" became a red bar across the whole screen.
             Ui.Row(
@@ -47,29 +77,27 @@ public static class SettingsView
                 Ui.Button("settings-trackers-add", "Add private tracker", PluginActionIntent.CallPlugin(PluginMethods.AddPrivateTracker))),
         ];
 
-        if (settings.PrivateTrackers.Count > 0)
-        {
-            for (int index = 0; index < settings.PrivateTrackers.Count; index++)
-            {
-                // One block per tracker, so its form and the button that deletes it stay
-                // together rather than the remove button sitting above the next one's name.
-                children.Add(Ui.Container(
-                    $"settings-tracker-{index}",
-                    BuildPrivateTrackerForm(index, settings.PrivateTrackers[index], storedSecretKeys),
-                    Ui.Row($"settings-tracker-{index}-actions", BuildRemovePrivateTrackerButton(index))));
-            }
-        }
-        else
+        if (settings.PrivateTrackers.Count == 0)
         {
             children.Add(Ui.EmptyState(
                 "settings-trackers-empty",
                 "No private tracker configured",
                 "Without one, every torrent is treated as public: nothing is ever uploaded."));
+
+            return Ui.Container("settings-trackers-body", children);
         }
 
-        // Zero: nothing on this page changes on its own, and a form that re-renders under
-        // the owner's fingers loses what they were typing.
-        return Pages.Page(Pages.Settings, 0, [.. children]);
+        for (int index = 0; index < settings.PrivateTrackers.Count; index++)
+        {
+            // One block per tracker, so its form and the button that deletes it stay
+            // together rather than the remove button sitting above the next one's name.
+            children.Add(Ui.Container(
+                $"settings-tracker-{index}",
+                BuildPrivateTrackerForm(index, settings.PrivateTrackers[index], storedSecretKeys),
+                Ui.Row($"settings-tracker-{index}-actions", BuildRemovePrivateTrackerButton(index))));
+        }
+
+        return Ui.Container("settings-trackers-body", children);
     }
 
     // Rendered with CultureInfo.InvariantCulture, same as Core's size formatting, so this

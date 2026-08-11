@@ -20,6 +20,45 @@ public class SettingsViewTests
     // the only version that sees what a viewer gets.
     private static List<PluginFormField> AllFormFields(PluginView view) => [.. PluginNodes.AllFields(view)];
 
+    /// <summary>
+    /// Same shape as every other page.
+    ///
+    /// <para>
+    /// This was the one page not built out of sections: a caption, a bare form of ten
+    /// fields with nothing saying what any group of them was for, and a hand-rolled
+    /// subtitle where the others have a real section header. Beside Sources or Shows it
+    /// read as a different plugin.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("settings-general")]
+    [InlineData("settings-general-heading")]
+    [InlineData("settings-general-note")]
+    [InlineData("settings-trackers")]
+    [InlineData("settings-trackers-heading")]
+    [InlineData("settings-trackers-note")]
+    public void Build_IsBuiltOutOfSectionsLikeEveryOtherPage(string id)
+    {
+        PluginView view = SettingsView.Build(new TorrentDownloaderSettings(), new HashSet<string>());
+
+        PluginNodes.All(view).Should().Contain(node => node.Id == id);
+    }
+
+    /// <summary>
+    /// One form, because there is one Save behind it: ApplyGeneral demands all four
+    /// schedules together and reads a missing folder as an empty one, so a page that split
+    /// them into a form per section would refuse half its own saves and blank the folders
+    /// on the other half. The sections are what the reader gets; the form stays whole.
+    /// </summary>
+    [Fact]
+    public void Build_KeepsTheGeneralSettingsInOneForm()
+    {
+        PluginView view = SettingsView.Build(new TorrentDownloaderSettings(), new HashSet<string>());
+
+        PluginNodes.All(view).Where(node => node.Component == "PluginForm")
+            .Should().ContainSingle("splitting it would break the save it posts to");
+    }
+
     [Fact]
     public void Build_ReturnsADeclarativeTreeNotAWebView()
     {
