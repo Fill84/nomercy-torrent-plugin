@@ -56,7 +56,12 @@ public class LibraryImportHandoffTests : IDisposable
     }
 
     private LibraryImportHandoff Handoff() =>
-        new(new FinishedFolderMover(_finished), _library, new EncodeJobDispatch(new NothingResolved(), NullLogger.Instance), NullLogger.Instance);
+        new(
+            new FinishedFolderMover(_finished),
+            _library,
+            new EncodeJobDispatch(new NothingResolved(), NullLogger.Instance),
+            string.Empty,
+            NullLogger.Instance);
 
     private async Task<string> ACompletedDownloadAsync(string name = "Some.Show.S01E02.1080p.WEB-DL-GROUP")
     {

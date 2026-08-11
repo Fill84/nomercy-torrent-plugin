@@ -39,7 +39,12 @@ public static class SettingsView
     /// over each, which is all the other pages ever had.
     /// </para>
     /// </summary>
-    public static PluginView Build(TorrentDownloaderSettings settings, IReadOnlySet<string> storedSecretKeys) =>
+    public static PluginView Build(
+        TorrentDownloaderSettings settings,
+        IReadOnlySet<string> storedSecretKeys,
+        // Defaults to none, which renders the choice as just "the library's first folder".
+        // A test about the codec field should not have to know what a folder list is.
+        IReadOnlyList<(string Id, string Label)>? libraryFolders = null) =>
         Pages.Page(
             Pages.Settings,
 
@@ -57,7 +62,7 @@ public static class SettingsView
                 "settings-general",
                 "How it runs",
                 "Schedules are cron expressions. The folders are where a download lands while it runs and where it is put for the server to import.",
-                BuildGeneralForm(settings)),
+                BuildGeneralForm(settings, libraryFolders ?? [])),
             Ui.Section(
                 "settings-trackers",
                 Format.Count("Private trackers", settings.PrivateTrackers.Count),
@@ -109,7 +114,9 @@ public static class SettingsView
             ? $"Last saved {savedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC"
             : "Not saved yet.";
 
-    private static PluginComponent BuildGeneralForm(TorrentDownloaderSettings settings)
+    private static PluginComponent BuildGeneralForm(
+        TorrentDownloaderSettings settings,
+        IReadOnlyList<(string Id, string Label)> libraryFolders)
     {
         PluginFormField[] fields =
         [
@@ -165,6 +172,21 @@ public static class SettingsView
                 Label = "Never grab a release containing",
                 Type = PluginFormFieldType.Text,
                 Value = string.Join(", ", settings.ExcludeTerms),
+            },
+            // The same choice the Add content screen offers, made once. The options are the
+            // server's own folders, read fresh every time this page is drawn - a folder the
+            // owner removed must stop being offered, and one they just added must appear.
+            new()
+            {
+                Name = "encodeFolderId",
+                Label = "Encode finished downloads into",
+                Type = PluginFormFieldType.Select,
+                Value = settings.EncodeFolderId,
+                Options =
+                [
+                    new PluginFormOption { Value = string.Empty, Label = "The library's first folder" },
+                    .. libraryFolders.Select(folder => new PluginFormOption { Value = folder.Id, Label = folder.Label }),
+                ],
             },
             new()
             {

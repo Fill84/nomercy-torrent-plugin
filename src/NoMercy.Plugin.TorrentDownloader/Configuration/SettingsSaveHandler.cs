@@ -191,6 +191,13 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         if (request.Codec is string codec && codec.Trim().ToLowerInvariant() is "any" or "h264" or "h265")
             merged.Codec = codec.Trim().ToLowerInvariant();
 
+        // Submitted empty means "the library's first folder", which is what the Add content
+        // screen defaults to. Not validated against the server's folder list here: the list
+        // is the server's and can change between rendering the page and saving it, and the
+        // dispatch already says so out loud when a chosen folder has gone.
+        if (request.EncodeFolderId is not null)
+            merged.EncodeFolderId = request.EncodeFolderId.Trim();
+
         if (request.EnglishOnly is bool englishOnly)
             merged.EnglishOnly = englishOnly;
 
@@ -544,6 +551,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             MaximumResolution = source.MaximumResolution,
             MinimumSeeders = source.MinimumSeeders,
             MaxConcurrentDownloads = source.MaxConcurrentDownloads,
+            EncodeFolderId = source.EncodeFolderId,
             AllowSeasonPacks = source.AllowSeasonPacks,
             Indexers = source.Indexers,
             PrivateTrackers = source.PrivateTrackers,

@@ -46,6 +46,21 @@ public class TorrentDownloaderSettings
     /// <summary>A pack is still only considered once enough of a season is missing to be worth its bytes.</summary>
     public bool AllowSeasonPacks { get; set; } = true;
 
+    /// <summary>
+    /// Which library folder a finished download is encoded into.
+    ///
+    /// <para>
+    /// The same choice the Add content screen offers, made once instead of per file. Empty
+    /// means the library's first folder, which is that screen's own default.
+    /// </para>
+    ///
+    /// <para>
+    /// A folder id rather than a path: a path is the thing an owner edits on the server, and
+    /// the encode job keys on the id everywhere.
+    /// </para>
+    /// </summary>
+    public string EncodeFolderId { get; set; } = string.Empty;
+
     public List<IndexerSettings> Indexers { get; set; } = [];
     /// <summary>
     /// Which video codec to accept: <c>h264</c>, <c>h265</c> or <c>any</c>.

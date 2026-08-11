@@ -78,11 +78,11 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     /// one job stopped every download in flight from being looked at at all.
     /// </para>
     /// </summary>
-    public async Task<bool> QueueAsync(Ulid libraryId, string inputFile, CancellationToken ct)
+    public async Task<bool> QueueAsync(Ulid libraryId, string inputFile, string folderId, CancellationToken ct)
     {
         try
         {
-            return await DispatchAsync(libraryId, inputFile, ct);
+            return await DispatchAsync(libraryId, inputFile, folderId, ct);
         }
         catch (Exception failure) when (failure is not OperationCanceledException)
         {
@@ -95,7 +95,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         }
     }
 
-    private async Task<bool> DispatchAsync(Ulid libraryId, string inputFile, CancellationToken ct)
+    private async Task<bool> DispatchAsync(Ulid libraryId, string inputFile, string folderId, CancellationToken ct)
     {
         object? dispatcher = Resolve(DispatcherType);
         Type? jobType = FindType(JobType);
@@ -116,9 +116,9 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         if (library is null)
             return false;
 
-        (object? folderId, string folderPath) = ChooseFolder(library);
+        (object? chosenFolder, string folderPath) = ChooseFolder(library, folderId);
 
-        if (folderId is null)
+        if (chosenFolder is null)
             return false;
 
         // What the server itself thinks this file is. Asked the way the Add content screen
@@ -135,7 +135,7 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         // was matched to. Empty is what an unmatched file carries - and an unmatched file is
         // a job that runs and does nothing, so it never gets dispatched from here.
         if (!Set(job, "LibraryId", libraryId)
-            || !Set(job, "FolderId", folderId)
+            || !Set(job, "FolderId", chosenFolder)
             || !Set(job, "InputFile", inputFile)
             || !Set(job, "Id", mediaId))
             return false;
@@ -161,11 +161,50 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
             "Torrent Downloader queued an encode for {File} into folder {Folder} ({FolderId}) of library {Library}, preset {Preset}.",
             inputFile,
             folderPath,
-            folderId,
+            chosenFolder,
             libraryId,
             Get(library, "EncodePresetId")?.ToString() ?? "the folder's own");
 
         return true;
+    }
+
+    /// <summary>
+    /// Every folder the server's libraries hold, so the owner can pick the one downloads
+    /// are encoded into - the same choice the Add content screen puts in front of them.
+    ///
+    /// <para>
+    /// Each entry is the folder's id and a label naming its library and its path. The list
+    /// comes from the server every time the settings page is drawn: a folder the owner has
+    /// since removed must stop being offered, and one they have just added must appear
+    /// without this plugin being restarted.
+    /// </para>
+    /// </summary>
+    public async Task<IReadOnlyList<(string Id, string Label)>> FoldersAsync(
+        IReadOnlyList<(string Id, string Title)> libraries,
+        CancellationToken ct)
+    {
+        List<(string, string)> folders = [];
+
+        foreach ((string id, string title) in libraries)
+        {
+            if (!Ulid.TryParse(id, out Ulid libraryId) || await LibraryAsync(libraryId, ct) is not { } library)
+                continue;
+
+            if (Get(library, "FolderLibraries") is not System.Collections.IEnumerable rows)
+                continue;
+
+            foreach (object? row in rows)
+            {
+                if (row is null || Get(row, "FolderId") is not { } folderId)
+                    continue;
+
+                string path = Get(row, "Folder") is { } folder ? Get(folder, "Path") as string ?? string.Empty : string.Empty;
+
+                folders.Add((folderId.ToString()!, path.Length > 0 ? $"{title} - {path}" : $"{title} - (no path)"));
+            }
+        }
+
+        return folders;
     }
 
     /// <summary>
@@ -346,24 +385,17 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     }
 
     /// <summary>
-    /// A folder of the library that actually has a path.
+    /// The folder this encode goes into: the one the owner picked, or the library's first,
+    /// which is what the Add content screen offers before anybody changes it.
     ///
     /// <para>
-    /// This took the first join row it found, the way the Add content screen defaults to
-    /// folder_library[0]. That screen has a human in front of it who can pick a different
-    /// one; this does not. On a real library the first row was a folder with an empty
-    /// path, and <c>VideoEncodeJob</c> begins by resolving the folder and
-    /// <em>returns without a word</em> if it cannot - so the job ran, did nothing, and left
-    /// no trace anywhere. Two episodes reported as queued, no encode, nothing in the log.
-    /// </para>
-    ///
-    /// <para>
-    /// So: a folder with a path, and the choice is logged. A silent wrong answer here is
-    /// indistinguishable from success, which is the worst thing a step this deep in a chain
-    /// can be.
+    /// Nothing here judges the folder. Which folder is a good destination is the owner's
+    /// business and the server's - this plugin's job is to hand the encode the same fields
+    /// that screen hands it, and a plugin second-guessing them is a plugin producing a
+    /// different result from the button next to it.
     /// </para>
     /// </summary>
-    private (object? Id, string Path) ChooseFolder(object library)
+    private (object? Id, string Path) ChooseFolder(object library, string preferredFolderId)
     {
         if (Get(library, "FolderLibraries") is not System.Collections.IEnumerable rows)
             return (null, string.Empty);
@@ -381,28 +413,27 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         }
 
         if (candidates.Count == 0)
-            return (null, string.Empty);
-
-        (object Id, string Path) chosen = candidates.FirstOrDefault(candidate => candidate.Path.Length > 0);
-
-        if (chosen.Id is null)
         {
-            logger.LogError(
-                "Torrent Downloader cannot queue an encode: none of the library's {Count} folder(s) has a path.",
-                candidates.Count);
-
+            logger.LogError("Torrent Downloader cannot queue an encode: this library has no folder.");
             return (null, string.Empty);
         }
 
-        if (candidates.Count > 1)
+        if (preferredFolderId.Length > 0)
         {
-            logger.LogInformation(
-                "Torrent Downloader is encoding into {Path}, the first of {Count} folders on this library that has one.",
-                chosen.Path,
-                candidates.Count);
+            (object Id, string Path) picked = candidates.FirstOrDefault(candidate =>
+                string.Equals(candidate.Id.ToString(), preferredFolderId, StringComparison.OrdinalIgnoreCase));
+
+            if (picked.Id is not null)
+                return picked;
+
+            // Said out loud rather than quietly falling back: a chosen folder that has gone
+            // is a setting pointing at nothing, and the owner is the only one who can fix it.
+            logger.LogWarning(
+                "Torrent Downloader cannot use the chosen folder {Folder} - it is not on this library. Using its first folder instead.",
+                preferredFolderId);
         }
 
-        return chosen;
+        return candidates[0];
     }
 
     private object? Resolve(string typeName)
