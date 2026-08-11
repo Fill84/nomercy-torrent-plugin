@@ -152,17 +152,19 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 
         object? repository = scope.ServiceProvider.GetService(contract);
 
-        MethodInfo? get = repository?.GetType()
-            .GetMethods()
-            .FirstOrDefault(method => method.Name.StartsWith("GetLibraryByIdLite", StringComparison.Ordinal));
+        // The full lookup, not the Lite one. Lite selects the row and includes nothing, so
+        // the library came back real and folderless and the encode was refused for having
+        // nowhere to go - on a library with two folders. This one includes
+        // FolderLibraries, which is the whole reason it is being asked.
+        MethodInfo? get = Method(repository, "GetLibraryByIdAsync") ?? Method(repository, "GetLibraryById");
 
         if (repository is null || get is null)
         {
             logger.LogError(
-                "Torrent Downloader cannot queue an encode: {Contract} resolved to {Repository}, and GetLibraryByIdLite {Found}.",
+                "Torrent Downloader cannot queue an encode: {Contract} resolved to {Repository}, and no GetLibraryById method {Found}.",
                 LibraryRepositoryType,
                 repository?.GetType().FullName ?? "nothing",
-                get is null ? "is not on it" : "is");
+                get is null ? "is on it" : "is");
 
             return null;
         }
@@ -171,6 +173,20 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 
         return pending is Task task ? await Unwrap(task) : pending;
     }
+
+    /// <summary>
+    /// A method by exact name, then by prefix, taking only ones this can actually call -
+    /// every parameter is either the id or a cancellation token, and anything else would be
+    /// passed null and mean something nobody here intended.
+    /// </summary>
+    private static MethodInfo? Method(object? target, string name) =>
+        target?.GetType()
+            .GetMethods()
+            .Where(method => method.Name.StartsWith(name, StringComparison.Ordinal))
+            .Where(method => method.GetParameters().All(parameter =>
+                parameter.ParameterType == typeof(Ulid) || parameter.ParameterType == typeof(CancellationToken)))
+            .OrderBy(method => method.Name.Length)
+            .FirstOrDefault();
 
     private static object?[] Arguments(MethodInfo method, Ulid libraryId, CancellationToken ct) =>
         [
