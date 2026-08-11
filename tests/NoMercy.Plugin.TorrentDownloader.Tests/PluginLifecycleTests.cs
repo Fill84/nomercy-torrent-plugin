@@ -250,7 +250,65 @@ public class PluginLifecycleTests
         List<string> words = [.. PluginNodes.Words(view)];
         words.Should().Contain("Some.Show.S01E01.1080p", "the active list names the release being downloaded");
         words.Should().Contain("50%", "500 of 1000 bytes is half of it");
-        words.Should().Contain("Some Show", "the queue names the show an episode is still missing from");
+    }
+
+    // The queue left the downloads page when it got its own, and the routing has to have
+    // followed it. One page showing another's contents is how a tab bar ends up leading
+    // everywhere and nowhere.
+    [Fact]
+    public async Task GetViewAsync_RoutesTheQueueToItsOwnPage()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        await SeedStoreAsync(context);
+        plugin.Initialize(context);
+
+        PluginView queue = await plugin.GetViewAsync(new PluginViewRequest { Route = "/queue" }, CancellationToken.None);
+        PluginView downloads = await plugin.GetViewAsync(new PluginViewRequest { Route = "/downloads" }, CancellationToken.None);
+
+        PluginNodes.Words(queue).Should().Contain("Some Show", "the queue names the show an episode is still missing from");
+        PluginNodes.Words(downloads).Should().NotContain("Some Show");
+    }
+
+    // The assertion the whole slice rests on: a page the plugin declares is a page the
+    // client registers a route for, and a declared route the plugin then answers with
+    // "Nothing here" is a tab that leads to an empty screen.
+    [Fact]
+    public async Task GetViewAsync_AnswersEveryPageItDeclares()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings();
+        plugin.Initialize(context);
+
+        foreach (PluginRoute route in plugin.Routes.Routes)
+        {
+            PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = route.Path }, CancellationToken.None);
+
+            PluginNodes.All(view).Should().NotContain(
+                node => node.Id == "unknown-route",
+                $"the plugin declares {route.Path}, so it has to answer it");
+        }
+    }
+
+    // Every page carries the bar, so no page is a dead end. The sidebar draws nothing for
+    // this plugin's section, which makes the bar the only way between pages.
+    [Fact]
+    public async Task GetViewAsync_PutsTheTabBarOnEveryPage()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings();
+        plugin.Initialize(context);
+
+        foreach (PluginRoute route in plugin.Routes.Routes)
+        {
+            PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = route.Path }, CancellationToken.None);
+
+            PluginNodes.All(view).Should().Contain(
+                node => node.Id == "tab-overview",
+                $"{route.Path} has to be leaveable");
+        }
     }
 
     [Fact]
@@ -304,7 +362,9 @@ public class PluginLifecycleTests
         TorrentDownloaderPlugin plugin = new();
         plugin.Initialize(new FakePluginContext());
 
-        PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = "/history" }, CancellationToken.None);
+        // A route no version of this plugin has ever served. "/history" used to stand here
+        // and is a real page now, which is exactly the drift this test has to survive.
+        PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = "/nothing-like-this" }, CancellationToken.None);
 
         PluginNodes.All(view).Should().Contain(node => node.Id == "unknown-route");
     }

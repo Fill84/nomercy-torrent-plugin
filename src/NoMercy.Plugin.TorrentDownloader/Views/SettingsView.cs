@@ -3,166 +3,76 @@
 
 using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
-using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Views;
 
-// The dashboard's only way to configure this plugin: no env vars, no config-file editing.
-// Build is pure - settings and grant results in, a PluginView out, no I/O and no
-// IPluginContext - so all ten SettingsViewTests are cheap in-memory assertions. GetViewAsync
-// on TorrentDownloaderPlugin is where the loading, grant-checking and secret-key lookup
-// belong; this method never sees a secret's actual value, only whether one is stored, which
-// is what makes it structurally incapable of echoing one back to the client.
+/// <summary>
+/// How the plugin is set up: folders, schedules, what quality to accept, and the private
+/// trackers it is allowed to seed to.
+///
+/// <para>
+/// Sources used to be here too and are now their own page - they are the thing an owner adds
+/// and watches, not the thing they set once. What is left is the settings sense of settings.
+/// </para>
+///
+/// <para>
+/// Build is pure - settings in, a PluginView out, no I/O and no IPluginContext - so its
+/// tests are cheap in-memory assertions. <c>GetViewAsync</c> is where the loading and the
+/// secret-key lookup belong; this method never sees a secret's actual value, only whether
+/// one is stored, which is what makes it structurally incapable of echoing one back.
+/// </para>
+/// </summary>
 public static class SettingsView
 {
-    // Internal rather than private so TorrentDownloaderSettingsController's [HttpPost] route
-    // attributes and this view's CallPlugin calls read the same literals instead of copies
-    // that could drift apart - the host combines a controller's route with the plugin's own
-    // prefix, so these strings are what make CallPlugin(...) actually resolve to something.
-    //
-    // The client interpolates CallPlugin's method straight into the request path
-    // (plugins/{pluginId}/{method}) and posts the form's own fields as the body, discarding
-    // anything else the action intent carried - a PluginForm's submit never forwards the
-    // intent's payload. So a per-entry form's identity cannot ride in the payload (that was
-    // the defect); it rides in the method string instead, as "SaveIndexer/{index}", which is
-    // why these are shared route stems rather than full method names.
-    internal const string SaveSettingsMethod = "SaveSettings";
-    internal const string SaveIndexerMethod = "SaveIndexer";
-    internal const string SavePrivateTrackerMethod = "SavePrivateTracker";
-
-    // Add carries no index - it targets no existing entry, so there is nothing for the
-    // route to parameterise. Remove needs one, for the same reason the save routes do:
-    // the client's PluginButton dispatches its action's payload intact (unlike a
-    // form), but the index still rides in the method string for consistency with the save
-    // routes above, rather than one entry point reading the index from the route and its
-    // sibling reading it from the payload.
-    internal const string AddIndexerMethod = "AddIndexer";
-    internal const string AddPrivateTrackerMethod = "AddPrivateTracker";
-    internal const string RemoveIndexerMethod = "RemoveIndexer";
-    internal const string RemovePrivateTrackerMethod = "RemovePrivateTracker";
-
-    // Route templates the controller attaches its [HttpPost] to. Built from the same method
-    // constants above at compile time, so the "{method}/{index}" shape used when building a
-    // per-entry action and the "{method}/{index:int}" route the controller listens on cannot
-    // drift into two different stems.
-    internal const string SaveIndexerRouteTemplate = SaveIndexerMethod + "/{index:int}";
-    internal const string SavePrivateTrackerRouteTemplate = SavePrivateTrackerMethod + "/{index:int}";
-    internal const string RemoveIndexerRouteTemplate = RemoveIndexerMethod + "/{index:int}";
-    internal const string RemovePrivateTrackerRouteTemplate = RemovePrivateTrackerMethod + "/{index:int}";
-
     private const string SaveLabel = "Save";
 
-    public static PluginView Build(
-        TorrentDownloaderSettings settings,
-        IReadOnlyList<string> ungrantedHosts,
-        IReadOnlySet<string> storedSecretKeys
-    )
+    public static PluginView Build(TorrentDownloaderSettings settings, IReadOnlySet<string> storedSecretKeys)
     {
         List<PluginComponent> children =
         [
-            Ui.Text("settings-heading", "Torrent Downloader Settings", "title"),
+            // The client discards a successful action's response body entirely and re-fetches
+            // the view itself afterwards, so this line - not the response - is what tells the
+            // owner a save actually reached disk.
             Ui.Text("settings-last-saved", LastSavedLabel(settings.LastSavedAtUtc), "caption"),
-        ];
-
-        if (ungrantedHosts.Count > 0)
-        {
-            children.Add(BuildGrantWarning(ungrantedHosts));
-        }
-
-        children.Add(BuildGeneralForm(settings));
-
-        children.Add(Ui.Text("settings-indexers-heading", "Indexers", "subtitle"));
-        children.Add(Ui.Button("settings-indexers-add", "Add indexer", PluginActionIntent.CallPlugin(AddIndexerMethod)));
-        if (settings.Indexers.Count > 0)
-        {
-            for (int i = 0; i < settings.Indexers.Count; i++)
-            {
-                children.Add(BuildIndexerForm(i, settings.Indexers[i], storedSecretKeys));
-                children.Add(BuildRemoveIndexerButton(i));
-            }
-        }
-        else
-        {
-            children.Add(
-                Ui.EmptyState(
-                    "settings-indexers-empty",
-                    "No indexer configured",
-                    "A feed announces which releases exist and what they are called; a site is where the torrent "
-                    + "actually is, searched by that name. Most setups want one of each."
-                )
-            );
-        }
-
-        children.Add(Ui.Text("settings-trackers-heading", "Private Trackers", "subtitle"));
-        children.Add(
+            BuildGeneralForm(settings),
+            Ui.Text("settings-trackers-heading", Format.Count("Private trackers", settings.PrivateTrackers.Count), "subtitle"),
             Ui.Text(
                 "settings-trackers-explainer",
                 "Everything else is public and never uploads. A tracker added here is the only way this plugin seeds.",
-                "caption"
-            )
-        );
-        children.Add(Ui.Button("settings-trackers-add", "Add private tracker", PluginActionIntent.CallPlugin(AddPrivateTrackerMethod)));
+                "caption"),
+            Ui.Button("settings-trackers-add", "Add private tracker", PluginActionIntent.CallPlugin(PluginMethods.AddPrivateTracker)),
+        ];
+
         if (settings.PrivateTrackers.Count > 0)
         {
-            for (int i = 0; i < settings.PrivateTrackers.Count; i++)
+            for (int index = 0; index < settings.PrivateTrackers.Count; index++)
             {
-                children.Add(BuildPrivateTrackerForm(i, settings.PrivateTrackers[i], storedSecretKeys));
-                children.Add(BuildRemovePrivateTrackerButton(i));
+                children.Add(BuildPrivateTrackerForm(index, settings.PrivateTrackers[index], storedSecretKeys));
+                children.Add(BuildRemovePrivateTrackerButton(index));
             }
         }
         else
         {
-            children.Add(
-                Ui.EmptyState(
-                    "settings-trackers-empty",
-                    "No private tracker configured",
-                    "Without one, every torrent is treated as public: nothing is ever uploaded."
-                )
-            );
+            children.Add(Ui.EmptyState(
+                "settings-trackers-empty",
+                "No private tracker configured",
+                "Without one, every torrent is treated as public: nothing is ever uploaded."));
         }
 
-        return PluginViews.Declarative(0, Ui.Container("settings-root", [.. children]));
+        // Zero: nothing on this page changes on its own, and a form that re-renders under
+        // the owner's fingers loses what they were typing.
+        return Pages.Page(Pages.Settings, 0, [.. children]);
     }
 
     // Rendered with CultureInfo.InvariantCulture, same as Core's size formatting, so this
     // does not shift shape by server locale - a comma-for-decimal locale reading the clock
     // differently would otherwise make the same instant look like two different formats to
-    // two owners on two servers. The client discards a successful action's response body
-    // entirely and re-fetches the view itself afterward, so this line - not the response -
-    // is what tells the owner a save actually reached disk.
+    // two owners on two servers.
     private static string LastSavedLabel(DateTimeOffset? lastSavedAtUtc) =>
         lastSavedAtUtc is { } savedAt
             ? $"Last saved {savedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture)} UTC"
             : "Not saved yet.";
-
-    // Ids live outside the "settings-indexer-"/"settings-tracker-" namespace the per-entry
-    // form uses (settings-indexer-{index}-form) - a component here landing inside that
-    // namespace would collide with tests that gather every component by that prefix and
-    // then treat every match as a form.
-    private static PluginComponent BuildRemoveIndexerButton(int index) =>
-        Ui.DestructiveButton(
-            $"indexer-{index}-remove",
-            "Remove indexer",
-            $"{RemoveIndexerMethod}/{index}",
-            "Remove this indexer?",
-            "This deletes the indexer and its saved API key. This cannot be undone."
-        );
-
-    // A badge plus the sentence naming the hosts, so the owner knows a grant prompt they
-    // may have missed is why nothing is downloading yet.
-    private static PluginComponent BuildGrantWarning(IReadOnlyList<string> ungrantedHosts)
-    {
-        return Ui.Container(
-            "settings-grant-warning",
-            Ui.Badge("settings-grant-warning-badge", "Access needed", PluginBadgeVariant.Warning),
-            Ui.Text(
-                "settings-grant-warning-text",
-                $"Torrent Downloader is waiting on host access for: {string.Join(", ", ungrantedHosts)}.",
-                "body"
-            )
-        );
-    }
 
     private static PluginComponent BuildGeneralForm(TorrentDownloaderSettings settings)
     {
@@ -210,77 +120,12 @@ public static class SettingsView
             },
         ];
 
-        return Ui.Form("settings-general-form", SaveLabel, PluginActionIntent.CallPlugin(SaveSettingsMethod), fields);
-    }
-
-    /// <summary>
-    /// What to put in the URL box, which is not the same question for all three kinds.
-    ///
-    /// <para>
-    /// A site needs its search address with a placeholder in it, and that is not guessable
-    /// - so the label asks for exactly what the owner can copy out of their own address
-    /// bar after searching the site once by hand.
-    /// </para>
-    /// </summary>
-    private static string UrlLabel(string kind) =>
-        kind.Equals("site", StringComparison.OrdinalIgnoreCase)
-            ? $"Search address, with {SiteIndexer.QueryPlaceholder} where the search terms go"
-            : "URL";
-
-    private static PluginComponent BuildIndexerForm(int index, IndexerSettings indexer, IReadOnlySet<string> storedSecretKeys)
-    {
-        bool hasStoredKey = storedSecretKeys.Contains(SettingsGateway.IndexerSecretKey(indexer.Name));
-
-        PluginFormField[] fields =
-        [
-            new() { Name = "name", Label = "Name", Value = indexer.Name, Required = true },
-            // A list rather than a text box. The three kinds do genuinely different jobs,
-            // and typing one of them from memory is how an indexer ends up silently
-            // skipped for a spelling nobody can see on the page.
-            new()
-            {
-                Name = "kind",
-                Label = "Kind",
-                Type = PluginFormFieldType.Select,
-                Value = indexer.Kind,
-                Options =
-                [
-                    new() { Value = "rss", Label = "Feed - announces releases by name" },
-                    new() { Value = "site", Label = "Site - searched for a release, has the torrents" },
-                    new() { Value = "torznab", Label = "Torznab - Jackett or Prowlarr" },
-                ],
-            },
-            new()
-            {
-                Name = "url",
-                Label = UrlLabel(indexer.Kind),
-                Value = indexer.Url,
-                Required = true,
-            },
-            new() { Name = "priority", Label = "Priority", Type = PluginFormFieldType.Number, Value = indexer.Priority },
-            new() { Name = "enabled", Label = "Enabled", Type = PluginFormFieldType.Toggle, Value = indexer.Enabled },
-            new()
-            {
-                Name = "minimumIntervalSeconds",
-                Label = "Minimum interval (seconds)",
-                Type = PluginFormFieldType.Number,
-                Value = indexer.MinimumIntervalSeconds,
-            },
-            new() { Name = "categories", Label = "Categories", Value = string.Join(", ", indexer.Categories) },
-            BuildSecretField("apiKey", "API key", hasStoredKey),
-        ];
-
-        return Ui.Form(
-            $"settings-indexer-{index}-form",
-            SaveLabel,
-            PluginActionIntent.CallPlugin($"{SaveIndexerMethod}/{index}"),
-            fields
-        );
+        return Ui.Form("settings-general-form", SaveLabel, PluginActionIntent.CallPlugin(PluginMethods.SaveSettings), fields);
     }
 
     // The announce URL is a secret field, not a URL field, and that is the whole shape of
-    // this form. Everything else about a private tracker is ordinary configuration; the
-    // one thing that identifies the account never comes back down the wire.
+    // this form. Everything else about a private tracker is ordinary configuration; the one
+    // thing that identifies the account never comes back down the wire.
     private static PluginComponent BuildPrivateTrackerForm(int index, PrivateTrackerSettings tracker, IReadOnlySet<string> storedSecretKeys)
     {
         bool hasStoredAnnounce = storedSecretKeys.Contains(SettingsGateway.PrivateTrackerAnnounceKey(tracker.Name));
@@ -312,26 +157,23 @@ public static class SettingsView
         return Ui.Form(
             $"settings-tracker-{index}-form",
             SaveLabel,
-            PluginActionIntent.CallPlugin($"{SavePrivateTrackerMethod}/{index}"),
-            fields
-        );
+            PluginActionIntent.CallPlugin($"{PluginMethods.SavePrivateTracker}/{index}"),
+            fields);
     }
 
     private static PluginComponent BuildRemovePrivateTrackerButton(int index) =>
         Ui.DestructiveButton(
             $"tracker-{index}-remove",
             "Remove private tracker",
-            $"{RemovePrivateTrackerMethod}/{index}",
+            $"{PluginMethods.RemovePrivateTracker}/{index}",
             "Remove this private tracker?",
-            "This deletes the tracker, its announce URL and its API key. Torrents from it become public, and stop seeding."
-        );
+            "This deletes the tracker, its announce URL and its API key. Torrents from it become public, and stop seeding.");
 
     // Never carries the stored value - Build never receives it in the first place. The
     // placeholder is the only signal of "stored", so the owner can tell "never set" from
     // "set, just not shown" instead of an empty box reading as a lost key either way.
-    private static PluginFormField BuildSecretField(string name, string label, bool isStored)
-    {
-        return new PluginFormField
+    private static PluginFormField BuildSecretField(string name, string label, bool isStored) =>
+        new()
         {
             Name = name,
             Label = label,
@@ -341,5 +183,4 @@ public static class SettingsView
                 ? $"{label} is already saved. Leave blank to keep it."
                 : $"No {label.ToLowerInvariant()} saved yet.",
         };
-    }
 }

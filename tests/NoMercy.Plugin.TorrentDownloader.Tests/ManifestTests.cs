@@ -175,6 +175,8 @@ public class ManifestTests
         PluginManifest manifest = LoadManifest();
         List<PluginUiMount> mounts = manifest.Capabilities!.Ui!.Mounts;
 
-        mounts.Select(mount => mount.Route).Should().BeEquivalentTo(["/settings", "/downloads"]);
+        // One entry that is the plugin, landing on the overview with the rest behind the tab
+        // bar, and one straight to the settings page for the dashboard's settings section.
+        mounts.Select(mount => mount.Route).Should().BeEquivalentTo(["/settings", "/"]);
     }
 }

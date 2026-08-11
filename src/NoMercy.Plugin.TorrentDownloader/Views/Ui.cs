@@ -63,6 +63,10 @@ public static class Ui
     public static PluginComponent Row(string id, params PluginComponent[] items) =>
         new() { Id = id, Component = RowComponent, Items = [.. items] };
 
+    /// <inheritdoc cref="Row(string, PluginComponent[])"/>
+    public static PluginComponent Row(string id, IEnumerable<PluginComponent> items) =>
+        new() { Id = id, Component = RowComponent, Items = [.. items] };
+
     /// <summary>
     /// <c>value</c>, not <c>text</c>: PluginText reads its own prop name, and the variants
     /// it knows are "title" and "subtitle". Anything else reads as body text, which is the

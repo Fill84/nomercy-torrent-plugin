@@ -505,9 +505,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     // since a manifest and this property are two declarations of the same fact and nothing
     // else would catch them drifting apart - the dashboard prefers this one.
     //
-    // The downloads page sits beside films and shows rather than in the admin panel: the
+    // The plugin sits beside films and shows rather than only in the admin panel: the
     // question it answers - where is episode five - is one asked while looking at the
-    // library, not while configuring a server.
+    // library, not while configuring a server. One entry, landing on the overview, with the
+    // other pages behind the tab bar; a second entry in the dashboard's settings section
+    // goes straight to the settings page, because that is where an owner looks for a
+    // plugin's configuration.
     public IReadOnlyList<PluginNavEntry> NavEntries { get; } =
         [
             new PluginNavEntry
@@ -520,11 +523,24 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             new PluginNavEntry
             {
                 Section = PluginUiSection.Video,
-                Label = "Downloads",
+                Label = PluginIdentity.Name,
                 Icon = "download",
-                Route = "/downloads",
+                Route = "/",
             },
         ];
+
+    /// <summary>
+    /// Every page this plugin serves.
+    ///
+    /// <para>
+    /// Not decoration. The server reads this and serves it as the plugin's pages; the client
+    /// registers a named route for each. A page nobody declares falls back to a wildcard
+    /// that covers the legacy <c>/plugins/{id}/…</c> mount and not the
+    /// <c>/video/plugins/{id}/…</c> one this plugin sits behind - so every tab beyond the
+    /// two original routes would reach the app's 404 without this.
+    /// </para>
+    /// </summary>
+    public PluginRouteTable Routes => Pages.Routes;
 
     // A view request after Dispose is not the caller's bug the way a tick is - the host may
     // still be draining an in-flight page render while tearing the plugin down - so this
@@ -562,9 +578,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             )
         );
 
-    // The two routes this plugin mounts. A client asking for anything else is not a bug
-    // worth failing the request over - the empty state is the honest answer for a route
-    // this version does not have.
+    // Resolved through the plugin's own route table rather than matched as strings, so the
+    // set of pages the server lists and the set this answers cannot disagree. A client asking
+    // for anything else is not a bug worth failing the request over - the empty state is the
+    // honest answer for a route this version does not have.
+    //
+    // Each page loads only what it shows. The old single page read the whole store on every
+    // render because it drew the whole store; a queue that no longer carries history has no
+    // reason to read it.
     public async Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
     {
         if (_disposed)
@@ -576,10 +597,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         try
         {
-            return request.Route switch
+            return Pages.Routes.Resolve(request.Route)?.Route.Name switch
             {
-                "/settings" => await SettingsPageAsync(context, ct),
-                "/downloads" => await DownloadsPageAsync(context, ct),
+                Pages.Overview => await OverviewPageAsync(context, ct),
+                Pages.Downloads => await DownloadsPageAsync(context, ct),
+                Pages.Queue => QueueView.Build(await WantedAsync(context, ct)),
+                Pages.History => HistoryView.Build(await HistoryAsync(context, HistoryView.Limit, ct)),
+                Pages.Sources => await SourcesPageAsync(context, ct),
+                Pages.Skipped => await SkippedPageAsync(context, ct),
+                Pages.Settings => await SettingsPageAsync(ct),
                 _ => PluginViews.Declarative(Ui.EmptyState("unknown-route", "Nothing here")),
             };
         }
@@ -594,14 +620,44 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
     }
 
-    private async Task<PluginView> SettingsPageAsync(IPluginContext context, CancellationToken ct)
+    private async Task<PluginView> SettingsPageAsync(CancellationToken ct)
+    {
+        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
+        IReadOnlyList<string> storedSecretKeys = await Context.Secrets.KeysAsync(ct);
+
+        return SettingsView.Build(loaded.Settings, new HashSet<string>(storedSecretKeys, StringComparer.Ordinal));
+    }
+
+    // The grant check lives here rather than on the settings page now: a host is asked for
+    // on behalf of a source, and the sources page is where an owner can do something about
+    // one that has not been granted.
+    private async Task<PluginView> SourcesPageAsync(IPluginContext context, CancellationToken ct)
     {
         LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
         HostGrants hostGrants = new(context.Grants);
         IReadOnlyList<string> ungrantedHosts = await hostGrants.EnsureAsync(loaded.Settings, ct);
         IReadOnlyList<string> storedSecretKeys = await context.Secrets.KeysAsync(ct);
 
-        return SettingsView.Build(loaded.Settings, ungrantedHosts, new HashSet<string>(storedSecretKeys, StringComparer.Ordinal));
+        return SourcesView.Build(
+            loaded.Settings,
+            ungrantedHosts,
+            new HashSet<string>(storedSecretKeys, StringComparer.Ordinal),
+            await HistoryAsync(context, SourcesView.HistoryDepth, ct));
+    }
+
+    private async Task<PluginView> OverviewPageAsync(IPluginContext context, CancellationToken ct)
+    {
+        IDownloadStore store = await StoreAsync(context, ct);
+        HostGrants hostGrants = new(context.Grants);
+        LoadedSettings loaded = await SettingsGateway.LoadAsync(ct);
+
+        return OverviewView.Build(
+            await store.TransfersAsync(ct),
+            await store.ActiveGrabsAsync(ct),
+            await store.WantedAsync(int.MaxValue, ct),
+            await store.HistoryAsync(OverviewView.DigestLength, ct),
+            await UnstartedShowsAsync(store, ct),
+            await hostGrants.EnsureAsync(loaded.Settings, ct));
     }
 
     // Reads the store and nothing else. Deliberately not through PipelineAsync: that builds
@@ -612,22 +668,24 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     {
         IDownloadStore store = await StoreAsync(context, ct);
 
-        IReadOnlyList<Transfer> transfers = await store.TransfersAsync(ct);
-        IReadOnlyList<Grab> grabs = await store.ActiveGrabsAsync(ct);
-
-        // Everything still wanted, not a page of it: the view truncates the list itself and
-        // says how many it left out, which it cannot do from a list already cut short. The
-        // store answers from memory, so the cost of the full list is the allocation.
-        IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(int.MaxValue, ct);
-
-        return DownloadsView.Build(
-            transfers,
-            grabs,
-            wanted,
-            await UnstartedShowsAsync(store, ct),
-            await store.HistoryAsync(DownloadsView.HistoryLimit, ct),
-            await store.BlacklistedAsync(_clock.UtcNow, ct));
+        return DownloadsView.Build(await store.TransfersAsync(ct), await store.ActiveGrabsAsync(ct));
     }
+
+    private async Task<PluginView> SkippedPageAsync(IPluginContext context, CancellationToken ct)
+    {
+        IDownloadStore store = await StoreAsync(context, ct);
+
+        return SkippedView.Build(await store.BlacklistedAsync(_clock.UtcNow, ct));
+    }
+
+    // Everything still wanted, not a page of it: the view truncates the list itself and says
+    // how many it left out, which it cannot do from a list already cut short. The store
+    // answers from memory, so the cost of the full list is the allocation.
+    private async Task<IReadOnlyList<WantedEpisode>> WantedAsync(IPluginContext context, CancellationToken ct) =>
+        await (await StoreAsync(context, ct)).WantedAsync(int.MaxValue, ct);
+
+    private async Task<IReadOnlyList<HistoryEntry>> HistoryAsync(IPluginContext context, int limit, CancellationToken ct) =>
+        await (await StoreAsync(context, ct)).HistoryAsync(limit, ct);
 
     /// <summary>
     /// The shows this plugin is leaving alone, as the last refresh concluded them.
@@ -646,14 +704,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// happened yet, which is what lets the button say "Stop following" straight away.
     /// </para>
     /// </summary>
-    private async Task<IReadOnlyList<DownloadsView.FollowableShow>> UnstartedShowsAsync(IDownloadStore store, CancellationToken ct)
+    private async Task<IReadOnlyList<FollowableShow>> UnstartedShowsAsync(IDownloadStore store, CancellationToken ct)
     {
         HashSet<int> followed = [.. ReadSettingsOrDefault().FollowedShowIds];
 
         return
         [
             .. (await store.UnstartedShowsAsync(ct))
-                .Select(show => new DownloadsView.FollowableShow(show.ShowId, show.Title, followed.Contains(show.ShowId))),
+                .Select(show => new FollowableShow(show.ShowId, show.Title, followed.Contains(show.ShowId))),
         ];
     }
 

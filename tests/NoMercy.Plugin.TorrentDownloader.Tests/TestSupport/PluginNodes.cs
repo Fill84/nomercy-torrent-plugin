@@ -87,6 +87,10 @@ internal static class PluginNodes
     public static IEnumerable<string> Words(PluginComponent node) =>
         Flatten(node).SelectMany(TextOf).Where(word => word.Length > 0);
 
+    /// <summary>Whether the page says this anywhere, in any component that carries words.</summary>
+    public static bool Says(PluginView view, string text) =>
+        Words(view).Any(word => word.Contains(text, StringComparison.Ordinal));
+
     private static IEnumerable<string> TextOf(PluginComponent node) =>
         [Prop(node, "value"), Prop(node, "title"), Prop(node, "message"), Prop(node, "label")];
 

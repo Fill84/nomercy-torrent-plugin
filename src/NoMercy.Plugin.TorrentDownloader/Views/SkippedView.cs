@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Phillippe Pelzer - https://github.com/Fill84
+
+using NoMercy.Plugin.TorrentDownloader.Core.Store;
+using NoMercy.Plugins.Abstractions;
+
+namespace NoMercy.Plugin.TorrentDownloader.Views;
+
+/// <summary>
+/// What the plugin is refusing to pick, and a way to change its mind.
+///
+/// <para>
+/// This list was invisible before it had a page. A release blacklisted for a fortnight is
+/// the most likely reason an episode keeps not arriving, and an owner who cannot see the
+/// list has no way to tell that from "nobody is seeding it" - two problems with completely
+/// different answers.
+/// </para>
+/// </summary>
+public static class SkippedView
+{
+    /// <summary>Beyond this it stops being a list and starts being a log.</summary>
+    public const int Limit = 50;
+
+    /// <summary>Entries expire on their own, so the page comes back to notice one that has.</summary>
+    public const int RefreshSeconds = 60;
+
+    public static PluginView Build(IReadOnlyList<BlacklistEntry> skipped) =>
+        Pages.Page(
+            Pages.Skipped,
+            RefreshSeconds,
+            Ui.Section(
+                "skipped-releases",
+                Format.Count("Skipped releases", skipped.Count),
+                "These are passed over when choosing. Allow one again and it can be picked next time.",
+                Rows(skipped)));
+
+    private static PluginComponent Rows(IReadOnlyList<BlacklistEntry> skipped)
+    {
+        if (skipped.Count == 0)
+        {
+            return Ui.EmptyState(
+                "skipped-empty",
+                "Nothing is being skipped",
+                "A release is skipped after it fails or is cancelled, and most stop being skipped on their own.");
+        }
+
+        List<PluginComponent> rows = [];
+
+        foreach (BlacklistEntry entry in skipped.OrderByDescending(entry => entry.AddedAt).Take(Limit))
+        {
+            rows.Add(Ui.Row(
+                $"skipped-row-{entry.Handle}",
+                Ui.Text($"skipped-title-{entry.Handle}", entry.ReleaseTitle ?? entry.InfoHash ?? "an unnamed release"),
+                Ui.Text($"skipped-reason-{entry.Handle}", entry.Reason, "caption"),
+                Ui.Text($"skipped-until-{entry.Handle}", Format.Until(entry.ExpiresAt), "caption"),
+                Ui.Button(
+                    $"skipped-allow-{entry.Handle}",
+                    "Allow again",
+                    PluginActionIntent.CallPlugin($"{PluginMethods.AllowRelease}/{entry.Handle}"))));
+        }
+
+        return Ui.List("skipped-list", [.. rows]);
+    }
+}

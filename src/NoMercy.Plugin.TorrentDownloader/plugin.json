@@ -22,9 +22,9 @@
         },
         {
           "section": "video",
-          "label": "Downloads",
+          "label": "Torrent Downloader",
           "icon": "download",
-          "route": "/downloads"
+          "route": "/"
         }
       ]
     }

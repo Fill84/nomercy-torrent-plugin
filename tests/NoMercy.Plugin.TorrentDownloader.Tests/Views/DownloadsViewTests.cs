@@ -10,6 +10,7 @@ using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Views;
 
+/// <summary>Only what is moving, and the buttons that change it.</summary>
 public class DownloadsViewTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 8, 12, 0, 0, TimeSpan.Zero);
@@ -32,61 +33,47 @@ public class DownloadsViewTests
         GrabbedAt = Now,
     };
 
-    private static WantedEpisode Wanted(int episode, WantedState state = WantedState.Wanted) => new()
-    {
-        Key = new EpisodeKey(1, 1, episode),
-        ShowTitle = "Some Show",
-        EpisodeTitle = $"Episode {episode}",
-        State = state,
-    };
-
     private static List<string> TextOf(PluginView view) => [.. PluginNodes.Words(view)];
 
     [Fact]
     public void Build_DrawsOnlyTagsAClientKnows()
     {
-        PluginView view = DownloadsView.Build(
-            [Transfer("abc", 500, 1000)],
-            [Grab("abc", 1, "Some.Show.S01E01.1080p")],
-            [Wanted(2)]);
+        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
 
-        // A tag the client does not know renders as an "unsupported component" notice,
-        // which is a page of apologies rather than a page.
+        // A tag the client does not know renders as an "unsupported component" notice, which
+        // is a page of apologies rather than a page.
         PluginNodes.All(view).Select(node => node.Component)
             .Should().OnlyContain(component => PluginNodes.KnownComponents.Contains(component!));
     }
 
     [Fact]
+    public void Build_CarriesTheTabBar()
+    {
+        PluginNodes.All(DownloadsView.Build([], [])).Should().Contain(node => node.Id == "tab-queue");
+    }
+
+    [Fact]
     public void Build_ShowsWhatIsDownloadingAndHowFar()
     {
-        PluginView view = DownloadsView.Build(
-            [Transfer("abc", 500, 1000)],
-            [Grab("abc", 1, "Some.Show.S01E01.1080p")],
-            []);
+        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
 
-        IEnumerable<string> text = TextOf(view);
+        List<string> text = TextOf(view);
 
         text.Should().Contain("Some.Show.S01E01.1080p");
         text.Should().Contain("50%");
         text.Should().Contain("8 peers");
     }
 
-    // Seen on a real server: every queue row read "456 S00E01". EpisodeKey.ToString()
-    // carries the show id because a log line needs it to be unambiguous; a page does not,
-    // because the show's name is the text right beside it.
+    // Seen on a real server: every row read "456 S00E01". EpisodeKey.ToString() carries the
+    // show id because a log line needs it to be unambiguous; a page does not, because the
+    // show's name is the text right beside it.
     [Fact]
     public void Build_NamesTheEpisodeSlotWithoutLeakingTheShowId()
     {
-        PluginView view = DownloadsView.Build(
-            [Transfer("abc", 500, 1000)],
-            [Grab("abc", 7, "Some.Show.S01E07.1080p")],
-            [Wanted(2)]);
-
-        List<string> text = TextOf(view);
+        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 7, "Some.Show.S01E07.1080p")]);
 
         // The fixtures use show id 1, so the leak reads "1 S01E07".
-        text.Should().Contain("S01E07").And.NotContain("1 S01E07");
-        text.Should().Contain("S01E02").And.NotContain("1 S01E02");
+        TextOf(view).Should().Contain("S01E07").And.NotContain("1 S01E07");
     }
 
     // A pack row labelled with the single episode that triggered it reads as one episode
@@ -104,54 +91,20 @@ public class DownloadsViewTests
             ],
         };
 
-        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [pack], []);
+        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [pack]);
 
         TextOf(view).Should().Contain("3 episodes").And.NotContain("S01E01");
     }
 
     [Fact]
-    public void Build_OffersToFollowAShowWithNothingOnTheServer()
-    {
-        PluginView view = DownloadsView.Build([], [], [], [new DownloadsView.FollowableShow(42, "Never Watched", Followed: false)]);
-
-        PluginComponent button = PluginNodes.All(view).Should()
-            .ContainSingle(node => node.Id == "downloads-follow-42").Which;
-
-        button.Action!.Payload["method"].Should().Be("FollowShow/42");
-        TextOf(view).Should().Contain("Never Watched");
-    }
-
-    [Fact]
-    public void Build_OffersToStopFollowingAShowItIsAlreadyFollowing()
-    {
-        PluginView view = DownloadsView.Build([], [], [], [new DownloadsView.FollowableShow(42, "Asked For", Followed: true)]);
-
-        PluginNodes.All(view).Should().ContainSingle(node => node.Id == "downloads-unfollow-42");
-        PluginNodes.All(view).Should().NotContain(node => node.Id == "downloads-follow-42");
-    }
-
-    // A library where every show has files is the normal case, and a heading over an
-    // empty list reads as something being broken.
-    [Fact]
-    public void Build_SaysNothingAboutUnstartedShowsWhenThereAreNone()
-    {
-        PluginView view = DownloadsView.Build([], [], []);
-
-        PluginNodes.All(view).Should().NotContain(node => node.Id == "downloads-unstarted-heading");
-    }
-
-    [Fact]
     public void Build_AsksTheClientToComeBackBecauseTheseNumbersMove()
     {
-        PluginView view = DownloadsView.Build(
-            [Transfer("abc", 500, 1000)],
-            [Grab("abc", 1, "Some.Show.S01E01.1080p")],
-            []);
+        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
 
-        // Zero means never, and a progress bar that only moves when the user reloads the
-        // page is a screenshot. The ceiling is here because the other direction is just as
-        // wrong: re-rendering every second costs a request per viewer for numbers the
-        // transfers cadence only rewrites once a minute.
+        // Zero means never, and a progress bar that only moves when the user reloads the page
+        // is a screenshot. The ceiling is here because the other direction is just as wrong:
+        // re-rendering every second costs a request per viewer for numbers the transfers
+        // cadence only rewrites once a minute.
         view.RefreshInterval.Should().BeInRange(1, 60);
     }
 
@@ -160,8 +113,7 @@ public class DownloadsViewTests
     {
         PluginView view = DownloadsView.Build(
             [Transfer("slow", 100, 1000), Transfer("fast", 900, 1000)],
-            [Grab("slow", 1, "Slow.Release"), Grab("fast", 2, "Fast.Release")],
-            []);
+            [Grab("slow", 1, "Slow.Release"), Grab("fast", 2, "Fast.Release")]);
 
         List<string> titles = [.. TextOf(view).Where(value => value.EndsWith(".Release"))];
 
@@ -171,47 +123,11 @@ public class DownloadsViewTests
     [Fact]
     public void Build_SaysNothingIsDownloadingRatherThanLookingBroken()
     {
-        PluginView view = DownloadsView.Build([], [], [Wanted(1)]);
+        PluginView view = DownloadsView.Build([], []);
 
-        // Idle is the common case. A page that looks like an error when nothing is
-        // happening trains a user to ignore it.
+        // Idle is the common case. A page that looks like an error when nothing is happening
+        // trains a user to ignore it.
         TextOf(view).Should().Contain("Nothing is downloading right now.");
-    }
-
-    [Fact]
-    public void Build_SaysSoWhenTheLibraryIsComplete()
-    {
-        PluginView view = DownloadsView.Build([], [], []);
-
-        TextOf(view).Should().Contain("Nothing is missing");
-    }
-
-    [Fact]
-    public void Build_CountsTheQueueAndAdmitsWhenItIsTruncated()
-    {
-        PluginView view = DownloadsView.Build(
-            [],
-            [],
-            [.. Enumerable.Range(1, 200).Select(number => Wanted(number))]);
-
-        // A first run on a library with years of gaps wants hundreds. Rendering all of
-        // them is a page nobody can read, and pretending there are 25 is a lie.
-        TextOf(view).Should().Contain($"Wanted ({DownloadsView.QueuePreviewLength} of 200)");
-    }
-
-    [Fact]
-    public void Build_LabelsEachWantedEpisodeWithWhereItStands()
-    {
-        PluginView view = DownloadsView.Build(
-            [],
-            [],
-            [Wanted(1), Wanted(2, WantedState.Grabbed), Wanted(3, WantedState.Unavailable)]);
-
-        IEnumerable<string> text = TextOf(view);
-
-        text.Should().Contain("Wanted");
-        text.Should().Contain("Downloading");
-        text.Should().Contain("Not found");
     }
 
     [Fact]
@@ -219,7 +135,7 @@ public class DownloadsViewTests
     {
         // A transfer whose grab row was pruned still has to render something. Showing the
         // hash beats showing an empty row that looks like a bug.
-        PluginView view = DownloadsView.Build([Transfer("orphan-hash", 1, 2)], [], []);
+        PluginView view = DownloadsView.Build([Transfer("orphan-hash", 1, 2)], []);
 
         TextOf(view).Should().Contain("orphan-hash");
     }
@@ -227,8 +143,40 @@ public class DownloadsViewTests
     [Fact]
     public void Build_SaysStartingRatherThanZeroPercentBeforeTheSizeIsKnown()
     {
-        PluginView view = DownloadsView.Build([Transfer("abc", 0, 0)], [], []);
+        PluginView view = DownloadsView.Build([Transfer("abc", 0, 0)], []);
 
         TextOf(view).Should().Contain("starting");
+    }
+
+    // The escape hatch stays on this page: a magnet found by hand is about a download, and
+    // this is the page about downloads.
+    [Fact]
+    public void Build_TakesAMagnetByHand()
+    {
+        PluginComponent form = PluginNodes.All(DownloadsView.Build([], [])).Should()
+            .ContainSingle(node => node.Id == "downloads-add-form").Which;
+
+        form.Action!.Payload["method"].Should().Be("AddTorrent");
+    }
+
+    // Cancelling deletes the bytes and skips the release for a fortnight. That is not an undo
+    // away, so it asks first.
+    [Fact]
+    public void Build_AsksBeforeCancelling()
+    {
+        PluginComponent cancel = PluginNodes.All(DownloadsView.Build([Transfer("abc", 1, 2)], []))
+            .Should().ContainSingle(node => node.Id == "downloads-cancel-abc").Which;
+
+        cancel.Action!.Confirm.Should().NotBeNull();
+        cancel.Action.Payload["method"].Should().Be("CancelDownload/abc");
+    }
+
+    [Fact]
+    public void Build_OffersResumeRatherThanPauseOnAPausedDownload()
+    {
+        PluginView view = DownloadsView.Build([Transfer("abc", 1, 2) with { Paused = true }], []);
+
+        PluginNodes.All(view).Should().Contain(node => node.Id == "downloads-resume-abc");
+        PluginNodes.All(view).Should().NotContain(node => node.Id == "downloads-pause-abc");
     }
 }
