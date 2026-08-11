@@ -36,6 +36,15 @@ public static class HistoryView
                 "What became of each release, after it left the downloads list.",
                 Rows(history)));
 
+    private static readonly PluginTableColumn[] Columns =
+    [
+        new() { Key = "outcome", Label = "Outcome", Cell = PluginTableCellType.Badge, Width = "8rem" },
+        new() { Key = "release", Label = "Release" },
+        new() { Key = "episode", Label = "Episode", Width = "7rem" },
+        new() { Key = "when", Label = "When", Width = "8rem" },
+        new() { Key = "detail", Label = "Why" },
+    ];
+
     private static PluginComponent Rows(IReadOnlyList<HistoryEntry> history)
     {
         if (history.Count == 0)
@@ -52,15 +61,19 @@ public static class HistoryView
         {
             string id = $"{entry.At.ToUnixTimeMilliseconds()}-{entry.Key}";
 
-            rows.Add(Ui.Row(
+            rows.Add(Ui.TableRow(
                 $"history-row-{id}",
-                Ui.Badge($"history-badge-{id}", Format.Outcome(entry.Event), Format.OutcomeVariant(entry.Event)),
-                Ui.Text($"history-title-{id}", entry.ReleaseTitle),
-                Ui.Text($"history-slot-{id}", Format.Slot(entry.Key), "caption"),
-                Ui.Text($"history-when-{id}", Format.Ago(entry.At), "caption"),
-                Ui.Text($"history-detail-{id}", entry.Detail ?? "", "caption")));
+                new()
+                {
+                    ["outcome"] = Format.Outcome(entry.Event),
+                    ["outcomeVariant"] = Format.OutcomeVariant(entry.Event),
+                    ["release"] = entry.ReleaseTitle,
+                    ["episode"] = Format.Slot(entry.Key),
+                    ["when"] = Format.Ago(entry.At),
+                    ["detail"] = entry.Detail ?? "",
+                }));
         }
 
-        return Ui.List("history-list", [.. rows]);
+        return Ui.Table("history-list", Columns, rows);
     }
 }

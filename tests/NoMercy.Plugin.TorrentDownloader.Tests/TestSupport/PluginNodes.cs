@@ -82,17 +82,71 @@ internal static class PluginNodes
     /// for one of them finds nothing on a page full of words.
     /// </summary>
     public static IEnumerable<string> Words(PluginView view) =>
-        All(view).SelectMany(TextOf).Where(word => word.Length > 0);
+        All(view).SelectMany(Said).Where(word => word.Length > 0);
 
     public static IEnumerable<string> Words(PluginComponent node) =>
-        Flatten(node).SelectMany(TextOf).Where(word => word.Length > 0);
+        Flatten(node).SelectMany(Said).Where(word => word.Length > 0);
+
+    private static IEnumerable<string> Said(PluginComponent node) => [.. TextOf(node), .. CellsOf(node)];
+
+    /// <summary>
+    /// A table's own words.
+    ///
+    /// <para>
+    /// A table's rows do not carry their text under a prop name anyone can guess: each value
+    /// sits under the key of the column that draws it, so the only way to read a table the
+    /// way a viewer does is to read it through its columns. Which is also the assertion
+    /// worth having - a value under a key no column names is a value nobody sees.
+    /// </para>
+    /// </summary>
+    private static IEnumerable<string> CellsOf(PluginComponent node)
+    {
+        if (node.Component != Ui.TableComponent)
+            yield break;
+
+        if (!node.Props.TryGetValue("columns", out object? declared)
+            || declared is not IEnumerable<PluginTableColumn> columns)
+        {
+            yield break;
+        }
+
+        List<PluginTableColumn> keys = [.. columns];
+
+        foreach (PluginComponent row in node.Items)
+        {
+            foreach (PluginTableColumn column in keys)
+            {
+                if (row.Props.TryGetValue(column.Key, out object? value) && value is string text)
+                    yield return text;
+            }
+        }
+    }
+
+    /// <summary>Every row of a table, whichever page drew it.</summary>
+    public static IEnumerable<PluginComponent> TableRows(PluginView view) =>
+        All(view).Where(node => node.Component == Ui.TableComponent).SelectMany(table => table.Items);
+
+    /// <summary>One cell, read the way the column that draws it would.</summary>
+    public static object? Cell(PluginComponent row, string key) =>
+        row.Props.TryGetValue(key, out object? value) ? value : null;
 
     /// <summary>Whether the page says this anywhere, in any component that carries words.</summary>
     public static bool Says(PluginView view, string text) =>
         Words(view).Any(word => word.Contains(text, StringComparison.Ordinal));
 
+    // Every prop a component draws words from: a text node has "value", an empty state a
+    // "title" and a "message", a button and a badge a "label", a card a "subtitle", and a
+    // detail block a "description". A helper that knew only some of them would report a page
+    // as silent about something it says in full.
     private static IEnumerable<string> TextOf(PluginComponent node) =>
-        [Prop(node, "value"), Prop(node, "title"), Prop(node, "message"), Prop(node, "label")];
+    [
+        Prop(node, "value"),
+        Prop(node, "title"),
+        Prop(node, "subtitle"),
+        Prop(node, "description"),
+        Prop(node, "message"),
+        Prop(node, "label"),
+    ];
 
     private static string Prop(PluginComponent node, string key) =>
         node.Props.TryGetValue(key, out object? value) ? value?.ToString() ?? "" : "";

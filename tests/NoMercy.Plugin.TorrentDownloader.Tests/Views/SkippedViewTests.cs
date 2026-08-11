@@ -63,15 +63,20 @@ public class SkippedViewTests
             .Should().BeTrue();
     }
 
+    // Allowing one again is not destructive - it puts a release back among the candidates
+    // and the next search decides for itself - so the row can carry it without a
+    // confirmation, and the note above the table says so.
     [Fact]
     public void Build_OffersToAllowOneAgain()
     {
         BlacklistEntry entry = Skipped("Bad.Release");
+        PluginView view = SkippedView.Build([entry]);
 
-        PluginComponent allow = PluginNodes.All(SkippedView.Build([entry]))
-            .Should().ContainSingle(node => node.Id == $"skipped-allow-{entry.Handle}").Which;
+        PluginComponent row = PluginNodes.TableRows(view).Should().ContainSingle().Which;
 
-        allow.Action!.Payload["method"].Should().Be($"AllowRelease/{entry.Handle}");
+        row.Action!.Payload["method"].Should().Be($"AllowRelease/{entry.Handle}");
+        row.Action.Confirm.Should().BeNull();
+        PluginNodes.Says(view, "Click one to allow it again").Should().BeTrue();
     }
 
     // An entry with no title still has to render as something. A blank row reads as a bug.

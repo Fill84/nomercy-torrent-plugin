@@ -31,8 +31,17 @@ public static class SkippedView
             Ui.Section(
                 "skipped-releases",
                 Format.Count("Skipped releases", skipped.Count),
-                "These are passed over when choosing. Allow one again and it can be picked next time.",
+                skipped.Count == 0
+                    ? "These are passed over when choosing."
+                    : "These are passed over when choosing. Click one to allow it again, and it can be picked next time.",
                 Rows(skipped)));
+
+    private static readonly PluginTableColumn[] Columns =
+    [
+        new() { Key = "release", Label = "Release" },
+        new() { Key = "reason", Label = "Why" },
+        new() { Key = "until", Label = "Until", Width = "9rem" },
+    ];
 
     private static PluginComponent Rows(IReadOnlyList<BlacklistEntry> skipped)
     {
@@ -48,17 +57,21 @@ public static class SkippedView
 
         foreach (BlacklistEntry entry in skipped.OrderByDescending(entry => entry.AddedAt).Take(Limit))
         {
-            rows.Add(Ui.Row(
+            rows.Add(Ui.TableRow(
                 $"skipped-row-{entry.Handle}",
-                Ui.Text($"skipped-title-{entry.Handle}", entry.ReleaseTitle ?? entry.InfoHash ?? "an unnamed release"),
-                Ui.Text($"skipped-reason-{entry.Handle}", entry.Reason, "caption"),
-                Ui.Text($"skipped-until-{entry.Handle}", Format.Until(entry.ExpiresAt), "caption"),
-                Ui.Button(
-                    $"skipped-allow-{entry.Handle}",
-                    "Allow again",
-                    PluginActionIntent.CallPlugin($"{PluginMethods.AllowRelease}/{entry.Handle}"))));
+                new()
+                {
+                    ["release"] = entry.ReleaseTitle ?? entry.InfoHash ?? "an unnamed release",
+                    ["reason"] = entry.Reason,
+                    ["until"] = Format.Until(entry.ExpiresAt),
+                },
+
+                // Allowing one again is not destructive - it puts a release back among the
+                // candidates and the next search decides for itself - so the row can carry
+                // it without a confirmation standing in the way.
+                PluginActionIntent.CallPlugin($"{PluginMethods.AllowRelease}/{entry.Handle}")));
         }
 
-        return Ui.List("skipped-list", [.. rows]);
+        return Ui.Table("skipped-list", Columns, rows);
     }
 }

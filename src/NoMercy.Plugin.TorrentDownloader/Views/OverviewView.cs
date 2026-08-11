@@ -106,9 +106,22 @@ public static class OverviewView
         }
     }
 
+    private static readonly PluginTableColumn[] NowColumns =
+    [
+        new() { Key = "release", Label = "Release" },
+        new() { Key = "progress", Label = "Progress", Cell = PluginTableCellType.Progress, Width = "10rem" },
+        new() { Key = "percent", Label = "", Width = "4rem", Align = "right" },
+        new() { Key = "rate", Label = "Rate", Width = "12rem" },
+    ];
+
     /// <summary>
     /// What is moving, without the buttons. Pausing and cancelling live on the downloads
     /// page; a glance page that can also destroy things is one people stop glancing at.
+    ///
+    /// <para>
+    /// A table precisely because there is nothing to press: columns line up, so five
+    /// downloads can be read down rather than one at a time.
+    /// </para>
     /// </summary>
     private static PluginComponent Now(IReadOnlyList<Transfer> transfers, IReadOnlyDictionary<string, Grab> byHash)
     {
@@ -126,23 +139,29 @@ public static class OverviewView
         {
             byHash.TryGetValue(transfer.InfoHash, out Grab? grab);
 
-            rows.Add(Ui.Row(
+            rows.Add(Ui.TableRow(
                 $"overview-now-{transfer.InfoHash}",
-                Ui.Text($"overview-now-title-{transfer.InfoHash}", grab?.ReleaseTitle ?? transfer.InfoHash),
-                Ui.Progress($"overview-now-progress-{transfer.InfoHash}", transfer.Progress),
-                Ui.Text($"overview-now-percent-{transfer.InfoHash}", Format.Percentage(transfer), "caption"),
-                Ui.Text($"overview-now-rate-{transfer.InfoHash}", Format.Rate(transfer), "caption")));
+                new()
+                {
+                    ["release"] = grab?.ReleaseTitle ?? transfer.InfoHash,
+                    ["progress"] = transfer.Progress,
+                    ["percent"] = Format.Percentage(transfer),
+                    ["rate"] = Format.Rate(transfer),
+                },
+                Pages.Routes.GoTo(Pages.Downloads)));
         }
+
+        List<PluginComponent> children = [Ui.Table("overview-now-list", NowColumns, rows)];
 
         if (transfers.Count > DigestLength)
         {
-            rows.Add(Ui.Button(
+            children.Add(Ui.Button(
                 "overview-now-more",
                 $"All {transfers.Count} downloads",
                 Pages.Routes.GoTo(Pages.Downloads)));
         }
 
-        return Ui.List("overview-now-list", [.. rows]);
+        return Ui.Container("overview-now-body", children);
     }
 
     /// <summary>
@@ -156,25 +175,29 @@ public static class OverviewView
     /// </summary>
     private static PluginComponent Unstarted(IReadOnlyList<FollowableShow> shows)
     {
-        List<PluginComponent> rows = [];
+        List<PluginComponent> tiles = [];
 
         foreach (FollowableShow show in shows.OrderBy(show => show.Title, StringComparer.CurrentCultureIgnoreCase))
         {
-            rows.Add(Ui.Row(
-                $"overview-unstarted-{show.ShowId}",
-                Ui.Text($"overview-unstarted-title-{show.ShowId}", show.Title),
-                show.Followed
-                    ? Ui.Button(
-                        $"overview-unfollow-{show.ShowId}",
-                        "Stop following",
-                        PluginActionIntent.CallPlugin($"{PluginMethods.UnfollowShow}/{show.ShowId}"))
-                    : Ui.Button(
-                        $"overview-follow-{show.ShowId}",
-                        "Follow",
-                        PluginActionIntent.CallPlugin($"{PluginMethods.FollowShow}/{show.ShowId}"))));
+            // Tiles rather than a list of buttons, because a card is the one component with
+            // a surface of its own - twenty shows read as twenty things instead of forty
+            // words in a column. The whole tile is the button, so its subtitle has to say
+            // what pressing it does; a card that only named the show would be a click into
+            // the dark.
+            tiles.Add(show.Followed
+                ? Ui.Card(
+                    $"overview-unfollow-{show.ShowId}",
+                    show.Title,
+                    "Following - click to stop",
+                    PluginActionIntent.CallPlugin($"{PluginMethods.UnfollowShow}/{show.ShowId}"))
+                : Ui.Card(
+                    $"overview-follow-{show.ShowId}",
+                    show.Title,
+                    "Click to follow",
+                    PluginActionIntent.CallPlugin($"{PluginMethods.FollowShow}/{show.ShowId}")));
         }
 
-        return Ui.List("overview-unstarted-list", [.. rows]);
+        return Ui.Grid("overview-unstarted-list", tiles);
     }
 
     /// <summary>The whole plugin in one sentence: what is moving, what is waiting, what has landed.</summary>

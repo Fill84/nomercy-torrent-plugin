@@ -94,9 +94,14 @@ public static class SourcesView
             {
                 IndexerSettings indexer = settings.Indexers[index];
 
-                children.Add(Yield(index, indexer, history));
-                children.Add(IndexerForm(index, indexer, storedSecretKeys));
-                children.Add(RemoveButton(index));
+                // One block per source, so the yield line, the form it describes and the
+                // button that deletes it read as one thing. Loose siblings put a remove
+                // button directly above the next source's name, which is a bad place for it.
+                children.Add(Ui.Container(
+                    $"sources-{index}",
+                    Yield(index, indexer, history),
+                    IndexerForm(index, indexer, storedSecretKeys),
+                    RemoveButton(index)));
             }
         }
 

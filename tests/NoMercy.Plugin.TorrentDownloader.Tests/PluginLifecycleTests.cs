@@ -247,9 +247,10 @@ public class PluginLifecycleTests
 
         PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = "/downloads" }, CancellationToken.None);
 
-        List<string> words = [.. PluginNodes.Words(view)];
-        words.Should().Contain("Some.Show.S01E01.1080p", "the active list names the release being downloaded");
-        words.Should().Contain("50%", "500 of 1000 bytes is half of it");
+        PluginNodes.Words(view).Should()
+            .Contain("Some.Show.S01E01.1080p", "the active list names the release being downloaded");
+
+        PluginNodes.Says(view, "50%").Should().BeTrue("500 of 1000 bytes is half of it");
     }
 
     // The queue left the downloads page when it got its own, and the routing has to have

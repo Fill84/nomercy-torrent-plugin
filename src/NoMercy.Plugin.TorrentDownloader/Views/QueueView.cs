@@ -27,10 +27,15 @@ public static class QueueView
             Ui.Section(
                 "queue-wanted",
                 Heading(wanted),
-                wanted.Count > PreviewLength
-                    ? "The next few; the rest follow as these finish."
-                    : null,
+                Note(wanted),
                 Rows(wanted)));
+
+    private static readonly PluginTableColumn[] Columns =
+    [
+        new() { Key = "show", Label = "Show" },
+        new() { Key = "episode", Label = "Episode", Width = "7rem" },
+        new() { Key = "state", Label = "State", Cell = PluginTableCellType.Badge, Width = "10rem" },
+    ];
 
     private static PluginComponent Rows(IReadOnlyList<WantedEpisode> wanted)
     {
@@ -46,46 +51,53 @@ public static class QueueView
 
         foreach (WantedEpisode episode in wanted.Take(PreviewLength))
         {
-            rows.Add(Ui.Row(
-                $"queue-wanted-{episode.Key}",
-                Ui.Text($"queue-wanted-show-{episode.Key}", episode.ShowTitle),
-                Ui.Text($"queue-wanted-slot-{episode.Key}", Format.Slot(episode.Key), "caption"),
-                StateBadge(episode),
+            (string label, string variant) = State(episode);
 
-                // The cadence works least-recently-searched first, ten at a time, which is
-                // the right order for a machine and the wrong one for somebody who wants
-                // tonight's episode.
-                Ui.Button(
-                    $"queue-search-now-{episode.Key}",
-                    "Search now",
-                    PluginActionIntent.CallPlugin(
-                        $"{PluginMethods.SearchNow}/{episode.Key.ShowId}/{episode.Key.Season}/{episode.Key.Episode}"))));
+            rows.Add(Ui.TableRow(
+                $"queue-wanted-{episode.Key}",
+                new()
+                {
+                    ["show"] = episode.ShowTitle,
+                    ["episode"] = Format.Slot(episode.Key),
+                    ["state"] = label,
+                    ["stateVariant"] = variant,
+                },
+
+                // The whole row, because the cadence works least-recently-searched first,
+                // ten at a time - the right order for a machine and the wrong one for
+                // somebody who wants tonight's episode. A twenty-five row list of buttons
+                // was what made this page unreadable; a row that is itself the button is a
+                // bigger target and leaves the columns lined up.
+                PluginActionIntent.CallPlugin(
+                    $"{PluginMethods.SearchNow}/{episode.Key.ShowId}/{episode.Key.Season}/{episode.Key.Episode}")));
         }
 
-        return Ui.List("queue-list", [.. rows]);
+        return Ui.Table("queue-list", Columns, rows);
     }
 
-    private static PluginComponent StateBadge(WantedEpisode episode) =>
-        Ui.Badge(
-            $"queue-wanted-state-{episode.Key}",
-            episode.State switch
-            {
-                _ when Format.NotOutYet(episode) => $"Airs {episode.AirDate:d MMM}",
-                WantedState.Searching => "Searching",
-                WantedState.Grabbed => "Downloading",
-                WantedState.Unavailable => "Not found",
-                _ => "Wanted",
-            },
+    /// <summary>
+    /// What a row is for, said in words, because a clickable row does not announce itself
+    /// the way a button labelled "Search now" did.
+    /// </summary>
+    private static string Note(IReadOnlyList<WantedEpisode> wanted) =>
+        wanted.Count == 0
+            ? "Nothing is missing."
+            : wanted.Count > PreviewLength
+                ? "Click an episode to search for it now. These are the next few; the rest follow as they finish."
+                : "Click an episode to search for it now.";
+
+    private static (string Label, string Variant) State(WantedEpisode episode) =>
+        episode switch
+        {
+            _ when Format.NotOutYet(episode) => ($"Airs {episode.AirDate:d MMM}", PluginBadgeVariant.Neutral),
+            { State: WantedState.Searching } => ("Searching", PluginBadgeVariant.Info),
+            { State: WantedState.Grabbed } => ("Downloading", PluginBadgeVariant.Success),
+            { State: WantedState.Unavailable } => ("Not found", PluginBadgeVariant.Warning),
 
             // Semantic, never a colour. What "not found" should look like is the theme's
             // business and changes between light, dark and a television.
-            episode.State switch
-            {
-                _ when Format.NotOutYet(episode) => PluginBadgeVariant.Neutral,
-                WantedState.Unavailable => PluginBadgeVariant.Warning,
-                WantedState.Grabbed => PluginBadgeVariant.Success,
-                _ => PluginBadgeVariant.Neutral,
-            });
+            _ => ("Wanted", PluginBadgeVariant.Neutral),
+        };
 
     private static string Heading(IReadOnlyList<WantedEpisode> wanted) =>
         wanted.Count > PreviewLength

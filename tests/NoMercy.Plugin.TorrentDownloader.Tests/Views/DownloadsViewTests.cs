@@ -57,11 +57,11 @@ public class DownloadsViewTests
     {
         PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
 
-        List<string> text = TextOf(view);
-
-        text.Should().Contain("Some.Show.S01E01.1080p");
-        text.Should().Contain("50%");
-        text.Should().Contain("8 peers");
+        // The release is the block's heading; how far, how fast and with how many is the one
+        // line under it, so these are read as words on the page rather than as whole nodes.
+        TextOf(view).Should().Contain("Some.Show.S01E01.1080p");
+        PluginNodes.Says(view, "50%").Should().BeTrue();
+        PluginNodes.Says(view, "8 peers").Should().BeTrue();
     }
 
     // Seen on a real server: every row read "456 S00E01". EpisodeKey.ToString() carries the
@@ -73,7 +73,8 @@ public class DownloadsViewTests
         PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 7, "Some.Show.S01E07.1080p")]);
 
         // The fixtures use show id 1, so the leak reads "1 S01E07".
-        TextOf(view).Should().Contain("S01E07").And.NotContain("1 S01E07");
+        PluginNodes.Says(view, "S01E07").Should().BeTrue();
+        PluginNodes.Says(view, "1 S01E07").Should().BeFalse();
     }
 
     // A pack row labelled with the single episode that triggered it reads as one episode
@@ -93,7 +94,31 @@ public class DownloadsViewTests
 
         PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [pack]);
 
-        TextOf(view).Should().Contain("3 episodes").And.NotContain("S01E01");
+        PluginNodes.Says(view, "3 episodes").Should().BeTrue();
+        PluginNodes.Says(view, "S01E01").Should().BeFalse();
+    }
+
+    /// <summary>
+    /// The shape this page was rebuilt for.
+    ///
+    /// <para>
+    /// A progress bar takes the full width of whatever holds it, so a wrapping row that
+    /// contained one re-flowed around it: the title on one line, the rate below, the buttons
+    /// on a third, and nothing lining up with the download above. A block puts the name, the
+    /// line about where it stands, the bar and the buttons in that order every time.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Build_DrawsEachDownloadAsABlockRatherThanAWrappingRow()
+    {
+        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
+
+        PluginComponent block = PluginNodes.All(view).Should()
+            .ContainSingle(node => node.Id == "downloads-row-abc").Which;
+
+        block.Component.Should().Be(Ui.DetailComponent);
+        block.Props["title"].Should().Be("Some.Show.S01E01.1080p");
+        block.Items.Should().Contain(child => child.Component == Ui.ProgressComponent);
     }
 
     [Fact]
@@ -145,7 +170,7 @@ public class DownloadsViewTests
     {
         PluginView view = DownloadsView.Build([Transfer("abc", 0, 0)], []);
 
-        TextOf(view).Should().Contain("starting");
+        PluginNodes.Says(view, "starting").Should().BeTrue();
     }
 
     // The escape hatch stays on this page: a magnet found by hand is about a download, and

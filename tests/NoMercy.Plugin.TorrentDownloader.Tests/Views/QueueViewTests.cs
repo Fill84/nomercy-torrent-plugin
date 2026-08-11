@@ -84,13 +84,29 @@ public class QueueViewTests
     }
 
     // The cadence works least-recently-searched first, ten at a time, which is the right
-    // order for a machine and the wrong one for somebody who wants tonight's episode.
+    // order for a machine and the wrong one for somebody who wants tonight's episode. The
+    // row itself carries it now, so twenty-five of these do not read as a column of buttons.
     [Fact]
     public void Build_OffersToSearchOneEpisodeNow()
     {
-        PluginComponent button = PluginNodes.All(QueueView.Build([Wanted(5)]))
-            .Should().ContainSingle(node => node.Component == Ui.ButtonComponent && node.Id.StartsWith("queue-search-now")).Which;
+        PluginComponent row = PluginNodes.TableRows(QueueView.Build([Wanted(5)])).Should().ContainSingle().Which;
 
-        button.Action!.Payload["method"].Should().Be("SearchNow/1/1/5");
+        row.Action!.Payload["method"].Should().Be("SearchNow/1/1/5");
+    }
+
+    // A clickable row does not announce itself the way a button labelled "Search now" did,
+    // so the page has to say what a click does. Without this the action is invisible.
+    [Fact]
+    public void Build_SaysThatARowCanBeClicked()
+    {
+        PluginNodes.Says(QueueView.Build([Wanted(1)]), "Click an episode to search for it now").Should().BeTrue();
+    }
+
+    // A table lines its columns up; a list of wrapping rows re-flows differently on every
+    // row, which is what made twenty-five wanted episodes unreadable.
+    [Fact]
+    public void Build_LinesTheEpisodesUpInColumns()
+    {
+        PluginNodes.All(QueueView.Build([Wanted(1)])).Should().Contain(node => node.Component == Ui.TableComponent);
     }
 }

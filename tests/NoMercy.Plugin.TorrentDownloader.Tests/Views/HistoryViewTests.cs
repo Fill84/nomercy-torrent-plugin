@@ -39,6 +39,31 @@ public class HistoryViewTests
         PluginNodes.All(HistoryView.Build([])).Should().Contain(node => node.Id == "tab-overview");
     }
 
+    // Fifty entries of five values each is the page this plugin is worst at when it draws
+    // them as wrapping rows: nothing lines up and the eye starts again on every line.
+    [Fact]
+    public void Build_LinesTheOutcomesUpInColumns()
+    {
+        PluginComponent table = PluginNodes.All(HistoryView.Build([Entry(HistoryEvent.Imported)]))
+            .Should().ContainSingle(node => node.Component == Ui.TableComponent).Which;
+
+        table.Props["columns"].Should().BeAssignableTo<IEnumerable<PluginTableColumn>>()
+            .Which.Select(column => column.Key)
+            .Should().Equal("outcome", "release", "episode", "when", "detail");
+    }
+
+    // The outcome is a badge cell, so its colour is the theme's business. A plugin that put
+    // the word in a plain cell would have to pick one itself.
+    [Fact]
+    public void Build_DrawsTheOutcomeAsABadgeWithASemanticVariant()
+    {
+        PluginComponent row = PluginNodes.TableRows(HistoryView.Build([Entry(HistoryEvent.Failed)]))
+            .Should().ContainSingle().Which;
+
+        PluginNodes.Cell(row, "outcome").Should().Be("Failed");
+        PluginNodes.Cell(row, "outcomeVariant").Should().Be(PluginBadgeVariant.Warning);
+    }
+
     [Fact]
     public void Build_SaysNothingHasHappenedRatherThanShowingAnEmptyList()
     {

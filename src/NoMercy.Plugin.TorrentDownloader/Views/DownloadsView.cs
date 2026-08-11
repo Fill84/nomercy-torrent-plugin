@@ -57,61 +57,89 @@ public static class DownloadsView
                     new PluginFormField { Name = "source", Label = "Magnet link", Required = true })));
     }
 
+    /// <summary>
+    /// One block per download rather than one wrapping row.
+    ///
+    /// <para>
+    /// The row was the reason this page was unreadable. A progress bar takes the full width
+    /// of whatever holds it, so a row containing one re-flowed around it and every other
+    /// value landed somewhere different on every row - a title here, a rate below it, two
+    /// buttons on a third line, and nothing lining up with the row above. A block has a
+    /// name, a line saying where it stands, the bar, and the buttons, in that order, every
+    /// time.
+    /// </para>
+    ///
+    /// <para>
+    /// Not a table either, unlike the pages that only list things: the two buttons here
+    /// pause and destroy, and a table cell cannot hold a button. Making the row itself the
+    /// action would mean a click that deletes a download.
+    /// </para>
+    /// </summary>
     private static PluginComponent ActiveList(IReadOnlyList<Transfer> transfers, IReadOnlyDictionary<string, Grab> byHash)
     {
-        List<PluginComponent> rows = [];
+        List<PluginComponent> blocks = [];
 
         foreach (Transfer transfer in transfers.OrderByDescending(transfer => transfer.Progress))
         {
             byHash.TryGetValue(transfer.InfoHash, out Grab? grab);
 
-            rows.Add(Ui.Row(
+            blocks.Add(Ui.Detail(
                 $"downloads-row-{transfer.InfoHash}",
-                Ui.Text($"downloads-title-{transfer.InfoHash}", grab?.ReleaseTitle ?? transfer.InfoHash),
-                Ui.Text($"downloads-episode-{transfer.InfoHash}", grab is null ? "" : Format.Covers(grab), "caption"),
+                grab?.ReleaseTitle ?? transfer.InfoHash,
+
+                // One line, in the order a reader asks: which episode, how far, how fast,
+                // and who from. Percentage as words rather than only the bar's own label,
+                // because a label inside a bar is one a reader walking the page - or a
+                // screen reader - may never reach. Rate and peers together, because
+                // percentage alone cannot tell a download apart from a stall: a torrent at
+                // 34% with four peers looks healthy right up until you notice it looked that
+                // way an hour ago.
+                Description(transfer, grab),
+
                 Ui.Progress($"downloads-progress-{transfer.InfoHash}", transfer.Progress),
 
-                // The percentage as its own text rather than only a label on the bar: a
-                // label that lives inside the bar is one a reader walking the page - or a
-                // screen reader - may never reach.
-                Ui.Text($"downloads-percent-{transfer.InfoHash}", Format.Percentage(transfer), "caption"),
+                Ui.Row(
+                    $"downloads-actions-{transfer.InfoHash}",
+                    transfer.Paused
+                        ? Ui.Button(
+                            $"downloads-resume-{transfer.InfoHash}",
+                            "Resume",
+                            PluginActionIntent.CallPlugin($"{PluginMethods.ResumeDownload}/{transfer.InfoHash}"))
+                        : Ui.Button(
+                            $"downloads-pause-{transfer.InfoHash}",
+                            "Pause",
+                            PluginActionIntent.CallPlugin($"{PluginMethods.PauseDownload}/{transfer.InfoHash}")),
 
-                // Rate and estimate beside the peers, because percentage alone cannot tell a
-                // download apart from a stall. A torrent sitting at 34% with four peers looks
-                // healthy right up until you notice it looked that way an hour ago.
-                Ui.Text($"downloads-rate-{transfer.InfoHash}", Format.Rate(transfer), "caption"),
-                Ui.Text($"downloads-peers-{transfer.InfoHash}", Format.Peers(transfer.Peers), "caption"),
-
-                transfer.Paused
-                    ? Ui.Button(
-                        $"downloads-resume-{transfer.InfoHash}",
-                        "Resume",
-                        PluginActionIntent.CallPlugin($"{PluginMethods.ResumeDownload}/{transfer.InfoHash}"))
-                    : Ui.Button(
-                        $"downloads-pause-{transfer.InfoHash}",
-                        "Pause",
-                        PluginActionIntent.CallPlugin($"{PluginMethods.PauseDownload}/{transfer.InfoHash}")),
-
-                // Confirmed, because it deletes the bytes and blacklists the release for a
-                // fortnight. That is not an undo away.
-                Ui.DestructiveButton(
-                    $"downloads-cancel-{transfer.InfoHash}",
-                    "Cancel",
-                    $"{PluginMethods.CancelDownload}/{transfer.InfoHash}",
-                    "Cancel this download?",
-                    $"The files are deleted and {grab?.ReleaseTitle ?? "this release"} is skipped for 14 days. "
-                        + "The episode goes back on the queue and the plugin looks for a different release.")));
+                    // Confirmed, because it deletes the bytes and blacklists the release for
+                    // a fortnight. That is not an undo away.
+                    Ui.DestructiveButton(
+                        $"downloads-cancel-{transfer.InfoHash}",
+                        "Cancel",
+                        $"{PluginMethods.CancelDownload}/{transfer.InfoHash}",
+                        "Cancel this download?",
+                        $"The files are deleted and {grab?.ReleaseTitle ?? "this release"} is skipped for 14 days. "
+                            + "The episode goes back on the queue and the plugin looks for a different release."))));
         }
 
-        // A list of rows rather than a table. The design system turns a table's cells into
-        // nodes of its own, so its rows do not live where the rest of a payload's children
-        // do - which makes them invisible to anything walking the tree, tests included. A row
-        // of text and a progress bar draws the same and stays readable.
-        return rows.Count == 0
+        return blocks.Count == 0
             ? Ui.EmptyState(
                 "downloads-active-empty",
                 "Nothing is downloading right now.",
                 "Finished downloads move to the intake and leave this list.")
-            : Ui.List("downloads-active", [.. rows]);
+            : Ui.List("downloads-active", [.. blocks]);
+    }
+
+    private static string Description(Transfer transfer, Grab? grab)
+    {
+        List<string> parts = [];
+
+        if (grab is not null)
+            parts.Add(Format.Covers(grab));
+
+        parts.Add(Format.Percentage(transfer));
+        parts.Add(Format.Rate(transfer));
+        parts.Add(Format.Peers(transfer.Peers));
+
+        return string.Join(" · ", parts);
     }
 }

@@ -48,8 +48,12 @@ public static class SettingsView
         {
             for (int index = 0; index < settings.PrivateTrackers.Count; index++)
             {
-                children.Add(BuildPrivateTrackerForm(index, settings.PrivateTrackers[index], storedSecretKeys));
-                children.Add(BuildRemovePrivateTrackerButton(index));
+                // One block per tracker, so its form and the button that deletes it stay
+                // together rather than the remove button sitting above the next one's name.
+                children.Add(Ui.Container(
+                    $"settings-tracker-{index}",
+                    BuildPrivateTrackerForm(index, settings.PrivateTrackers[index], storedSecretKeys),
+                    BuildRemovePrivateTrackerButton(index)));
             }
         }
         else

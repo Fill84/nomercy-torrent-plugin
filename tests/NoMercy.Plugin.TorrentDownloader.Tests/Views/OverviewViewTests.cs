@@ -156,6 +156,22 @@ public class OverviewViewTests
         PluginNodes.Says(view, "Never Watched").Should().BeTrue();
     }
 
+    // Tiles, not a column of buttons: a card is the one component with a surface of its own,
+    // so twenty shows read as twenty things. The whole tile is the button, which is why the
+    // subtitle has to say what pressing it does.
+    [Fact]
+    public void Build_DrawsTheShowsAsTilesThatSayWhatAClickDoes()
+    {
+        PluginView view = Build(shows: [new FollowableShow(42, "Never Watched", Followed: false)]);
+
+        PluginNodes.All(view).Should().Contain(node => node.Component == Ui.GridComponent);
+
+        PluginComponent tile = PluginNodes.All(view).Single(node => node.Id == "overview-follow-42");
+
+        tile.Component.Should().Be(Ui.CardComponent);
+        tile.Props["subtitle"].Should().Be("Click to follow");
+    }
+
     [Fact]
     public void Build_OffersToStopFollowingAShowItIsAlreadyFollowing()
     {
