@@ -49,8 +49,37 @@ public class OverviewViewTests
         IReadOnlyList<Grab>? grabs = null,
         IReadOnlyList<WantedEpisode>? wanted = null,
         IReadOnlyList<HistoryEntry>? history = null,
-        IReadOnlyList<string>? ungranted = null) =>
-        OverviewView.Build(transfers ?? [], grabs ?? [], wanted ?? [], history ?? [], ungranted ?? []);
+        IReadOnlyList<string>? ungranted = null,
+        int shows = 0) =>
+        OverviewView.Build(transfers ?? [], grabs ?? [], wanted ?? [], history ?? [], ungranted ?? [], shows);
+
+    /// <summary>
+    /// The two numbers this plugin puts in front of somebody are episodes here and shows on
+    /// the next tab. Read one after the other - 42, then a list of 25 - they look like a
+    /// contradiction, and the reader is left doing the arithmetic to find out it is not one.
+    /// </summary>
+    [Fact]
+    public void Build_SaysHowManyShowsTheWantedEpisodesAreSpreadAcross()
+    {
+        PluginNodes.Says(Build(wanted: [Wanted(1), Wanted(2)], shows: 25), "2 episodes wanted across 25 shows")
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void Build_SaysFromOneShowRatherThanAcrossOne()
+    {
+        PluginNodes.Says(Build(wanted: [Wanted(1)], shows: 1), "1 episode wanted from 1 show").Should().BeTrue();
+    }
+
+    /// <summary>
+    /// "0 episodes wanted across 25 shows" makes an idle plugin sound busy, on the one line
+    /// meant to be read at a glance.
+    /// </summary>
+    [Fact]
+    public void Build_LeavesTheShowsOutWhenNothingIsWanted()
+    {
+        PluginNodes.Says(Build(shows: 25), "across").Should().BeFalse();
+    }
 
     [Fact]
     public void Build_DrawsOnlyTagsAClientKnows()

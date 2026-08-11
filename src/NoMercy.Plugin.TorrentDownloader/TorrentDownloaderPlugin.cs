@@ -860,7 +860,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             await store.ActiveGrabsAsync(ct),
             await store.WantedAsync(int.MaxValue, ct),
             await store.HistoryAsync(OverviewView.DigestLength, ct),
-            await hostGrants.EnsureAsync(loaded.Settings, ct));
+            await hostGrants.EnsureAsync(loaded.Settings, ct),
+
+            // The count, not the list: the summary line names how many shows those wanted
+            // episodes are spread across, and nothing else on this page needs them.
+            (await store.ShowsAsync(ct)).Count);
     }
 
     // Reads the store and nothing else. Deliberately not through PipelineAsync: that builds
