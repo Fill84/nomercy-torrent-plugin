@@ -111,6 +111,19 @@ public sealed record OrchestratorOptions
     public required string DownloadFolder { get; init; }
 
     /// <summary>
+    /// Trackers added to every torrent, on top of whatever the indexers named for it.
+    ///
+    /// <para>
+    /// The aggregator already merges the trackers every indexer reported for one info hash,
+    /// which is the bigger half of the swarm. These are the owner's own, and they go on
+    /// everything rather than only on the magnets this plugin had to build - a torrent
+    /// found through one site announces to that site's trackers alone, and the peers on the
+    /// others are simply never asked.
+    /// </para>
+    /// </summary>
+    public IReadOnlyList<string> ExtraTrackers { get; init; } = [];
+
+    /// <summary>
     /// How much room to leave on the disk after a download finishes.
     ///
     /// <para>
@@ -444,6 +457,42 @@ public sealed class DownloadOrchestrator(
         return new SearchCycle(searched, grabbed);
     }
 
+    /// <summary>
+    /// Whether a failure was simply that nobody had it.
+    ///
+    /// <para>
+    /// Matched on the engine's own wording rather than a type, because the engine reports a
+    /// reason and not a category - and inventing a category for this one case would put the
+    /// judgement in the wrong place. The engine decides what went wrong; this decides
+    /// whether it is worth telling anybody.
+    /// </para>
+    /// </summary>
+    private static bool NobodyWasSeeding(string? reason) =>
+        reason is not null && reason.Contains("no peer", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Every tracker worth announcing this torrent to, once each.
+    ///
+    /// <para>
+    /// Order matters and is kept: what the indexers said comes first, because those are the
+    /// swarms the release is actually in, and the owner's general ones follow. Compared
+    /// case-insensitively so one tracker spelled two ways is not announced to twice.
+    /// </para>
+    /// </summary>
+    private IReadOnlyList<string> Announce(IReadOnlyList<string> reported)
+    {
+        List<string> announce = [];
+        HashSet<string> seen = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (string tracker in reported.Concat(options.ExtraTrackers))
+        {
+            if (tracker.Length > 0 && seen.Add(tracker.Trim()))
+                announce.Add(tracker.Trim());
+        }
+
+        return announce;
+    }
+
     /// <summary>An episode named the way history reads best when no release got far enough to have a name.</summary>
     private static string Slot(EpisodeKey key) => $"S{key.Season:D2}E{key.Episode:D2}";
 
@@ -741,12 +790,18 @@ public sealed class DownloadOrchestrator(
                 ? gapsInSeason
                 : [episode.Key];
 
+        // Everything anybody named for this torrent, plus the owner's own. The aggregator
+        // has already merged what every indexer reported for this info hash; adding the
+        // configured ones on top is what turns a torrent found through one site into a
+        // torrent announced to every swarm the owner knows about.
+        IReadOnlyList<string> trackers = Announce(chosen.Trackers);
+
         string infoHash = await engine.AddAsync(new TorrentRequest
         {
             Source = source,
             DestinationFolder = options.DownloadFolder,
             Origin = privateTrackers.OriginFor(chosen.Trackers),
-            ExtraTrackers = chosen.Trackers,
+            ExtraTrackers = trackers,
         }, ct);
 
         await store.AddGrabAsync(new Grab
@@ -764,18 +819,10 @@ public sealed class DownloadOrchestrator(
         foreach (EpisodeKey key in covers)
             await store.MarkSearchedAsync(key, now(), WantedState.Grabbed, ct);
 
-        await store.RecordHistoryAsync(new HistoryEntry
-        {
-            At = now(),
-            Event = HistoryEvent.Grabbed,
-            Key = episode.Key,
-            ShowTitle = episode.ShowTitle,
-            ReleaseTitle = chosen.Title,
-            Indexer = chosen.IndexerName,
-            SizeBytes = chosen.SizeBytes,
-            Detail = covers.Count > 1 ? $"a season pack covering {covers.Count} episodes" : null,
-        }, ct);
-
+        // No history yet. Choosing something is not news: most of what is chosen off a
+        // public tracker turns out to have nobody seeding it, and a line per choice buried
+        // the two that actually arrived under a dozen that never started. The entry is
+        // written when bytes appear - see TransfersCycleAsync.
         return covers;
     }
 
@@ -817,6 +864,23 @@ public sealed class DownloadOrchestrator(
 
                 case EngineState.Downloading when grab.State is GrabState.Grabbed or GrabState.Resolving:
                     await store.UpdateGrabAsync(transfer.InfoHash, GrabState.Downloading, null, null, ct);
+
+                    // Here rather than at the moment it was chosen, because this is the
+                    // first point at which anything real has happened: a peer answered and
+                    // bytes are moving. Once per download - the guard above only lets this
+                    // arm run on the way out of Grabbed or Resolving.
+                    await store.RecordHistoryAsync(new HistoryEntry
+                    {
+                        At = now(),
+                        Event = HistoryEvent.Grabbed,
+                        Key = grab.Key,
+                        ShowTitle = null,
+                        ReleaseTitle = grab.ReleaseTitle,
+                        Indexer = grab.Indexer,
+                        SizeBytes = grab.SizeBytes,
+                        Detail = grab.Covered.Count > 1 ? $"a season pack covering {grab.Covered.Count} episodes" : null,
+                    }, ct);
+
                     break;
 
                 case EngineState.Completed when grab.State != GrabState.Imported:
@@ -868,6 +932,7 @@ public sealed class DownloadOrchestrator(
                 Source = grab.Source,
                 DestinationFolder = options.DownloadFolder,
                 Origin = privateTrackers.OriginFor([]),
+                ExtraTrackers = Announce([]),
             }, ct);
         }
     }
@@ -1164,6 +1229,13 @@ public sealed class DownloadOrchestrator(
             await store.MarkSearchedAsync(key, now(), WantedState.Wanted, ct);
 
         await engine.RemoveAsync(grab.InfoHash, deleteFiles: true, ct);
+
+        // A swarm with nobody in it is not an event. It is the ordinary weather of a public
+        // tracker, the episode is already back on the queue, and there is nothing anybody
+        // can do about it - so a line saying so is noise that hides the failures somebody
+        // could act on. Everything else is written down.
+        if (NobodyWasSeeding(transfer.FailureReason))
+            return;
 
         await store.RecordHistoryAsync(new HistoryEntry
         {

@@ -38,6 +38,32 @@ public static class QualityLadders
     /// lower is a preference the scorer can talk itself out of when the seeders look good.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// One rung, and nothing else on the ladder.
+    ///
+    /// <para>
+    /// The strict reading of a quality setting, and the one torrent-feed takes: 1080p means
+    /// 1080p rather than "1080p or anything below it". A ceiling sounds kinder and is not,
+    /// because a 720p release of tonight's episode is usually the first one posted - so the
+    /// ceiling quietly turns into the answer, and the owner ends up with the quality they
+    /// did not choose.
+    /// </para>
+    ///
+    /// <para>
+    /// The cost is real and deliberate: an episode that exists only in 720p is never taken.
+    /// That is the owner's call and it is a setting.
+    /// </para>
+    /// </summary>
+    public static QualityLadder Only(Resolution resolution)
+    {
+        if (!Ascending.Contains(resolution))
+            throw new ArgumentOutOfRangeException(nameof(resolution), resolution, "not a resolution a ladder can be built from");
+
+        QualityDefinition rung = new(NameOf(resolution), resolution, ReleaseSource.Unknown);
+
+        return new QualityLadder([rung], rung.Name);
+    }
+
     public static QualityLadder UpTo(Resolution maximum)
     {
         if (!Ascending.Contains(maximum))

@@ -569,6 +569,47 @@ public class DownloadOrchestratorTests
             .Should().ContainSingle().Which.ReleaseTitle.Should().NotBeNullOrEmpty();
     }
 
+    // --- as many swarms as possible ------------------------------------------------------
+
+    /// <summary>
+    /// A torrent found through one site announces to that site's trackers alone, and every
+    /// peer on the others is simply never asked. The aggregator already merges what each
+    /// indexer reported for one info hash; the owner's own list goes on top of that.
+    /// </summary>
+    [Fact]
+    public async Task SearchCycleAsync_AnnouncesToTheOwnersTrackersAsWellAsTheIndexersOwn()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release() with { Trackers = ["udp://from-the-site:1337/announce"] }];
+
+        await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            ExtraTrackers = ["udp://the-owners:80/announce"],
+        }).SearchCycleAsync(CancellationToken.None);
+
+        _engine.Added.Should().ContainSingle().Which.ExtraTrackers
+            .Should().Equal("udp://from-the-site:1337/announce", "udp://the-owners:80/announce");
+    }
+
+    // One tracker spelled two ways is one tracker, and announcing to it twice is a request
+    // for nothing.
+    [Fact]
+    public async Task SearchCycleAsync_AnnouncesToEachTrackerOnce()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release() with { Trackers = ["udp://shared:80/announce"] }];
+
+        await Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            ExtraTrackers = ["UDP://SHARED:80/announce", "udp://extra:80/announce"],
+        }).SearchCycleAsync(CancellationToken.None);
+
+        _engine.Added.Should().ContainSingle().Which.ExtraTrackers
+            .Should().Equal("udp://shared:80/announce", "udp://extra:80/announce");
+    }
+
     // --- surviving a restart -------------------------------------------------------------
 
     /// <summary>
@@ -1056,17 +1097,49 @@ public class DownloadOrchestratorTests
 
     // --- history ---------------------------------------------------------------------
 
-    // The page only ever showed the present. This is the line that answers "what happened
-    // to that episode" the morning after it left the list.
+    /// <summary>
+    /// Choosing something is not news.
+    ///
+    /// <para>
+    /// Most of what is chosen off a public tracker turns out to have nobody seeding it, and
+    /// a history line per choice buried the two downloads that actually arrived under a
+    /// dozen that never started. Written when bytes appear instead.
+    /// </para>
+    /// </summary>
     [Fact]
-    public async Task SearchCycleAsync_WritesDownWhatItGrabbedAndWhereFrom()
+    public async Task SearchCycleAsync_WritesNoHistoryUntilSomethingActuallyArrives()
     {
         await GrabOneAsync();
 
+        _store.History.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task TransfersCycleAsync_WritesDownWhatItGrabbedOnceBytesAppear()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+        _engine.Transfers = [new EngineTransfer { InfoHash = hash, State = EngineState.Downloading }];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
         HistoryEntry entry = _store.History.Should().ContainSingle().Subject;
         entry.Event.Should().Be(HistoryEvent.Grabbed);
-        entry.ShowTitle.Should().Be("Some Show");
         entry.Indexer.Should().Be("site-a");
+    }
+
+    // Once per download, not once per tick.
+    [Fact]
+    public async Task TransfersCycleAsync_WritesThatLineOnlyOnce()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+        _engine.Transfers = [new EngineTransfer { InfoHash = hash, State = EngineState.Downloading }];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _store.History.Should().ContainSingle();
     }
 
     [Fact]
@@ -1087,12 +1160,33 @@ public class DownloadOrchestratorTests
     {
         await GrabOneAsync();
         string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
-        _engine.Transfers = [Failed(hash, "no peers after 30 minutes")];
+        _engine.Transfers = [Failed(hash, "the disk is full")];
 
         await Orchestrator().TransfersCycleAsync(CancellationToken.None);
 
         HistoryEntry entry = _store.History.Should().ContainSingle(entry => entry.Event == HistoryEvent.Failed).Subject;
-        entry.Detail.Should().Be("no peers after 30 minutes");
+        entry.Detail.Should().Be("the disk is full");
+    }
+
+    /// <summary>
+    /// A swarm with nobody in it is not an event. It is the ordinary weather of a public
+    /// tracker, the episode goes straight back on the queue, and nobody can act on it - so a
+    /// line saying so is noise hiding the failures somebody could act on.
+    /// </summary>
+    [Fact]
+    public async Task TransfersCycleAsync_SaysNothingWhenNobodyWasSeedingIt()
+    {
+        await GrabOneAsync();
+        string hash = (await _store.ActiveGrabsAsync(CancellationToken.None))[0].InfoHash;
+        _engine.Transfers = [Failed(hash, "no peer offered this torrent's contents within the time allowed")];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _store.History.Should().BeEmpty();
+
+        // Still put back, still skipped, still removed - only the telling is dropped.
+        (await _store.WantedAsync(10, CancellationToken.None)).Should().ContainSingle()
+            .Which.State.Should().Be(WantedState.Wanted);
     }
 
     // --- the owner's own hands ------------------------------------------------------

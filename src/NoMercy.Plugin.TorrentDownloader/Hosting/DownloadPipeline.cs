@@ -91,6 +91,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
                 DownloadFolder = downloads,
                 IncludeSpecials = settings.IncludeSpecials,
                 FollowedShowIds = settings.FollowedShowIds,
+                ExtraTrackers = settings.DefaultTrackers,
             },
 
             PrivateTrackers(context, loaded),
@@ -293,7 +294,11 @@ internal sealed class DownloadPipeline : IAsyncDisposable
     private static ReleaseProfile ProfileFor(TorrentDownloaderSettings settings) => new()
     {
         Name = "default",
-        Quality = QualityLadders.UpTo(QualityLadders.ParseResolution(settings.MaximumResolution, Resolution.Fhd1080)),
+        // One rung, not a ceiling. A ceiling reads as generous and behaves as a
+        // downgrade: the 720p copy of tonight's episode is usually posted first, so it
+        // becomes the answer and the owner gets a quality they did not ask for. On a real
+        // server that meant 720p grabs against a 1080p setting.
+        Quality = QualityLadders.Only(QualityLadders.ParseResolution(settings.MaximumResolution, Resolution.Fhd1080)),
         MinSeeders = Math.Max(1, settings.MinimumSeeders),
         AllowSeasonPacks = settings.AllowSeasonPacks,
         Codec = CodecFor(settings.Codec),
