@@ -145,64 +145,22 @@ public class OverviewViewTests
         PluginNodes.Says(Build(wanted: [Wanted(1)]), "0 downloading").Should().BeTrue();
     }
 
-    // The counterpart of the rule that keeps a first run from being a thousand downloads:
-    // without somewhere to say "except this one", the plugin can never start a show at all.
+    /// <summary>
+    /// Named, not listed. Deciding about one show belongs on Shows, which is the page for
+    /// deciding about a show; what belongs here is that there are some at all, because an
+    /// owner who does not know that concludes the plugin is ignoring half their library.
+    /// </summary>
     [Fact]
-    public void Build_OffersToFollowAShowWithNothingOnTheServer()
+    public void Build_SaysHowManyShowsItIsLeavingAloneAndSendsYouToThem()
     {
         PluginView view = Build(shows: [new FollowableShow(42, "Never Watched", Followed: false)]);
 
-        PluginComponent button = PluginNodes.All(view).Should()
-            .ContainSingle(node => node.Id == "overview-follow-42").Which;
+        PluginNodes.Says(view, "One show has nothing on the server").Should().BeTrue();
 
-        button.Action!.Payload["method"].Should().Be("FollowShow/42");
-        PluginNodes.Says(view, "Never Watched").Should().BeTrue();
-    }
+        PluginComponent more = PluginNodes.All(view).Should()
+            .ContainSingle(node => node.Id == "overview-unstarted-more").Which;
 
-    // Not tiles. A card truncates at ten rem, and these are titles like "GINTAMA - Mr.
-    // Ginpachi's Zany Class": twelve tiles of clipped text is a worse answer than twelve
-    // lines you can read.
-    [Fact]
-    public void Build_ListsTheShowsWithTheirNamesReadableInFull()
-    {
-        PluginView view = Build(shows: [new FollowableShow(42, "GINTAMA - Mr. Ginpachi's Zany Class", Followed: false)]);
-
-        PluginComponent row = PluginNodes.TableRows(view).Should()
-            .ContainSingle(node => node.Id == "overview-follow-42").Which;
-
-        PluginNodes.Cell(row, "show").Should().Be("GINTAMA - Mr. Ginpachi's Zany Class");
-        PluginNodes.Cell(row, "follow").Should().Be("Follow");
-    }
-
-    /// <summary>
-    /// An empty state is half a screen of icon and heading. On the page somebody opens to
-    /// check whether anything is wrong, a section saying "nothing here" in that much space
-    /// is space the things that are wrong should be using - and the line at the top already
-    /// says "0 downloading".
-    /// </summary>
-    [Fact]
-    public void Build_DoesNotSpendHalfAScreenSayingNothingIsDownloading()
-    {
-        PluginView view = Build(wanted: [Wanted(1)], ungranted: ["www.scnsrc.me"]);
-
-        PluginNodes.All(view).Should().NotContain(node => node.Id == "overview-now");
-        PluginNodes.Says(view, "0 downloading").Should().BeTrue();
-    }
-
-    // The one case an empty state belongs in: the whole page has nothing, not one section.
-    [Fact]
-    public void Build_SaysSoWhenThereIsGenuinelyNothingToReport()
-    {
-        PluginNodes.All(Build()).Should().Contain(node => node.Id == "overview-idle");
-    }
-
-    [Fact]
-    public void Build_OffersToStopFollowingAShowItIsAlreadyFollowing()
-    {
-        PluginView view = Build(shows: [new FollowableShow(42, "Asked For", Followed: true)]);
-
-        PluginNodes.All(view).Should().Contain(node => node.Id == "overview-unfollow-42");
-        PluginNodes.All(view).Should().NotContain(node => node.Id == "overview-follow-42");
+        more.Action!.Payload[PluginNavigation.RouteKey].Should().Be("/shows");
     }
 
     // A library where every show has files is the normal case, and a heading over an empty

@@ -70,13 +70,20 @@ public static class OverviewView
                 Now(transfers, byHash)));
         }
 
+        // Named, not listed. Following one is a decision per show and Shows is where a show
+        // is decided about; what belongs here is that there are some, because an owner who
+        // does not know that concludes the plugin is ignoring half their library.
         if (unstartedShows.Count > 0)
         {
             children.Add(Ui.Section(
                 "overview-unstarted",
                 Format.Count("Not started", unstartedShows.Count),
-                "Nothing of these is on the server yet. Click one to follow it.",
-                Unstarted(unstartedShows)));
+                unstartedShows.Count == 1
+                    ? "One show has nothing on the server, so the plugin leaves it alone."
+                    : $"{unstartedShows.Count} shows have nothing on the server, so the plugin leaves them alone.",
+                Ui.Row(
+                    "overview-unstarted-actions",
+                    Ui.Button("overview-unstarted-more", "Shows", Pages.Routes.GoTo(Pages.Shows)))));
         }
 
         // The one case an empty state belongs in: the whole page has nothing, rather than
@@ -188,44 +195,6 @@ public static class OverviewView
     /// can never start a show at all. This is that somewhere until the Shows page exists.
     /// </para>
     /// </summary>
-    private static readonly PluginTableColumn[] ShowColumns =
-    [
-        new() { Key = "show", Label = "Show" },
-        new() { Key = "follow", Label = "", Width = "10rem", Align = "right" },
-    ];
-
-    /// <summary>
-    /// The shows the plugin is leaving alone, each with the one click that changes that.
-    ///
-    /// <para>
-    /// A row and not a tile, though a tile is the only component with a surface of its own.
-    /// A tile is ten rem wide and truncates, and these are titles like "GINTAMA - Mr.
-    /// Ginpachi's Zany Class" and "Backstabbed in a Backwater Dungeon": twelve tiles of
-    /// clipped text is a worse answer than twelve lines you can read. Tiles are for things
-    /// with artwork, and this plugin cannot get a poster path.
-    /// </para>
-    /// </summary>
-    private static PluginComponent Unstarted(IReadOnlyList<FollowableShow> shows)
-    {
-        List<PluginComponent> rows = [];
-
-        foreach (FollowableShow show in shows.OrderBy(show => show.Title, StringComparer.CurrentCultureIgnoreCase))
-        {
-            rows.Add(Ui.TableRow(
-                show.Followed ? $"overview-unfollow-{show.ShowId}" : $"overview-follow-{show.ShowId}",
-                new()
-                {
-                    ["show"] = show.Title,
-                    ["follow"] = show.Followed ? "Stop following" : "Follow",
-                },
-                PluginActionIntent.CallPlugin(show.Followed
-                    ? $"{PluginMethods.UnfollowShow}/{show.ShowId}"
-                    : $"{PluginMethods.FollowShow}/{show.ShowId}")));
-        }
-
-        return Ui.Table("overview-unstarted-list", ShowColumns, rows);
-    }
-
     /// <summary>The whole plugin in one sentence: what is moving, what is waiting, what has landed.</summary>
     private static string Summary(
         IReadOnlyList<Transfer> transfers,

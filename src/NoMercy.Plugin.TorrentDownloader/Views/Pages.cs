@@ -25,6 +25,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 public static class Pages
 {
     public const string Overview = "overview";
+    public const string Shows = "shows";
     public const string Downloads = "downloads";
     public const string Queue = "queue";
     public const string History = "history";
@@ -43,6 +44,9 @@ public static class Pages
     /// </summary>
     public const string Source = "source";
 
+    /// <summary>One show, on its own page. Reached from the list, like a source.</summary>
+    public const string Show = "show";
+
     /// <summary>
     /// The pages, in the order the tab bar offers them: what is happening, then what is
     /// being worked on, then what happened, then what it is all configured from.
@@ -56,6 +60,8 @@ public static class Pages
     /// </summary>
     public static PluginRouteTable Routes { get; } = new(
         new PluginRoute { Path = "/", Name = Overview, Label = "Overview" },
+        new PluginRoute { Path = "/shows", Name = Shows, Label = "Shows" },
+        new PluginRoute { Path = "/shows/:showId", Name = Show, Label = "Show" },
         new PluginRoute { Path = "/downloads", Name = Downloads, Label = "Downloads" },
         new PluginRoute { Path = "/queue", Name = Queue, Label = "Queue" },
         new PluginRoute { Path = "/history", Name = History, Label = "History" },
@@ -76,7 +82,7 @@ public static class Pages
     /// from the whole route table would grow an entry per configured source.
     /// </para>
     /// </summary>
-    private static readonly string[] TabOrder = [Overview, Downloads, Queue, History, Sources, Skipped, Settings];
+    private static readonly string[] TabOrder = [Overview, Shows, Downloads, Queue, History, Sources, Skipped, Settings];
 
     /// <summary>
     /// A page: its own name, the bar, then whatever it is about.

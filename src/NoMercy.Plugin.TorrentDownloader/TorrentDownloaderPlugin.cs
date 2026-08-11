@@ -633,6 +633,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             PluginView view = match?.Route.Name switch
             {
                 Pages.Source => await SourcePageAsync(context, match.Param("index"), ct),
+                Pages.Shows => ShowsView.Build(await ShowsAsync(context, ct)),
+                Pages.Show => await ShowPageAsync(context, match.Param("showId"), ct),
                 Pages.Overview => await OverviewPageAsync(context, ct),
                 Pages.Downloads => await DownloadsPageAsync(context, ct),
                 Pages.Queue => QueueView.Build(await WantedAsync(context, ct)),
@@ -712,6 +714,82 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             loaded.Settings.Indexers[position],
             new HashSet<string>(storedSecretKeys, StringComparer.Ordinal),
             await HistoryAsync(context, SourcesView.HistoryDepth, ct));
+    }
+
+    /// <summary>
+    /// Every show the plugin knows about, with its counts already worked out.
+    ///
+    /// <para>
+    /// Assembled here rather than in the view, for the same reason every other page's data
+    /// is: a view that had to join four lists would be a view nothing could assert without
+    /// building all four. The joins are by show id throughout - a title is what a reader
+    /// matches on, not what a plugin should.
+    /// </para>
+    /// </summary>
+    private async Task<IReadOnlyList<ShowSummary>> ShowsAsync(IPluginContext context, CancellationToken ct)
+    {
+        IDownloadStore store = await StoreAsync(context, ct);
+
+        IReadOnlyList<WantedEpisode> wanted = await store.WantedAsync(int.MaxValue, ct);
+        IReadOnlyList<Grab> grabs = await store.ActiveGrabsAsync(ct);
+        IReadOnlyList<HistoryEntry> history = await store.HistoryAsync(int.MaxValue, ct);
+        HashSet<int> followed = [.. ReadSettingsOrDefault().FollowedShowIds];
+
+        Dictionary<int, string> titles = [];
+        Dictionary<int, ShowSummary> summaries = [];
+
+        foreach (WantedEpisode episode in wanted)
+            titles.TryAdd(episode.Key.ShowId, episode.ShowTitle);
+
+        foreach (HistoryEntry entry in history.Where(entry => entry.ShowTitle is not null))
+            titles.TryAdd(entry.Key.ShowId, entry.ShowTitle!);
+
+        // The shows the refresh decided to leave alone. They have nothing wanted and nothing
+        // in history, so they exist in no other list here - and they are the ones an owner
+        // most needs to find, because following one is what starts the whole loop for it.
+        foreach (UnstartedShow show in await store.UnstartedShowsAsync(ct))
+            titles.TryAdd(show.ShowId, show.Title);
+
+        HashSet<int> unstarted = [.. (await store.UnstartedShowsAsync(ct)).Select(show => show.ShowId)];
+
+        foreach ((int showId, string title) in titles)
+        {
+            summaries[showId] = new ShowSummary(
+                showId,
+                title,
+                wanted.Count(episode => episode.Key.ShowId == showId),
+                grabs.Count(grab => grab.Key.ShowId == showId),
+                history
+                    .Where(entry => entry.Key.ShowId == showId && entry.Event == HistoryEvent.Imported)
+                    .Select(entry => (DateTimeOffset?)entry.At)
+                    .Max(),
+                !unstarted.Contains(showId),
+                followed.Contains(showId));
+        }
+
+        return [.. summaries.Values];
+    }
+
+    private async Task<PluginView> ShowPageAsync(IPluginContext context, string? showId, CancellationToken ct)
+    {
+        IReadOnlyList<ShowSummary> shows = await ShowsAsync(context, ct);
+
+        if (!int.TryParse(showId, out int id) || shows.FirstOrDefault(show => show.ShowId == id) is not { } show)
+        {
+            return Pages.Page(
+                Pages.Show,
+                "Show",
+                0,
+                Ui.EmptyState("show-missing-show", "That show is gone", "The library no longer has it."),
+                Ui.Row("show-back", Ui.Button("show-back-button", "Back to shows", Pages.Routes.GoTo(Pages.Shows))));
+        }
+
+        IDownloadStore store = await StoreAsync(context, ct);
+
+        return ShowsView.Detail(
+            show,
+            [.. (await store.WantedAsync(int.MaxValue, ct)).Where(episode => episode.Key.ShowId == id)],
+            [.. (await store.HistoryAsync(int.MaxValue, ct)).Where(entry => entry.Key.ShowId == id)]);
     }
 
     private async Task<PluginView> OverviewPageAsync(IPluginContext context, CancellationToken ct)

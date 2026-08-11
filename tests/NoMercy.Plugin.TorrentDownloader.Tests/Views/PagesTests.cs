@@ -66,7 +66,7 @@ public class PagesTests
     {
         IEnumerable<string> labels = TabsOf(Pages.Overview).SelectMany(PluginNodes.Words);
 
-        labels.Should().BeEquivalentTo(["Overview", "Downloads", "Queue", "History", "Sources", "Skipped", "Settings"]);
+        labels.Should().BeEquivalentTo(["Overview", "Shows", "Downloads", "Queue", "History", "Sources", "Skipped", "Settings"]);
     }
 
     /// <summary>
