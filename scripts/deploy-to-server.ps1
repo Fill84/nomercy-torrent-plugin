@@ -66,7 +66,12 @@ foreach ($file in $files) {
     Get-Content -Raw $temp | ssh -o BatchMode=yes $Server 'cat > /tmp/nm-deploy.b64'
     Remove-Item $temp -Force
 
-    $remote = ssh -o BatchMode=yes $Server "base64 -d /tmp/nm-deploy.b64 > `"$remoteDir/$file`" && md5sum `"$remoteDir/$file`""
+    # tr first, because PowerShell terminates a pipe into a native command with
+    # CRLF and GNU base64 rejects the CR outright - "base64: invalid input",
+    # with an empty hash that reads exactly like a file the server still holds
+    # open. The bash script redirects a file into ssh instead and never grows
+    # the extra byte; stripping here means one remote command serves both.
+    $remote = ssh -o BatchMode=yes $Server "tr -d '\r' < /tmp/nm-deploy.b64 | base64 -d > `"$remoteDir/$file`" && md5sum `"$remoteDir/$file`""
     $remoteSum = ($remote -join '') -replace '[\\*]', '' -split ' ' | Select-Object -First 1
 
     # The hashes are the whole point. A busy file leaves the old bytes in place
