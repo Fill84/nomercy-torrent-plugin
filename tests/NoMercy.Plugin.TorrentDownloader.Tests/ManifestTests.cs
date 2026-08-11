@@ -179,4 +179,20 @@ public class ManifestTests
         // bar, and one straight to the settings page for the dashboard's settings section.
         mounts.Select(mount => mount.Route).Should().BeEquivalentTo(["/settings", "/"]);
     }
+
+    /// <summary>
+    /// The section is the URL. The host builds a page's path as
+    /// <c>{prefix-for-the-section}/plugins/{id}{route}</c>, so a mount that says "video"
+    /// puts every page in a namespace of its own instead of under the libraries the plugin
+    /// exists to keep complete - and nothing in the plugin can correct that afterwards.
+    /// </summary>
+    [Fact]
+    public void Manifest_MountsThePluginWithTheLibraryRatherThanWithOneMedium()
+    {
+        PluginManifest manifest = LoadManifest();
+
+        manifest.Capabilities!.Ui!.Mounts
+            .Should().ContainSingle(mount => mount.Route == "/")
+            .Which.Section.Should().Be(PluginUiSection.Library);
+    }
 }

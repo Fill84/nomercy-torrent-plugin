@@ -21,7 +21,7 @@
           "route": "/settings"
         },
         {
-          "section": "video",
+          "section": "library",
           "label": "Torrent Downloader",
           "icon": "download",
           "route": "/"

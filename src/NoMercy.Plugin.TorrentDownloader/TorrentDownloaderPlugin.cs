@@ -522,7 +522,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             },
             new PluginNavEntry
             {
-                Section = PluginUiSection.Video,
+                // The library as a whole, not the video medium. What this plugin does is
+                // keep a library complete; it is not a thing you reach while looking at one
+                // film. The section is also what decides the URL - the host builds the
+                // prefix from it - so this is what puts the pages under /libraries rather
+                // than off in a namespace of their own.
+                Section = PluginUiSection.Library,
                 Label = PluginIdentity.Name,
                 Icon = "download",
                 Route = "/",
