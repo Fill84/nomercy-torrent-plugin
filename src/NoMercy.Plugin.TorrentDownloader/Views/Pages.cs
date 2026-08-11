@@ -99,4 +99,38 @@ public static class Pages
     /// </summary>
     public static string LabelOf(string name) =>
         Routes.Routes.FirstOrDefault(route => route.Name == name)?.Label ?? name;
+
+    /// <summary>
+    /// What the last button press did, put on the page that gets drawn afterwards.
+    ///
+    /// <para>
+    /// The client posts an action, discards the response body whatever it says, and
+    /// re-fetches the view. So every sentence this plugin writes to explain a refusal - "a
+    /// site's search address needs {query}", "paste a magnet link first", "there is already
+    /// a source called that" - went nowhere, and a rejected form looked exactly like a form
+    /// that had saved. That was observed: a site address pasted without the placeholder was
+    /// refused, correctly, and the page said nothing at all.
+    /// </para>
+    ///
+    /// <para>
+    /// Inserted here rather than by each view, for the same reason the tab bar is: it is
+    /// something every page needs and none of them should have to remember. It goes above
+    /// the content and below the tabs, where a reader is already looking after pressing
+    /// something.
+    /// </para>
+    /// </summary>
+    public static PluginView WithNotice(PluginView view, string? message, bool failed)
+    {
+        if (string.IsNullOrWhiteSpace(message) || view.Components is not [PluginComponent root, ..])
+            return view;
+
+        root.Items.Insert(
+            Math.Min(2, root.Items.Count),
+            Ui.Row(
+                "notice",
+                Ui.Badge("notice-badge", failed ? "Not done" : "Done", failed ? PluginBadgeVariant.Warning : PluginBadgeVariant.Success),
+                Ui.Text("notice-text", message)));
+
+        return view;
+    }
 }

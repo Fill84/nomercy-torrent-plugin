@@ -48,6 +48,63 @@ public class AddSourceTests
         Saved().Indexers.Should().ContainSingle().Which.Kind.Should().Be("site");
     }
 
+    /// <summary>
+    /// The paste an owner actually makes.
+    ///
+    /// <para>
+    /// Observed on the real server: the address bar after searching a site by hand reads
+    /// <c>https://extranet.torrentbay.st/browse/?q=</c> once the term is cleared, and that is
+    /// what gets pasted. The empty value of the last query parameter is unambiguously where
+    /// the search terms go - there is nowhere else they could go - so filling it in beats
+    /// refusing a paste that is right in every way but one.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("https://extranet.torrentbay.st/browse/?q=", "https://extranet.torrentbay.st/browse/?q={query}")]
+    [InlineData("https://site.test/search?type=tv&q=", "https://site.test/search?type=tv&q={query}")]
+    public async Task HandleAddSourceAsync_FillsInTheSearchTermsWhereThePasteLeftThemBlank(string pasted, string stored)
+    {
+        (await AddAsync("A site", "site", pasted)).Succeeded.Should().BeTrue();
+
+        Saved().Indexers.Should().ContainSingle().Which.Url.Should().Be(stored);
+    }
+
+    /// <summary>
+    /// Any site, in whatever way the owner wrote down where the terms go.
+    ///
+    /// <para>
+    /// The two real addresses this was asked for put the terms in different places - one in
+    /// a query parameter, one in the path - which is exactly why the marker is the owner's
+    /// to place and not something the plugin can work out. What it should not do is insist
+    /// on one spelling of the marker.
+    /// </para>
+    /// </summary>
+    [Theory]
+    [InlineData("https://extranet.torrentbay.st/browse/?q=<replace>", "https://extranet.torrentbay.st/browse/?q={query}")]
+    [InlineData("https://www.limetorrents.fun/search/all/<replace>", "https://www.limetorrents.fun/search/all/{query}")]
+    [InlineData("https://site.test/search/%s", "https://site.test/search/{query}")]
+    [InlineData("https://site.test/search/{search}", "https://site.test/search/{query}")]
+    [InlineData("https://site.test/search/<QUERY>", "https://site.test/search/{query}")]
+    [InlineData("https://site.test/search/{query}", "https://site.test/search/{query}")]
+    public async Task HandleAddSourceAsync_TakesTheMarkerHoweverTheOwnerWroteIt(string written, string stored)
+    {
+        (await AddAsync("A site", "site", written)).Succeeded.Should().BeTrue();
+
+        Saved().Indexers.Should().ContainSingle().Which.Url.Should().Be(stored);
+    }
+
+    // Only the blank value at the end. Anything else is a guess about which part of somebody
+    // else's URL means "the thing I searched for", and a wrong guess searches the wrong page
+    // forever without ever looking broken.
+    [Fact]
+    public async Task HandleAddSourceAsync_DoesNotGuessWhereTermsGoInAnOrdinaryPath()
+    {
+        SaveSettingsOutcome outcome = await AddAsync("A site", "site", "https://site.test/browse/tv/");
+
+        outcome.Succeeded.Should().BeFalse();
+        outcome.Error.Should().Contain("{query}");
+    }
+
     // Without the placeholder it searches the same page for every query, which reads as a
     // working site with bad results rather than as a setting nobody filled in.
     [Fact]

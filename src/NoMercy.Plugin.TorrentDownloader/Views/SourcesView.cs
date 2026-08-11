@@ -58,7 +58,8 @@ public static class SourcesView
         children.Add(Ui.Section(
             "sources-add",
             "Add a source",
-            "A feed announces which releases exist; a site is where the torrent is, searched by that name. Most setups want one of each.",
+            "A feed announces which releases exist; a site is where the torrent is, searched by that name. Most setups want one of each. "
+                + $"For a site: search it once by hand, paste the address, and put {SiteIndexer.QueryPlaceholder} where what you searched for was.",
             Ui.Form(
                 "sources-add-form",
                 "Add source",
@@ -75,7 +76,13 @@ public static class SourcesView
                 new PluginFormField
                 {
                     Name = "url",
-                    Label = $"Address - a site needs {SiteIndexer.QueryPlaceholder} where the search terms go",
+                    Label = "Address",
+
+                    // The placeholder does the teaching, because it shows the shape rather
+                    // than describing it. A label reading "put {query} where the terms go"
+                    // was on screen while an address was pasted without it - people copy an
+                    // example, they do not parse a sentence.
+                    Placeholder = $"https://a-site.test/search/{SiteIndexer.QueryPlaceholder}",
                     Required = true,
                 })));
 
@@ -176,7 +183,14 @@ public static class SourcesView
                 Value = indexer.Kind,
                 Options = [.. Kinds()],
             },
-            new() { Name = "url", Label = UrlLabel(indexer.Kind), Value = indexer.Url, Required = true },
+            new()
+            {
+                Name = "url",
+                Label = UrlLabel(indexer.Kind),
+                Value = indexer.Url,
+                Placeholder = UrlPlaceholder(indexer.Kind),
+                Required = true,
+            },
             new() { Name = "priority", Label = "Priority", Type = PluginFormFieldType.Number, Value = indexer.Priority },
             new() { Name = "enabled", Label = "Enabled", Type = PluginFormFieldType.Toggle, Value = indexer.Enabled },
             new()
@@ -232,6 +246,11 @@ public static class SourcesView
         kind.Equals("site", StringComparison.OrdinalIgnoreCase)
             ? $"Search address, with {SiteIndexer.QueryPlaceholder} where the search terms go"
             : "URL";
+
+    private static string? UrlPlaceholder(string kind) =>
+        kind.Equals("site", StringComparison.OrdinalIgnoreCase)
+            ? $"https://a-site.test/search/{SiteIndexer.QueryPlaceholder}"
+            : null;
 
     // Never carries the stored value - Build never receives it in the first place. The
     // placeholder is the only signal of "stored", so the owner can tell "never set" from

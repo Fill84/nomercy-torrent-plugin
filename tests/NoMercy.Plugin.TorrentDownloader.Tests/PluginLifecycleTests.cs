@@ -292,6 +292,53 @@ public class PluginLifecycleTests
         }
     }
 
+    /// <summary>
+    /// The defect this exists for, seen on the real server: a site address pasted without
+    /// the placeholder was refused, correctly, with a sentence saying exactly what was
+    /// missing - and the page said nothing at all.
+    ///
+    /// <para>
+    /// The client posts an action, discards the response body whatever it says, and
+    /// re-fetches the view. So a refusal only reaches the person who caused it if the next
+    /// view carries it.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task GetViewAsync_PutsTheLastRefusalOnTheNextPage()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings();
+        plugin.Initialize(context);
+
+        SaveSettingsOutcome outcome = await plugin.AddSourceAsync(
+            new SaveSettingsRequest { Name = "A site", Kind = "site", Url = "https://site.test/browse/tv/" });
+
+        outcome.Succeeded.Should().BeFalse();
+
+        PluginView view = await plugin.GetViewAsync(new PluginViewRequest { Route = "/sources" }, CancellationToken.None);
+
+        PluginNodes.Says(view, "{query}").Should().BeTrue("the page has to say why nothing was added");
+    }
+
+    // Reported once. A notice that survived every later render would follow the reader from
+    // page to page describing something they have already dealt with.
+    [Fact]
+    public async Task GetViewAsync_ReportsOnePressOnce()
+    {
+        TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        context.Configuration.Stored = new TorrentDownloaderSettings();
+        plugin.Initialize(context);
+
+        await plugin.AddSourceAsync(new SaveSettingsRequest { Name = "", Kind = "rss", Url = "https://x.test/feed" });
+
+        await plugin.GetViewAsync(new PluginViewRequest { Route = "/sources" }, CancellationToken.None);
+        PluginView second = await plugin.GetViewAsync(new PluginViewRequest { Route = "/sources" }, CancellationToken.None);
+
+        PluginNodes.All(second).Should().NotContain(node => node.Id == "notice");
+    }
+
     // Every page carries the bar, so no page is a dead end. The sidebar draws nothing for
     // this plugin's section, which makes the bar the only way between pages.
     [Fact]

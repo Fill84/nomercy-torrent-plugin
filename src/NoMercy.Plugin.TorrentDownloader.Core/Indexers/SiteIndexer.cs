@@ -33,6 +33,68 @@ public sealed class SiteIndexer(
     /// <summary>What the owner puts in the URL where the search terms belong.</summary>
     public const string QueryPlaceholder = "{query}";
 
+    /// <summary>
+    /// The other spellings of the same idea, accepted and rewritten to
+    /// <see cref="QueryPlaceholder"/> on the way in.
+    ///
+    /// <para>
+    /// Nobody reads a label and then types the exact token it named. They write the thing
+    /// that means "put it here" - <c>&lt;replace&gt;</c>, <c>%s</c>, <c>{search}</c> - and a
+    /// plugin that accepts only one of them is refusing an address that is right in every
+    /// way that matters. The site's URL is the hard part; the token is not.
+    /// </para>
+    ///
+    /// <para>
+    /// Longest first, so <c>&lt;searchterm&gt;</c> is not half-consumed by
+    /// <c>&lt;search&gt;</c>.
+    /// </para>
+    /// </summary>
+    public static readonly string[] AcceptedPlaceholders =
+    [
+        QueryPlaceholder,
+        "{searchterms}",
+        "{searchterm}",
+        "<searchterms>",
+        "<searchterm>",
+        "{replace}",
+        "<replace>",
+        "{search}",
+        "<search>",
+        "<query>",
+        "{term}",
+        "<term>",
+        "{q}",
+        "<q>",
+        "{0}",
+        "%s",
+    ];
+
+    /// <summary>
+    /// The same address written the way the rest of this plugin expects it.
+    ///
+    /// <para>
+    /// Applied when settings are saved rather than per search, so what is stored is what is
+    /// used and the config file does not carry a spelling only this method understands.
+    /// </para>
+    /// </summary>
+    public static string Normalise(string? template)
+    {
+        if (string.IsNullOrWhiteSpace(template))
+            return template ?? string.Empty;
+
+        string normalised = template;
+
+        foreach (string alias in AcceptedPlaceholders)
+        {
+            if (alias == QueryPlaceholder)
+                continue;
+
+            normalised = normalised.Replace(alias, QueryPlaceholder, StringComparison.OrdinalIgnoreCase);
+        }
+
+        return normalised;
+    }
+
     public string Name => name;
 
     public int Priority => priority;

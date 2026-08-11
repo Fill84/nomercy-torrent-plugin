@@ -121,23 +121,23 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public async Task<SaveSettingsOutcome> AddTorrentAsync(SaveSettingsRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Source))
-            return SaveSettingsOutcome.Failure("Paste a magnet link first.");
+            return Remember(SaveSettingsOutcome.Failure("Paste a magnet link first."));
 
         if (_disposed || _context is null)
-            return SaveSettingsOutcome.Failure("Torrent Downloader is unavailable.");
+            return Remember(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
 
         try
         {
             DownloadPipeline pipeline = await PipelineAsync(_context, ct);
             ManualAdd added = await pipeline.Orchestrator.AddManuallyAsync(request.Source, ct);
 
-            return added.Added ? SaveSettingsOutcome.Done(added.Message) : SaveSettingsOutcome.Failure(added.Message);
+            return Remember(added.Added ? SaveSettingsOutcome.Done(added.Message) : SaveSettingsOutcome.Failure(added.Message));
         }
         catch (Exception failure)
         {
             _context.Logger.LogWarning(failure, "Torrent Downloader could not add a link by hand.");
 
-            return SaveSettingsOutcome.Failure("That link could not be added. The server log says why.");
+            return Remember(SaveSettingsOutcome.Failure("That link could not be added. The server log says why."));
         }
     }
 
@@ -153,13 +153,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public async Task<SaveSettingsOutcome> AllowReleaseAsync(string handle, CancellationToken ct = default)
     {
         if (_disposed || _context is null)
-            return SaveSettingsOutcome.Failure("Torrent Downloader is unavailable.");
+            return Remember(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
 
         IDownloadStore store = await StoreAsync(_context, ct);
 
-        return await store.AllowAgainAsync(handle, ct)
+        return Remember(await store.AllowAgainAsync(handle, ct)
             ? SaveSettingsOutcome.Done("Allowed again. It can be picked on the next search.")
-            : SaveSettingsOutcome.Failure("That release is not being skipped any more.");
+            : SaveSettingsOutcome.Failure("That release is not being skipped any more."));
     }
 
     /// <summary>
@@ -178,15 +178,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         string nothingHappened = "That download is no longer one this plugin is holding.")
     {
         if (_disposed || _context is null)
-            return SaveSettingsOutcome.Failure("Torrent Downloader is unavailable.");
+            return Remember(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
 
         try
         {
             DownloadPipeline pipeline = await PipelineAsync(_context, ct);
 
-            return await act(pipeline.Orchestrator)
+            return Remember(await act(pipeline.Orchestrator)
                 ? SaveSettingsOutcome.Done(done)
-                : SaveSettingsOutcome.Failure(nothingHappened);
+                : SaveSettingsOutcome.Failure(nothingHappened));
         }
         catch (Exception failure)
         {
@@ -194,7 +194,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // dashboard tells its reader nothing they can act on.
             _context.Logger.LogWarning(failure, "Torrent Downloader could not act on a download.");
 
-            return SaveSettingsOutcome.Failure("That did not work. The server log says why.");
+            return Remember(SaveSettingsOutcome.Failure("That did not work. The server log says why."));
         }
     }
 
@@ -207,15 +207,41 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public Task<SaveSettingsOutcome> RemoveIndexerAsync(int index, CancellationToken ct = default) =>
         SaveAsync(handler => handler.HandleRemoveIndexerAsync(index, ct));
 
-    private Task<SaveSettingsOutcome> SaveAsync(Func<SettingsSaveHandler, Task<SaveSettingsOutcome>> handle)
+    private async Task<SaveSettingsOutcome> SaveAsync(Func<SettingsSaveHandler, Task<SaveSettingsOutcome>> handle)
     {
         if (_disposed)
         {
-            return Task.FromResult(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
+            return Remember(SaveSettingsOutcome.Failure("Torrent Downloader is unavailable."));
         }
 
-        return handle(new SettingsSaveHandler(SettingsGateway, _clock));
+        return Remember(await handle(new SettingsSaveHandler(SettingsGateway, _clock)));
     }
+
+    /// <summary>
+    /// What the last action said, kept until the next view is built.
+    ///
+    /// <para>
+    /// The client throws away an action's response body and re-fetches the view, so this is
+    /// the only way a refusal reaches the person who caused it. In memory rather than in the
+    /// configuration: it is true for one render, and writing it to disk would make a
+    /// transient sentence outlive the server.
+    /// </para>
+    /// </summary>
+    private ActionNotice? _notice;
+
+    private SaveSettingsOutcome Remember(SaveSettingsOutcome outcome)
+    {
+        _notice = new ActionNotice(
+            outcome.Succeeded ? outcome.Message ?? "Saved." : outcome.Error ?? "That did not work.",
+            !outcome.Succeeded);
+
+        return outcome;
+    }
+
+    /// <summary>Reads the pending notice and clears it, so one press is reported once.</summary>
+    private ActionNotice? TakeNotice() => Interlocked.Exchange(ref _notice, null);
+
+    private sealed record ActionNotice(string Message, bool Failed);
 
     // The single legacy cadence a host that reads CronExpression instead of Jobs still
     // sees. Kept identical to the transfers job - the fastest of the four - so either path
@@ -602,7 +628,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         try
         {
-            return Pages.Routes.Resolve(request.Route)?.Route.Name switch
+            PluginView view = Pages.Routes.Resolve(request.Route)?.Route.Name switch
             {
                 Pages.Overview => await OverviewPageAsync(context, ct),
                 Pages.Downloads => await DownloadsPageAsync(context, ct),
@@ -613,6 +639,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 Pages.Settings => await SettingsPageAsync(ct),
                 _ => PluginViews.Declarative(Ui.EmptyState("unknown-route", "Nothing here")),
             };
+
+            // Last, so whatever the page turned out to be, what the last press did is on it.
+            return TakeNotice() is { } notice ? Pages.WithNotice(view, notice.Message, notice.Failed) : view;
         }
         catch (OperationCanceledException)
         {

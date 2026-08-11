@@ -50,7 +50,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
 
         string name = (request.Name ?? string.Empty).Trim();
         string kind = (request.Kind ?? "rss").Trim().ToLowerInvariant();
-        string url = (request.Url ?? string.Empty).Trim();
+        string url = WithSearchTerms(kind, (request.Url ?? string.Empty).Trim());
 
         if (name.Length == 0)
             return SaveSettingsOutcome.Failure("Give the source a name.");
@@ -217,11 +217,15 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             return SaveSettingsOutcome.Failure("Indexer URL must be an absolute URL.");
         }
 
+        // The same forgiveness the add form has. An edit that pasted a fresh address should
+        // not be refused for a reason the other entry point silently fixes.
+        string url = WithSearchTerms(request.Kind, request.Url!);
+
         // Refused here rather than at search time. A site address without the placeholder
         // searches the same page for every query, which returns the same rows for every
         // episode - a failure that looks like a working site with bad results, and one
         // nobody would think to blame on a missing word in a settings box.
-        if (IsSiteKind(request.Kind) && !SiteIndexer.IsUsableTemplate(request.Url))
+        if (IsSiteKind(request.Kind) && !SiteIndexer.IsUsableTemplate(url))
         {
             return SaveSettingsOutcome.Failure(
                 $"A site's search address needs {SiteIndexer.QueryPlaceholder} where the search terms go. "
@@ -235,7 +239,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         {
             Name = newName,
             Kind = request.Kind ?? existing.Kind,
-            Url = request.Url!,
+            Url = url,
             Priority = request.Priority ?? existing.Priority,
             Enabled = request.Enabled ?? existing.Enabled,
             MinimumIntervalSeconds = request.MinimumIntervalSeconds ?? existing.MinimumIntervalSeconds,
@@ -430,6 +434,44 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
 
     private static bool IsAbsoluteUrl(string? url) =>
         !string.IsNullOrWhiteSpace(url) && Uri.TryCreate(url, UriKind.Absolute, out _);
+
+    /// <summary>
+    /// Fills in where the search terms go when the paste left it blank.
+    ///
+    /// <para>
+    /// What an owner actually does is search the site once by hand, clear the term out of
+    /// the address bar and paste the rest - which leaves the last query parameter with an
+    /// empty value: <c>…/browse/?q=</c>. There is exactly one place the terms could go in
+    /// that URL, so refusing it teaches nothing that filling it in would not.
+    /// </para>
+    ///
+    /// <para>
+    /// Only that shape. A path with no query string at all is a URL whose search part is
+    /// somewhere this cannot see, and guessing wrong means searching the same page forever
+    /// while looking like a site that simply has poor results.
+    /// </para>
+    /// </summary>
+    private static string WithSearchTerms(string? kind, string url)
+    {
+        if (!IsSiteKind(kind))
+            return url;
+
+        // Whatever the owner wrote to mean "the terms go here" - <replace>, %s, {search} -
+        // becomes the one spelling the rest of the plugin uses. The site's address is the
+        // hard part and the only part they can get wrong in a way nobody can fix for them;
+        // the token is not, so it is not worth refusing an address over.
+        string normalised = SiteIndexer.Normalise(url);
+
+        if (normalised.Contains(SiteIndexer.QueryPlaceholder, StringComparison.Ordinal))
+            return normalised;
+
+        // Nothing written at all, but the address ends on an empty query value - which is
+        // what pasting from the address bar after clearing the search term leaves behind.
+        // There is exactly one place the terms could go, so put them there.
+        return normalised.EndsWith('=') && normalised.Contains('?', StringComparison.Ordinal)
+            ? normalised + SiteIndexer.QueryPlaceholder
+            : normalised;
+    }
 
     private static List<string> ParseCategories(string? categories) =>
         string.IsNullOrWhiteSpace(categories)
