@@ -57,76 +57,146 @@ public static class DownloadsView
                     new PluginFormField { Name = "source", Label = "Magnet link", Required = true })));
     }
 
+    private static readonly PluginTableColumn[] Columns =
+    [
+        new() { Key = "release", Label = "Release" },
+        new() { Key = "size", Label = "Size", Cell = PluginTableCellType.Bytes, Width = "7rem", Align = "right" },
+        new() { Key = "progress", Label = "Progress", Cell = PluginTableCellType.Progress, Width = "9rem" },
+        new() { Key = "percent", Label = "", Width = "4rem", Align = "right" },
+        new() { Key = "state", Label = "Status", Cell = PluginTableCellType.Badge, Width = "8rem" },
+        new() { Key = "peers", Label = "Peers", Width = "5rem", Align = "right" },
+        new() { Key = "rate", Label = "Down", Cell = PluginTableCellType.Rate, Width = "7rem", Align = "right" },
+        new() { Key = "left", Label = "Left", Cell = PluginTableCellType.Duration, Width = "7rem", Align = "right" },
+    ];
+
     /// <summary>
-    /// One block per download rather than one wrapping row.
+    /// One row per download, the way a torrent client lists them.
     ///
     /// <para>
-    /// The row was the reason this page was unreadable. A progress bar takes the full width
-    /// of whatever holds it, so a row containing one re-flowed around it and every other
-    /// value landed somewhere different on every row - a title here, a rate below it, two
-    /// buttons on a third line, and nothing lining up with the row above. A block has a
-    /// name, a line saying where it stands, the bar, and the buttons, in that order, every
-    /// time.
+    /// This was a block each: a heading, a sentence, a full-width bar and two buttons - five
+    /// rows of screen for one download. At twenty downloads the page was unreadable, and
+    /// twenty is an ordinary evening for a plugin that grabs five at a time. Columns line
+    /// up, so twenty of them are read down rather than one at a time.
     /// </para>
     ///
     /// <para>
-    /// Not a table either, unlike the pages that only list things: the two buttons here
-    /// pause and destroy, and a table cell cannot hold a button. Making the row itself the
-    /// action would mean a click that deletes a download.
+    /// No buttons in the row, which is what forced the blocks in the first place: a table
+    /// cell cannot hold one, and making the row itself the action would put "delete this
+    /// download and blacklist the release" one stray click away. The row opens the
+    /// download's own page, where those buttons live - the same list-then-detail shape the
+    /// sources page already uses.
     /// </para>
     /// </summary>
     private static PluginComponent ActiveList(IReadOnlyList<Transfer> transfers, IReadOnlyDictionary<string, Grab> byHash)
     {
-        List<PluginComponent> blocks = [];
+        if (transfers.Count == 0)
+        {
+            return Ui.EmptyState(
+                "downloads-active-empty",
+                "Nothing is downloading right now.",
+                "Finished downloads move to the intake and leave this list.");
+        }
+
+        List<PluginComponent> rows = [];
 
         foreach (Transfer transfer in transfers.OrderByDescending(transfer => transfer.Progress))
         {
             byHash.TryGetValue(transfer.InfoHash, out Grab? grab);
 
-            blocks.Add(Ui.Detail(
+            (string label, string variant) = State(transfer, grab);
+
+            rows.Add(Ui.TableRow(
                 $"downloads-row-{transfer.InfoHash}",
-                grab?.ReleaseTitle ?? transfer.InfoHash,
-
-                // One line, in the order a reader asks: which episode, how far, how fast,
-                // and who from. Percentage as words rather than only the bar's own label,
-                // because a label inside a bar is one a reader walking the page - or a
-                // screen reader - may never reach. Rate and peers together, because
-                // percentage alone cannot tell a download apart from a stall: a torrent at
-                // 34% with four peers looks healthy right up until you notice it looked that
-                // way an hour ago.
-                Description(transfer, grab),
-
-                Ui.Progress($"downloads-progress-{transfer.InfoHash}", transfer.Progress),
-
-                Ui.Row(
-                    $"downloads-actions-{transfer.InfoHash}",
-                    transfer.Paused
-                        ? Ui.Button(
-                            $"downloads-resume-{transfer.InfoHash}",
-                            "Resume",
-                            PluginActionIntent.CallPlugin($"{PluginMethods.ResumeDownload}/{transfer.InfoHash}"))
-                        : Ui.Button(
-                            $"downloads-pause-{transfer.InfoHash}",
-                            "Pause",
-                            PluginActionIntent.CallPlugin($"{PluginMethods.PauseDownload}/{transfer.InfoHash}")),
-
-                    // Confirmed, because it deletes the bytes and blacklists the release for
-                    // a fortnight. That is not an undo away.
-                    Ui.DestructiveButton(
-                        $"downloads-cancel-{transfer.InfoHash}",
-                        "Cancel",
-                        $"{PluginMethods.CancelDownload}/{transfer.InfoHash}",
-                        "Cancel this download?",
-                        $"The files are deleted and {grab?.ReleaseTitle ?? "this release"} is skipped for 14 days. "
-                            + "The episode goes back on the queue and the plugin looks for a different release."))));
+                new()
+                {
+                    // The release name, or the hash when no grab is held - which should not
+                    // happen and is worth showing rather than hiding behind a dash.
+                    ["release"] = grab?.ReleaseTitle ?? transfer.InfoHash,
+                    ["size"] = transfer.BytesTotal,
+                    ["progress"] = transfer.Progress,
+                    ["percent"] = Format.Percentage(transfer),
+                    ["state"] = label,
+                    ["stateVariant"] = variant,
+                    ["peers"] = transfer.Peers == 0 ? "" : transfer.Peers.ToString(),
+                    ["rate"] = transfer.BytesPerSecond,
+                    ["left"] = transfer.Remaining is TimeSpan left ? (long)left.TotalSeconds : 0L,
+                },
+                Pages.Routes.GoTo(
+                    Pages.Download,
+                    new Dictionary<string, string> { ["infoHash"] = transfer.InfoHash })));
         }
 
-        return blocks.Count == 0
-            ? Ui.EmptyState(
-                "downloads-active-empty",
-                "Nothing is downloading right now.",
-                "Finished downloads move to the intake and leave this list.")
-            : Ui.List("downloads-active", [.. blocks]);
+        return Ui.Table("downloads-active", Columns, rows);
+    }
+
+    /// <summary>
+    /// Where one download stands, in one word.
+    ///
+    /// <para>
+    /// Read off the grab rather than the transfer wherever the two could disagree: the grab
+    /// is what the plugin decided, and the transfer is what the engine last measured.
+    /// </para>
+    /// </summary>
+    private static (string Label, string Variant) State(Transfer transfer, Grab? grab) => (transfer, grab) switch
+    {
+        (_, { State: GrabState.Failed }) => ("Failed", PluginBadgeVariant.Danger),
+        (_, { State: GrabState.Imported }) => ("Imported", PluginBadgeVariant.Success),
+        (_, { State: GrabState.Downloaded }) => ("Finished", PluginBadgeVariant.Success),
+        ({ Paused: true }, _) => ("Paused", PluginBadgeVariant.Neutral),
+        (_, { State: GrabState.Resolving }) => ("Finding peers", PluginBadgeVariant.Info),
+
+        // Measured, not decided: a torrent with peers and no bytes for a while is the
+        // difference between a download and a download that has quietly died.
+        ({ BytesPerSecond: 0 }, _) => ("Stalled", PluginBadgeVariant.Warning),
+        _ => ("Downloading", PluginBadgeVariant.Info),
+    };
+
+    /// <summary>
+    /// One download on its own page, with the two buttons that change it.
+    ///
+    /// <para>
+    /// Reached from the list, never from the tab bar - the same shape a source uses. The
+    /// destructive one is behind a deliberate navigation rather than sitting on every row of
+    /// a twenty-row table.
+    /// </para>
+    /// </summary>
+    public static PluginView Detail(Transfer transfer, Grab? grab)
+    {
+        (string label, string variant) = State(transfer, grab);
+
+        return Pages.Page(
+            Pages.Download,
+            grab?.ReleaseTitle ?? transfer.InfoHash,
+            RefreshSeconds,
+            Ui.Row(
+                "download-state",
+                Ui.Badge("download-state-badge", label, variant),
+                Ui.Text("download-summary", Description(transfer, grab))),
+            Ui.Progress($"download-progress-{transfer.InfoHash}", transfer.Progress),
+            Ui.Row(
+                "download-actions",
+                transfer.Paused
+                    ? Ui.Button(
+                        $"downloads-resume-{transfer.InfoHash}",
+                        "Resume",
+                        PluginActionIntent.CallPlugin($"{PluginMethods.ResumeDownload}/{transfer.InfoHash}"))
+                    : Ui.Button(
+                        $"downloads-pause-{transfer.InfoHash}",
+                        "Pause",
+                        PluginActionIntent.CallPlugin($"{PluginMethods.PauseDownload}/{transfer.InfoHash}")),
+
+                // Confirmed, because it deletes the bytes and blacklists the release for a
+                // fortnight. That is not an undo away.
+                Ui.DestructiveButton(
+                    $"downloads-cancel-{transfer.InfoHash}",
+                    "Cancel",
+                    $"{PluginMethods.CancelDownload}/{transfer.InfoHash}",
+                    "Cancel this download?",
+                    $"The files are deleted and {grab?.ReleaseTitle ?? "this release"} is skipped for 14 days. "
+                        + "The episode goes back on the queue and the plugin looks for a different release.")),
+            Ui.Row(
+                "download-back",
+                Ui.Button("download-back-button", "Back to downloads", Pages.Routes.GoTo(Pages.Downloads))));
     }
 
     private static string Description(Transfer transfer, Grab? grab)

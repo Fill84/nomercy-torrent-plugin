@@ -755,6 +755,7 @@ public sealed class DownloadOrchestrator(
             Key = episode.Key,
             Covers = covers,
             ReleaseTitle = chosen.Title,
+            Source = source,
             Indexer = chosen.IndexerName,
             SizeBytes = chosen.SizeBytes,
             GrabbedAt = now(),
@@ -785,6 +786,8 @@ public sealed class DownloadOrchestrator(
     public async Task<int> TransfersCycleAsync(CancellationToken ct)
     {
         int imported = 0;
+
+        await ResumeForgottenAsync(ct);
 
         foreach (EngineTransfer transfer in await engine.TransfersAsync(ct))
         {
@@ -829,6 +832,44 @@ public sealed class DownloadOrchestrator(
         }
 
         return imported;
+    }
+
+    /// <summary>
+    /// Hands back to the engine any download it no longer knows about.
+    ///
+    /// <para>
+    /// The engine keeps its torrents in memory, so a server restart empties it while the
+    /// store still holds every grab. Nothing put them back, and the consequence was worse
+    /// than a pause: a download that had already finished sat on disk marked Downloaded and
+    /// was never asked about again, so the import never ran and no encode was ever queued.
+    /// Three finished episodes were stranded that way on a real server.
+    /// </para>
+    ///
+    /// <para>
+    /// Here rather than at start-up because this cadence already runs every minute and
+    /// already reconciles the engine against the store. A torrent the engine does know is
+    /// left alone - AddAsync is idempotent, but asking it needlessly every minute is not
+    /// free.
+    /// </para>
+    /// </summary>
+    private async Task ResumeForgottenAsync(CancellationToken ct)
+    {
+        HashSet<string> known = [.. (await engine.TransfersAsync(ct)).Select(transfer => transfer.InfoHash)];
+
+        foreach (Grab grab in await store.ActiveGrabsAsync(ct))
+        {
+            // A grab written before the source was kept cannot be resumed. Left alone
+            // rather than guessed at: the wrong magnet downloads the wrong episode.
+            if (known.Contains(grab.InfoHash) || grab.Source.Length == 0)
+                continue;
+
+            await engine.AddAsync(new TorrentRequest
+            {
+                Source = grab.Source,
+                DestinationFolder = options.DownloadFolder,
+                Origin = privateTrackers.OriginFor([]),
+            }, ct);
+        }
     }
 
     private async Task<bool> ImportAsync(Grab grab, EngineTransfer transfer, CancellationToken ct)
@@ -946,6 +987,7 @@ public sealed class DownloadOrchestrator(
             Key = match.Episode.Key,
             Covers = [match.Episode.Key],
             ReleaseTitle = name,
+            Source = trimmed,
             Indexer = "added by hand",
             GrabbedAt = now(),
         }, ct);

@@ -44,6 +44,9 @@ public static class Pages
     /// </summary>
     public const string Source = "source";
 
+    /// <summary>One download, with the buttons that change it. Reached from the list, never from the bar.</summary>
+    public const string Download = "download";
+
     /// <summary>One show, on its own page. Reached from the list, like a source.</summary>
     public const string Show = "show";
 
@@ -81,7 +84,12 @@ public static class Pages
         // measure is for a page that is only a form, and neither of these is: they are
         // sections of a plugin you move around inside.
         new PluginRoute { Path = "/settings", Name = Settings, Label = "Settings" },
-        new PluginRoute { Path = "/sources/:index", Name = Source, Label = "Source" });
+        new PluginRoute { Path = "/sources/:index", Name = Source, Label = "Source" },
+
+        // Pausing and cancelling live here rather than on every row of the list. A table
+        // cell cannot hold a button, and making the row itself the action would put "delete
+        // this download and blacklist the release" one stray click away.
+        new PluginRoute { Path = "/downloads/:infoHash", Name = Download, Label = "Download" });
 
     /// <summary>
     /// What the bar offers, which is not everything the plugin serves.

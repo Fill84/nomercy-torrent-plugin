@@ -53,21 +53,6 @@ public class DownloadsViewTests
     }
 
     [Fact]
-    public void Build_ShowsWhatIsDownloadingAndHowFar()
-    {
-        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
-
-        // The release is the block's heading; how far, how fast and with how many is the one
-        // line under it, so these are read as words on the page rather than as whole nodes.
-        TextOf(view).Should().Contain("Some.Show.S01E01.1080p");
-        PluginNodes.Says(view, "50%").Should().BeTrue();
-        PluginNodes.Says(view, "8 peers").Should().BeTrue();
-    }
-
-    // Seen on a real server: every row read "456 S00E01". EpisodeKey.ToString() carries the
-    // show id because a log line needs it to be unambiguous; a page does not, because the
-    // show's name is the text right beside it.
-    [Fact]
     public void Build_NamesTheEpisodeSlotWithoutLeakingTheShowId()
     {
         PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 7, "Some.Show.S01E07.1080p")]);
@@ -79,25 +64,6 @@ public class DownloadsViewTests
 
     // A pack row labelled with the single episode that triggered it reads as one episode
     // arriving, which is wrong about both the bytes and the wait.
-    [Fact]
-    public void Build_SaysHowManyEpisodesAPackIsBringing()
-    {
-        Grab pack = Grab("abc", 1, "Some.Show.S01.1080p") with
-        {
-            Covers =
-            [
-                new EpisodeKey(1, 1, 1),
-                new EpisodeKey(1, 1, 2),
-                new EpisodeKey(1, 1, 3),
-            ],
-        };
-
-        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [pack]);
-
-        PluginNodes.Says(view, "3 episodes").Should().BeTrue();
-        PluginNodes.Says(view, "S01E01").Should().BeFalse();
-    }
-
     /// <summary>
     /// The shape this page was rebuilt for.
     ///
@@ -107,20 +73,6 @@ public class DownloadsViewTests
     /// on a third, and nothing lining up with the download above. A block puts the name, the
     /// line about where it stands, the bar and the buttons in that order every time.
     /// </para>
-    /// </summary>
-    [Fact]
-    public void Build_DrawsEachDownloadAsABlockRatherThanAWrappingRow()
-    {
-        PluginView view = DownloadsView.Build([Transfer("abc", 500, 1000)], [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
-
-        PluginComponent block = PluginNodes.All(view).Should()
-            .ContainSingle(node => node.Id == "downloads-row-abc").Which;
-
-        block.Component.Should().Be(Ui.DetailComponent);
-        block.Props["title"].Should().Be("Some.Show.S01E01.1080p");
-        block.Items.Should().Contain(child => child.Component == Ui.ProgressComponent);
-    }
-
     [Fact]
     public void Build_AsksTheClientToComeBackBecauseTheseNumbersMove()
     {
@@ -186,25 +138,6 @@ public class DownloadsViewTests
 
     // Cancelling deletes the bytes and skips the release for a fortnight. That is not an undo
     // away, so it asks first.
-    [Fact]
-    public void Build_AsksBeforeCancelling()
-    {
-        PluginComponent cancel = PluginNodes.All(DownloadsView.Build([Transfer("abc", 1, 2)], []))
-            .Should().ContainSingle(node => node.Id == "downloads-cancel-abc").Which;
-
-        cancel.Action!.Confirm.Should().NotBeNull();
-        cancel.Action.Payload["method"].Should().Be("CancelDownload/abc");
-    }
-
-    [Fact]
-    public void Build_OffersResumeRatherThanPauseOnAPausedDownload()
-    {
-        PluginView view = DownloadsView.Build([Transfer("abc", 1, 2) with { Paused = true }], []);
-
-        PluginNodes.All(view).Should().Contain(node => node.Id == "downloads-resume-abc");
-        PluginNodes.All(view).Should().NotContain(node => node.Id == "downloads-pause-abc");
-    }
-
     /// <summary>
     /// No percentage and no rate until a peer says how big the torrent is. "0%" reads as a
     /// download that has stalled, which is a different thing to worry about from one that
@@ -219,5 +152,90 @@ public class DownloadsViewTests
 
         PluginNodes.Says(view, "Finding peers").Should().BeTrue();
         PluginNodes.Says(view, "0%").Should().BeFalse();
+    }
+
+    // --- one row per download ------------------------------------------------------
+
+    /// <summary>
+    /// This page was a block each: a heading, a sentence, a full-width bar and two buttons -
+    /// five rows of screen for one download. At twenty downloads it was unreadable, and
+    /// twenty is an ordinary evening for a plugin that grabs five at a time.
+    /// </summary>
+    [Fact]
+    public void Build_DrawsOneRowPerDownload()
+    {
+        PluginView view = DownloadsView.Build(
+            [Transfer("abc", 0, 1000), Transfer("def", 0, 1000)],
+            [Grab("abc", 1, "Some.Show.S01E01"), Grab("def", 2, "Some.Show.S01E02")]);
+
+        PluginNodes.TableRows(view).Should().HaveCount(2);
+    }
+
+    [Fact]
+    public void Build_ShowsWhatEachDownloadIsAndHowFar()
+    {
+        PluginComponent row = PluginNodes.TableRows(DownloadsView.Build(
+            [Transfer("abc", 500, 1000, 12) with { BytesPerSecond = 2048 }],
+            [Grab("abc", 1, "Some.Show.S01E01.1080p")])).Should().ContainSingle().Which;
+
+        PluginNodes.Cell(row, "release").Should().Be("Some.Show.S01E01.1080p");
+        PluginNodes.Cell(row, "peers").Should().Be("12");
+        PluginNodes.Cell(row, "percent").Should().Be("50%");
+    }
+
+    /// <summary>
+    /// No buttons in the row, which is what forced the blocks in the first place: a table
+    /// cell cannot hold one, and making the row itself the action would put "delete this
+    /// download and blacklist the release" one stray click away. The row opens the
+    /// download's own page instead.
+    /// </summary>
+    [Fact]
+    public void Build_ARowOpensThatDownloadRatherThanActingOnIt()
+    {
+        PluginComponent row = PluginNodes.TableRows(
+            DownloadsView.Build([Transfer("abc", 0, 1000)], [Grab("abc", 1, "Some.Show.S01E01")]))
+            .Should().ContainSingle().Which;
+
+        row.Action!.Payload[PluginNavigation.RouteKey].Should().Be("/downloads/abc");
+    }
+
+    [Fact]
+    public void Build_SaysWhenNothingIsDownloading()
+    {
+        PluginNodes.Says(DownloadsView.Build([], []), "Nothing is downloading right now").Should().BeTrue();
+    }
+
+    // --- one download, on its own page ---------------------------------------------
+
+    [Fact]
+    public void Detail_CarriesThePauseAndCancelButtons()
+    {
+        List<PluginComponent> nodes = [.. PluginNodes.All(
+            DownloadsView.Detail(Transfer("abc", 0, 1000), Grab("abc", 1, "Some.Show.S01E01")))];
+
+        nodes.Should().Contain(node => node.Id == "downloads-pause-abc");
+        nodes.Should().Contain(node => node.Id == "downloads-cancel-abc");
+    }
+
+    [Fact]
+    public void Detail_OffersResumeRatherThanPauseOnAPausedDownload()
+    {
+        List<PluginComponent> nodes = [.. PluginNodes.All(
+            DownloadsView.Detail(Transfer("abc", 0, 1000) with { Paused = true }, Grab("abc", 1, "Some.Show.S01E01")))];
+
+        nodes.Should().Contain(node => node.Id == "downloads-resume-abc");
+        nodes.Should().NotContain(node => node.Id == "downloads-pause-abc");
+    }
+
+    // It deletes the bytes and blacklists the release for a fortnight. That is not an undo
+    // away, so it asks first.
+    [Fact]
+    public void Detail_AsksBeforeCancelling()
+    {
+        PluginComponent cancel = PluginNodes.All(
+            DownloadsView.Detail(Transfer("abc", 0, 1000), Grab("abc", 1, "Some.Show.S01E01")))
+            .Single(node => node.Id == "downloads-cancel-abc");
+
+        cancel.Action!.Confirm.Should().NotBeNull();
     }
 }

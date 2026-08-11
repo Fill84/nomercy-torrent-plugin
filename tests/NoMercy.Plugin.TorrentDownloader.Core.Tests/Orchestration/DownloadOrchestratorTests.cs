@@ -569,6 +569,67 @@ public class DownloadOrchestratorTests
             .Should().ContainSingle().Which.ReleaseTitle.Should().NotBeNullOrEmpty();
     }
 
+    // --- surviving a restart -------------------------------------------------------------
+
+    /// <summary>
+    /// The engine keeps its torrents in memory, so a restart empties it while the store
+    /// still holds every grab. Nothing put them back, and a download that had already
+    /// finished was then stranded: on disk, marked Downloaded, never asked about again - so
+    /// the import never ran and no encode was ever queued. Three finished episodes sat like
+    /// that on a real server.
+    /// </summary>
+    [Fact]
+    public async Task TransfersCycleAsync_HandsBackADownloadTheEngineHasForgotten()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        // A restart: the store remembers, the engine does not.
+        _engine.Added.Clear();
+        _engine.Transfers = [];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _engine.Added.Should().ContainSingle()
+            .Which.Source.Should().Be(Release().MagnetUri, "the grab remembers where it came from");
+    }
+
+    [Fact]
+    public async Task TransfersCycleAsync_LeavesADownloadTheEngineAlreadyHoldsAlone()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        string hash = _engine.Added.Should().ContainSingle().Subject.Source;
+        _engine.Added.Clear();
+        _engine.Transfers = [new EngineTransfer { InfoHash = hash, State = EngineState.Downloading }];
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _engine.Added.Should().BeEmpty("asking every minute for a torrent it already has is not free");
+    }
+
+    // A grab written before the source was kept cannot be resumed, and guessing would
+    // download the wrong episode.
+    [Fact]
+    public async Task TransfersCycleAsync_LeavesAGrabWithNoSourceAlone()
+    {
+        await _store.AddGrabAsync(new Grab
+        {
+            InfoHash = "old",
+            Key = new EpisodeKey(1, 1, 1),
+            ReleaseTitle = "From.Before.The.Source.Was.Kept",
+            Indexer = "site-a",
+            GrabbedAt = Now,
+        }, CancellationToken.None);
+
+        await Orchestrator().TransfersCycleAsync(CancellationToken.None);
+
+        _engine.Added.Should().BeEmpty();
+    }
+
     // --- one failure costs one episode -------------------------------------------------
 
     /// <summary>

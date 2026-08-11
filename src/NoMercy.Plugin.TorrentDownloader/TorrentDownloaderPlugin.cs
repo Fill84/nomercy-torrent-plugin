@@ -711,6 +711,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 Pages.Show => await ShowPageAsync(context, match.Param("showId"), ct),
                 Pages.Overview => await OverviewPageAsync(context, ct),
                 Pages.Downloads => await DownloadsPageAsync(context, ct),
+                Pages.Download => await DownloadPageAsync(context, match.Param("infoHash"), ct),
                 Pages.Queue => QueueView.Build(await WantedAsync(context, ct)),
                 Pages.History => HistoryView.Build(await HistoryAsync(context, HistoryView.Limit, ct)),
                 Pages.Sources => await SourcesPageAsync(context, ct),
@@ -890,6 +891,35 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         IDownloadStore store = await StoreAsync(context, ct);
 
         return DownloadsView.Build(await store.TransfersAsync(ct), await store.ActiveGrabsAsync(ct));
+    }
+
+    /// <summary>
+    /// One download, reached by clicking its row.
+    ///
+    /// <para>
+    /// A download that is no longer there is not an error worth a stack trace: it finished
+    /// and left the list, or the owner cancelled it in another tab. Saying so and offering
+    /// the list back is the whole handling, the same as one source's page.
+    /// </para>
+    /// </summary>
+    private async Task<PluginView> DownloadPageAsync(IPluginContext context, string? infoHash, CancellationToken ct)
+    {
+        IDownloadStore store = await StoreAsync(context, ct);
+
+        Transfer? transfer = (await store.TransfersAsync(ct))
+            .FirstOrDefault(entry => entry.InfoHash == infoHash);
+
+        if (infoHash is null || transfer is null)
+        {
+            return Pages.Page(
+                Pages.Download,
+                "Download",
+                0,
+                Ui.EmptyState("download-missing", "That download is gone", "It may have finished since this list was drawn."),
+                Ui.Row("download-back", Ui.Button("download-back-button", "Back to downloads", Pages.Routes.GoTo(Pages.Downloads))));
+        }
+
+        return DownloadsView.Detail(transfer, await store.FindGrabAsync(infoHash, ct));
     }
 
     private async Task<PluginView> SkippedPageAsync(IPluginContext context, CancellationToken ct)

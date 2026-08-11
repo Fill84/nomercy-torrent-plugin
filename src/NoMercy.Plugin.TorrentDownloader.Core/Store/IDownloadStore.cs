@@ -93,6 +93,24 @@ public sealed record Grab
     /// </summary>
     public IReadOnlyList<EpisodeKey> Covered => Covers.Count == 0 ? [Key] : Covers;
     public required string ReleaseTitle { get; init; }
+
+    /// <summary>
+    /// The magnet or torrent URL this grab came from.
+    ///
+    /// <para>
+    /// Kept so a download can be handed back to the engine after a restart. Without it the
+    /// engine came up empty and every download in flight was stranded: the bytes were on
+    /// disk, the grab said Downloaded, and nothing ever asked the engine about it again -
+    /// so the import never ran and no encode was ever queued.
+    /// </para>
+    ///
+    /// <para>
+    /// Empty on a grab written before this existed. Those cannot be resumed and are left
+    /// alone rather than guessed at.
+    /// </para>
+    /// </summary>
+    public string Source { get; init; } = string.Empty;
+
     public required string Indexer { get; init; }
     public long SizeBytes { get; init; }
     public GrabState State { get; init; } = GrabState.Grabbed;
