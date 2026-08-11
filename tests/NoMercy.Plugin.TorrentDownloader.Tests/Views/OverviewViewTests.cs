@@ -51,7 +51,17 @@ public class OverviewViewTests
         IReadOnlyList<HistoryEntry>? history = null,
         IReadOnlyList<string>? ungranted = null,
         int shows = 0) =>
-        OverviewView.Build(transfers ?? [], grabs ?? [], wanted ?? [], history ?? [], ungranted ?? [], shows);
+        OverviewView.Build(
+            transfers ?? [],
+
+            // A transfer this plugin no longer holds a grab for is left off the page - it
+            // has no name to show, only its info hash. So a test that only cares about the
+            // counting gets a grab per transfer rather than having to say so every time.
+            grabs ?? [.. (transfers ?? []).Select(transfer => Grab(transfer.InfoHash, $"Release.{transfer.InfoHash}"))],
+            wanted ?? [],
+            history ?? [],
+            ungranted ?? [],
+            shows);
 
     /// <summary>
     /// The two numbers this plugin puts in front of somebody are episodes here and shows on

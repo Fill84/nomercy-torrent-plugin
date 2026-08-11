@@ -168,6 +168,13 @@ public static class SettingsView
             },
             new()
             {
+                Name = "maxConcurrentDownloads",
+                Label = "Downloads at once",
+                Type = PluginFormFieldType.Number,
+                Value = settings.MaxConcurrentDownloads,
+            },
+            new()
+            {
                 Name = "minimumSeeders",
                 Label = "Minimum seeders",
                 Type = PluginFormFieldType.Number,

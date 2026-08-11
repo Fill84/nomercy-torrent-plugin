@@ -31,6 +31,18 @@ public class TorrentDownloaderSettings
     /// <summary>Below this a release is usually dead or a trap, and the download stalls at 2%.</summary>
     public int MinimumSeeders { get; set; } = 2;
 
+    /// <summary>
+    /// How many downloads may run at once.
+    ///
+    /// <para>
+    /// The search cadence stops grabbing when this is reached, so it is also what decides
+    /// how fast a library that is behind catches up. Five is a steady stream on an ordinary
+    /// connection; an owner who wants the whole backlog at once raises it and pays for it in
+    /// contention - one connection, one disk, and a swarm each.
+    /// </para>
+    /// </summary>
+    public int MaxConcurrentDownloads { get; set; } = 5;
+
     /// <summary>A pack is still only considered once enough of a season is missing to be worth its bytes.</summary>
     public bool AllowSeasonPacks { get; set; } = true;
 

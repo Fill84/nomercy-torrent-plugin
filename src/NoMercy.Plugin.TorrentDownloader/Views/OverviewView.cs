@@ -35,6 +35,10 @@ public static class OverviewView
             .GroupBy(grab => grab.InfoHash)
             .ToDictionary(group => group.Key, group => group.First());
 
+        // Same rule as the Downloads page: a transfer row outlives its download, and one
+        // whose grab is gone has no name to show. See DownloadsView.Build.
+        transfers = [.. transfers.Where(transfer => byHash.ContainsKey(transfer.InfoHash))];
+
         List<PluginComponent> children =
         [
             // The first line, and not a caption: it is the answer to the question somebody

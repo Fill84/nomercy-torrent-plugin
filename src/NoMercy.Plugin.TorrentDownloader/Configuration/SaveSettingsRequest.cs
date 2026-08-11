@@ -29,6 +29,7 @@ public sealed class SaveSettingsRequest
     public bool? IncludeSpecials { get; init; }
     public string? MaximumResolution { get; init; }
     public int? MinimumSeeders { get; init; }
+    public int? MaxConcurrentDownloads { get; init; }
     public bool? AllowSeasonPacks { get; init; }
 
     /// <summary>Comma separated, because a form field is one line and a tracker list is short.</summary>

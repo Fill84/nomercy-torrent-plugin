@@ -29,11 +29,18 @@ public static class DownloadsView
     /// </summary>
     public const int RefreshSeconds = 30;
 
-    public static PluginView Build(IReadOnlyList<Transfer> transfers, IReadOnlyList<Grab> grabs)
+    public static PluginView Build(IReadOnlyList<Transfer> allTransfers, IReadOnlyList<Grab> grabs)
     {
         Dictionary<string, Grab> byHash = grabs
             .GroupBy(grab => grab.InfoHash)
             .ToDictionary(group => group.Key, group => group.First());
+
+        // Only what this plugin still holds a grab for. A transfer row outlives its
+        // download - the store keeps the last one written for every info hash it ever saw -
+        // so the page listed every torrent of the last fortnight, and every one whose grab
+        // had since failed or been imported had nothing to take a name from and rendered as
+        // its bare info hash. Forty lines of hexadecimal under a heading saying Downloading.
+        List<Transfer> transfers = [.. allTransfers.Where(transfer => byHash.ContainsKey(transfer.InfoHash))];
 
         return Pages.Page(
             Pages.Downloads,
@@ -109,8 +116,8 @@ public static class DownloadsView
                 $"downloads-row-{transfer.InfoHash}",
                 new()
                 {
-                    // The release name, or the hash when no grab is held - which should not
-                    // happen and is worth showing rather than hiding behind a dash.
+                    // Always the release name. Every transfer reaching here has a grab, and
+                    // the grab is where the name lives.
                     ["release"] = grab?.ReleaseTitle ?? transfer.InfoHash,
                     ["size"] = transfer.BytesTotal,
                     ["progress"] = transfer.Progress,

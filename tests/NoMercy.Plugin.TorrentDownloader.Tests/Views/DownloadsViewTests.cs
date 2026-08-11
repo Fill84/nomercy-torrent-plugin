@@ -107,20 +107,27 @@ public class DownloadsViewTests
         TextOf(view).Should().Contain("Nothing is downloading right now.");
     }
 
+    /// <summary>
+    /// The store keeps the last transfer written for every info hash it has ever seen, so
+    /// the rows outlive their downloads. This page used to list all of them and print the
+    /// bare info hash for any whose grab had since failed or been imported - forty lines of
+    /// hexadecimal under a heading saying Downloading.
+    /// </summary>
     [Fact]
-    public void Build_FallsBackToTheInfoHashWhenTheGrabIsMissing()
+    public void Build_LeavesOutATransferThisPluginNoLongerHoldsAGrabFor()
     {
-        // A transfer whose grab row was pruned still has to render something. Showing the
-        // hash beats showing an empty row that looks like a bug.
-        PluginView view = DownloadsView.Build([Transfer("orphan-hash", 1, 2)], []);
+        PluginView view = DownloadsView.Build(
+            [Transfer("abc", 500, 1000), Transfer("orphan-hash", 1, 2)],
+            [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
 
-        TextOf(view).Should().Contain("orphan-hash");
+        TextOf(view).Should().NotContain("orphan-hash");
+        TextOf(view).Should().Contain("Some.Show.S01E01.1080p");
     }
 
     [Fact]
     public void Build_SaysStartingRatherThanZeroPercentBeforeTheSizeIsKnown()
     {
-        PluginView view = DownloadsView.Build([Transfer("abc", 0, 0)], []);
+        PluginView view = DownloadsView.Build([Transfer("abc", 0, 0)], [Grab("abc", 1, "Some.Show.S01E01.1080p")]);
 
         PluginNodes.Says(view, "starting").Should().BeTrue();
     }

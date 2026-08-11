@@ -1615,6 +1615,37 @@ public class DownloadOrchestratorTests
         cycle.Searched.Should().Be(40);
     }
 
+    /// <summary>
+    /// A download that has finished and is waiting on its move takes no bandwidth, no peer
+    /// slot and no disk head. Counting it against the ceiling is how two stuck imports held
+    /// two of five places for a day - and with one more downloading, that left room for one
+    /// new grab per cycle. From outside, a plugin working through one show at a time.
+    /// </summary>
+    [Fact]
+    public async Task SearchCycleAsync_DoesNotCountAFinishedDownloadWaitingOnItsMove()
+    {
+        await WantEpisodesAsync(10);
+        _search.Results = [Release()];
+        _search.UniquePerQuery = true;
+
+        DownloadOrchestrator orchestrator = Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            MaxConcurrentDownloads = 3,
+        });
+
+        await orchestrator.SearchCycleAsync(CancellationToken.None);
+
+        foreach (Grab grab in await _store.ActiveGrabsAsync(CancellationToken.None))
+            await _store.UpdateGrabAsync(grab.InfoHash, GrabState.Downloaded, null, null, CancellationToken.None);
+
+        _engine.Added.Clear();
+
+        // All three places are free again: nothing is downloading, three things are waiting
+        // to be moved.
+        (await orchestrator.SearchCycleAsync(CancellationToken.None)).Grabbed.Should().Be(3);
+    }
+
     [Fact]
     public async Task SearchCycleAsync_DoesNothingWhileTheCeilingIsAlreadyReached()
     {

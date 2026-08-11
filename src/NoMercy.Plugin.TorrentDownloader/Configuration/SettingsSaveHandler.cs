@@ -229,6 +229,14 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             merged.MinimumSeeders = Math.Clamp(seeders, 1, 1000);
         }
 
+        // Clamped, not refused, for the same reason as the seeders above. One is a plugin
+        // that downloads one thing at a time; the ceiling is high enough that an owner who
+        // means "all of them" gets all of them.
+        if (request.MaxConcurrentDownloads is int concurrent)
+        {
+            merged.MaxConcurrentDownloads = Math.Clamp(concurrent, 1, 200);
+        }
+
         return SaveSettingsOutcome.Success(new LoadedSettings(merged, []));
     }
 
@@ -535,6 +543,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             IncludeSpecials = source.IncludeSpecials,
             MaximumResolution = source.MaximumResolution,
             MinimumSeeders = source.MinimumSeeders,
+            MaxConcurrentDownloads = source.MaxConcurrentDownloads,
             AllowSeasonPacks = source.AllowSeasonPacks,
             Indexers = source.Indexers,
             PrivateTrackers = source.PrivateTrackers,

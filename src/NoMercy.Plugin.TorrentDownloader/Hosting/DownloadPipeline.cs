@@ -90,6 +90,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             new OrchestratorOptions
             {
                 DownloadFolder = downloads,
+                MaxConcurrentDownloads = Math.Max(1, settings.MaxConcurrentDownloads),
                 IncludeSpecials = settings.IncludeSpecials,
                 FollowedShowIds = settings.FollowedShowIds,
                 ExtraTrackers = settings.DefaultTrackers,

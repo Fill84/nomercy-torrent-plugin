@@ -60,11 +60,11 @@ public sealed class LibraryImportHandoff(
         }
 
         // One encode per video file, exactly as the Add content screen queues one per
-        // selected file. The media id is zero for the same reason the screen sends zero:
-        // it is the server that decides what a file is, and it does that from the path.
+        // selected file. Nothing names a media id: the server decides what a file is, and
+        // it does that from the path.
         foreach (string video in Directory.EnumerateFiles(finished, "*", SearchOption.AllDirectories))
         {
-            await encodes.QueueAsync(libraryId, video, mediaId: 0, ct);
+            await encodes.QueueAsync(libraryId, video, ct);
         }
 
         return true;

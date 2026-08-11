@@ -397,8 +397,7 @@ public sealed class DownloadOrchestrator(
     /// </summary>
     public async Task<SearchCycle> SearchCycleAsync(CancellationToken ct)
     {
-        int running = (await store.ActiveGrabsAsync(ct)).Count;
-        int room = options.MaxConcurrentDownloads - running;
+        int room = options.MaxConcurrentDownloads - await DownloadingNowAsync(ct);
 
         if (room <= 0)
             return new SearchCycle(0, 0);
@@ -496,6 +495,21 @@ public sealed class DownloadOrchestrator(
     private static string Slot(EpisodeKey key) => $"S{key.Season:D2}E{key.Episode:D2}";
 
     /// <summary>
+    /// How many downloads are actually running, which is not how many grabs are active.
+    ///
+    /// <para>
+    /// A grab that has finished and is waiting on its move takes no bandwidth, no peer slot
+    /// and no disk head. Counting it against the ceiling meant a download stuck on its
+    /// import held one of the five places for as long as it stayed stuck - and two of them
+    /// stayed stuck for a day. With one more downloading, that left room for a single new
+    /// grab per cycle: a plugin that visibly worked through one show at a time, for a
+    /// reason that had nothing to do with searching.
+    /// </para>
+    /// </summary>
+    private async Task<int> DownloadingNowAsync(CancellationToken ct) =>
+        (await store.ActiveGrabsAsync(ct)).Count(grab => grab.State != GrabState.Downloaded);
+
+    /// <summary>
     /// Every episode worth asking an indexer about, least recently searched first.
     ///
     /// <para>
@@ -553,8 +567,7 @@ public sealed class DownloadOrchestrator(
         if (feed is null)
             return new FeedCycle(0, 0);
 
-        int running = (await store.ActiveGrabsAsync(ct)).Count;
-        int room = options.MaxConcurrentDownloads - running;
+        int room = options.MaxConcurrentDownloads - await DownloadingNowAsync(ct);
 
         if (room <= 0)
             return new FeedCycle(0, 0);

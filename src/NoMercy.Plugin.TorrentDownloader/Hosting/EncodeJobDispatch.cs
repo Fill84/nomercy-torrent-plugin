@@ -57,12 +57,30 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     /// Queues the encode for one file, and reports whether it was queued.
     ///
     /// <para>
-    /// <paramref name="mediaId"/> is the id the file was matched to. The dashboard sends
-    /// <c>match.id ?? 0</c>, so zero is a value the server already handles - it is what
-    /// the operator's own screen sends for a file it could not match.
+    /// Nothing here throws. An encode that cannot be queued is one download that stays
+    /// unfinished and a line in the log saying why - it used to be an exception out of a
+    /// reflection call, which unwound the whole transfers cadence, so a type mismatch on
+    /// one job stopped every download in flight from being looked at at all.
     /// </para>
     /// </summary>
-    public async Task<bool> QueueAsync(Ulid libraryId, string inputFile, int mediaId, CancellationToken ct)
+    public async Task<bool> QueueAsync(Ulid libraryId, string inputFile, CancellationToken ct)
+    {
+        try
+        {
+            return await DispatchAsync(libraryId, inputFile, ct);
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            logger.LogError(
+                failure,
+                "Torrent Downloader could not queue an encode for {File}. The download stays in the finished folder.",
+                inputFile);
+
+            return false;
+        }
+    }
+
+    private async Task<bool> DispatchAsync(Ulid libraryId, string inputFile, CancellationToken ct)
     {
         object? dispatcher = Resolve(DispatcherType);
         Type? jobType = FindType(JobType);
@@ -96,10 +114,18 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 
         object job = Activator.CreateInstance(jobType)!;
 
-        Set(job, "LibraryId", libraryId);
-        Set(job, "FolderId", folderId);
-        Set(job, "Id", mediaId);
-        Set(job, "InputFile", inputFile);
+        // Id is a string on AbstractEncoderJob, not a number - it is the id of the media
+        // this file was matched to, and empty is what an unmatched file carries. It was
+        // set to the int 0 here, which threw straight out of the reflection call and took
+        // the whole transfers cadence with it, every minute, for as long as one finished
+        // download sat in the folder.
+        if (!Set(job, "LibraryId", libraryId)
+            || !Set(job, "FolderId", folderId)
+            || !Set(job, "InputFile", inputFile)
+            || !Set(job, "Id", string.Empty))
+            return false;
+
+        // Optional: a library with no preset encodes with the server's defaults.
         Set(job, "PresetId", Get(library, "EncodePresetId"));
 
         MethodInfo? dispatch = dispatcher.GetType()
@@ -319,6 +345,46 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
     private static object? Get(object target, string property) =>
         target.GetType().GetProperty(property)?.GetValue(target);
 
-    private static void Set(object target, string property, object? value) =>
-        target.GetType().GetProperty(property)?.SetValue(target, value);
+    /// <summary>
+    /// Sets a property, and says whether it took.
+    ///
+    /// <para>
+    /// It used to be void, which made a missing property and a wrong type look the same
+    /// from the caller: one did nothing quietly, the other threw out through the cadence.
+    /// Both now answer false, and the caller refuses to dispatch a job it could not fill in
+    /// - a half-built encode job is worse than no encode job.
+    /// </para>
+    /// </summary>
+    private bool Set(object target, string property, object? value)
+    {
+        PropertyInfo? slot = target.GetType().GetProperty(property);
+
+        if (slot is null || !slot.CanWrite)
+        {
+            logger.LogError(
+                "Torrent Downloader cannot queue an encode: {Job} has no writable {Property}.",
+                target.GetType().Name,
+                property);
+
+            return false;
+        }
+
+        Type wanted = Nullable.GetUnderlyingType(slot.PropertyType) ?? slot.PropertyType;
+
+        if (value is not null && !wanted.IsInstanceOfType(value))
+        {
+            logger.LogError(
+                "Torrent Downloader cannot queue an encode: {Job}.{Property} is {Wanted}, and this offered {Offered}.",
+                target.GetType().Name,
+                property,
+                wanted.Name,
+                value.GetType().Name);
+
+            return false;
+        }
+
+        slot.SetValue(target, value);
+
+        return true;
+    }
 }
