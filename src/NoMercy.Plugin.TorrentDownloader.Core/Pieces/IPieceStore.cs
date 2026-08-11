@@ -15,6 +15,17 @@ public interface IPieceStore
     Task<byte[]> ReadPieceAsync(int pieceIndex, CancellationToken ct);
 
     /// <summary>
+    /// Whether this piece can be handed to a peer in full.
+    ///
+    /// <para>
+    /// A store that keeps only some of a torrent's files cannot serve a piece that overlaps
+    /// the rest: those bytes were never written and read back as zeroes. Serving them would
+    /// make us the peer that lies.
+    /// </para>
+    /// </summary>
+    bool CanServe(int pieceIndex) => true;
+
+    /// <summary>
     /// Returns only once the bytes are durable. The resume record is written after this
     /// returns, because the invariant is that the record never claims more than the disk holds.
     /// </summary>

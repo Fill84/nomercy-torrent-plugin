@@ -85,10 +85,15 @@ public class DownloadEndToEndTests
         session.IsComplete.Should().BeTrue();
         await store.FlushAsync(deadline.Token);
 
-        // Every file, byte for byte, split across pieces that cross their boundaries.
+        // Every video, byte for byte, split across pieces that cross their boundaries.
         (await ReadAsync(folder, "season", "e01.mkv")).Should().Equal(Filler(10_000, 1));
         (await ReadAsync(folder, "season", "e02.mkv")).Should().Equal(Filler(14_000, 2));
-        (await ReadAsync(folder, "season", "season.nfo")).Should().Equal(Filler(8_768, 3));
+
+        // And the nfo nowhere at all. This test asserted the opposite until 11 August: the
+        // torrent still downloads whole, because the pieces holding the last episode also
+        // hold the start of the nfo, but only video is written out. The owner's folder ends
+        // up with what they asked for and nothing else.
+        File.Exists(Path.Combine(folder.Path, "season", "season.nfo")).Should().BeFalse();
     }
 
     [Fact]

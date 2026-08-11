@@ -23,12 +23,37 @@ public sealed class FilePieceStore(TorrentMetadata metadata, string rootFolder) 
 
         foreach (FileSegment segment in PieceLayout.Segments(metadata, pieceIndex))
         {
+            // Only video reaches the disk. An nfo, a sample, a screenshot - and anything
+            // else somebody puts in a torrent - is downloaded because the piece it shares
+            // with the episode has to be, and then dropped on the floor rather than
+            // written. The file is never created, so the owner's folder holds what they
+            // asked for and nothing else.
+            if (!TorrentContents.IsVideo(segment.File))
+            {
+                offset += segment.Length;
+                continue;
+            }
+
             FileStream stream = Open(segment.File);
             stream.Seek(segment.OffsetInFile, SeekOrigin.Begin);
             await stream.WriteAsync(piece.Slice(offset, segment.Length), ct);
             offset += segment.Length;
         }
     }
+
+    /// <summary>
+    /// Whether this piece can be handed to a peer in full.
+    ///
+    /// <para>
+    /// False for a piece that overlaps a file this store skipped: those bytes were never
+    /// written, so reading it back gives zeroes where the nfo used to be. Serving that
+    /// would make us the peer that lies - and on a private tracker, the peer that gets
+    /// banned for it. Refusing one request is the honest answer and costs a peer nothing
+    /// they cannot get elsewhere.
+    /// </para>
+    /// </summary>
+    public bool CanServe(int pieceIndex) =>
+        PieceLayout.Segments(metadata, pieceIndex).All(segment => TorrentContents.IsVideo(segment.File));
 
     public async Task<byte[]> ReadPieceAsync(int pieceIndex, CancellationToken ct)
     {

@@ -66,6 +66,11 @@ public sealed class PieceServer(
         if (!have[request.PieceIndex])
             return null;
 
+        // Held, but not whole. This plugin writes only the video files out of a torrent, so
+        // a piece straddling the nfo beside them is on disk with a hole in it.
+        if (!store.CanServe(request.PieceIndex))
+            return null;
+
         byte[] piece = await store.ReadPieceAsync(request.PieceIndex, ct);
 
         // Re-check against what actually came back: a short read means the piece is not

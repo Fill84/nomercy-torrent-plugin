@@ -41,21 +41,6 @@ public static class TorrentContents
     };
 
     /// <summary>
-    /// The inert things a release ships beside its video, and nothing else.
-    ///
-    /// <para>
-    /// Refusing these would refuse almost every real release: a scene torrent ships an nfo,
-    /// a checksum, usually a subtitle and often a screenshot. None of them can do anything
-    /// on their own.
-    /// </para>
-    /// </summary>
-    private static readonly HashSet<string> CompanionExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".srt", ".sub", ".idx", ".ass", ".ssa", ".vtt", ".sup",
-        ".nfo", ".txt", ".md5", ".sfv", ".sha1", ".jpg", ".jpeg", ".png", ".webp",
-    };
-
-    /// <summary>
     /// Things that run, named only so the refusal can say which kind of wrong this is.
     ///
     /// <para>
@@ -88,33 +73,35 @@ public static class TorrentContents
         if (files.Count == 0)
             return "the torrent lists no files at all";
 
-        // The allowlist decides. Anything not on it is refused, whether or not anybody
-        // thought to put it on a list of dangerous things - which is the whole reason this
-        // is the way round it is. The first version asked "is this an executable", and a
-        // question like that is only ever as good as the answers somebody remembered.
-        FileEntry? unwanted = files.FirstOrDefault(file => !IsAllowed(Extension(file)));
+        // Only the torrent as a whole is judged here. Which of its files reach the disk is
+        // decided per file by IsVideo, because refusing a release for shipping an nfo would
+        // refuse almost every real one - a scene torrent nearly always carries a checksum,
+        // usually a subtitle and often a screenshot.
+        if (files.Any(IsVideo))
+            return null;
 
-        if (unwanted is not null)
-        {
-            string extension = Extension(unwanted);
+        // Nothing worth having. Named by what it does carry, because "it contains a
+        // program" and "it contains no video" mean very different things to whoever reads
+        // it: one is somebody trying something, the other is a release this plugin cannot
+        // use. This is the case the .scr fell into - the torrent was nothing else.
+        FileEntry? program = files.FirstOrDefault(file => ExecutableExtensions.Contains(Extension(file)));
 
-            // Named differently because they mean different things to whoever reads it: a
-            // torrent carrying a program is somebody trying something, and a torrent of
-            // archives is a release this plugin simply cannot use.
-            return ExecutableExtensions.Contains(extension)
-                ? $"it contains a program ({Name(unwanted)}), not just video - refused before anything was written to disk"
-                : $"it contains {Name(unwanted)}, which is not video or anything that ships with it - refused before anything was written to disk";
-        }
-
-        if (!files.Any(file => VideoExtensions.Contains(Extension(file))))
-            return "it contains no video file";
-
-        return null;
+        return program is not null
+            ? $"it contains a program ({Name(program)}) and no video at all - refused before anything was written to disk"
+            : "it contains no video file";
     }
 
-    /// <summary>Video, or one of the inert things that ship beside it. Nothing else, ever.</summary>
-    private static bool IsAllowed(string extension) =>
-        VideoExtensions.Contains(extension) || CompanionExtensions.Contains(extension);
+    /// <summary>
+    /// Whether this file is one this plugin will put on a disk.
+    ///
+    /// <para>
+    /// An allowlist of video, and nothing else: not the nfo, not the sample, not the
+    /// screenshot, and certainly not whatever extension somebody invents next. Everything
+    /// outside it is skipped as the torrent downloads rather than refusing the torrent, so
+    /// an ordinary release still arrives - with only its video written.
+    /// </para>
+    /// </summary>
+    public static bool IsVideo(FileEntry file) => VideoExtensions.Contains(Extension(file));
 
     /// <summary>The file's own name, which is the last of the path segments a torrent carries.</summary>
     private static string Name(FileEntry file) => file.Path.Count == 0 ? string.Empty : file.Path[^1];

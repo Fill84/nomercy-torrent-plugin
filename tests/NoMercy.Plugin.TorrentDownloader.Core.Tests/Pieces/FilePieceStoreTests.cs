@@ -27,9 +27,9 @@ public class FilePieceStoreTests
     private static TorrentBuilder Season() => new TorrentBuilder()
         .WithName("season")
         .WithPieceLength(8)
-        .WithFile("season/a.bin", "aaaa")
-        .WithFile("season/b.bin", "bbbbbb")
-        .WithFile("season/c.bin", "cc");
+        .WithFile("season/a.mkv", "aaaa")
+        .WithFile("season/b.mkv", "bbbbbb")
+        .WithFile("season/c.mkv", "cc");
 
     [Fact]
     public async Task WritePieceAsync_SplitsAPieceAcrossTheFilesItCovers()
@@ -41,8 +41,8 @@ public class FilePieceStoreTests
         await store.WritePieceAsync(0, Encoding.UTF8.GetBytes("aaaabbbb"), CancellationToken.None);
         await store.FlushAsync(CancellationToken.None);
 
-        (await ReadWhileOpenAsync(folder.File("season", "a.bin"))).Should().Be("aaaa");
-        (await ReadWhileOpenAsync(folder.File("season", "b.bin"))).Should().StartWith("bbbb");
+        (await ReadWhileOpenAsync(folder.File("season", "a.mkv"))).Should().Be("aaaa");
+        (await ReadWhileOpenAsync(folder.File("season", "b.mkv"))).Should().StartWith("bbbb");
     }
 
     [Fact]
@@ -67,9 +67,9 @@ public class FilePieceStoreTests
             await store.FlushAsync(CancellationToken.None);
         }
 
-        (await File.ReadAllTextAsync(folder.File("season", "a.bin"))).Should().Be("aaaa");
-        (await File.ReadAllTextAsync(folder.File("season", "b.bin"))).Should().Be("bbbbbb");
-        (await File.ReadAllTextAsync(folder.File("season", "c.bin"))).Should().Be("cc");
+        (await File.ReadAllTextAsync(folder.File("season", "a.mkv"))).Should().Be("aaaa");
+        (await File.ReadAllTextAsync(folder.File("season", "b.mkv"))).Should().Be("bbbbbb");
+        (await File.ReadAllTextAsync(folder.File("season", "c.mkv"))).Should().Be("cc");
     }
 
     [Fact]
@@ -107,15 +107,15 @@ public class FilePieceStoreTests
         TorrentMetadata metadata = MetadataParser.FromTorrentFile(new TorrentBuilder()
             .WithName("deep")
             .WithPieceLength(4)
-            .WithFile("deep/sub/one.bin", "abcd")
-            .WithFile("deep/sub/two.bin", "efgh")
+            .WithFile("deep/sub/one.mkv", "abcd")
+            .WithFile("deep/sub/two.mkv", "efgh")
             .Build());
         using FilePieceStore store = new(metadata, folder.Path);
 
         await store.WritePieceAsync(0, Encoding.UTF8.GetBytes("abcd"), CancellationToken.None);
         await store.FlushAsync(CancellationToken.None);
 
-        File.Exists(folder.File("deep", "sub", "one.bin")).Should().BeTrue();
+        File.Exists(folder.File("deep", "sub", "one.mkv")).Should().BeTrue();
     }
 
     [Fact]

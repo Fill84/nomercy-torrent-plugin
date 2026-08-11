@@ -21,9 +21,9 @@ public class SeedingEndToEndTests
     private static CancellationTokenSource Deadline() => new(TimeSpan.FromSeconds(30));
 
     private static TorrentMetadata Metadata() => MetadataParser.FromTorrentFile(new TorrentBuilder()
-        .WithName("four")
+        .WithName("four.mkv")
         .WithPieceLength(4)
-        .WithFile("four", "aaaabbbbccccdddd")
+        .WithFile("four.mkv", "aaaabbbbccccdddd")
         .Build());
 
     private static Bitfield Everything(int count)

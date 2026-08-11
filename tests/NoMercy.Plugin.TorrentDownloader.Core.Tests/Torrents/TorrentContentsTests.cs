@@ -40,24 +40,47 @@ public class TorrentContentsTests
         refusal.Should().Contain(".scr");
     }
 
+    /// <summary>
+    /// A release beside a program still downloads - and the program is never written. The
+    /// torrent is not refused, because refusing on the strength of one file would refuse
+    /// almost every real release for its nfo; the selection below is what keeps the disk
+    /// clean.
+    /// </summary>
     [Theory]
     [InlineData("setup.exe")]
     [InlineData("install.msi")]
-    [InlineData("run.bat")]
     [InlineData("payload.js")]
-    [InlineData("thing.vbs")]
-    [InlineData("script.ps1")]
-    [InlineData("shortcut.lnk")]
-    [InlineData("app.jar")]
-    public void Refuse_AnythingThatRuns(string name)
+    [InlineData("release.nfo")]
+    [InlineData("release.rar")]
+    [InlineData("poster.jpg")]
+    [InlineData("Show.S01E01.srt")]
+    [InlineData("weird.qqq")]
+    [InlineData("README")]
+    public void IsVideo_IsFalseForEverythingThatIsNotVideo(string name)
     {
-        TorrentContents.Refuse(With("Show.S01E01.1080p.mkv", name)).Should().NotBeNull(
-            "a video in the same torrent does not make the program safe");
+        TorrentContents.IsVideo(new FileEntry([name], 100, 0)).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData("Show.S01E01.1080p.WEB.h264-GROUP.mkv")]
+    [InlineData("Show.S01E01.mp4")]
+    [InlineData("Show.S01E01.AVI")]
+    [InlineData("Show.S01E01.m2ts")]
+    public void IsVideo_IsTrueForVideo(string name)
+    {
+        TorrentContents.IsVideo(new FileEntry([name], 100, 0)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Refuse_LetsAReleaseWithJunkBesideItThrough()
+    {
+        TorrentContents.Refuse(With("Show.S01E01.1080p.mkv", "setup.exe", "release.nfo"))
+            .Should().BeNull("the torrent is fine; only its video is written");
     }
 
     /// <summary>
-    /// Case is whatever the person who built the torrent felt like. ".SCR" is the same
-    /// threat as ".scr" and the obvious way past a naive check.
+    /// Case is whatever the person who built the torrent felt like, and ".SCR" is the
+    /// obvious way past a naive check.
     /// </summary>
     [Theory]
     [InlineData("Episode.SCR")]
@@ -68,21 +91,10 @@ public class TorrentContentsTests
     }
 
     [Fact]
-    public void Refuse_AnExecutableBuriedInASubfolder()
+    public void IsVideo_ReadsTheExtensionOffTheFilesOwnName()
     {
-        TorrentMetadata metadata = new(
-            InfoHash: new byte[20],
-            Name: "release",
-            PieceLength: 16384,
-            PieceHashes: [new byte[20]],
-            Files:
-            [
-                new FileEntry(["Show.S01E01.mkv"], 1000, 0),
-                new FileEntry(["Subs", "extras", "codec.exe"], 1000, 1000),
-            ],
-            Trackers: []);
-
-        TorrentContents.Refuse(metadata).Should().Contain("codec.exe");
+        TorrentContents.IsVideo(new FileEntry(["Subs", "extras", "codec.exe"], 100, 0)).Should().BeFalse();
+        TorrentContents.IsVideo(new FileEntry(["Season 1", "Show.S01E01.mkv"], 100, 0)).Should().BeTrue();
     }
 
     // A torrent of nothing but companions is not what was searched for.
@@ -97,28 +109,28 @@ public class TorrentContentsTests
     /// dangerous extensions: something nobody thought of is refused by default. None of
     /// these is on any blocklist in this file, and every one of them is refused.
     /// </summary>
+    /// <summary>
+    /// The property that matters, and the reason this is an allowlist rather than a list of
+    /// dangerous extensions: something nobody thought of is kept off the disk by default.
+    /// None of these is on any blocklist in that file.
+    /// </summary>
     [Theory]
     [InlineData("release.rar")]
-    [InlineData("release.zip")]
-    [InlineData("release.7z")]
     [InlineData("disc.iso")]
     [InlineData("thing.dmg")]
-    [InlineData("thing.deb")]
     [InlineData("payload.scpt")]
     [InlineData("macro.xlsm")]
     [InlineData("weird.qqq")]
-    public void Refuse_AnythingNobodyPutOnAList(string name)
+    public void IsVideo_RefusesAnythingNobodyPutOnAList(string name)
     {
-        TorrentContents.Refuse(With("Show.S01E01.1080p.mkv", name))
-            .Should().NotBeNull("the allowlist refuses what it does not recognise, which is the point of it");
+        TorrentContents.IsVideo(new FileEntry([name], 100, 0)).Should().BeFalse();
     }
 
-    // A file with no extension at all is not on the list either, and a torrent is free to
-    // ship one.
+    // A torrent of nothing but those is still refused outright: there is no episode in it.
     [Fact]
-    public void Refuse_AFileWithNoExtension()
+    public void Refuse_ATorrentOfNothingButArchives()
     {
-        TorrentContents.Refuse(With("Show.S01E01.mkv", "README")).Should().NotBeNull();
+        TorrentContents.Refuse(With("release.rar", "release.r00")).Should().Contain("no video");
     }
 
     [Fact]
@@ -150,7 +162,7 @@ public class TorrentContentsTests
     }
 
     [Fact]
-    public void Refuse_LetsSubtitlesAndSeveralEpisodesThrough()
+    public void Refuse_LetsASeasonPackThrough()
     {
         TorrentContents.Refuse(With(
             "Show.S01E01.mkv",

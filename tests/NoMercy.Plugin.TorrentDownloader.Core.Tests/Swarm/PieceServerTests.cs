@@ -15,9 +15,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Swarm;
 public class PieceServerTests
 {
     private static TorrentMetadata Metadata() => MetadataParser.FromTorrentFile(new TorrentBuilder()
-        .WithName("four")
+        .WithName("four.mkv")
         .WithPieceLength(4)
-        .WithFile("four", "aaaabbbbccccdddd")
+        .WithFile("four.mkv", "aaaabbbbccccdddd")
         .Build());
 
     private static Bitfield Everything(int count)
