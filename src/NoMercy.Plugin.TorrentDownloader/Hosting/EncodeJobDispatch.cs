@@ -37,7 +37,21 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 {
     private const string DispatcherType = "NoMercy.MediaProcessing.Jobs.IJobDispatcher";
     private const string JobType = "NoMercy.MediaProcessing.Jobs.MediaJobs.VideoEncodeJob";
-    private const string LibraryRepositoryType = "NoMercy.MediaProcessing.Libraries.ILibraryRepository";
+    /// <summary>
+    /// There are two interfaces called <c>ILibraryRepository</c> in that process, and only
+    /// this one is registered and only this one has the lookup.
+    ///
+    /// <para>
+    /// The other, <c>NoMercy.MediaProcessing.Libraries.ILibraryRepository</c>, is what this
+    /// asked for at first. It resolved to nothing - the server registers the concrete
+    /// <c>MediaProcessingLibraryRepository</c> and never that interface - so every encode
+    /// this plugin ever tried to queue was refused, and refused with the wrong sentence:
+    /// "library X was not found" about a library that was right there. The short-name
+    /// fallback cannot save this one either, because two types share the name, which is
+    /// exactly when it declines to guess.
+    /// </para>
+    /// </summary>
+    private const string LibraryRepositoryType = "NoMercy.Data.Repositories.ILibraryRepository";
 
     /// <summary>
     /// Queues the encode for one file, and reports whether it was queued.
@@ -65,11 +79,9 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
 
         object? library = await LibraryAsync(libraryId, ct);
 
+        // LibraryAsync has already said which of the two things went wrong.
         if (library is null)
-        {
-            logger.LogError("Torrent Downloader cannot queue an encode: library {Library} was not found.", libraryId);
             return false;
-        }
 
         // The first folder of the library, which is what the Add content screen defaults
         // to - it reads folder_library[0] and offers the rest as a choice nobody has to
@@ -107,16 +119,53 @@ public sealed class EncodeJobDispatch(IServiceProvider services, ILogger logger)
         return true;
     }
 
+    /// <summary>
+    /// The library, or null with a line saying which of the two things went wrong.
+    ///
+    /// <para>
+    /// It used to answer null for both "the repository is not there" and "the library is
+    /// not there", and the caller reported the second. So a wiring mistake was logged, for
+    /// days, as a fact about the owner's library that was not true.
+    /// </para>
+    ///
+    /// <para>
+    /// Resolved inside a scope. The repository is registered scoped, because it opens a
+    /// database context, and a scoped service asked of the root provider is either an
+    /// exception or a null - never the object. The plugin's cadences are not requests and
+    /// have no scope of their own, so this makes one.
+    /// </para>
+    /// </summary>
     private async Task<object?> LibraryAsync(Ulid libraryId, CancellationToken ct)
     {
-        object? repository = Resolve(LibraryRepositoryType);
+        Type? contract = FindType(LibraryRepositoryType);
+
+        if (contract is null)
+        {
+            logger.LogError(
+                "Torrent Downloader cannot queue an encode: the server does not expose {Missing}.",
+                LibraryRepositoryType);
+
+            return null;
+        }
+
+        using IServiceScope scope = services.CreateScope();
+
+        object? repository = scope.ServiceProvider.GetService(contract);
 
         MethodInfo? get = repository?.GetType()
             .GetMethods()
             .FirstOrDefault(method => method.Name.StartsWith("GetLibraryByIdLite", StringComparison.Ordinal));
 
         if (repository is null || get is null)
+        {
+            logger.LogError(
+                "Torrent Downloader cannot queue an encode: {Contract} resolved to {Repository}, and GetLibraryByIdLite {Found}.",
+                LibraryRepositoryType,
+                repository?.GetType().FullName ?? "nothing",
+                get is null ? "is not on it" : "is");
+
             return null;
+        }
 
         object? pending = get.Invoke(repository, Arguments(get, libraryId, ct));
 
