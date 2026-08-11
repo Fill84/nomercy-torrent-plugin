@@ -103,7 +103,14 @@ public sealed class InMemoryDownloadStore : IDownloadStore
     public Task<IReadOnlyList<Grab>> ActiveGrabsAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Grab>>(
         [
-            .. _grabs.Values.Where(grab => grab.State is GrabState.Grabbed or GrabState.Downloading or GrabState.Downloaded),
+            // Resolving counts, exactly as it does in the real store. A double that
+            // disagrees about which downloads are running is a double that hides the bug
+            // where the limit stops working.
+            .. _grabs.Values.Where(grab => grab.State
+                is GrabState.Grabbed
+                or GrabState.Resolving
+                or GrabState.Downloading
+                or GrabState.Downloaded),
         ]);
 
     public Task UpdateGrabAsync(

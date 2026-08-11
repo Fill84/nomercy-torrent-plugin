@@ -113,7 +113,16 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
     public async Task<IReadOnlyList<Grab>> ActiveGrabsAsync(CancellationToken ct) =>
         await ReadAsync<IReadOnlyList<Grab>>(state =>
         [
-            .. state.Grabs.Where(grab => grab.State is GrabState.Grabbed or GrabState.Downloading or GrabState.Downloaded),
+            // Resolving belongs here, and leaving it out was not cosmetic: the search cycle
+            // works out how much room it has from this set, so five downloads waiting on
+            // their swarm counted as zero and the next cycle started five more - no ceiling
+            // at all. The pages also read this to find out what a transfer is called, so
+            // without it the owner saw a raw info hash.
+            .. state.Grabs.Where(grab => grab.State
+                is GrabState.Grabbed
+                or GrabState.Resolving
+                or GrabState.Downloading
+                or GrabState.Downloaded),
         ], ct);
 
     public async Task UpdateGrabAsync(

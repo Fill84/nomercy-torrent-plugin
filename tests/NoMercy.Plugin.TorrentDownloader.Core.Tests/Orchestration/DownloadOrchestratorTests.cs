@@ -509,6 +509,66 @@ public class DownloadOrchestratorTests
             .State.Should().Be(GrabState.Downloading);
     }
 
+    /// <summary>
+    /// A download waiting on its swarm is still a download.
+    ///
+    /// <para>
+    /// It was left out of the active set when Resolving was added, and the consequence was
+    /// not cosmetic: the cycle works out how much room it has from that set, so five
+    /// resolving downloads counted as zero and the next cycle started five more. On a real
+    /// server that filled the page with torrents nobody had asked for, five minutes apart,
+    /// with no ceiling at all.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task SearchCycleAsync_ADownloadStillFindingPeersCountsAgainstTheLimit()
+    {
+        _library.Add(showId: 1, "Some Show", "/media/some-show",
+            [(1, 1, true), .. Enumerable.Range(2, 9).Select(episode => (1, episode, false))],
+            status: ShowStatus.Returning);
+
+        foreach (int episode in Enumerable.Range(2, 9))
+            _library.SetAirDate(1, 1, episode, Now.AddDays(-30));
+
+        await Orchestrator().RefreshWantedAsync(CancellationToken.None);
+
+        _search.UniquePerQuery = true;
+        _search.Results = [Release()];
+
+        DownloadOrchestrator orchestrator = Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            MaxConcurrentDownloads = 2,
+        });
+
+        await orchestrator.SearchCycleAsync(CancellationToken.None);
+
+        // Everything taken so far is still resolving, which is where it sits for as long as
+        // the swarm takes to answer.
+        foreach (Grab grab in await _store.ActiveGrabsAsync(CancellationToken.None))
+            await _store.UpdateGrabAsync(grab.InfoHash, GrabState.Resolving, null, null, CancellationToken.None);
+
+        await orchestrator.SearchCycleAsync(CancellationToken.None);
+
+        _engine.Added.Should().HaveCount(2, "two at a time means two, whatever state they are waiting in");
+    }
+
+    // The page reads the grab to find out what a transfer is called. Left out of the active
+    // set, a resolving download showed the owner a raw info hash and nothing else.
+    [Fact]
+    public async Task ActiveGrabs_IncludeTheOnesStillFindingPeers()
+    {
+        await WantOneEpisodeAsync();
+        _search.Results = [Release()];
+        await Orchestrator().SearchCycleAsync(CancellationToken.None);
+
+        string hash = _engine.Added.Should().ContainSingle().Subject.Source;
+        await _store.UpdateGrabAsync(hash, GrabState.Resolving, null, null, CancellationToken.None);
+
+        (await _store.ActiveGrabsAsync(CancellationToken.None))
+            .Should().ContainSingle().Which.ReleaseTitle.Should().NotBeNullOrEmpty();
+    }
+
     // --- one failure costs one episode -------------------------------------------------
 
     /// <summary>
