@@ -166,6 +166,14 @@ jobs:
           cp "$BIN/$PLUGIN_DIR.deps.json"                        "$STAGING/"
           cp "$BIN/NoMercy.Plugin.TorrentDownloader.Core.dll"    "$STAGING/"
           cp "src/$PLUGIN_DIR/plugin.json"                       "$STAGING/"
+
+          # PuppeteerSharp and what it needs, for the Chrome that answers a Cloudflare
+          # challenge. The load context resolves these from the plugin folder through the
+          # deps.json above, so an artifact without them loads and then throws
+          # FileNotFoundException at the first challenged site.
+          cp "$BIN/PuppeteerSharp.dll"                           "$STAGING/"
+          cp "$BIN/WebDriverBiDi.dll"                            "$STAGING/"
+          cp "$BIN/Microsoft.IO.RecyclableMemoryStream.dll"      "$STAGING/"
           # The plugin's own README, not the repository's. The repo README is for someone
           # building or contributing; what belongs beside an installed DLL is what the thing
           # does, what it declares and how it treats your credentials.

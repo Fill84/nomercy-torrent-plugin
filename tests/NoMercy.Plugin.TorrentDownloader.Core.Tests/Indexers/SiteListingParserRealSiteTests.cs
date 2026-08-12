@@ -81,7 +81,7 @@ public class SiteListingParserRealSiteTests
     [Fact]
     public void Parse_IgnoresTheSponsoredRowsAtTheTopOfThePage()
     {
-        Rows().Should().OnlyContain(row => row.MagnetUri.StartsWith("magnet:?xt=urn:btih:"));
+        Rows().Should().OnlyContain(row => row.MagnetUri != null && row.MagnetUri.StartsWith("magnet:?xt=urn:btih:"));
         Rows().Should().NotContain(row => row.Title.Contains("Download", StringComparison.OrdinalIgnoreCase));
     }
 
@@ -98,7 +98,7 @@ public class SiteListingParserRealSiteTests
             Fixtures.Text("limetorrents-search.html"),
             ["udp://tracker.example:1337/announce", "udp://other.example:80/announce"]);
 
-        string magnet = rows.First().MagnetUri;
+        string magnet = rows.First().MagnetUri!;
 
         magnet.Should().Contain($"tr={Uri.EscapeDataString("udp://tracker.example:1337/announce")}");
         magnet.Should().Contain($"tr={Uri.EscapeDataString("udp://other.example:80/announce")}");

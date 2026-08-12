@@ -118,8 +118,8 @@ public abstract class DownloadOrchestratorTestBase
 
     protected sealed class FakeLibrary : ILibraryQuery
     {
-        protected readonly List<LibraryShow> _shows = [];
-        protected readonly Dictionary<int, List<LibraryEpisode>> _episodes = [];
+        private readonly List<LibraryShow> _shows = [];
+        private readonly Dictionary<int, List<LibraryEpisode>> _episodes = [];
 
         /// <summary>
         /// The status defaults to what the record itself defaults to, so a test that does

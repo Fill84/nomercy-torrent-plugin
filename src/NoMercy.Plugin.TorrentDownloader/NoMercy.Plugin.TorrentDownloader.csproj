@@ -23,6 +23,18 @@
             the host already owned.
         -->
         <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+
+        <!--
+            Which brings the host's own assemblies along with it, and those must never be
+            copied: they live in the server's shared-assembly set, and a second copy beside
+            the plugin is a second identity of the same type across the load-context
+            boundary. CI fails the build when it sees one in the output, which is how this
+            was caught.
+
+            The host packages are marked below. That keeps them as compile
+            references and as deps.json entries - which is what the load context reads - and
+            stops them being written next to the plugin.
+        -->
     </PropertyGroup>
 
     <ItemGroup>
@@ -71,5 +83,37 @@
             <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
         </None>
     </ItemGroup>
+
+    <!--
+        The host's assemblies, out of the copy-local set.
+
+        <para>
+        CopyLocalLockFileAssemblies is what puts PuppeteerSharp beside the plugin, and it is
+        indiscriminate: it copies every assembly in the lock file, including the ones the
+        server owns. A second copy of those next to the plugin is a second identity of the
+        same type across the load-context boundary, and the failure surfaces as an unrelated
+        cast error far from its cause. Private="false" on the PackageReference does not stop
+        it - that governs the direct reference, not the lock-file sweep.
+        </para>
+
+        <para>
+        The list is PluginHostOptions.DefaultSharedAssemblies on the server side: what the
+        load context deliberately resolves to the host's copy. CI asserts two of them never
+        ship; the rest are just as wrong and are removed for the same reason.
+        </para>
+    -->
+    <Target Name="LeaveTheHostsAssembliesToTheHost" AfterTargets="ResolveReferences">
+        <ItemGroup>
+            <ReferenceCopyLocalPaths
+                Remove="@(ReferenceCopyLocalPaths)"
+                Condition="'%(Filename)' == 'NoMercy.Plugins.Abstractions'
+                        or '%(Filename)' == 'NoMercy.Plugins.Mvc'
+                        or '%(Filename)' == 'NoMercy.Events'
+                        or '%(Filename)' == 'NoMercy.Design'
+                        or '%(Filename)' == 'Newtonsoft.Json'
+                        or '%(Filename)' == 'Ulid'
+                        or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.Extensions.'))" />
+        </ItemGroup>
+    </Target>
 
 </Project>
