@@ -106,13 +106,7 @@
         <ItemGroup>
             <ReferenceCopyLocalPaths
                 Remove="@(ReferenceCopyLocalPaths)"
-                Condition="'%(Filename)' == 'NoMercy.Plugins.Abstractions'
-                        or '%(Filename)' == 'NoMercy.Plugins.Mvc'
-                        or '%(Filename)' == 'NoMercy.Events'
-                        or '%(Filename)' == 'NoMercy.Design'
-                        or '%(Filename)' == 'Newtonsoft.Json'
-                        or '%(Filename)' == 'Ulid'
-                        or $([System.String]::Copy('%(Filename)').StartsWith('Microsoft.Extensions.'))" />
+                Condition="$([System.Text.RegularExpressions.Regex]::IsMatch('%(Filename)', '^(NoMercy\.(Plugins\.Abstractions|Plugins\.Mvc|Events|Design)|Newtonsoft\.Json|Ulid|Microsoft\.Extensions\..+)$'))" />
         </ItemGroup>
     </Target>
 
