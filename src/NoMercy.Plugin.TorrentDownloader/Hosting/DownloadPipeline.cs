@@ -105,7 +105,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
             // never reach a Torznab endpoint.
             new IndexerReleaseFeed(
                 new IndexerAggregator([.. indexers.Where(indexer => indexer.IsFeed).Select(indexer => indexer.Indexer)]),
-                Report(store, indexers)),
+                Report(store, [.. indexers.Where(indexer => indexer.IsFeed)])),
 
             FreeSpaceOn,
 
@@ -129,9 +129,11 @@ internal sealed class DownloadPipeline : IAsyncDisposable
     /// </para>
     ///
     /// <para>
-    /// Every configured source is written, not only the ones that spoke: a source missing
-    /// from the result is a source that returned nothing, and leaving its row untouched
-    /// would show yesterday's answer as though it were today's.
+    /// Every source that was <em>asked</em>, not only the ones that spoke: one missing from
+    /// the result returned nothing, and leaving its row untouched would show yesterday's
+    /// answer as today's. And not one source more - the feed cycle asks only the feeds, so
+    /// reporting the sites on it filed "0 releases, no failure" against two sources nobody
+    /// had spoken to. That is the same lie this whole thing exists to stop.
     /// </para>
     /// </summary>
     private static Func<AggregateResult, CancellationToken, Task> Report(
