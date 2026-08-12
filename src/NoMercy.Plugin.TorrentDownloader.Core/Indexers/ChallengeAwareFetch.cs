@@ -41,6 +41,12 @@ public sealed class ChallengeAwareFetch(
                 $"{indexerName}: {url.Host} is behind a Cloudflare check and this indexer has no solver.");
         }
 
+        // The page itself, when the solver has one. Replaying the request with its cookies
+        // fails on sites that bind clearance to the TLS handshake - measured: cf_clearance
+        // obtained, same URL over HttpClient, 403.
+        if (solver is IPageSource source && await source.GetPageAsync(url, ct) is { } fetched)
+            return fetched;
+
         Clearance? fresh = await solver.SolveAsync(url, ct);
 
         if (fresh is null)

@@ -123,4 +123,59 @@ public class SiteListingParserRealSiteTests
     {
         Rows().Select(row => row.InfoHash).Should().OnlyHaveUniqueItems();
     }
+
+    /// <summary>
+    /// TorrentBay's real search page, captured through the plugin's own browser after it
+    /// cleared the Cloudflare challenge.
+    ///
+    /// <para>
+    /// This site keeps no magnet on its listing - fifty rows, zero magnets, one .torrent
+    /// link in the whole document - so the parser read nothing from it for as long as it
+    /// only understood magnets and hashed links. The row carries a title, a slug and a
+    /// seeder count, and the magnet lives behind the slug.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Parse_ReadsARowThatOnlyLinksToItsDetailPage()
+    {
+        IReadOnlyList<SiteRow> rows = SiteListingParser.Parse(Fixtures.Text("torrentbay-search.html"), []);
+
+        rows.Should().HaveCountGreaterThan(40);
+
+        SiteRow first = rows[0];
+
+        first.Title.Should().Be("Silo S03E06 1080p WEB H264-CAKES EZTV");
+        first.DetailUrl.Should().Be("/silo-s03e06-1080p-web-h264-cakes-eztv-21152668/");
+        first.MagnetUri.Should().BeNull("this listing has none - the magnet is behind the slug");
+    }
+
+    /// <summary>
+    /// The seeder count, which is the score.
+    ///
+    /// <para>
+    /// Written as a label in one tag and a number in the next, and sitting seven thousand
+    /// characters past the title because each row carries an inline SVG badge. Read within a
+    /// window measured in hundreds, every row scored zero - and a profile with a minimum
+    /// seeder count then refuses every row of a site that answered perfectly.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public void Parse_ReadsTheSeederCountOutOfARowThatIsThousandsOfCharactersLong()
+    {
+        IReadOnlyList<SiteRow> rows = SiteListingParser.Parse(Fixtures.Text("torrentbay-search.html"), []);
+
+        rows[0].Seeders.Should().Be(4779);
+        rows.Take(6).Should().OnlyContain(row => row.Seeders > 0);
+    }
+
+    /// <summary>
+    /// The title comes from the tooltip, not the link text: the link text wraps the search
+    /// term in a span, and stripping tags glues the tokens into "SiloS03E06".
+    /// </summary>
+    [Fact]
+    public void Parse_DoesNotGlueTheSearchTermToTheRestOfTheTitle()
+    {
+        SiteListingParser.Parse(Fixtures.Text("torrentbay-search.html"), [])
+            .Should().OnlyContain(row => !row.Title.Contains("SiloS", StringComparison.Ordinal));
+    }
 }

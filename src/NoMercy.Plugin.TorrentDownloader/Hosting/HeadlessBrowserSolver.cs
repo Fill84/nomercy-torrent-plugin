@@ -35,7 +35,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 public sealed class HeadlessBrowserSolver(
     ILogger logger,
     string browserFolder,
-    TimeSpan? patience = null) : IChallengeSolver, IAsyncDisposable
+    TimeSpan? patience = null) : IChallengeSolver, IPageSource, IAsyncDisposable
 {
     /// <summary>
     /// How long to let a challenge run before giving up.
@@ -60,48 +60,40 @@ public sealed class HeadlessBrowserSolver(
     private readonly SemaphoreSlim _gate = new(1, 1);
     private IBrowser? _browser;
 
-    /// <summary>
-    /// What the page is told about itself before any of the site's own script runs.
-    ///
-    /// <para>
-    /// This is the whole of the arms race in one string. Headless Chromium answers a handful
-    /// of questions differently from a real one - it admits to being automated, reports no
-    /// plugins, no languages, and a software renderer - and a managed challenge asks exactly
-    /// those. Each line here is one of them, and they are the same evasions
-    /// puppeteer-extra-plugin-stealth applies, which is what FlareSolverr runs.
-    /// </para>
-    ///
-    /// <para>
-    /// Injected via evaluate-on-new-document, so it lands before the page's first script
-    /// rather than after - patching afterwards is patching something that has already been
-    /// read.
-    /// </para>
-    /// </summary>
-    private const string Evasions =
-        """
-        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    /// <summary>The page as the browser loaded it, once the challenge is out of the way.</summary>
+    public async Task<string?> GetPageAsync(Uri url, CancellationToken ct)
+    {
+        try
+        {
+            IBrowser browser = await BrowserAsync(ct);
 
-        window.chrome = window.chrome || { runtime: {}, loadTimes: () => {}, csi: () => {} };
+            await using IPage page = await browser.NewPageAsync();
 
-        Object.defineProperty(navigator, 'plugins', {
-            get: () => [1, 2, 3, 4, 5].map(index => ({ name: `Plugin ${index}`, filename: `plugin${index}.dll` })),
-        });
+            await page.GoToAsync(url.ToString(), new NavigationOptions
+            {
+                WaitUntil = [WaitUntilNavigation.DOMContentLoaded],
+                Timeout = (int)Patience.TotalMilliseconds,
+            });
 
-        Object.defineProperty(navigator, 'languages', { get: () => ['en-GB', 'en'] });
+            if (!await ClearedAsync(page, ct))
+            {
+                logger.LogWarning(
+                    "Torrent Downloader drove a browser at {Host} and the challenge was still there after {Seconds}s.",
+                    url.Host,
+                    (int)Patience.TotalSeconds);
 
-        const query = navigator.permissions.query.bind(navigator.permissions);
-        navigator.permissions.query = parameters =>
-            parameters.name === 'notifications'
-                ? Promise.resolve({ state: Notification.permission })
-                : query(parameters);
+                return null;
+            }
 
-        const getParameter = WebGLRenderingContext.prototype.getParameter;
-        WebGLRenderingContext.prototype.getParameter = function (parameter) {
-            if (parameter === 37445) return 'Intel Inc.';
-            if (parameter === 37446) return 'Intel Iris OpenGL Engine';
-            return getParameter.call(this, parameter);
-        };
-        """;
+            return await page.GetContentAsync();
+        }
+        catch (Exception failure) when (failure is not OperationCanceledException)
+        {
+            logger.LogWarning(failure, "Torrent Downloader could not read {Host} with a browser.", url.Host);
+
+            return null;
+        }
+    }
 
     public async Task<Clearance?> SolveAsync(Uri url, CancellationToken ct)
     {
@@ -110,7 +102,6 @@ public sealed class HeadlessBrowserSolver(
             IBrowser browser = await BrowserAsync(ct);
 
             await using IPage page = await browser.NewPageAsync();
-            await page.EvaluateExpressionOnNewDocumentAsync(Evasions);
 
             await page.GoToAsync(url.ToString(), new NavigationOptions
             {
@@ -194,7 +185,11 @@ public sealed class HeadlessBrowserSolver(
 
             LaunchOptions options = new()
             {
-                Headless = true,
+                // Not headless. Measured against the live site: headful cleared the
+                // challenge in five seconds, headless sat on a Turnstile widget for forty
+                // and never passed. This is also why FlareSolverr runs Chrome under Xvfb
+                // rather than headless - the mode is detectable, and no flag hides it.
+                Headless = false,
 
                 // --no-sandbox because this runs as a service, and Chromium's sandbox wants
                 // a user session it does not have there. The rest are the flags that stop a

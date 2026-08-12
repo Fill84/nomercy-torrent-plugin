@@ -88,6 +88,27 @@ public sealed record Clearance(string Cookies, string UserAgent)
 /// the expensive one is a swap, not a rewrite.
 /// </para>
 /// </summary>
+/// <summary>
+/// A solver that can also hand back the page it fetched.
+///
+/// <para>
+/// Clearance alone is not always enough, and this was measured rather than assumed: a real
+/// browser cleared the challenge and produced a cf_clearance cookie, and the very same
+/// request replayed over HttpClient with that cookie came back 403. Cloudflare binds the
+/// clearance to the TLS handshake as well as to the user agent, and no cookie carries a
+/// handshake across to another client.
+/// </para>
+///
+/// <para>
+/// So the browser hands over what it actually loaded. FlareSolverr returns its page in
+/// exactly the same way, for exactly the same reason.
+/// </para>
+/// </summary>
+public interface IPageSource
+{
+    Task<string?> GetPageAsync(Uri url, CancellationToken ct);
+}
+
 public interface IChallengeSolver
 {
     /// <summary>Clearance for this URL, or null when it could not be had. Never throws for an unsolvable page.</summary>

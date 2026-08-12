@@ -39,6 +39,10 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Indexers;
 /// </summary>
 public static partial class SiteListingParser
 {
+    /// <summary>Tags out, whitespace collapsed. A tooltip may carry markup of its own.</summary>
+    private static string Clean(string value) =>
+        Regex.Replace(Regex.Replace(value, "<[^>]+>", string.Empty), @"\s+", " ").Trim();
+
     /// <summary>
     /// A magnet anywhere in the document. Deliberately not anchored to an <c>href</c>:
     /// plenty of sites put the magnet in a data attribute, a button, or plain text.
@@ -103,8 +107,51 @@ public static partial class SiteListingParser
     private static partial Regex LinkTextPattern();
 
     /// <summary>The slugged name in the torrent URL, for a site that prints no link text worth reading.</summary>
+    /// <summary>
+    /// The label alone in one tag and the number in the next, which is how a real listing
+    /// writes it: <c>&lt;span&gt;Seeds&lt;/span&gt; &lt;span class="text-success"&gt;4779&lt;/span&gt;</c>.
+    ///
+    /// <para>
+    /// The label has to be alone in its tag - anchored on the opening angle bracket -
+    /// because <c>&lt;td&gt;148 seeders&lt;/td&gt;&lt;td&gt;3&lt;/td&gt;</c> otherwise reads
+    /// as this shape and answers 3: the leech count of the row it was asked about.
+    /// </para>
+    ///
+    /// <para>
+    /// The other two patterns want the number within a few characters of the word, so on
+    /// this markup they found nothing and every row scored zero - which on a profile with a
+    /// minimum seeder count means every row is refused, from a site that answered perfectly.
+    /// </para>
+    /// </summary>
+    [GeneratedRegex(
+        @">\s*seed(?:er)?s?\s*</[a-z]+>\s*<[^>]{0,120}>\s*([\d][\d,. ]{0,11})\s*<",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex SplitCellSeedersPattern();
+
     [GeneratedRegex(@"[?&]title=([^&""']+)", RegexOptions.IgnoreCase)]
     private static partial Regex UrlTitlePattern();
+
+    /// <summary>
+    /// A listing row that links to a detail page and carries the title in the link.
+    ///
+    /// <para>
+    /// The shape of every large tracker that keeps its magnets one click away: the row has
+    /// a title, a slug and a seeder count, and the magnet lives behind the slug. Matched on
+    /// the class rather than the markup around it, because the markup is a table on one site
+    /// and a list of divs on the next while the class is what the site's own JavaScript
+    /// keys on.
+    /// </para>
+    ///
+    /// <para>
+    /// The title comes from the tooltip attribute, not the link text: the link text carries
+    /// the search term wrapped in a span, and stripping tags glues the tokens together -
+    /// "SiloS03E06" instead of "Silo S03E06".
+    /// </para>
+    /// </summary>
+    [GeneratedRegex(
+        @"<a\s+href=[""'](?<href>[^""']+)[""'][^>]*class=[""'][^""']*torrent-title-link[^""']*[""'][^>]*data-tooltip=[""'](?<title>[^""']+)[""']",
+        RegexOptions.IgnoreCase)]
+    private static partial Regex DetailRowPattern();
 
     /// <summary>
     /// A seeder count in a table cell named for it, thousands separator and all:
@@ -159,6 +206,34 @@ public static partial class SiteListingParser
                 MagnetUri = magnet,
                 InfoHash = Hash(magnet),
                 Seeders = Seeders(html, match.Index),
+            });
+        }
+
+        MatchCollection detailRows = DetailRowPattern().Matches(html);
+
+        for (int index = 0; index < detailRows.Count; index++)
+        {
+            Match match = detailRows[index];
+
+            // Bounded by the next row rather than by a character count. A row on a real
+            // listing is not small: this site puts an inline SVG badge in each one, so its
+            // seeder cell sits seven thousand characters past its title and a fixed window
+            // measured in hundreds finds nothing at all. Every row then scored zero, and a
+            // profile with a minimum seeder count refuses every one of them - a site
+            // answering perfectly, thrown away on arrival.
+            int rowEnd = index + 1 < detailRows.Count ? detailRows[index + 1].Index : html.Length;
+
+            string title = Clean(HttpUtility.HtmlDecode(match.Groups["title"].Value));
+            string href = HttpUtility.HtmlDecode(match.Groups["href"].Value);
+
+            if (title.Length == 0 || href.Length == 0)
+                continue;
+
+            byMagnet.TryAdd(href, new SiteRow
+            {
+                Title = title,
+                DetailUrl = href,
+                Seeders = SeedersIn(html[match.Index..rowEnd]),
             });
         }
 
@@ -257,6 +332,26 @@ public static partial class SiteListingParser
         return match.Success ? match.Groups[1].Value.ToLowerInvariant() : null;
     }
 
+    /// <summary>Seeders from one row's own markup, whatever its shape.</summary>
+    private static int SeedersIn(string row)
+    {
+        Match match = CellSeedersPattern().Match(row);
+
+        if (!match.Success)
+            match = SplitCellSeedersPattern().Match(row);
+
+        if (!match.Success)
+            match = LabelledSeedersPattern().Match(row);
+
+        if (!match.Success)
+            match = TrailingSeedersPattern().Match(row);
+
+        return match.Success
+            && int.TryParse(match.Groups[1].Value.Replace(",", string.Empty).Replace(".", string.Empty).Replace(" ", string.Empty), out int seeders)
+                ? seeders
+                : 0;
+    }
+
     private static int Seeders(string html, int magnetAt)
     {
         int start = Math.Max(0, magnetAt - RowWindow);
@@ -267,6 +362,9 @@ public static partial class SiteListingParser
         // The cell form first: it is the only one of the three that names the number by the
         // markup around it rather than by nearby words, so when it matches it is right.
         Match match = CellSeedersPattern().Match(row);
+
+        if (!match.Success)
+            match = SplitCellSeedersPattern().Match(row);
 
         if (!match.Success)
             match = LabelledSeedersPattern().Match(row);
@@ -289,7 +387,20 @@ public static partial class SiteListingParser
 public sealed record SiteRow
 {
     public required string Title { get; init; }
-    public required string MagnetUri { get; init; }
+
+    /// <summary>
+    /// The magnet, when the listing carries one. Null on a site that keeps its magnets one
+    /// click away - and that is most of the big ones.
+    /// </summary>
+    public string? MagnetUri { get; init; }
+
+    /// <summary>
+    /// Where the magnet is, when the row itself does not have it. The release travels with
+    /// this instead and the resolver fetches the source at grab time, so a search costs one
+    /// request rather than one per row.
+    /// </summary>
+    public string? DetailUrl { get; init; }
+
     public string? InfoHash { get; init; }
     public int Seeders { get; init; }
 }

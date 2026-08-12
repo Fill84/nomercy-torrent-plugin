@@ -13,8 +13,29 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Indexers;
 /// needed the expensive one never pay for it.
 /// </para>
 /// </summary>
-public sealed class FirstSolverThatWorks(params IChallengeSolver[] solvers) : IChallengeSolver
+public sealed class FirstSolverThatWorks(params IChallengeSolver[] solvers) : IChallengeSolver, IPageSource
 {
+    /// <summary>
+    /// Forwarded to whichever member can do it.
+    ///
+    /// <para>
+    /// Without this the chain hides the capability: the fetch asks "can you hand me the
+    /// page" of the wrapper, the wrapper says no, and the browser behind it never gets
+    /// asked - so a site that only works when the browser hands over what it loaded falls
+    /// straight back to the cookie replay that does not work on it.
+    /// </para>
+    /// </summary>
+    public async Task<string?> GetPageAsync(Uri url, CancellationToken ct)
+    {
+        foreach (IChallengeSolver solver in solvers)
+        {
+            if (solver is IPageSource source && await source.GetPageAsync(url, ct) is { } page)
+                return page;
+        }
+
+        return null;
+    }
+
     public async Task<Clearance?> SolveAsync(Uri url, CancellationToken ct)
     {
         foreach (IChallengeSolver solver in solvers)

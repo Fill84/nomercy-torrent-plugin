@@ -133,6 +133,14 @@ public sealed class SiteIndexer(
                 Title = row.Title,
                 InfoHash = row.InfoHash,
                 MagnetUri = row.MagnetUri,
+
+                // The magnet is one click away on most large sites, so the release travels
+                // with the page that has it and the resolver fetches the source at grab
+                // time. Fetching every row's detail page during a search would be fifty
+                // requests to answer one question.
+                DetailUrl = row.DetailUrl is { Length: > 0 } detail
+                    ? new Uri(url, detail).ToString()
+                    : null,
                 Seeders = row.Seeders,
                 IndexerPriority = priority,
             }),
