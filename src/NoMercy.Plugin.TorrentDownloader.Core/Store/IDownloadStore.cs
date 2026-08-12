@@ -54,6 +54,24 @@ public enum GrabState
     /// </summary>
     Resolving,
 
+    /// <summary>
+    /// Stopped by the owner, and still theirs.
+    ///
+    /// <para>
+    /// Written down rather than kept in the engine, which is where it used to live and
+    /// only lived: the engine's paused set is in memory, so a restart forgot it, the
+    /// transfers cadence saw an active grab the engine no longer knew, handed it straight
+    /// back, and the download the owner had stopped quietly carried on.
+    /// </para>
+    ///
+    /// <para>
+    /// Still an active grab - the pages read that set to give a transfer its name, and a
+    /// paused download has to stay nameable. It is not a running one, so it holds no
+    /// download slot, exactly like a finished one waiting on its move.
+    /// </para>
+    /// </summary>
+    Paused,
+
     Downloading,
     Downloaded,
 

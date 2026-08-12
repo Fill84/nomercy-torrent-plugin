@@ -379,4 +379,75 @@ public class TransfersCycleTests : DownloadOrchestratorTestBase
         (await _store.TransfersAsync(CancellationToken.None)).Should().BeEmpty();
     }
 
+
+    /// <summary>
+    /// A pause used to live only in the engine's memory, so a restart forgot it: the
+    /// cadence saw an active grab the engine no longer knew, handed it straight back, and
+    /// the download the owner had stopped carried on as if nothing had happened.
+    /// </summary>
+    [Fact]
+    public async Task ResumeForgotten_LeavesADownloadTheOwnerPausedAlone()
+    {
+        await GrabOneAsync();
+        string hash = _engine.Added[0].Source;
+
+        DownloadOrchestrator orchestrator = Orchestrator();
+        await orchestrator.PauseDownloadAsync(hash, CancellationToken.None);
+
+        (await _store.FindGrabAsync(hash, CancellationToken.None))!.State.Should().Be(GrabState.Paused);
+
+        // The engine is emptied, as a restart empties it.
+        _engine.Transfers = [];
+        _engine.Added.Clear();
+
+        await orchestrator.TransfersCycleAsync(CancellationToken.None);
+
+        _engine.Added.Should().BeEmpty("a paused download stays paused across a restart");
+    }
+
+    [Fact]
+    public async Task ResumeDownloadAsync_PutsItBackAmongTheRunningOnes()
+    {
+        await GrabOneAsync();
+        string hash = _engine.Added[0].Source;
+
+        DownloadOrchestrator orchestrator = Orchestrator();
+        await orchestrator.PauseDownloadAsync(hash, CancellationToken.None);
+        await orchestrator.ResumeDownloadAsync(hash, CancellationToken.None);
+
+        (await _store.FindGrabAsync(hash, CancellationToken.None))!.State.Should().Be(GrabState.Downloading);
+
+        _engine.Transfers = [];
+        _engine.Added.Clear();
+
+        await orchestrator.TransfersCycleAsync(CancellationToken.None);
+
+        _engine.Added.Should().ContainSingle("a resumed download is handed back after a restart");
+    }
+
+    /// <summary>
+    /// A paused download takes no bandwidth, no peer slot and no disk head, exactly like a
+    /// finished one waiting on its move. Counting it against the ceiling is how a queue
+    /// stops moving because of downloads that are not moving either.
+    /// </summary>
+    [Fact]
+    public async Task SearchCycleAsync_DoesNotCountAPausedDownloadAgainstTheCeiling()
+    {
+        await WantEpisodesAsync(6);
+        _search.Results = [Release()];
+        _search.UniquePerQuery = true;
+
+        DownloadOrchestrator orchestrator = Orchestrator(new OrchestratorOptions
+        {
+            DownloadFolder = "/downloads",
+            MaxConcurrentDownloads = 2,
+        });
+
+        await orchestrator.SearchCycleAsync(CancellationToken.None);
+
+        foreach (Grab grab in await _store.ActiveGrabsAsync(CancellationToken.None))
+            await orchestrator.PauseDownloadAsync(grab.InfoHash, CancellationToken.None);
+
+        (await orchestrator.SearchCycleAsync(CancellationToken.None)).Grabbed.Should().Be(2);
+    }
 }

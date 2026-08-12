@@ -332,7 +332,8 @@ public sealed class DownloadOrchestrator(
     /// </para>
     /// </summary>
     private async Task<int> DownloadingNowAsync(CancellationToken ct) =>
-        (await store.ActiveGrabsAsync(ct)).Count(grab => grab.State != GrabState.Downloaded);
+        (await store.ActiveGrabsAsync(ct))
+            .Count(grab => grab.State is not (GrabState.Downloaded or GrabState.Paused));
 
     /// <summary>
     /// Every episode worth asking an indexer about, least recently searched first.
@@ -775,6 +776,11 @@ public sealed class DownloadOrchestrator(
             if (known.Contains(grab.InfoHash) || grab.Source.Length == 0)
                 continue;
 
+            // The owner stopped this one. Handing it back to the engine is how a pause
+            // used to end at the next restart, without anybody asking for it.
+            if (grab.State == GrabState.Paused)
+                continue;
+
             await engine.AddAsync(new TorrentRequest
             {
                 Source = grab.Source,
@@ -1002,6 +1008,7 @@ public sealed class DownloadOrchestrator(
             return false;
 
         await engine.PauseAsync(infoHash, ct);
+        await store.UpdateGrabAsync(infoHash, GrabState.Paused, null, null, ct);
 
         return true;
     }
@@ -1012,6 +1019,7 @@ public sealed class DownloadOrchestrator(
             return false;
 
         await engine.ResumeAsync(infoHash, ct);
+        await store.UpdateGrabAsync(infoHash, GrabState.Downloading, null, null, ct);
 
         return true;
     }

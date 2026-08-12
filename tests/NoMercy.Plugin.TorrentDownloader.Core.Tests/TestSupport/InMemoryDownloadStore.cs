@@ -110,6 +110,7 @@ public sealed class InMemoryDownloadStore : IDownloadStore
                 is GrabState.Grabbed
                 or GrabState.Resolving
                 or GrabState.Downloading
+                or GrabState.Paused
                 or GrabState.Downloaded),
         ]);
 
