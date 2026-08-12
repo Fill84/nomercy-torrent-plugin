@@ -12,6 +12,13 @@ public sealed class StubHttpMessageHandler(
 {
     public List<Uri> Requests { get; } = [];
 
+    /// <summary>
+    /// What was sent, for the handful of callers that POST. Captured here rather than by
+    /// each test, because reading a request's content after the fact is not possible - the
+    /// stream is consumed by the time anyone could ask.
+    /// </summary>
+    public List<string> Bodies { get; } = [];
+
     public static StubHttpMessageHandler Returning(
         string body,
         HttpStatusCode status = HttpStatusCode.OK,
@@ -29,13 +36,17 @@ public sealed class StubHttpMessageHandler(
     public static StubHttpMessageHandler Throwing(Exception error) =>
         new(_ => throw error);
 
-    protected override Task<HttpResponseMessage> SendAsync(
+    protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request,
         CancellationToken cancellationToken
     )
     {
         Requests.Add(request.RequestUri!);
-        return Task.FromResult(respond(request));
+
+        if (request.Content is not null)
+            Bodies.Add(await request.Content.ReadAsStringAsync(cancellationToken));
+
+        return respond(request);
     }
 
     public HttpClient Client() => new(this);

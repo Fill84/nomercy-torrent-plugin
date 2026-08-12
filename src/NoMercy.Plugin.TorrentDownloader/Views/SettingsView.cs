@@ -168,6 +168,13 @@ public static class SettingsView
             },
             new()
             {
+                Name = "flareSolverrUrl",
+                Label = "FlareSolverr address (optional)",
+                Value = settings.FlareSolverrUrl,
+                Placeholder = "http://localhost:8191/v1",
+            },
+            new()
+            {
                 Name = "maxConcurrentDownloads",
                 Label = "Downloads at once",
                 Type = PluginFormFieldType.Number,

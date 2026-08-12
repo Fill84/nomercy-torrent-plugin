@@ -116,6 +116,31 @@ internal sealed class DownloadPipeline : IAsyncDisposable
     }
 
     /// <summary>
+    /// How this plugin gets past a gate: cheapest first.
+    ///
+    /// <para>
+    /// Sending the request the way a browser sends it costs one HTTP call and clears most
+    /// sites. FlareSolverr costs a browser start-up in another process and clears the rest -
+    /// Cloudflare's scripted challenge wants JavaScript run, and headers do not substitute.
+    /// Trying them in that order means a site that never needed a sidecar never pays for one.
+    /// </para>
+    ///
+    /// <para>
+    /// No FlareSolverr configured is the ordinary case and not a degraded one: the plugin
+    /// behaves exactly as it did before, and says plainly which host it could not pass.
+    /// </para>
+    /// </summary>
+    private static IChallengeSolver Solver(IPluginContext context, string flareSolverrUrl)
+    {
+        BrowserIdentitySolver browser = new();
+
+        if (!Uri.TryCreate(flareSolverrUrl, UriKind.Absolute, out Uri? endpoint))
+            return browser;
+
+        return new FirstSolverThatWorks(browser, new FlareSolverrSolver(context.HttpClient, endpoint));
+    }
+
+    /// <summary>
     /// Free bytes on whichever volume holds the download folder, or null when that cannot
     /// be worked out.
     ///
@@ -213,7 +238,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
             string? apiKey = loaded.IndexerSecrets.FirstOrDefault(secret => secret.Name == settings.Name)?.ApiKey;
 
-            IIndexer? indexer = Build(settings, url, apiKey, context, loaded.Settings.DefaultTrackers);
+            IIndexer? indexer = Build(settings, url, apiKey, context, loaded.Settings.DefaultTrackers, loaded.Settings.FlareSolverrUrl);
 
             if (indexer is null)
                 continue;
@@ -238,7 +263,8 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         Uri url,
         string? apiKey,
         IPluginContext context,
-        IReadOnlyList<string> trackers)
+        IReadOnlyList<string> trackers,
+        string flareSolverrUrl)
     {
         switch (settings.Kind.ToLowerInvariant())
         {
@@ -265,7 +291,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
                     settings.Name,
                     settings.Priority,
                     settings.Url,
-                    new ChallengeAwareFetch(context.HttpClient, Clearances, new BrowserIdentitySolver()),
+                    new ChallengeAwareFetch(context.HttpClient, Clearances, Solver(context, flareSolverrUrl)),
                     trackers);
 
             case "site":

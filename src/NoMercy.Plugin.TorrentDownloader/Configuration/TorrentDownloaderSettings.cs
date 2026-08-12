@@ -46,6 +46,24 @@ public class TorrentDownloaderSettings
     /// <summary>A pack is still only considered once enough of a season is missing to be worth its bytes.</summary>
     public bool AllowSeasonPacks { get; set; } = true;
 
+    /// <summary>
+    /// Where FlareSolverr is, when the owner runs one. Empty means they do not.
+    ///
+    /// <para>
+    /// The plugin gets past most gates on its own, by sending the request the way a browser
+    /// sends it. Cloudflare's scripted challenge is the exception: it wants JavaScript run,
+    /// and no header work substitutes. On a real server that was two of three sources
+    /// answering 403 and never having produced a single release.
+    /// </para>
+    ///
+    /// <para>
+    /// A full URL including the path, normally <c>http://localhost:8191/v1</c>. Nothing here
+    /// starts FlareSolverr and nothing here needs it - left empty, the plugin behaves exactly
+    /// as it did before.
+    /// </para>
+    /// </summary>
+    public string FlareSolverrUrl { get; set; } = string.Empty;
+
     public List<IndexerSettings> Indexers { get; set; } = [];
     /// <summary>
     /// Which video codec to accept: <c>h264</c>, <c>h265</c> or <c>any</c>.

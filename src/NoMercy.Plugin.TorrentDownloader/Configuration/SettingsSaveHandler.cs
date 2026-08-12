@@ -191,6 +191,22 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
         if (request.Codec is string codec && codec.Trim().ToLowerInvariant() is "any" or "h264" or "h265")
             merged.Codec = codec.Trim().ToLowerInvariant();
 
+        // Refused rather than stored when it is not a URL, for the same reason a codec typo
+        // is: a value the plugin cannot use is a solver that silently is not there, and the
+        // owner would be looking at their sources wondering why nothing changed. Submitted
+        // empty is honoured - that is how somebody turns it off.
+        if (request.FlareSolverrUrl is not null)
+        {
+            string trimmed = request.FlareSolverrUrl.Trim();
+
+            if (trimmed.Length == 0)
+                merged.FlareSolverrUrl = string.Empty;
+            else if (Uri.TryCreate(trimmed, UriKind.Absolute, out _))
+                merged.FlareSolverrUrl = trimmed;
+            else
+                return SaveSettingsOutcome.Failure("The FlareSolverr address must be a full URL, like http://localhost:8191/v1.");
+        }
+
         if (request.EnglishOnly is bool englishOnly)
             merged.EnglishOnly = englishOnly;
 
@@ -544,6 +560,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             MaximumResolution = source.MaximumResolution,
             MinimumSeeders = source.MinimumSeeders,
             MaxConcurrentDownloads = source.MaxConcurrentDownloads,
+            FlareSolverrUrl = source.FlareSolverrUrl,
             AllowSeasonPacks = source.AllowSeasonPacks,
             Indexers = source.Indexers,
             PrivateTrackers = source.PrivateTrackers,
