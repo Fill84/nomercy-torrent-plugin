@@ -26,7 +26,13 @@ permissions:
 
 env:
   PLUGIN_DIR: NoMercy.Plugin.TorrentDownloader
-  SERVER_BRANCH: dev
+  # master, not dev, and the fetch script says why at length: this plugin is
+  # installed on servers running a release, so the contract it compiles against
+  # should be the one those servers ship. This line quietly overrode that default
+  # and CI packed 0.1.404 from dev while the contract the plugin needs - ABI 10.1,
+  # with PluginShowStatus - was 0.1.472 on master. The build failed with CS0246
+  # naming the type, which reads like a missing using and is really a server too old.
+  SERVER_BRANCH: master
   DOTNET_CHANNEL: "10.0"
   DOTNET_NOLOGO: "1"
   DOTNET_CLI_TELEMETRY_OPTOUT: "1"
