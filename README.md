@@ -90,7 +90,16 @@ Requires the **.NET 10 SDK** (matches the server's target framework).
 
 The plugin shell builds against `NoMercy.Plugins.Abstractions`, which is **not published to
 nuget.org**, so fetch it first. The script clones the server (sparse, shallow) and packs the contract
-into a local feed that the committed `nuget.config` already points at:
+into a local feed that the committed `nuget.config` already points at.
+
+**It needs ABI 10.1 or newer**, which is what `plugin.json` declares. That version added
+`PluginShowStatus` - whether a show is still going out - and this plugin cannot compile without it:
+the whole queue rests on the difference between a series that is still running and one that ended.
+A contract packed from a server that predates it fails with `CS0246: PluginShowStatus could not be
+found`, which reads like a missing using and is really a server too old to build against. It landed
+in the media server's `master`, which is the branch the script clones by default.
+
+
 
 ```bash
 ./scripts/fetch-abstractions.sh      # or: pwsh scripts/fetch-abstractions.ps1
