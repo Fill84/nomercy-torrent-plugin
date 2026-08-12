@@ -98,7 +98,7 @@ public static class QualityLadders
             _ => fallback,
         };
 
-    public static string NameOf(Resolution resolution) =>
+    private static string NameOf(Resolution resolution) =>
         resolution switch
         {
             Resolution.Sd480 => "480p",
