@@ -237,6 +237,8 @@ public sealed class HeadlessBrowserSolver(
                     "Torrent Downloader found no Chrome on this machine and downloaded {Build} into {Folder}.",
                     fetched.BuildId,
                     browserFolder);
+
+                DropTheHeadlessShell(browserFolder);
             }
 
             return _browser = await Puppeteer.LaunchAsync(options);
@@ -244,6 +246,37 @@ public sealed class HeadlessBrowserSolver(
         finally
         {
             _gate.Release();
+        }
+    }
+
+    /// <summary>
+    /// Deletes the headless shell that comes down beside Chrome.
+    ///
+    /// <para>
+    /// Asking for Chrome also fetches chrome-headless-shell - 272 MB of a browser this can
+    /// never use, since headless is the one mode measured not to pass a managed challenge.
+    /// Puppeteer does the same in Node and nothing here can turn it off, so it goes
+    /// afterwards. On a server that is a third of what the plugin puts on disk.
+    /// </para>
+    /// </summary>
+    private void DropTheHeadlessShell(string browserFolder)
+    {
+        string shell = Path.Combine(browserFolder, "ChromeHeadlessShell");
+
+        try
+        {
+            if (Directory.Exists(shell))
+            {
+                Directory.Delete(shell, recursive: true);
+
+                logger.LogInformation("Torrent Downloader removed the headless shell it cannot use, freeing its space.");
+            }
+        }
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        {
+            // Disk space, not correctness. A shell that will not delete is wasted megabytes
+            // and nothing else, and failing a search over it would be absurd.
+            logger.LogDebug(failure, "Torrent Downloader could not remove the unused headless shell.");
         }
     }
 
