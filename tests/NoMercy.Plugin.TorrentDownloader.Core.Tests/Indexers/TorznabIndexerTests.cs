@@ -44,7 +44,7 @@ public class TorznabIndexerTests
             9,
             new Uri("https://indexer.example/api"),
             "SECRETKEY",
-            handler.Client(),
+            new ChallengeAwareFetch(handler.Client(), new ClearanceStore(() => DateTimeOffset.UtcNow)),
             categories
         );
 
@@ -173,7 +173,7 @@ public class TorznabIndexerTests
             9,
             new Uri("https://jackett.local/api/v2.0/indexers/x/results/torznab/?apikey=OLD"),
             "NEW",
-            handler.Client()
+            new ChallengeAwareFetch(handler.Client(), new ClearanceStore(() => DateTimeOffset.UtcNow))
         );
 
         await indexer.SearchAsync(new SearchQuery("Silo"), CancellationToken.None);

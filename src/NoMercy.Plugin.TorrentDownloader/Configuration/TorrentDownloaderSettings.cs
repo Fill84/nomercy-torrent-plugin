@@ -46,42 +46,6 @@ public class TorrentDownloaderSettings
     /// <summary>A pack is still only considered once enough of a season is missing to be worth its bytes.</summary>
     public bool AllowSeasonPacks { get; set; } = true;
 
-    /// <summary>
-    /// Where FlareSolverr is, when the owner runs one. Empty means they do not.
-    ///
-    /// <para>
-    /// The plugin gets past most gates on its own, by sending the request the way a browser
-    /// sends it. Cloudflare's scripted challenge is the exception: it wants JavaScript run,
-    /// and no header work substitutes. On a real server that was two of three sources
-    /// answering 403 and never having produced a single release.
-    /// </para>
-    ///
-    /// <para>
-    /// A full URL including the path, normally <c>http://localhost:8191/v1</c>. Nothing here
-    /// starts FlareSolverr and nothing here needs it - left empty, the plugin behaves exactly
-    /// as it did before.
-    /// </para>
-    /// </summary>
-    public string FlareSolverrUrl { get; set; } = string.Empty;
-
-    /// <summary>
-    /// Let the plugin drive a real browser when a site will not answer otherwise.
-    ///
-    /// <para>
-    /// The same job FlareSolverr's container does, done in this process: a headless Chromium
-    /// with the stealth patches a managed challenge looks for. It uses a Chrome or Edge
-    /// already on the machine and only downloads one when there is none.
-    /// </para>
-    ///
-    /// <para>
-    /// Off by default. Most sites never need it - sending the request the way a browser
-    /// sends it clears them for the price of one call - and a browser costs a few hundred
-    /// megabytes and several seconds per solve. Turn it on for the sites that answer 403 and
-    /// nothing else.
-    /// </para>
-    /// </summary>
-    public bool UseBrowserForChallenges { get; set; }
-
     public List<IndexerSettings> Indexers { get; set; } = [];
     /// <summary>
     /// Which video codec to accept: <c>h264</c>, <c>h265</c> or <c>any</c>.

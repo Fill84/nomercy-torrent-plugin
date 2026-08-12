@@ -177,20 +177,28 @@ internal sealed class DownloadPipeline : IAsyncDisposable
     /// behaves exactly as it did before, and says plainly which host it could not pass.
     /// </para>
     /// </summary>
-    private static IChallengeSolver Solver(IPluginContext context, TorrentDownloaderSettings settings)
+    /// <summary>
+    /// The one way this plugin fetches a page, and every indexer uses it.
+    ///
+    /// <para>
+    /// Only the site indexers went through it at first, so a feed behind the same Cloudflare
+    /// check as a site was simply refused - which is what SCNSRC did, 403, with nothing but
+    /// a challenge page where the XML should have been. A gate does not care what kind of
+    /// document is behind it.
+    /// </para>
+    /// </summary>
+    private static ChallengeAwareFetch Fetch(IPluginContext context) =>
+        new(context.HttpClient, Clearances, Solver(context));
+
+    private static IChallengeSolver Solver(IPluginContext context)
     {
-        List<IChallengeSolver> solvers = [new BrowserIdentitySolver()];
-
-        // Somebody else's browser, if the owner already runs one.
-        if (Uri.TryCreate(settings.FlareSolverrUrl, UriKind.Absolute, out Uri? endpoint))
-            solvers.Add(new FlareSolverrSolver(context.HttpClient, endpoint));
-
-        // Ours, if they would rather not run a container. Last, because it is the most
-        // expensive of the three and the other two will have cleared most sites already.
-        if (settings.UseBrowserForChallenges)
-            solvers.Add(new HeadlessBrowserSolver(context.Logger, Path.Combine(context.DataFolderPath, "browser")));
-
-        return solvers.Count == 1 ? solvers[0] : new FirstSolverThatWorks([.. solvers]);
+        // The browser first. It runs the page the way a person's browser would, which is
+        // what a managed Cloudflare challenge is checking for, and it is the only one of the
+        // two that can pass one. The header-only solver stays behind it as the fallback for
+        // the case where Chromium will not start at all.
+        return new FirstSolverThatWorks(
+            new HeadlessBrowserSolver(context.Logger, Path.Combine(context.DataFolderPath, "browser")),
+            new BrowserIdentitySolver());
     }
 
     /// <summary>
@@ -291,7 +299,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
             string? apiKey = loaded.IndexerSecrets.FirstOrDefault(secret => secret.Name == settings.Name)?.ApiKey;
 
-            IIndexer? indexer = Build(settings, url, apiKey, context, loaded.Settings.DefaultTrackers, loaded.Settings);
+            IIndexer? indexer = Build(settings, url, apiKey, context, loaded.Settings.DefaultTrackers);
 
             if (indexer is null)
                 continue;
@@ -316,8 +324,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         Uri url,
         string? apiKey,
         IPluginContext context,
-        IReadOnlyList<string> trackers,
-        TorrentDownloaderSettings solverSettings)
+        IReadOnlyList<string> trackers)
     {
         switch (settings.Kind.ToLowerInvariant())
         {
@@ -327,7 +334,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
                     settings.Priority,
                     url,
                     apiKey,
-                    context.HttpClient,
+                    Fetch(context),
                     [.. settings.Categories.Select(category => int.TryParse(category, out int number) ? number : -1).Where(number => number > 0)]);
 
             case "torznab":
@@ -337,14 +344,14 @@ internal sealed class DownloadPipeline : IAsyncDisposable
                 return null;
 
             case "rss":
-                return new RssIndexer(settings.Name, settings.Priority, url, context.HttpClient, settings.Categories);
+                return new RssIndexer(settings.Name, settings.Priority, url, Fetch(context), settings.Categories);
 
             case "site" when SiteIndexer.IsUsableTemplate(settings.Url):
                 return new SiteIndexer(
                     settings.Name,
                     settings.Priority,
                     settings.Url,
-                    new ChallengeAwareFetch(context.HttpClient, Clearances, Solver(context, solverSettings)),
+                    Fetch(context),
                     trackers);
 
             case "site":

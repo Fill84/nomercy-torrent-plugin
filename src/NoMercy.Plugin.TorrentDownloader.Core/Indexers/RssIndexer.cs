@@ -11,7 +11,7 @@ public sealed partial class RssIndexer(
     string name,
     int priority,
     Uri feedUrl,
-    HttpClient http,
+    ChallengeAwareFetch fetch,
     IReadOnlyList<string>? categories = null
 ) : IIndexer
 {
@@ -27,7 +27,7 @@ public sealed partial class RssIndexer(
 
     public async Task<IReadOnlyList<ReleaseInfo>> SearchAsync(SearchQuery query, CancellationToken ct)
     {
-        string body = await IndexerHttp.GetStringAsync(http, feedUrl, name, "feed", ct);
+        string body = await fetch.GetStringAsync(feedUrl, name, "feed", ct);
 
         return RssFeedParser
             .Parse(body)

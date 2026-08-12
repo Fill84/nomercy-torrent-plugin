@@ -16,7 +16,7 @@ public class RssIndexerTests
         StubHttpMessageHandler handler,
         IReadOnlyList<string>? categories = null
     ) =>
-        new("scnsrc", 5, new Uri("https://feed.example/rss"), handler.Client(), categories);
+        new("scnsrc", 5, new Uri("https://feed.example/rss"), new ChallengeAwareFetch(handler.Client(), new ClearanceStore(() => DateTimeOffset.UtcNow)), categories);
 
     [Fact]
     public async Task SearchAsync_ReturnsEveryItemFromTheRealCapture()

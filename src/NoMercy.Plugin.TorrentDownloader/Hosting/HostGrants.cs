@@ -27,15 +27,6 @@ public sealed class HostGrants(IPluginGrants grants)
             }
         }
 
-        // FlareSolverr is usually on this machine, and the allowlist does not care: an
-        // outbound request is an outbound request, and one this plugin cannot make is a
-        // solver that silently is not there. Named by its role so the prompt says what the
-        // owner is approving rather than showing them a bare port number.
-        if (TryGetHost(settings.FlareSolverrUrl, out string solverHost))
-        {
-            AddRole(hosts, solverHost, "the FlareSolverr service");
-        }
-
 
         if (hosts.Count == 0)
         {

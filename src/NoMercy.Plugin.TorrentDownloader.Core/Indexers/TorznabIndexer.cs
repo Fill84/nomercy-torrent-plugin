@@ -12,7 +12,7 @@ public sealed class TorznabIndexer(
     int priority,
     Uri baseUrl,
     string apiKey,
-    HttpClient http,
+    ChallengeAwareFetch fetch,
     IReadOnlyList<int>? categories = null
 ) : IIndexer
 {
@@ -23,7 +23,7 @@ public sealed class TorznabIndexer(
     public async Task<IReadOnlyList<ReleaseInfo>> SearchAsync(SearchQuery query, CancellationToken ct)
     {
         Uri url = BuildUrl(query);
-        string body = await IndexerHttp.GetStringAsync(http, url, name, "search", ct);
+        string body = await fetch.GetStringAsync(url, name, "search", ct);
         return TorznabResultParser.Parse(body, name, priority);
     }
 

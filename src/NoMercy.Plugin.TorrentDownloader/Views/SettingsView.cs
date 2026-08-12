@@ -168,20 +168,6 @@ public static class SettingsView
             },
             new()
             {
-                Name = "useBrowserForChallenges",
-                Label = "Drive a browser when a site blocks us",
-                Type = PluginFormFieldType.Toggle,
-                Value = settings.UseBrowserForChallenges,
-            },
-            new()
-            {
-                Name = "flareSolverrUrl",
-                Label = "FlareSolverr address (optional)",
-                Value = settings.FlareSolverrUrl,
-                Placeholder = "http://localhost:8191/v1",
-            },
-            new()
-            {
                 Name = "maxConcurrentDownloads",
                 Label = "Downloads at once",
                 Type = PluginFormFieldType.Number,
