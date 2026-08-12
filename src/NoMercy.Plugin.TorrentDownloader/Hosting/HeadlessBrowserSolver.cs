@@ -205,26 +205,39 @@ public sealed class HeadlessBrowserSolver(
                 ],
             };
 
-            // Its own Chromium, never whatever the machine happens to have.
+            // Chrome, and only Chrome - the machine's if it has one, otherwise the same
+            // Chrome downloaded here.
             //
-            // Driving an installed Chrome or Edge sounds thrifty and is a trap: the version
-            // differs per machine, the flags differ per channel, a Windows box has Edge and
-            // a Linux container has nothing at all - so the plugin would behave differently
-            // everywhere and be untestable in the one place it matters. FlareSolverr ships
-            // its own for exactly this reason.
-            //
-            // Downloaded once into the plugin's own data folder, so removing the plugin
-            // takes it with it rather than leaving a browser somewhere in a profile.
-            BrowserFetcher fetcher = new(new BrowserFetcherOptions { Path = browserFolder });
+            // One browser everywhere is the point. Edge, Chromium and Chrome each answer a
+            // challenge slightly differently, so a plugin that drives whatever is lying
+            // around produces results nobody can compare: when it clears for one owner and
+            // not another, the difference is invisible. Taking the installed copy only
+            // saves disk; it never changes which engine runs.
+            if (ChromeOnDisk.Path() is { Length: > 0 } onDisk)
+            {
+                options.ExecutablePath = onDisk;
 
-            InstalledBrowser installed = await fetcher.DownloadAsync();
+                logger.LogInformation("Torrent Downloader is driving the Chrome already on this machine: {Path}.", onDisk);
+            }
+            else
+            {
+                // Downloaded into the plugin's own data folder, so removing the plugin takes
+                // it with it. Once, on the first challenge - never at install.
+                BrowserFetcher fetcher = new(new BrowserFetcherOptions
+                {
+                    Path = browserFolder,
+                    Browser = SupportedBrowser.Chrome,
+                });
 
-            options.ExecutablePath = installed.GetExecutablePath();
+                InstalledBrowser fetched = await fetcher.DownloadAsync();
 
-            logger.LogInformation(
-                "Torrent Downloader is driving its own Chromium {Build} from {Folder}.",
-                installed.BuildId,
-                browserFolder);
+                options.ExecutablePath = fetched.GetExecutablePath();
+
+                logger.LogInformation(
+                    "Torrent Downloader found no Chrome on this machine and downloaded {Build} into {Folder}.",
+                    fetched.BuildId,
+                    browserFolder);
+            }
 
             return _browser = await Puppeteer.LaunchAsync(options);
         }
