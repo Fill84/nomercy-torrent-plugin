@@ -4,6 +4,7 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Indexers;
 using PuppeteerSharp;
+using PuppeteerSharp.BrowserData;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
@@ -33,7 +34,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </summary>
 public sealed class HeadlessBrowserSolver(
     ILogger logger,
-    Func<string?>? findBrowser = null,
+    string browserFolder,
     TimeSpan? patience = null) : IChallengeSolver, IAsyncDisposable
 {
     /// <summary>
@@ -209,19 +210,26 @@ public sealed class HeadlessBrowserSolver(
                 ],
             };
 
-            if (findBrowser?.Invoke() is { Length: > 0 } executable)
-            {
-                options.ExecutablePath = executable;
-                logger.LogInformation("Torrent Downloader is using the browser already on this machine: {Path}.", executable);
-            }
-            else
-            {
-                // Only when the machine has none. A few hundred megabytes is a real cost and
-                // it is paid once, on the first challenge, rather than at install.
-                logger.LogInformation("Torrent Downloader found no browser on this machine and is downloading one. This happens once.");
+            // Its own Chromium, never whatever the machine happens to have.
+            //
+            // Driving an installed Chrome or Edge sounds thrifty and is a trap: the version
+            // differs per machine, the flags differ per channel, a Windows box has Edge and
+            // a Linux container has nothing at all - so the plugin would behave differently
+            // everywhere and be untestable in the one place it matters. FlareSolverr ships
+            // its own for exactly this reason.
+            //
+            // Downloaded once into the plugin's own data folder, so removing the plugin
+            // takes it with it rather than leaving a browser somewhere in a profile.
+            BrowserFetcher fetcher = new(new BrowserFetcherOptions { Path = browserFolder });
 
-                await new BrowserFetcher().DownloadAsync();
-            }
+            InstalledBrowser installed = await fetcher.DownloadAsync();
+
+            options.ExecutablePath = installed.GetExecutablePath();
+
+            logger.LogInformation(
+                "Torrent Downloader is driving its own Chromium {Build} from {Folder}.",
+                installed.BuildId,
+                browserFolder);
 
             return _browser = await Puppeteer.LaunchAsync(options);
         }

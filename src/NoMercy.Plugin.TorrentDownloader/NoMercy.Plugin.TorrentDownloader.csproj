@@ -11,6 +11,18 @@
         <Version>0.1.0</Version>
         <Authors>Phillippe Pelzer</Authors>
         <Description>Keeps a TV library complete by downloading missing episodes over BitTorrent.</Description>
+
+        <!--
+            A library build leaves its NuGet dependencies in the package cache and lists
+            them in deps.json, which is right for something another project references and
+            wrong for a plugin: nothing composes this, it is copied into a folder and loaded
+            from there. The host's load context resolves dependencies out of that folder, so
+            they have to be in it.
+
+            Only mattered once PuppeteerSharp arrived - before that every dependency was one
+            the host already owned.
+        -->
+        <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     </PropertyGroup>
 
     <ItemGroup>

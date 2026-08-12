@@ -188,7 +188,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         // Ours, if they would rather not run a container. Last, because it is the most
         // expensive of the three and the other two will have cleared most sites already.
         if (settings.UseBrowserForChallenges)
-            solvers.Add(new HeadlessBrowserSolver(context.Logger, InstalledBrowser.Path));
+            solvers.Add(new HeadlessBrowserSolver(context.Logger, Path.Combine(context.DataFolderPath, "browser")));
 
         return solvers.Count == 1 ? solvers[0] : new FirstSolverThatWorks([.. solvers]);
     }
