@@ -37,7 +37,21 @@ $files = @(
     "$project.dll",
     "$project.Core.dll",
     "$project.deps.json",
-    'plugin.json'
+    'plugin.json',
+
+    # PuppeteerSharp and what it needs, for the headless browser that answers a
+    # managed Cloudflare challenge. The host's PluginLoadContext resolves these
+    # from the plugin folder through the deps.json above, which is the supported
+    # way a plugin brings its own dependencies.
+    #
+    # Newtonsoft.Json is deliberately absent even though it appears in the publish
+    # output: PluginHostOptions.DefaultSharedAssemblies names it, so the load
+    # context returns null for it and the runtime uses the host's copy. Shipping a
+    # second one would be a second assembly identity for [JsonProperty], which is
+    # exactly the bug that list exists to prevent. Same for Ulid and every NoMercy.*.
+    'PuppeteerSharp.dll',
+    'WebDriverBiDi.dll',
+    'Microsoft.IO.RecyclableMemoryStream.dll'
 )
 
 if ($Build) {

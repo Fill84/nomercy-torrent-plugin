@@ -168,6 +168,13 @@ public static class SettingsView
             },
             new()
             {
+                Name = "useBrowserForChallenges",
+                Label = "Drive a browser when a site blocks us",
+                Type = PluginFormFieldType.Toggle,
+                Value = settings.UseBrowserForChallenges,
+            },
+            new()
+            {
                 Name = "flareSolverrUrl",
                 Label = "FlareSolverr address (optional)",
                 Value = settings.FlareSolverrUrl,

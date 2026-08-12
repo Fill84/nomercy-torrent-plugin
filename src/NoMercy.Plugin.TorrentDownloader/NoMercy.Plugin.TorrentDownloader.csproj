@@ -38,6 +38,7 @@
             base class the host resolves must have exactly one identity.
         -->
         <PackageReference Include="NoMercy.Plugins.Mvc" Version="*" />
+        <PackageReference Include="PuppeteerSharp" Version="25.5.0" />
     </ItemGroup>
 
     <ItemGroup>

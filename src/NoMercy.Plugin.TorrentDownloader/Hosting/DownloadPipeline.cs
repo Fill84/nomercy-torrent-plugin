@@ -177,14 +177,20 @@ internal sealed class DownloadPipeline : IAsyncDisposable
     /// behaves exactly as it did before, and says plainly which host it could not pass.
     /// </para>
     /// </summary>
-    private static IChallengeSolver Solver(IPluginContext context, string flareSolverrUrl)
+    private static IChallengeSolver Solver(IPluginContext context, TorrentDownloaderSettings settings)
     {
-        BrowserIdentitySolver browser = new();
+        List<IChallengeSolver> solvers = [new BrowserIdentitySolver()];
 
-        if (!Uri.TryCreate(flareSolverrUrl, UriKind.Absolute, out Uri? endpoint))
-            return browser;
+        // Somebody else's browser, if the owner already runs one.
+        if (Uri.TryCreate(settings.FlareSolverrUrl, UriKind.Absolute, out Uri? endpoint))
+            solvers.Add(new FlareSolverrSolver(context.HttpClient, endpoint));
 
-        return new FirstSolverThatWorks(browser, new FlareSolverrSolver(context.HttpClient, endpoint));
+        // Ours, if they would rather not run a container. Last, because it is the most
+        // expensive of the three and the other two will have cleared most sites already.
+        if (settings.UseBrowserForChallenges)
+            solvers.Add(new HeadlessBrowserSolver(context.Logger, InstalledBrowser.Path));
+
+        return solvers.Count == 1 ? solvers[0] : new FirstSolverThatWorks([.. solvers]);
     }
 
     /// <summary>
@@ -285,7 +291,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
             string? apiKey = loaded.IndexerSecrets.FirstOrDefault(secret => secret.Name == settings.Name)?.ApiKey;
 
-            IIndexer? indexer = Build(settings, url, apiKey, context, loaded.Settings.DefaultTrackers, loaded.Settings.FlareSolverrUrl);
+            IIndexer? indexer = Build(settings, url, apiKey, context, loaded.Settings.DefaultTrackers, loaded.Settings);
 
             if (indexer is null)
                 continue;
@@ -311,7 +317,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         string? apiKey,
         IPluginContext context,
         IReadOnlyList<string> trackers,
-        string flareSolverrUrl)
+        TorrentDownloaderSettings solverSettings)
     {
         switch (settings.Kind.ToLowerInvariant())
         {
@@ -338,7 +344,7 @@ internal sealed class DownloadPipeline : IAsyncDisposable
                     settings.Name,
                     settings.Priority,
                     settings.Url,
-                    new ChallengeAwareFetch(context.HttpClient, Clearances, Solver(context, flareSolverrUrl)),
+                    new ChallengeAwareFetch(context.HttpClient, Clearances, Solver(context, solverSettings)),
                     trackers);
 
             case "site":

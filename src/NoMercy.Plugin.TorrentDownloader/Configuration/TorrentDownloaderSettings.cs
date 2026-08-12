@@ -64,6 +64,24 @@ public class TorrentDownloaderSettings
     /// </summary>
     public string FlareSolverrUrl { get; set; } = string.Empty;
 
+    /// <summary>
+    /// Let the plugin drive a real browser when a site will not answer otherwise.
+    ///
+    /// <para>
+    /// The same job FlareSolverr's container does, done in this process: a headless Chromium
+    /// with the stealth patches a managed challenge looks for. It uses a Chrome or Edge
+    /// already on the machine and only downloads one when there is none.
+    /// </para>
+    ///
+    /// <para>
+    /// Off by default. Most sites never need it - sending the request the way a browser
+    /// sends it clears them for the price of one call - and a browser costs a few hundred
+    /// megabytes and several seconds per solve. Turn it on for the sites that answer 403 and
+    /// nothing else.
+    /// </para>
+    /// </summary>
+    public bool UseBrowserForChallenges { get; set; }
+
     public List<IndexerSettings> Indexers { get; set; } = [];
     /// <summary>
     /// Which video codec to accept: <c>h264</c>, <c>h265</c> or <c>any</c>.

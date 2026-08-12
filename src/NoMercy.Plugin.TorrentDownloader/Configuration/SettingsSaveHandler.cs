@@ -207,6 +207,9 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
                 return SaveSettingsOutcome.Failure("The FlareSolverr address must be a full URL, like http://localhost:8191/v1.");
         }
 
+        if (request.UseBrowserForChallenges is bool useBrowser)
+            merged.UseBrowserForChallenges = useBrowser;
+
         if (request.EnglishOnly is bool englishOnly)
             merged.EnglishOnly = englishOnly;
 
@@ -561,6 +564,7 @@ public sealed class SettingsSaveHandler(SettingsGateway gateway, IClock clock)
             MinimumSeeders = source.MinimumSeeders,
             MaxConcurrentDownloads = source.MaxConcurrentDownloads,
             FlareSolverrUrl = source.FlareSolverrUrl,
+            UseBrowserForChallenges = source.UseBrowserForChallenges,
             AllowSeasonPacks = source.AllowSeasonPacks,
             Indexers = source.Indexers,
             PrivateTrackers = source.PrivateTrackers,

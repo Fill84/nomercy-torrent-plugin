@@ -35,6 +35,8 @@ public sealed class SaveSettingsRequest
     /// <summary>Comma separated, because a form field is one line and a tracker list is short.</summary>
     public string? DefaultTrackers { get; init; }
 
+    public bool? UseBrowserForChallenges { get; init; }
+
     /// <summary>Where FlareSolverr is, or empty when the owner runs none.</summary>
     public string? FlareSolverrUrl { get; init; }
 
