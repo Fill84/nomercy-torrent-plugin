@@ -46,11 +46,29 @@ public sealed class ProfileReleaseChooser(ReleaseProfile profile) : IReleaseChoo
     }
 }
 
-/// <summary>Searching, over the indexer aggregator built in stage 0b.</summary>
-public sealed class AggregatorReleaseSearch(IndexerAggregator aggregator) : IReleaseSearch
+/// <summary>
+/// Searching, over the indexer aggregator built in stage 0b.
+///
+/// <para>
+/// The aggregator reports what every source returned and what every source refused, and
+/// this used to keep the first half and drop the second on the floor. That is how two
+/// sources sat behind a Cloudflare check for weeks looking exactly like two sources with
+/// nothing to offer. <paramref name="report"/> is where the whole answer goes.
+/// </para>
+/// </summary>
+public sealed class AggregatorReleaseSearch(
+    IndexerAggregator aggregator,
+    Func<AggregateResult, CancellationToken, Task>? report = null) : IReleaseSearch
 {
-    public async Task<IReadOnlyList<ReleaseInfo>> SearchAsync(SearchQuery query, CancellationToken ct) =>
-        (await aggregator.SearchAsync(query, ct)).Releases;
+    public async Task<IReadOnlyList<ReleaseInfo>> SearchAsync(SearchQuery query, CancellationToken ct)
+    {
+        AggregateResult result = await aggregator.SearchAsync(query, ct);
+
+        if (report is not null)
+            await report(result, ct);
+
+        return result.Releases;
+    }
 }
 
 /// <summary>
@@ -63,10 +81,19 @@ public sealed class AggregatorReleaseSearch(IndexerAggregator aggregator) : IRel
 /// entire catalogue, which is a good way to be banned from it.
 /// </para>
 /// </summary>
-public sealed class IndexerReleaseFeed(IndexerAggregator aggregator) : IReleaseFeed
+public sealed class IndexerReleaseFeed(
+    IndexerAggregator aggregator,
+    Func<AggregateResult, CancellationToken, Task>? report = null) : IReleaseFeed
 {
-    public async Task<IReadOnlyList<ReleaseInfo>> LatestAsync(CancellationToken ct) =>
-        (await aggregator.SearchAsync(new SearchQuery(string.Empty, null), ct)).Releases;
+    public async Task<IReadOnlyList<ReleaseInfo>> LatestAsync(CancellationToken ct)
+    {
+        AggregateResult result = await aggregator.SearchAsync(new SearchQuery(string.Empty, null), ct);
+
+        if (report is not null)
+            await report(result, ct);
+
+        return result.Releases;
+    }
 }
 
 /// <summary>Fetching a <c>.torrent</c> an indexer pointed at.</summary>

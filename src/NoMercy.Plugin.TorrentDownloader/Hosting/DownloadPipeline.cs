@@ -83,7 +83,9 @@ internal sealed class DownloadPipeline : IAsyncDisposable
         DownloadOrchestrator orchestrator = new(
             new PluginLibraryQueryAdapter(context.Library),
             store,
-            new AggregatorReleaseSearch(new IndexerAggregator([.. indexers.Select(indexer => indexer.Indexer)])),
+            new AggregatorReleaseSearch(
+                new IndexerAggregator([.. indexers.Select(indexer => indexer.Indexer)]),
+                Report(store, indexers)),
             new ProfileReleaseChooser(ProfileFor(settings)),
             engine,
             new LibraryImportHandoff(new FinishedFolderMover(intake), context.Library, new EncodeJobDispatch(context.Services, context.Logger), context.Logger),
@@ -101,8 +103,9 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
             // Feed indexers only: see IndexerReleaseFeed for why a query-less request must
             // never reach a Torznab endpoint.
-            new IndexerReleaseFeed(new IndexerAggregator(
-                [.. indexers.Where(indexer => indexer.IsFeed).Select(indexer => indexer.Indexer)])),
+            new IndexerReleaseFeed(
+                new IndexerAggregator([.. indexers.Where(indexer => indexer.IsFeed).Select(indexer => indexer.Indexer)]),
+                Report(store, indexers)),
 
             FreeSpaceOn,
 
@@ -114,6 +117,48 @@ internal sealed class DownloadPipeline : IAsyncDisposable
 
         return new DownloadPipeline(engine, orchestrator);
     }
+
+    /// <summary>
+    /// Writes down what every source just answered.
+    ///
+    /// <para>
+    /// A source that returned forty releases the profile turned down, one that returned
+    /// nothing, and one that answered 403 behind a Cloudflare check are three different
+    /// situations with three different answers - and on a page built from grabs alone they
+    /// are one blank cell. Two of three sources on a real server were the third for weeks.
+    /// </para>
+    ///
+    /// <para>
+    /// Every configured source is written, not only the ones that spoke: a source missing
+    /// from the result is a source that returned nothing, and leaving its row untouched
+    /// would show yesterday's answer as though it were today's.
+    /// </para>
+    /// </summary>
+    private static Func<AggregateResult, CancellationToken, Task> Report(
+        IDownloadStore store,
+        IReadOnlyList<ConfiguredIndexer> indexers) =>
+        async (result, ct) =>
+        {
+            Dictionary<string, int> released = result.Releases
+                .GroupBy(release => release.IndexerName)
+                .ToDictionary(group => group.Key, group => group.Count(), StringComparer.OrdinalIgnoreCase);
+
+            Dictionary<string, string> refused = result.Failures
+                .GroupBy(failure => failure.IndexerName, StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(group => group.Key, group => group.First().Reason, StringComparer.OrdinalIgnoreCase);
+
+            DateTimeOffset at = DateTimeOffset.UtcNow;
+
+            await store.RecordSourceReportsAsync(
+                [
+                    .. indexers.Select(indexer => new SourceReport(
+                        indexer.Indexer.Indexer.Name,
+                        at,
+                        released.GetValueOrDefault(indexer.Indexer.Indexer.Name),
+                        refused.GetValueOrDefault(indexer.Indexer.Indexer.Name))),
+                ],
+                ct);
+        };
 
     /// <summary>
     /// How this plugin gets past a gate: cheapest first.

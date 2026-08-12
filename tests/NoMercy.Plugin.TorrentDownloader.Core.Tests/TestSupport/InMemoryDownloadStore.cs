@@ -137,6 +137,19 @@ public sealed class InMemoryDownloadStore : IDownloadStore
         return Task.CompletedTask;
     }
 
+    private readonly Dictionary<string, SourceReport> _sources = [];
+
+    public Task RecordSourceReportsAsync(IReadOnlyList<SourceReport> reports, CancellationToken ct)
+    {
+        foreach (SourceReport report in reports)
+            _sources[report.Name] = report;
+
+        return Task.CompletedTask;
+    }
+
+    public Task<IReadOnlyList<SourceReport>> SourceReportsAsync(CancellationToken ct) =>
+        Task.FromResult<IReadOnlyList<SourceReport>>([.. _sources.Values]);
+
     public Task RecordTransferAsync(Transfer transfer, CancellationToken ct)
     {
         _transfers[transfer.InfoHash] = transfer;

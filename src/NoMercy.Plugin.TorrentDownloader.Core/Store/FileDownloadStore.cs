@@ -149,6 +149,19 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
                 state.Grabs[index] = state.Grabs[index] with { CompletedPath = completedPath };
         }, ct);
 
+    public async Task RecordSourceReportsAsync(IReadOnlyList<SourceReport> reports, CancellationToken ct) =>
+        await MutateAsync(state =>
+        {
+            foreach (SourceReport report in reports)
+            {
+                state.Sources.RemoveAll(existing => existing.Name == report.Name);
+                state.Sources.Add(report);
+            }
+        }, ct);
+
+    public async Task<IReadOnlyList<SourceReport>> SourceReportsAsync(CancellationToken ct) =>
+        await ReadAsync(state => (IReadOnlyList<SourceReport>)[.. state.Sources], ct);
+
     public async Task RecordTransferAsync(Transfer transfer, CancellationToken ct) =>
         await MutateAsync(state =>
         {
@@ -310,6 +323,7 @@ public sealed class FileDownloadStore(string path) : IDownloadStore
         public List<Grab> Grabs { get; set; } = [];
 
         public List<Transfer> Transfers { get; set; } = [];
+        public List<SourceReport> Sources { get; set; } = [];
 
         public List<BlacklistEntry> Blacklist { get; set; } = [];
 

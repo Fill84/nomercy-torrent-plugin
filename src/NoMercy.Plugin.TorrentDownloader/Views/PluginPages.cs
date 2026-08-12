@@ -127,11 +127,14 @@ internal sealed class PluginPages(
         IReadOnlyList<string> ungrantedHosts = await hostGrants.EnsureAsync(loaded.Settings, ct);
         IReadOnlyList<string> storedSecretKeys = await context.Secrets.KeysAsync(ct);
 
+        IDownloadStore store = await openStore(ct);
+
         return SourcesView.Build(
             loaded.Settings,
             ungrantedHosts,
             new HashSet<string>(storedSecretKeys, StringComparer.Ordinal),
-            await HistoryAsync(context, SourcesView.HistoryDepth, ct));
+            await store.HistoryAsync(SourcesView.HistoryDepth, ct),
+            await store.SourceReportsAsync(ct));
     }
 
     /// <summary>

@@ -43,7 +43,8 @@ public static class SourcesView
         TorrentDownloaderSettings settings,
         IReadOnlyList<string> ungrantedHosts,
         IReadOnlySet<string> storedSecretKeys,
-        IReadOnlyList<HistoryEntry> history)
+        IReadOnlyList<HistoryEntry> history,
+        IReadOnlyList<SourceReport>? reports = null)
     {
         List<PluginComponent> children = [];
 
@@ -89,7 +90,7 @@ public static class SourcesView
             "sources-configured",
             Format.Count("Sources", settings.Indexers.Count),
             settings.Indexers.Count == 0 ? null : "Click one to change it.",
-            List(settings, history)));
+            List(settings, history, reports)));
 
         return Pages.Page(Pages.Sources, 0, [.. children]);
     }
@@ -105,7 +106,10 @@ public static class SourcesView
     /// they producing anything) and the form for one of them is one click away.
     /// </para>
     /// </summary>
-    private static PluginComponent List(TorrentDownloaderSettings settings, IReadOnlyList<HistoryEntry> history)
+    private static PluginComponent List(
+        TorrentDownloaderSettings settings,
+        IReadOnlyList<HistoryEntry> history,
+        IReadOnlyList<SourceReport>? reports)
     {
         if (settings.Indexers.Count == 0)
         {
@@ -129,6 +133,7 @@ public static class SourcesView
                     ["kindVariant"] = indexer.Enabled ? PluginBadgeVariant.Info : PluginBadgeVariant.Neutral,
                     ["name"] = indexer.Name,
                     ["address"] = indexer.Url,
+                    ["answered"] = LastAnswer(indexer, reports),
                     ["yielded"] = Yield(indexer, history),
                 },
                 Pages.Routes.GoTo(Pages.Source, new Dictionary<string, string> { ["index"] = index.ToString() })));
@@ -137,12 +142,45 @@ public static class SourcesView
         return Ui.Table("sources-list", ListColumns, rows);
     }
 
+    /// <summary>
+    /// What this source said the last time it was asked, which is not the same question as
+    /// what it has produced.
+    ///
+    /// <para>
+    /// Yield counts grabs, so a source returning forty releases the profile turns down and a
+    /// source answering 403 behind a Cloudflare check both read as a blank. On a real server
+    /// two of three sources were the second for weeks, and nothing on any page said so - the
+    /// only way to find out was to ask the site by hand.
+    /// </para>
+    /// </summary>
+    private static string LastAnswer(IndexerSettings indexer, IReadOnlyList<SourceReport>? reports)
+    {
+        SourceReport? report = reports?.FirstOrDefault(entry =>
+            string.Equals(entry.Name, indexer.Name, StringComparison.OrdinalIgnoreCase));
+
+        if (report is null)
+            return "not asked yet";
+
+        string when = Format.Ago(report.At);
+
+        // The reason verbatim and truncated rather than summarised: "a Cloudflare check",
+        // "no API key" and "timed out" need different things done about them, and a page
+        // that flattens them into "failed" sends the owner back to the log.
+        return report.Failure is { Length: > 0 } failure
+            ? $"{Trimmed(failure)} - {when}"
+            : $"{report.Released} release(s) - {when}";
+    }
+
+    private static string Trimmed(string reason) =>
+        reason.Length <= 70 ? reason : reason[..69] + "…";
+
     private static readonly PluginTableColumn[] ListColumns =
     [
         new() { Key = "kind", Label = "Kind", Cell = PluginTableCellType.Badge, Width = "6rem" },
         new() { Key = "name", Label = "Name", Width = "12rem" },
         new() { Key = "address", Label = "Address" },
-        new() { Key = "yielded", Label = "Yielded", Width = "14rem" },
+        new() { Key = "answered", Label = "Last answer", Width = "16rem" },
+        new() { Key = "yielded", Label = "Yielded", Width = "12rem" },
     ];
 
     /// <summary>

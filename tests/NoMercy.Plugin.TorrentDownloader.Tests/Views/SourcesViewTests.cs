@@ -248,4 +248,43 @@ public class SourcesViewTests
     {
         Build(new TorrentDownloaderSettings()).RefreshInterval.Should().Be(0);
     }
+
+    /// <summary>
+    /// Yield counts grabs, so a source returning forty releases the profile turned down and
+    /// a source answering 403 behind a Cloudflare check both read as a blank. Two of three
+    /// sources on a real server were the second for weeks and no page said so.
+    /// </summary>
+    [Fact]
+    public void Build_SaysWhatEachSourceLastAnswered()
+    {
+        TorrentDownloaderSettings settings = new()
+        {
+            Indexers =
+            [
+                new IndexerSettings { Name = "limetorrents", Kind = "site", Url = "https://lime.test/{query}" },
+                new IndexerSettings { Name = "torrentbay", Kind = "site", Url = "https://bay.test/{query}" },
+                new IndexerSettings { Name = "SceneSource", Kind = "rss", Url = "https://scene.test/feed/" },
+            ],
+        };
+
+        DateTimeOffset at = DateTimeOffset.UtcNow.AddMinutes(-2);
+
+        PluginView view = SourcesView.Build(
+            settings,
+            [],
+            new HashSet<string>(),
+            [],
+            [
+                new SourceReport("limetorrents", at, 40, null),
+                new SourceReport("torrentbay", at, 0, "bay.test is behind a Cloudflare check"),
+            ]);
+
+        List<string> words = [.. PluginNodes.Words(view)];
+
+        words.Should().Contain(word => word.StartsWith("40 release", StringComparison.Ordinal));
+        words.Should().Contain(word => word.Contains("Cloudflare check", StringComparison.Ordinal));
+
+        // Never asked is not the same as asked and silent, and the page says which.
+        words.Should().Contain("not asked yet");
+    }
 }

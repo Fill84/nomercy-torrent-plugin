@@ -194,6 +194,20 @@ public sealed record HistoryEntry
     public string? Detail { get; init; }
 }
 
+/// <summary>
+/// What one source last answered, so an owner can tell a quiet source from a broken one.
+///
+/// <para>
+/// The page could only show what a source had produced <em>grabs</em> for, which makes
+/// three very different sources look identical: one returning nothing, one returning forty
+/// releases the profile turns down, and one answering 403 behind a Cloudflare check. On a
+/// real server two of three sources had been the third for weeks and nothing said so.
+/// </para>
+/// </summary>
+/// <param name="Released">How many releases came back. Zero with no failure is a source that answered, emptily.</param>
+/// <param name="Failure">Why it did not answer, in the words the indexer used. Null when it did.</param>
+public sealed record SourceReport(string Name, DateTimeOffset At, int Released, string? Failure);
+
 public sealed record Transfer
 {
     public required string InfoHash { get; init; }
@@ -350,6 +364,11 @@ public interface IDownloadStore
     Task RecordCompletedPathAsync(string infoHash, string completedPath, CancellationToken ct);
 
     Task RecordTransferAsync(Transfer transfer, CancellationToken ct);
+
+    /// <summary>Replaces what is known about the sources that just answered. See <see cref="SourceReport"/>.</summary>
+    Task RecordSourceReportsAsync(IReadOnlyList<SourceReport> reports, CancellationToken ct);
+
+    Task<IReadOnlyList<SourceReport>> SourceReportsAsync(CancellationToken ct);
 
     Task<IReadOnlyList<Transfer>> TransfersAsync(CancellationToken ct);
 
