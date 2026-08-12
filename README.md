@@ -9,15 +9,16 @@ torrent client, tracks the download, moves the finished file where the owner ask
 same encode job the dashboard's Add content queues.
 Downloads can also be added and removed by hand, by magnet link or `.torrent` file.
 
-> **Status: in development — it loads, it does not download yet.** The domain core, the indexer
-> layer and the plugin shell are built and tested. What is missing is the engine between them: the
-> download database, the torrent-client clients, and the loop that ties searching to grabbing. See
-> [What works today](#what-works-today) for the honest line, and [Roadmap](#roadmap) for the order.
+> **Status: it works, on one server.** The whole chain runs unattended: it reads the library,
+> works out what is missing, searches, picks a release, downloads it over its own BitTorrent
+> engine, moves the finished file into the intake, asks the server which episode it is, and
+> queues the same encode job the dashboard's *Add content* queues.
 >
-> **Do not install this expecting downloads.** It will load, appear in the dashboard, register its
-> four jobs, read your library, and let you configure its schedules, indexers and download clients
-> from its settings page. What is missing is anything that acts on that configuration to actually
-> fetch an episode.
+> Proven end to end on the author's server rather than argued for. What is not yet proven is
+> everybody else's: one library, one set of indexers, one operating system. Treat it as
+> working software with a narrow sample, not as a thing that has met the world.
+>
+> **Requires a media server on ABI 10.1 or newer** (v0.1.472+). See [Building](#building).
 
 ## What works today
 
@@ -25,7 +26,7 @@ Downloads can also be added and removed by hand, by magnet link or `.torrent` fi
 server at all. It builds and tests standalone. Plus `NoMercy.Plugin.TorrentDownloader`, the shell
 that plugs it into the server.
 
-370 tests, no warnings.
+1104 tests, no warnings.
 
 | | |
 | --- | --- |
@@ -42,6 +43,11 @@ that plugs it into the server.
 | Settings page | renders cron schedules, folders, indexers and download clients, never echoing a stored secret back |
 | Saving | rejects a blank cron or non-absolute URL, leaves a stored secret alone when the field is submitted blank, carries a secret across a rename, and never lets one form's submission overwrite a section it did not address |
 | Network grants | user-configured indexer and client hosts requested from the owner at runtime, since a manifest cannot know them |
+| Torrent engine | its own BitTorrent client: magnets, BEP 9 metadata, HTTP and UDP trackers, piece verification, resume across a restart, and only video files ever written to disk |
+| The loop | wanted → search → decide → grab → track → move to the intake → queue the encode, on four independent cadences |
+| Cloudflare | a Chrome the plugin downloads and drives itself, in front of every indexer — no container, no second service, nothing to install |
+| Per-source reporting | what each indexer last answered, or the indexer's own words for why not, so a quiet source is distinguishable from a broken one |
+| Failure handling | a dead release is blacklisted and its episodes looked for again at once, and a pause survives a restart |
 
 ## Roadmap
 
@@ -55,8 +61,10 @@ that plugs it into the server.
 | ✅ Built-in torrent engine: magnets, DHT, HTTP and UDP trackers, resume, gated seeding | done |
 | ✅ The loop: wanted → search → decide → grab → track → move → encode | done |
 | ✅ The feed as a discovery source, matched against what is missing | done |
-| ⬜ Verified end to end on a real server | next |
-| ⬜ Quality upgrades that replace the old file, and daily-show matching | |
+| ✅ Verified end to end on a real server: searched, downloaded, encoded, in the library | done |
+| ✅ Cloudflare-protected indexers, through a Chrome the plugin drives itself | done |
+| ✅ Per-source reporting: what each indexer last answered, and why not | done |
+| ⬜ Quality upgrades that replace the old file, and daily-show matching | next |
 | ⬜ External clients: qBittorrent, Transmission, Deluge, for owners who already run one | |
 
 ## Design
@@ -115,7 +123,7 @@ SERVER_REF=<sha> ./scripts/fetch-abstractions.sh
 ```
 
 `Core` needs none of this: it has no external dependency and no reference to any NoMercy assembly,
-so `dotnet build src/NoMercy.Plugin.TorrentDownloader.Core` and its 257 tests work on a clean clone
+so `dotnet build src/NoMercy.Plugin.TorrentDownloader.Core` and its 799 tests work on a clean clone
 with no server present.
 
 ## Upstream platform work

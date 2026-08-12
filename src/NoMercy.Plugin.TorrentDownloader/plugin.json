@@ -2,7 +2,7 @@
   "id": "1SBQT26FHF98EBRPYVRGD92CZF",
   "name": "Torrent Downloader",
   "description": "Keeps a TV library complete by downloading missing episodes over BitTorrent.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "targetAbi": "10.1",
   "author": "Phillippe Pelzer",
   "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",

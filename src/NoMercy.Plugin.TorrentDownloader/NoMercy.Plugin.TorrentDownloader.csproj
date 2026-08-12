@@ -8,7 +8,7 @@
         <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
         <AssemblyName>NoMercy.Plugin.TorrentDownloader</AssemblyName>
         <RootNamespace>NoMercy.Plugin.TorrentDownloader</RootNamespace>
-        <Version>0.1.0</Version>
+        <Version>0.2.0</Version>
         <Authors>Phillippe Pelzer</Authors>
         <Description>Keeps a TV library complete by downloading missing episodes over BitTorrent.</Description>
 

@@ -16,7 +16,7 @@ public static class PluginIdentity
     public const string Description =
         "Keeps a TV library complete by downloading missing episodes over BitTorrent.";
 
-    public static Version Version { get; } = new(0, 1, 0);
+    public static Version Version { get; } = new(0, 2, 0);
 
     public const string AssemblyFileName = "NoMercy.Plugin.TorrentDownloader.dll";
 }
