@@ -34,9 +34,14 @@ when the show has none.
 
 ## Library types
 
-`PluginLibrary.Type` is the library's own type, set when the owner created it. The server uses
-three: **`movie`**, **`tv`** and **`anime`**
-(`src/NoMercy.Api/Controllers/V1/Dashboard/Media/RecommendationsController.cs`).
+`PluginLibrary.Type` is the library's own type, chosen when the owner created it. On the server it
+is `Library.Type` — a plain, indexed string column
+(`src/NoMercy.Database/Models/Libraries/Library.cs`), with no enum and no constraint behind it. The
+three values the server works with are **`movie`**, **`tv`** and **`anime`**, handled side by side
+in `src/NoMercy.MediaProcessing/Inbox/InboxClassifier.cs`.
+
+Because the column is a free string, the plugin compares case-insensitively and treats anything it
+does not recognise as out of scope rather than guessing.
 
 **This plugin reads libraries of type `tv` and `anime`, and nothing else.** Anime is a library type,
 not a guess: there is no genre and no origin country in the plugin contract, and none is needed.

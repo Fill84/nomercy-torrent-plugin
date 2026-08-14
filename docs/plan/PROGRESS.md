@@ -113,8 +113,9 @@ Kept here so no slice re-discovers them.
   Clear the NuGet cache after repacking the same version.
 - The media-server checkout may be a sparse checkout; `git sparse-checkout disable` gets the whole
   tree when something needs looking up.
-- Library types in the server are `movie`, `tv` and `anime`
-  (`src/NoMercy.Api/Controllers/V1/Dashboard/Media/RecommendationsController.cs`).
+- `Library.Type` is a plain indexed string column with no enum behind it
+  (`src/NoMercy.Database/Models/Libraries/Library.cs`). The three values in use are `movie`, `tv`
+  and `anime`, handled together in `src/NoMercy.MediaProcessing/Inbox/InboxClassifier.cs`.
 - `PluginLibraryQuery.GetShowsAsync(null)` returns every show in every library; it only filters when
   a library id is passed.
 - `PluginLibraryShow.HaveEpisodeCount` is `Tv.HaveEpisodes` and is zero for shows with hundreds of
