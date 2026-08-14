@@ -354,15 +354,33 @@ interval; what the gate does with intervals is `HostGateTests`' business.
 **Read first:** `docs/07-solver.md` § No window and § The browser, `docs/10-known-failures.md` § D3, C5.
 
 **Files:** `src/…/Solver/IHiddenStage.cs`, `WindowsDesktopStage.cs`, `XvfbStage.cs`,
-`HiddenStages.cs`, `BrowserInstall.cs`
+`HiddenStages.cs`, `BrowserInstall.cs`, `Browser.cs` — the lifecycle the steps below describe, which
+is neither the install nor a stage, `tests/…Tests/TestSupport/RecordingStages.cs`
 
 **Steps**
-1. Test (**C5**): across two starts the downloader is called once.
-2. Test (**D3**): `CanHideABrowser` is false on macOS, and a stage that cannot hide reports the reason
+1. Test (**C5**): across two starts the downloader is called once, and the second start is a
+   different `Browser` because a server restart is what the fault happened across.
+2. Test: an install whose browser has since gone is not an install. A half-deleted folder is a real
+   state, and answering "installed" for it fails later and further away.
+3. Test (**D3**): `CanHideABrowser` is false on macOS, and a stage that cannot hide reports the reason
    and starts nothing.
-3. Test: the stage is created **before** the browser process starts, asserted on a recording stage.
-4. Test: a second `StartAsync` reuses the running browser.
-5. Implement. Headless is not used.
+4. Test: the stage is created **before** the browser process starts, asserted on a recording stage.
+5. Test: a second `StartAsync` reuses the running browser, and one that has died is started again.
+6. Test: two `StartAsync` calls arriving together still produce one browser.
+7. Implement. Headless is not used.
+
+**Notes.** `HiddenStages.HidingFor(isWindows, isLinux)` is separate from asking the operating system
+which it is, so the **macOS** answer can be asserted on a machine that is not a Mac. A rule about a
+platform nobody runs the tests on is otherwise a rule nobody ever checks — and this one is the
+difference between skipping gated sources and opening a window on somebody's screen.
+
+**The ordering in step 4 is structural, not conditional.** Only an `IHiddenStage` can launch a
+browser, so "browser before stage" cannot be written; no single-line mutation breaks it. The test
+documents the rule and would catch a redesign that separated the two.
+
+Windows launches through `CreateProcess` because the desktop is chosen through
+`STARTUPINFO.lpDesktop`, which `Process.Start` cannot reach. Neither real stage can be tested here —
+both are proven only on the server.
 
 ## S2-04 · The solver
 

@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-03` · The hidden stage, and Chrome**
+**Slice `S2-04` · The solver**
 
-Specification: `docs/plan/SPRINTS.md`, section `S2-03`.
+Specification: `docs/plan/SPRINTS.md`, section `S2-04`.
 
 ## Blocked
 
@@ -44,7 +44,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 2 — Sources and fetch
 - [x] `S2-01` The catalogue and the host gate
 - [x] `S2-02` Fetching
-- [ ] `S2-03` The hidden stage, and Chrome
+- [x] `S2-03` The hidden stage, and Chrome
 - [ ] `S2-04` The solver
 - [ ] `S2-05` Readers, part one
 - [ ] `S2-06` Readers, part two
@@ -151,6 +151,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   parameter name (**G1**) — by name and not by shape, because a passkey and an info hash are both
   forty hex characters. Clearance is spent on refusal, and a second challenge after a fresh solve
   gives up rather than looping. `S2-03` builds the browser it has been asking for.
+- `S2-03` The stage exists before Chrome does, and only a stage can launch one — so the fault where a
+  window appears on the owner's desktop for half a second cannot be written (**D3**). macOS has
+  nowhere to hide a window, and that answer is asserted on a machine that is not a Mac by keeping the
+  decision separate from asking the operating system. The browser is downloaded once and kept across
+  restarts, and an install whose browser has gone is not an install (**C5**). Headless is never used:
+  it does not pass a managed challenge. `S2-04` drives the browser it starts.
 
 ## Decisions
 
@@ -177,6 +183,9 @@ and note it here.
   so no ordinary test can tell C1's fix from C1. `AssemblyFolderTests` loads a copy of the assembly
   in its own `AssemblyLoadContext` from another folder, which is the only way they differ in
   process — and the only test a `BaseDirectory` regression fails.
+- `CA1416` is on and enforced: a Windows-only or Linux-only type must carry `[SupportedOSPlatform]`
+  and be constructed behind an `OperatingSystem.IsWindows()`-style check, not behind an equivalent
+  the analyser cannot follow. It caught two real cross-platform slips in `S2-03`.
 - A test that fetches **one host twice** cannot use a fake clock at all: the second request waits on
   a gap nothing will advance. Use the real clock with a nought interval.
 - The mutation harness under-reports failures whose test names carry `[Theory]` arguments. When it
