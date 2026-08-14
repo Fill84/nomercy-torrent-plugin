@@ -10,7 +10,27 @@
     "hooks": ["scheduledTask", "ui"],
     "rest": true,
     "ws": false,
-    "network": { "hosts": [] },
+    "network": {
+      "hosts": [
+        "predb.me",
+        "www.srrdb.com",
+        "api.srrdb.com",
+        "www.scnsrc.me",
+        "eztv.re",
+        "apibay.org",
+        "www.1337x.to",
+        "www.limetorrents.lol",
+        "extranet.torrentbay.st",
+        "eztvx.to",
+        "katcr.to",
+        "torrentgalaxy.one",
+        "torrentz2.nz",
+        "www.torrentdownloads.pro",
+        "www.torrentfunk.com",
+        "nyaa.si",
+        "yts.gg"
+      ]
+    },
     "ui": {
       "mounts": [
         { "section": "library", "route": "/", "label": "Torrent Downloader", "icon": "download" },

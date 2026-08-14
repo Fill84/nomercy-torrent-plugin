@@ -13,6 +13,13 @@
       this project too, so a test reads the copy that would actually deploy.
     -->
     <None Update="plugin.json" CopyToOutputDirectory="PreserveNewest" />
+    <!--
+      Beside the assembly, and read from the assembly's own folder rather than
+      from AppContext.BaseDirectory — which, for a plugin loaded into the
+      server's process, is the server's folder. That mistake cost 0.3.4 fourteen
+      of its seventeen sources for a day, silently.
+    -->
+    <None Update="sources.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

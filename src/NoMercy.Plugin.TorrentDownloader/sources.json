@@ -1,0 +1,162 @@
+{
+  "//": "The sources this plugin ships with, so nobody has to configure one to get started. Written from docs/05-sources.md, which is the specification; every address here was measured answering a real release name end to end on 13 August 2026.",
+  "//hosts": "Every host below is also in plugin.json under capabilities.network.hosts, including the ones belonging to a disabled source: the manifest cannot change at runtime, so a source the owner switches on later needs its host permitted already. A test holds the two lists together in both directions.",
+  "version": 1,
+  "sources": [
+    {
+      "name": "PreDB",
+      "kind": "rss",
+      "url": "https://predb.me/?rss=1",
+      "searchUrl": "https://predb.me/?search={query}&rss=1",
+      "searchGated": true,
+      "priority": 20,
+      "minimumIntervalSeconds": 60,
+      "note": "A name database with an RSS search. Gating is a property of an address: the feed answers over plain HTTP and the search sits behind a challenge. It answers a plain curl with an empty feed but answers the plugin, so do not conclude it is dead from a shell test."
+    },
+    {
+      "name": "srrDB",
+      "kind": "rss",
+      "url": "https://www.srrdb.com/feed/srrs",
+      "priority": 20,
+      "minimumIntervalSeconds": 60,
+      "note": "Names only. Served as text/html and is XML regardless."
+    },
+    {
+      "name": "srrDB search",
+      "kind": "srrdb",
+      "url": "https://api.srrdb.com/v1/search/{query}",
+      "query": "slug",
+      "priority": 20,
+      "minimumIntervalSeconds": 15,
+      "note": "JSON with resultsCount and results[].release. Names, not torrents, and that is the point: only a full release name is fit to put to an indexer. A show with no scene releases honestly answers zero, which is not a broken reader."
+    },
+    {
+      "name": "SceneSource",
+      "kind": "rss",
+      "url": "https://www.scnsrc.me/feed/",
+      "gated": true,
+      "priority": 20,
+      "minimumIntervalSeconds": 60,
+      "note": "Read through the browser. It is a feed and has no search: 0.3.4 put it in the search set and made forty identical requests per cycle."
+    },
+    {
+      "name": "EZTV latest",
+      "kind": "eztv-api",
+      "url": "https://eztv.re/api/get-torrents?limit=100&search={query}",
+      "priority": 30,
+      "minimumIntervalSeconds": 60,
+      "note": "JSON, and must not be read as HTML. It takes a search parameter and ignores it, so it is read whole on the feed pass and never asked a question."
+    },
+    {
+      "name": "The Pirate Bay",
+      "kind": "apibay",
+      "url": "https://apibay.org/q.php?q={query}&cat=",
+      "priority": 45,
+      "minimumIntervalSeconds": 5,
+      "note": "JSON, with an info hash and honest seeder counts per row. The website itself is a JavaScript shell with no results in it; this is what it calls. Rate-limits hard under a burst."
+    },
+    {
+      "name": "1337x",
+      "kind": "site",
+      "url": "https://www.1337x.to/sort-category-search/{query}/TV/time/desc/1/",
+      "reader": "1337x",
+      "gated": true,
+      "priority": 40,
+      "minimumIntervalSeconds": 15,
+      "note": "The category-scoped address only: a plain search with dots returns their error page, which says 'No results were returned' and is not an error. No magnet on the listing; the row carries its own page address."
+    },
+    {
+      "name": "LimeTorrents",
+      "kind": "site",
+      "url": "https://www.limetorrents.lol/search/all/{query}/",
+      "priority": 35,
+      "minimumIntervalSeconds": 15,
+      "note": "A hashed .torrent link on the listing, which the generic reader handles."
+    },
+    {
+      "name": "TorrentBay",
+      "kind": "site",
+      "url": "https://extranet.torrentbay.st/browse/?q={query}&sort=seeders&order=desc",
+      "reader": "torrentbay",
+      "gated": true,
+      "priority": 30,
+      "minimumIntervalSeconds": 15,
+      "note": "Publishes no magnet: it comes from a signed POST to its own endpoint, built from two values off the row and two off the search page, sent from inside the browser session."
+    },
+    {
+      "name": "EZTV",
+      "kind": "site",
+      "url": "https://eztvx.to/search/{query}",
+      "reader": "eztv",
+      "gated": true,
+      "priority": 30,
+      "minimumIntervalSeconds": 15,
+      "note": "Appends [eztv.re] to every title; strip it or nothing matches."
+    },
+    {
+      "name": "KickassTorrents",
+      "kind": "site",
+      "url": "https://katcr.to/usearch/{query}/",
+      "reader": "kickass",
+      "gated": true,
+      "priority": 25,
+      "minimumIntervalSeconds": 15,
+      "note": "Four anchors per row and three empty; the name is in cellMainLink, cut into highlighted fragments that must be joined. A search for a full release name often redirects to that release's own page."
+    },
+    {
+      "name": "TorrentGalaxy",
+      "kind": "site",
+      "url": "https://torrentgalaxy.one/get-posts/keywords:{query}/",
+      "reader": "torrentgalaxy",
+      "query": "spaced",
+      "priority": 30,
+      "minimumIntervalSeconds": 15,
+      "note": "Searches from its path, where a plus is a plus. No magnet and no hash on the listing: the forty-character hex strings there are element ids."
+    },
+    {
+      "name": "Torrentz2",
+      "kind": "site",
+      "url": "https://torrentz2.nz/search?q={query}",
+      "reader": "torrentz2",
+      "priority": 25,
+      "minimumIntervalSeconds": 15,
+      "note": "Twenty definition lists, each with a name and a link to its own page. Titles carry a site prefix to cut, anchored on ' - ' with spaces because a scene name is full of dashes and the one before the group has none."
+    },
+    {
+      "name": "TorrentDownloads",
+      "kind": "site",
+      "url": "https://www.torrentdownloads.pro/search/?search={query}",
+      "reader": "torrentdownloads",
+      "priority": 25,
+      "minimumIntervalSeconds": 15,
+      "note": "The first link is an advert for another site carrying the same terms, so rows are matched on the numeric id every real release has in its address."
+    },
+    {
+      "name": "TorrentFunk",
+      "kind": "site",
+      "url": "https://www.torrentfunk.com/all/torrents/{query}.html",
+      "reader": "torrentfunk",
+      "query": "slug",
+      "priority": 25,
+      "minimumIntervalSeconds": 15,
+      "note": "A query with spaces gets a 301 to nothing. Attributes are bare: class=tv3, not class=\"tv3\". The detail page carries no magnet but prints the bare info hash."
+    },
+    {
+      "name": "Nyaa",
+      "kind": "torrent-rss",
+      "url": "https://nyaa.si/?page=rss&q={query}",
+      "priority": 30,
+      "minimumIntervalSeconds": 15,
+      "note": "An indexer in XML; every item links a real torrent. For anime it is often the only source that has the release, and it is asked with both the seasonal and the absolute form."
+    },
+    {
+      "name": "YTS",
+      "kind": "yts",
+      "url": "https://yts.gg/api/v2/list_movies.json?query_term={query}",
+      "enabled": false,
+      "priority": 20,
+      "minimumIntervalSeconds": 15,
+      "note": "Films, which are out of scope for this plugin. Shipped switched off so the address is recorded and never asked."
+    }
+  ]
+}

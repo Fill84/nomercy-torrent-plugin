@@ -277,7 +277,8 @@ deploy needs the owner to stop the server.
 
 **Files:** `src/…/sources.json`, `Core/Sources/SourceDefinition.cs`, `SourceCatalogue.cs`,
 `SourceRole.cs`, `HostGate.cs`, `src/…/Configuration/CatalogueLoader.cs`,
-`src/…/Hosting/HostGrants.cs`
+`src/…/Hosting/HostGrants.cs`, `tests/…Tests/TestSupport/FakeGrants.cs`,
+`tests/…Tests/Configuration/AssemblyFolderTests.cs`
 
 **Steps**
 1. Test (**C1**): the catalogue is read from the assembly's own folder and yields more than ten
@@ -291,8 +292,27 @@ deploy needs the owner to stop the server.
 5. Test: `HostGate` never lets two requests to one host be closer than its interval; ten requests to
    ten hosts run concurrently.
 6. Test (**B3**): a 429 widens that host's interval and success narrows it; a permission refusal does
-   neither.
-7. Implement.
+   neither. Success halves rather than resets, and the widening has a ceiling.
+7. Test: a catalogue that will not parse is the same failure as a missing one, and gets the same
+   answer — nothing, at error level.
+8. Implement.
+
+**Notes.** `SourceDefinition` carries **two** gating flags. Gating is a property of an address:
+PreDB answers its feed over plain HTTP and puts its search behind a challenge, and one flag for both
+would either send every feed read through the browser or walk the search into a challenge each cycle.
+
+The manifest declares the hosts of **disabled** sources too. A manifest cannot change at runtime, so
+a source the owner switches on next month must not need a release to become reachable.
+
+**C1 needs a load-context test.** In-process, `AppContext.BaseDirectory` *is* the assembly's folder,
+so every ordinary test passes either way and none of them can tell the fix from the fault. They
+differ exactly where it matters — an assembly loaded from somewhere other than the process that
+loaded it, which is what a plugin is — so `AssemblyFolderTests` copies the assembly elsewhere and
+loads it there. It is the only test that fails when the folder is read from the process.
+
+Both `HostGate` tests that wait on a fake clock are **bounded**. The failure they guard is not a
+wrong answer but no answer: one gate shared between hosts leaves nine requests waiting on a clock
+nothing will advance, and an unbounded wait hangs the suite instead of failing it.
 
 ## S2-02 · Fetching
 

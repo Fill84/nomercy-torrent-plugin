@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-01` · The catalogue and the host gate**
+**Slice `S2-02` · Fetching**
 
-Specification: `docs/plan/SPRINTS.md`, section `S2-01`.
+Specification: `docs/plan/SPRINTS.md`, section `S2-02`.
 
 ## Blocked
 
@@ -42,7 +42,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S1-04` Shows and Queue pages
 
 ### Sprint 2 — Sources and fetch
-- [ ] `S2-01` The catalogue and the host gate
+- [x] `S2-01` The catalogue and the host gate
 - [ ] `S2-02` Fetching
 - [ ] `S2-03` The hidden stage, and Chrome
 - [ ] `S2-04` The solver
@@ -141,6 +141,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   for now* is its own, or an unavailable episode appears nowhere at all.
   `HandCountedLibraryTests` runs the whole chain — server-shaped library, adapter, derivation, SQLite,
   page — against a library counted by hand. `S2-01` starts on the sources.
+- `S2-01` All seventeen sources ship in `sources.json`, written from `docs/05-sources.md`, and the
+  catalogue is read from the **assembly's own folder** (**C1**). `HostGrants` asks for every host of
+  every owner-configured source, search addresses included (**C2**). `HostGate` keeps one gate per
+  hostname and owns backoff: a refusal widens, a success halves, and a permission refusal earns
+  nothing at all (**B3**). `S2-02` puts a real fetch behind it.
 
 ## Decisions
 
@@ -163,6 +168,14 @@ and note it here.
 - **Secrets never enter the settings object.** A passkey lives at `tracker:{id}:passkey` and an API
   key at `indexer:{id}:apikey` in `IPluginSecretStore`; the settings carry an announce URL with
   `{passkey}` standing where the secret goes. `docs/04-domain.md` and `docs/08-ui.md` now say so.
+- **`AppContext.BaseDirectory` and the assembly's folder are the same directory under a test run**,
+  so no ordinary test can tell C1's fix from C1. `AssemblyFolderTests` loads a copy of the assembly
+  in its own `AssemblyLoadContext` from another folder, which is the only way they differ in
+  process — and the only test a `BaseDirectory` regression fails.
+- A test that waits on a `FakeTimeProvider` must **bound** the wait. A gate regression leaves the
+  wait unsatisfiable, and an unbounded one hangs the suite rather than failing it.
+- `PluginGrantKind.NetworkHost` is `"network.host"`; `IPluginGrants.RequestAsync(kind, scope, reason,
+  ct)` takes the host as the scope.
 - SQLite is `Microsoft.Data.Sqlite` 10.0.11 in the shell project. Migrations are **embedded
   resources**, so a migration that failed to deploy cannot look like a database already up to date.
   `PRAGMA user_version` carries the number; each migration and its version bump share a transaction.

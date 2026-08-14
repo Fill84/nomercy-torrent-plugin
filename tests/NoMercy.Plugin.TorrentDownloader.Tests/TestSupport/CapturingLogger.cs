@@ -13,9 +13,28 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 /// </remarks>
 public sealed class CapturingLogger : ILogger
 {
-    private readonly List<string> _lines = [];
+    private readonly List<(LogLevel Level, string Line)> _lines = [];
 
     public IReadOnlyList<string> Lines
+    {
+        get
+        {
+            lock (_lines)
+            {
+                return [.. _lines.Select(entry => entry.Line)];
+            }
+        }
+    }
+
+    /// <summary>
+    /// What was said, and how loudly.
+    /// </summary>
+    /// <remarks>
+    /// The level is part of whether something was said at all: a broken
+    /// catalogue reported at trace level is a broken catalogue nobody hears
+    /// about, which is the same failure as not reporting it.
+    /// </remarks>
+    public IReadOnlyList<(LogLevel Level, string Line)> Entries
     {
         get
         {
@@ -45,7 +64,7 @@ public sealed class CapturingLogger : ILogger
     {
         lock (_lines)
         {
-            _lines.Add(formatter(state, exception));
+            _lines.Add((logLevel, formatter(state, exception)));
         }
     }
 }
