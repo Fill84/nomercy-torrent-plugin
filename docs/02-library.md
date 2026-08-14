@@ -109,8 +109,14 @@ season 2 is `- 137`. The library numbers by season. Both must be searchable.
 absolute(show, season, episode) = episode + Σ episodeCount(show, s) for s in 1..season-1
 ```
 
-Season 0 never counts. The map is built once per show per cycle from the episode list that was
-already fetched, so it costs no extra call.
+Season 0 never counts, and a special is never given an absolute number of its own. The map is built
+once per show per cycle from the episode list that was already fetched, so it costs no extra call.
+
+Read the formula literally: it is the episode's **own number** plus the lengths of the seasons before
+it, never its position in the list. Those agree only while the list is complete, and they part
+company exactly when episodes are absent — which is the case this plugin exists for. An episode
+already on disk still counts towards the offset, or a show would renumber itself every time
+something downloaded.
 
 A show in an `anime` library is therefore searched under both forms, pooled and judged together:
 

@@ -45,7 +45,18 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
 
         foreach (Show show in await library.GetShowsAsync(ct))
         {
-            foreach (Episode episode in await library.GetEpisodesAsync(show.Id, ct))
+            IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
+
+            // Built from the list already fetched, so it costs no extra call —
+            // and built from all of it, before anything is filtered out, because
+            // a season already on disk still counts towards the next one's
+            // offset. Television has no absolute numbering; giving it one would
+            // put a number on a page that no release anywhere uses.
+            IReadOnlyDictionary<EpisodeKey, int> absolute = show.Kind == LibraryKind.Anime
+                ? AbsoluteNumbering.Build(episodes)
+                : new Dictionary<EpisodeKey, int>();
+
+            foreach (Episode episode in episodes)
             {
                 if (episode.Key.IsSpecial && !profile.IncludeSpecials)
                 {
@@ -67,7 +78,8 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
                     show.Kind,
                     episode.Title,
                     episode.AirDate,
-                    HasAired(episode.AirDate, today) ? EpisodeState.Missing : EpisodeState.NotAired));
+                    HasAired(episode.AirDate, today) ? EpisodeState.Missing : EpisodeState.NotAired,
+                    absolute.TryGetValue(episode.Key, out int number) ? number : null));
             }
         }
 

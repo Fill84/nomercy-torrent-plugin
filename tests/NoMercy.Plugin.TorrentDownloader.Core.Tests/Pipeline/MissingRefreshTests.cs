@@ -150,6 +150,74 @@ public class MissingRefreshTests
         Assert.Null(episode.LastSearchAt);
     }
 
+    /// <remarks>
+    /// An anime episode carries the number its releases actually use. Without
+    /// it the plugin can only search <c>S02E13</c>, and most of what exists is
+    /// published as <c>- 37</c>.
+    /// </remarks>
+    [Fact]
+    public async Task AnAnimeEpisodeCarriesItsAbsoluteNumber()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "Frieren", 2023, LibraryKind.Anime)
+            .Episode(1, 1, 24, airDate: new DateOnly(2024, 1, 1), hasFile: true)
+            .Episode(1, 2, 13, airDate: new DateOnly(2026, 1, 1));
+
+        // Twenty-four of season one, so season two's thirteenth is the
+        // thirty-seventh of the series — and the twenty-third of those is
+        // already on disk, which changes nothing about where it sits.
+        TrackedEpisode episode = Assert.Single(await DeriveAnime(library, 24));
+
+        Assert.Equal(37, episode.Absolute);
+    }
+
+    /// <remarks>
+    /// Television has no absolute numbering, so a number here would be one no
+    /// release anywhere uses — a search term guaranteed to find nothing, and a
+    /// number on a page that means nothing.
+    /// </remarks>
+    [Fact]
+    public async Task ATelevisionEpisodeHasNoAbsoluteNumber()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "Silo")
+            .Episode(1, 1, 1, airDate: new DateOnly(2024, 1, 1), hasFile: true)
+            .Episode(1, 2, 3, airDate: new DateOnly(2026, 1, 1));
+
+        Assert.Null(Assert.Single(await Derive(library)).Absolute);
+    }
+
+    /// <remarks>
+    /// The map is built from the list the pipeline already fetched. Fetching
+    /// again would be one extra call per show per cycle — invisible until a
+    /// library with hundreds of shows made the maintenance pass take minutes.
+    /// </remarks>
+    [Fact]
+    public async Task TheAbsoluteMapCostsNoExtraLibraryCall()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "Frieren", 2023, LibraryKind.Anime)
+            .Show(2, "Silo")
+            .Episode(1, 1, 1, airDate: new DateOnly(2026, 1, 1))
+            .Episode(2, 1, 1, airDate: new DateOnly(2026, 1, 1));
+
+        await Derive(library);
+
+        Assert.Equal([1, 2], library.EpisodesAskedFor);
+    }
+
+    private static async Task<IReadOnlyList<TrackedEpisode>> DeriveAnime(FakeLibrary library, int seasonOneLength)
+    {
+        // Season one in full, so the offset is a real count rather than a
+        // number written into the test.
+        for (int number = 1; number < seasonOneLength; number++)
+        {
+            library.Episode(1, 1, number, airDate: new DateOnly(2024, 1, 1), hasFile: true);
+        }
+
+        return await Derive(library);
+    }
+
     private static async Task<IReadOnlyList<TrackedEpisode>> Derive(FakeLibrary library, Profile? profile = null)
     {
         FakeTimeProvider clock = new(Today);

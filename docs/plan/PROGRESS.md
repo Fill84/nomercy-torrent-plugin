@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 1 — Library and the missing list**
-**Slice `S1-03` · Anime numbering**
+**Slice `S1-04` · Shows and Queue pages**
 
-Specification: `docs/plan/SPRINTS.md`, section `S1-03`.
+Specification: `docs/plan/SPRINTS.md`, section `S1-04`.
 
 ## Blocked
 
@@ -32,7 +32,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 1 — Library and the missing list
 - [x] `S1-01` Reading the library
 - [x] `S1-02` The missing list
-- [ ] `S1-03` Anime numbering
+- [x] `S1-03` Anime numbering
 - [ ] `S1-04` Shows and Queue pages
 
 ### Sprint 2 — Sources and fetch
@@ -124,6 +124,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   (**B1**), and leaves `attempts` and `last_search_at` untouched — only a recorded search moves them
   (**B2**). No status is consulted because none exists to consult (**B5**). Rows the library no
   longer has are deleted, so presence is the absence of a row. `S1-03` fills in `absolute`.
+- `S1-03` `AbsoluteNumbering.Build` from the episode list already fetched, anime only. The number is
+  the episode's own plus the lengths of the seasons before it — **not** its position in the list.
+  The two agree only while the list is complete, so the first integration test against a sparse
+  season caught the running counter I had written and it read 25 where the answer is 37. Both forms
+  are now stored, which is what `S3-03` and `S7-02` search under.
 
 ## Decisions
 

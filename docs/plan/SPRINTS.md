@@ -216,13 +216,22 @@ without ever being searched and the refresh would achieve nothing.
 
 **Read first:** `docs/02-library.md` § Anime numbering.
 
+**Files:** `Core/Domain/AbsoluteNumbering.cs`, and `Core/Pipeline/MissingRefresh.cs` fills in
+`TrackedEpisode.Absolute`.
+
 **Steps**
 1. Test: absolute of S02E13 after a 24-episode season one is 37.
-2. Test: season 0 never counts.
+2. Test: season 0 never counts, and is never numbered either.
 3. Test: a season with a gap still numbers from the episodes that exist.
-4. Test: the map is built from the episode list already fetched — no extra library call.
-5. Test: a show in a `tv` library has no absolute number.
-6. Implement.
+4. Test: an episode whose earlier siblings are absent still gets its own number — the number is
+   `episode + Σ earlier seasons`, **never** its position in the list. The two agree only while the
+   list is complete, and part company exactly when episodes are missing, which is the case this
+   plugin exists for.
+5. Test: the map is built from the episode list already fetched — no extra library call.
+6. Test: a show in a `tv` library has no absolute number.
+7. Test: an episode already on disk still counts towards the offset, or the show renumbers itself
+   every time something downloads.
+8. Implement.
 
 ## S1-04 · Shows and Queue pages
 

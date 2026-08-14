@@ -51,8 +51,19 @@ public sealed class FakeLibrary : ILibrary
         return Task.FromResult<IReadOnlyList<Show>>([.. _shows]);
     }
 
+    /// <summary>Every show whose episodes were asked for, once per asking.</summary>
+    /// <remarks>
+    /// The anime map is meant to be built from the list the pipeline already
+    /// fetched. Fetching a second time would be a call per show per cycle that
+    /// nobody would notice until a library with hundreds of shows made the
+    /// maintenance pass take minutes.
+    /// </remarks>
+    public List<int> EpisodesAskedFor { get; } = [];
+
     public Task<IReadOnlyList<Episode>> GetEpisodesAsync(int showId, CancellationToken ct)
     {
+        EpisodesAskedFor.Add(showId);
+
         return Task.FromResult<IReadOnlyList<Episode>>([.. _episodes.GetValueOrDefault(showId, [])]);
     }
 }
