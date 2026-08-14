@@ -1,0 +1,45 @@
+<Project>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>13</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+    <!--
+      Zero warnings, enforced. A warning that is allowed to survive is a warning
+      nobody reads, and 0.3.4 shipped its faults underneath a wall of them.
+    -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+
+    <!--
+      Without this the IDE rules in .editorconfig only ever fire inside an
+      editor, so a style rule set to error still lets the build through and the
+      gate proves nothing.
+    -->
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+
+    <!--
+      IDE0005 (unused using) is the one style rule the compiler refuses to run
+      without a documentation file — it fails the build telling you so, rather
+      than skipping the rule quietly. CS1591 goes with it: this codebase
+      explains itself in prose comments that say why, not in XML doc tags on
+      every public member.
+    -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <PropertyGroup>
+    <!--
+      The version of NoMercy.Plugins.Abstractions and NoMercy.Plugins.Mvc that
+      scripts/fetch-abstractions packs into _nupkgs/. It is the media server's
+      own version, read from its Directory.Build.props on branch dev; when that
+      moves, this moves with it and the script says so.
+    -->
+    <NoMercyContractVersion>0.1.404</NoMercyContractVersion>
+  </PropertyGroup>
+
+</Project>

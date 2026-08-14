@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 0 — Foundation and spine**
-**Slice `S0-01` · Repository, build, gates**
+**Slice `S0-02` · The plugin loads**
 
-Specification: `docs/plan/SPRINTS.md`, section `S0-01`.
+Specification: `docs/plan/SPRINTS.md`, section `S0-02`.
 
 ## Blocked
 
@@ -18,7 +18,7 @@ Nothing.
 Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 0 — Foundation and spine
-- [ ] `S0-01` Repository, build, gates
+- [x] `S0-01` Repository, build, gates
 - [ ] `S0-02` The plugin loads
 - [ ] `S0-03` The activity journal
 - [ ] `S0-04` Pushing the snapshot, and the dashboard
@@ -86,7 +86,11 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
-- _(nothing yet)_
+- `S0-01` Solution, three source projects and four test projects, all three gates green. `Core` and
+  `Bittorrent` reference nothing at all, and a test in each reads its project file and says so — the
+  compiled assembly cannot, because the compiler drops a reference nothing uses yet.
+  `scripts/fetch-abstractions.ps1`/`.sh` clone the media server into `_server/` and pack the contract
+  into `_nupkgs/`. `S0-02` writes the first real code: it can assume the gates bite.
 
 ## Decisions
 
@@ -137,3 +141,14 @@ Kept here so no slice re-discovers them.
   after every deploy.
 - The library holds ~25 shows and ~42 missing episodes, including shows that need their year to be
   searchable: Lucky (2026), Sugar (2024), Lioness (2023), Silo (2023).
+- The contract packs as **0.1.404** — the media server's own `<Version>` on `dev`.
+  `Directory.Build.props` holds it once, as `NoMercyContractVersion`, and `fetch-abstractions` warns
+  when the two have drifted apart.
+- Packing the contract needs five projects out of the media server: `NoMercy.Plugins.Abstractions`,
+  `NoMercy.Plugins.Mvc`, `NoMercy.Events`, `NoMercy.Design`, and `NoMercy.Analyzers`, which every
+  project in that repository inherits.
+- `dotnet new sln` on the .NET 10 SDK writes the new `.slnx` format unless given `--format sln`.
+- `IDE0005` (unused using) refuses to run at build time without `GenerateDocumentationFile`, and
+  fails the build saying so. Both that and `NoWarn=CS1591` are in `Directory.Build.props`.
+- The style gate bites: a block-scoped namespace, a `var` and a braceless `if` were each seen to fail
+  `dotnet build -warnaserror` as `IDE0161`, `IDE0008` and `IDE0011`.

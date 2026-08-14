@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The shell: everything that touches the host. Wiring, the library adapter,
+    encode dispatch, grants, the solver, storage, the pages and the endpoints.
+    This is the only project that is allowed to know a media server exists.
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="..\NoMercy.Plugin.TorrentDownloader.Core\NoMercy.Plugin.TorrentDownloader.Core.csproj" />
+    <ProjectReference Include="..\NoMercy.Plugin.TorrentDownloader.Bittorrent\NoMercy.Plugin.TorrentDownloader.Bittorrent.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Not on nuget.org. scripts/fetch-abstractions packs both out of the media
+      server on branch dev into _nupkgs/. docs/01-plugin.md § Building against
+      the contract.
+    -->
+    <PackageReference Include="NoMercy.Plugins.Abstractions" Version="$(NoMercyContractVersion)" />
+    <PackageReference Include="NoMercy.Plugins.Mvc" Version="$(NoMercyContractVersion)" />
+  </ItemGroup>
+
+</Project>

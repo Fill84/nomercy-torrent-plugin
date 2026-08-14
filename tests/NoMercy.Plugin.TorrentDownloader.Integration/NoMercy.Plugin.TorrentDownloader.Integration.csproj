@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Real network. Excluded from the default run by the name of its namespace, so
+    a source that is down cannot fail a build that has nothing to do with it.
+    README § Building says the filter.
+  -->
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NoMercy.Plugin.TorrentDownloader\NoMercy.Plugin.TorrentDownloader.csproj" />
+  </ItemGroup>
+
+</Project>

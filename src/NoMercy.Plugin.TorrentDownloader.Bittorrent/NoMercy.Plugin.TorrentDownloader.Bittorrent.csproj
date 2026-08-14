@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    No references either, and no third-party torrent library: the protocol is
+    written here. Bencode, trackers, the peer wire, pieces, DHT. It talks to
+    sockets and nothing else, so its tests run against captured wire bytes.
+
+    docs/06-torrent-client.md, docs/03-architecture.md § Project layout.
+  -->
+
+</Project>

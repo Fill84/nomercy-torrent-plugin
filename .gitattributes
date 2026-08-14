@@ -1,0 +1,13 @@
+# Line endings are LF in the working tree on every platform, so `dotnet format
+# --verify-no-changes` sees the same bytes on Windows as it does in CI. The
+# .editorconfig says end_of_line = lf; if git checked these out as CRLF the
+# formatter would rewrite every file it touched.
+* text=auto eol=lf
+
+# Visual Studio rewrites the solution file with CRLF whenever it saves it, so
+# leave it that way rather than fight it on every commit.
+*.sln text eol=crlf
+
+# Captured pages and captured wire bytes are evidence. A parser test asserts
+# against exactly what the site sent, so nothing may normalise a byte of it.
+tests/fixtures/** -text

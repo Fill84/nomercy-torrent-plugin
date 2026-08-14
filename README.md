@@ -48,6 +48,29 @@ not the `dotnet` on `PATH`, which is 8.0.
 scripts/fetch-abstractions.ps1              # packs the plugin contract from the media server (branch dev)
 dotnet build -c Release -warnaserror
 dotnet test --filter "FullyQualifiedName!~Integration"
+dotnet format --verify-no-changes
+```
+
+`fetch-abstractions` clones the media server into `_server/` — shallow, sparse, branch `dev` — packs
+`NoMercy.Plugins.Abstractions` and `NoMercy.Plugins.Mvc` into `_nupkgs/`, and clears their entries in
+the global NuGet cache first, because a repack of the same version number is otherwise ignored and
+nothing says so. Run it again after the media server's contract moves; it prints the version it
+packed and warns if `NoMercyContractVersion` in `Directory.Build.props` still asks for another one.
+
+### The test filter
+
+`tests/…Integration` talks to the real internet, so **it is excluded from every ordinary run**:
+
+```
+dotnet test --filter "FullyQualifiedName!~Integration"
+```
+
+The filter matches the fully qualified test name — namespace, class, method — not the project, so
+every test in that project lives under a namespace containing `Integration`, and a test in that
+assembly asserts they all do. Run the network tests deliberately:
+
+```
+dotnet test tests/NoMercy.Plugin.TorrentDownloader.Integration
 ```
 
 ## Checking the sources

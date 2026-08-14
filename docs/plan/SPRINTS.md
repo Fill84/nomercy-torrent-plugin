@@ -42,9 +42,11 @@ Every finished slice is committed and pushed; only a release waits for the owner
 - `scripts/fetch-abstractions.ps1` / `.sh`, `nuget.config`
 
 **Steps**
-1. Create the solution and six projects; wire the references.
+1. Create the solution and seven projects; wire the references. `dotnet new sln` writes the new
+   `.slnx` format unless told `--format sln`.
 2. Write `Directory.Build.props` and `.editorconfig`; introduce one deliberate style violation, see
-   the build fail, remove it.
+   the build fail, remove it. `IDE0005` needs `GenerateDocumentationFile`, and says so by failing the
+   build; `CS1591` goes in `NoWarn` with it.
 3. `fetch-abstractions`: sparse shallow clone of the media server on branch **`dev`**, pack the
    contract into `_nupkgs/`, clear its NuGet cache entry.
 4. One real assertion per test project, so the runner is proven.

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    No references. Not a package, not a project, and above all nothing from
+    NoMercy. The whole pipeline — missing list, naming, sources, judging,
+    grabbing — lives here so it can be tested without a media server and
+    without a swarm. The moment a reference appears the tests need a host.
+
+    docs/03-architecture.md § Project layout.
+  -->
+
+</Project>
