@@ -73,9 +73,36 @@ you are setting aside and why.
 - **Only video files are written into a library folder.**
 - **A private tracker passkey and an indexer API key are secrets.** Never in a page, a log, an error
   or the journal.
-- **The old plugin is reference, not source.** `../nomercy-torrent-plugin` may be read to learn what
-  a site does. No code is copied. Its faults are in `docs/10-known-failures.md` and each one has a
-  test here.
+- **The old plugin is reference, not source.** Nothing is carried over. The section below says
+  exactly what that forbids; read it before opening `../nomercy-torrent-plugin` for the first time.
+
+## The old plugin is reference. Nothing is carried over.
+
+`../nomercy-torrent-plugin` is 0.3.4 — the thing being replaced. It is read to learn three things:
+what a site does, what the media server accepts, and what went wrong. It is never a building block.
+
+**Nothing is carried over. Not one file.** Not a class, a method, a regex, a settings page, a
+`.csproj`, a manifest, a script, a workflow, a fixture, a JSON blob or a table of constants. Copying
+the file is forbidden; so is retyping its contents into a new file, renaming it on the way in,
+pasting a method and adjusting it, cloning that repository, branching from it, checking a path out
+of it, or reusing its `.git`. This repository starts empty and everything in it is written here.
+
+**"Read it" means read it.** Open the file, understand the behaviour, close it, then write this
+plugin's version from the specification in `docs/`. If the specification does not say enough to
+write it, then **the specification is what gets fixed** — the gap is never filled from the old code.
+
+**Why, and it is not style.** 0.3.4's faults are structural: they are in `docs/10-known-failures.md`
+and every one of them shipped *with* tests covering it. Code carried over carries its fault along,
+and the test written against carried-over code passes because the fault came too. That is precisely
+how those faults survived a release.
+
+**The shortcut is the tell.** If a step feels quicker because the old plugin already has it, that
+feeling *is* the copy. Slow down and write it. There is no legitimate reason starting with "the old
+plugin already has".
+
+**The only things from 0.3.4 that live here are in `docs/reference/`, and they are data.** The ABI
+dump and the 0.3.4 catalogue exist so nothing is rediscovered. They are read while writing a
+specification or a reader. They are never copied into `src/`, and no shipped code reads them.
 
 ## Definition of done, per slice
 
