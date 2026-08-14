@@ -4,14 +4,20 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Sprint 1 — Library and the missing list**
-**Slice `S1-04` · Shows and Queue pages**
+**Sprint 2 — Sources and fetch**
+**Slice `S2-01` · The catalogue and the host gate**
 
-Specification: `docs/plan/SPRINTS.md`, section `S1-04`.
+Specification: `docs/plan/SPRINTS.md`, section `S2-01`.
 
 ## Blocked
 
-Nothing. One thing waits on the owner without blocking anything:
+Nothing. Two things wait on the owner without blocking anything:
+
+- **Sprint 1's acceptance against the real library.** `HandCountedLibraryTests` proves the chain
+  against a library counted by hand, but "the Shows page matches *the* library" needs 0.4.0 on
+  `beast-unit`, and a deploy needs the server stopped. Say when, and it can be checked against the
+  ~25 shows and ~42 missing episodes recorded under **Facts**.
+
 
 - **Which trackers ship in `DefaultTrackers`.** The specs said "a shipped list" and never said which.
   It ships empty; a grab attaches only the trackers its source supplied. `S5-04` and `S6-01` are the
@@ -33,7 +39,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S1-01` Reading the library
 - [x] `S1-02` The missing list
 - [x] `S1-03` Anime numbering
-- [ ] `S1-04` Shows and Queue pages
+- [x] `S1-04` Shows and Queue pages
 
 ### Sprint 2 — Sources and fetch
 - [ ] `S2-01` The catalogue and the host gate
@@ -129,6 +135,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   The two agree only while the list is complete, so the first integration test against a sparse
   season caught the running counter I had written and it read 25 where the answer is 37. Both forms
   are now stored, which is what `S3-03` and `S7-02` search under.
+- `S1-04` **Sprint 1 is done.** Shows and Queue render from the store, and every count is counted
+  from the rows it summarises. The Queue's order is the search cadence's own rule, used by both, so
+  the page states what the plugin will do rather than guessing at it. Three lists, not two: *given up
+  for now* is its own, or an unavailable episode appears nowhere at all.
+  `HandCountedLibraryTests` runs the whole chain — server-shaped library, adapter, derivation, SQLite,
+  page — against a library counted by hand. `S2-01` starts on the sources.
 
 ## Decisions
 

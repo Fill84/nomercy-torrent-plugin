@@ -18,9 +18,17 @@ public sealed class Database
 
     private readonly string _connectionString;
 
+    private readonly string _dataFolderPath;
+
+    /// <remarks>
+    /// Builds a connection string and touches nothing. The plugin constructs
+    /// this while the server is still coming up, and <c>Initialize</c> is not
+    /// allowed to do I/O — the folder is made when the database is first
+    /// actually opened.
+    /// </remarks>
     public Database(string dataFolderPath)
     {
-        Directory.CreateDirectory(dataFolderPath);
+        _dataFolderPath = dataFolderPath;
 
         _connectionString = new SqliteConnectionStringBuilder
         {
@@ -38,6 +46,10 @@ public sealed class Database
     /// <summary>An open connection, with the pragmas this store depends on set.</summary>
     public async Task<SqliteConnection> OpenAsync(CancellationToken ct)
     {
+        // Here rather than in the constructor: the data folder of a plugin
+        // installed this morning does not exist yet, and making it is I/O.
+        Directory.CreateDirectory(_dataFolderPath);
+
         SqliteConnection connection = new(_connectionString);
         await connection.OpenAsync(ct);
 

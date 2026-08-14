@@ -237,15 +237,35 @@ without ever being searched and the refresh would achieve nothing.
 
 **Read first:** `docs/08-ui.md`, `docs/10-known-failures.md` § G3.
 
+**Files:** `Core/Domain/ShowSummary.cs`, `Core/Pipeline/QueueOrder.cs`, `ShowSummaries.cs`,
+`src/…/Views/ShowsView.cs`, `QueueView.cs`, and `Views/Pages.cs` gains the route table
+
 **Steps**
 1. Test: the Shows page's missing count equals the rows for that show, from a seeded store.
 2. Test: the media type is rendered per show.
 3. Test: the Queue page separates *looking* from *waiting to air* and never counts an unaired episode
    as missing.
-4. Test: the order is the order they will be asked in.
-5. Implement.
+4. Test: the order is the order they will be asked in — the page uses the search cadence's own rule,
+   not a second one.
+5. Test: an episode never searched says so rather than showing a date or a nought.
+6. Test: an anime episode is named by both its numbers.
+7. Implement.
 
-**Sprint 1 done when** the Shows page matches a hand-counted library.
+**Notes.** Shows and Queue are **not** navigation mounts — `docs/08-ui.md` § Navigation fixes those
+at two, and a test asserts it. They are declared in `IUiPlugin.Routes` instead, which is what lets
+the server list them, give each the shell it wants, and refuse a link to a page that does not exist.
+
+There are **three** lists on Queue, not two: *given up for now* is its own, or an unavailable episode
+appears in no count on any page and nobody can see it has stopped moving — B1's failure wearing a
+different hat.
+
+**Last arrival** on the Shows page waits for `S6-04`. It comes from `history`, nothing writes that
+table yet, and a column reading "not recorded" on every row is noise rather than information.
+
+**Sprint 1 done when** the Shows page matches a hand-counted library —
+`tests/…Tests/HandCountedLibraryTests.cs` runs the whole chain against a library counted by hand in
+its own comments. Confirming it against the **real** library on `beast-unit` needs a deploy, and a
+deploy needs the owner to stop the server.
 
 ---
 

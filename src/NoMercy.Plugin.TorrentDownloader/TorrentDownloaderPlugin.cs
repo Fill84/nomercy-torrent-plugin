@@ -2,7 +2,10 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
+using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
 
@@ -15,6 +18,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 {
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ActivityJournal _journal = new();
+    private readonly SemaphoreSlim _migrating = new(1, 1);
+    private Database? _database;
+    private EpisodeRepository? _episodes;
+    private bool _migrated;
     private IPluginContext? _context;
     private SettingsStore? _settings;
     private LiveSnapshot? _live;
@@ -83,6 +90,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public IReadOnlyList<PluginNavEntry> NavEntries => Pages.NavEntries;
 
     /// <summary>
+    /// Every page, not only the two in navigation: Shows and Queue are reached
+    /// from the dashboard rather than from a sidebar.
+    /// </summary>
+    public PluginRouteTable Routes => Pages.Routes;
+
+    /// <summary>
     /// Stores the context and does nothing else.
     /// </summary>
     /// <remarks>
@@ -95,9 +108,52 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _context = context;
 
         // Objects, not I/O: nothing here opens a file, a socket or a database.
-        // The settings are read when something asks for them, not now.
+        // The settings are read when something asks for them, and the database
+        // is created and migrated the first time it is really used.
         _settings = new(context.Configuration, context.Secrets);
+        _database = new(context.DataFolderPath);
+        _episodes = new(_database);
         _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
+    }
+
+    /// <summary>
+    /// The episode store, migrated up to date before it is first handed out.
+    /// </summary>
+    /// <remarks>
+    /// Migrating on first use rather than during <c>Initialize</c>, which does
+    /// no I/O. Behind a semaphore because a cadence tick and a page render can
+    /// arrive at once on a plugin that has only just loaded, and two threads
+    /// running <c>001-initial.sql</c> together would have one of them fail on a
+    /// table the other had just created.
+    /// </remarks>
+    public async Task<EpisodeRepository> EpisodesAsync(CancellationToken ct)
+    {
+        if (_episodes is null || _database is null)
+        {
+            throw new InvalidOperationException("The plugin has not been initialised, so it has no store yet.");
+        }
+
+        if (_migrated)
+        {
+            return _episodes;
+        }
+
+        await _migrating.WaitAsync(ct);
+
+        try
+        {
+            if (!_migrated)
+            {
+                await _database.MigrateAsync(ct);
+                _migrated = true;
+            }
+        }
+        finally
+        {
+            _migrating.Release();
+        }
+
+        return _episodes;
     }
 
     /// <summary>
@@ -144,17 +200,30 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // Rendered per request from the current state, never from a tree held
         // between requests: a cached page goes stale silently, and the page
         // most worth trusting is the one saying what is happening now.
-        if (request.Route != Pages.SettingsRoute)
+        switch (request.Route)
         {
-            return DashboardView.Render(_journal.Snapshot(), CurrentCycle());
-        }
+            case Pages.SettingsRoute:
+                // Names, never values. The page is given the keys that exist
+                // and has no route to what is behind them.
+                return SettingsView.Render(
+                    await Settings.LoadAsync(ct),
+                    await Settings.SecretsSetAsync(ct),
+                    []);
 
-        // Names, never values. The page is given the keys that exist and has no
-        // route to what is behind them.
-        return SettingsView.Render(
-            await Settings.LoadAsync(ct),
-            await Settings.SecretsSetAsync(ct),
-            []);
+            case Pages.ShowsRoute:
+                return ShowsView.Render(ShowSummaries.Summarise(await Tracked(ct)));
+
+            case Pages.QueueRoute:
+                return QueueView.Render(await Tracked(ct));
+
+            default:
+                return DashboardView.Render(_journal.Snapshot(), CurrentCycle());
+        }
+    }
+
+    private async Task<IReadOnlyList<TrackedEpisode>> Tracked(CancellationToken ct)
+    {
+        return await (await EpisodesAsync(ct)).AllAsync(ct);
     }
 
     /// <summary>
