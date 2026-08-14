@@ -84,15 +84,17 @@ nor `Bittorrent` references any NoMercy assembly.
 **Read first:** `docs/03-architecture.md` § Observability.
 
 **Files:** `Core/Activity/ActivityStage.cs` (`Harvest`, `Names`, `Find`, `Decide`, `Grab`,
-`Download`, `Dispatch`), `ActivityEvent.cs`, `IActivityJournal.cs`, `ActivityJournal.cs`,
-`ActivitySnapshot.cs`
+`Download`, `Dispatch`), `ActivityEvent.cs` (which also holds `ActivityOutcome`:
+`Started`, `Finished`, `Failed`), `IActivityJournal.cs`, `ActivityJournal.cs`, `ActivitySnapshot.cs`
 
 **Steps**
 1. Test: 1000 events from `Parallel.For` produce a snapshot with no torn state.
 2. Test: a subject that starts and finishes is not in the in-flight list.
-3. Test: history is bounded — 600 events leave 500.
+3. Test: history is bounded — 600 events leave 500, and the 500 kept are the newest.
 4. Test: a snapshot already handed out does not change when the journal does.
-5. Implement.
+5. Test: a failure clears the in-flight entry too, and carries its reason.
+6. Test: every stage of the chain is in `ActivityStage`, in the chain's order.
+7. Implement.
 
 ## S0-04 · Pushing the snapshot, and the dashboard
 

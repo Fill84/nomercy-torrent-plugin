@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 0 — Foundation and spine**
-**Slice `S0-03` · The activity journal**
+**Slice `S0-04` · Pushing the snapshot, and the dashboard**
 
-Specification: `docs/plan/SPRINTS.md`, section `S0-03`.
+Specification: `docs/plan/SPRINTS.md`, section `S0-04`.
 
 ## Blocked
 
@@ -20,7 +20,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 0 — Foundation and spine
 - [x] `S0-01` Repository, build, gates
 - [x] `S0-02` The plugin loads
-- [ ] `S0-03` The activity journal
+- [x] `S0-03` The activity journal
 - [ ] `S0-04` Pushing the snapshot, and the dashboard
 - [ ] `S0-05` Settings
 
@@ -95,6 +95,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   seen to fail against a one-line mutation of the rule it guards. Reading the server to write the
   manifest turned up the ABI: it declares `10.0`, because `10.1` is refused at load. Nothing is
   deployed yet; `S0-03` gives the plugin something to say beyond "awake".
+- `S0-03` `IActivityJournal` in `Core/Activity`: one lock over both collections, history bounded at
+  500, and a snapshot that is copied rather than wrapped. Failure is a third outcome beside started
+  and finished — it clears the in-flight entry as a finish does but carries the reason, or a subject
+  vanishes from the page and the journal says nothing about where it went. `S0-04` pushes the
+  snapshot over the hub and renders the first real page from it.
 
 ## Decisions
 
