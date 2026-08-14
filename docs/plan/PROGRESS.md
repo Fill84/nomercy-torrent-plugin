@@ -105,7 +105,10 @@ and note it here.
 
 Kept here so no slice re-discovers them.
 
-- The server runs on `beast-unit`; deploy over ssh with `scripts/deploy-to-server.ps1`.
+- The server runs on `beast-unit`; deploy over ssh with `scripts/deploy-to-server.ps1`. **That script
+  does not exist until `S8-04` step 6.** Every slice before it that needs the plugin on the server
+  deploys by hand: owner stops the server, copy the build over ssh, verify each file's hash, owner
+  starts it. Do not read its absence as a missing step in an earlier slice.
 - **The owner stops and starts the server.** Never do it.
 - The .NET 10 SDK is user-local: use `~/.dotnet/dotnet.exe`. Bare `dotnet` is 8.0 and cannot build
   this.
