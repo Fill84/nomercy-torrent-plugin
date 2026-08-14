@@ -111,6 +111,9 @@ Traps, every one measured:
   results, match on full path, read `item.Match.Id`. If nothing matched, **do not dispatch**: a job
   with no id is silently dropped, which reports success and leaves the episode in a folder nobody is
   watching.
+- **The library is the show's own**, from `PluginLibraryShow.LibraryId`. That is what puts an anime
+  episode in the anime library and a television episode in the tv library — the media type was
+  decided by the server when the show was filed, and this plugin follows it rather than choosing.
 - **Folder** is the library's *first* `FolderLibraries` entry, with no preference between them.
   Preferring one whose `Folder.Path` is non-empty is wrong: a real library's second folder is a `Z:`
   drive whose location lives on its storage driver, and the dialog lists it happily.
@@ -118,7 +121,7 @@ Traps, every one measured:
 Fields set on the job, exactly what `ServerController.AddFiles` sets:
 
 ```
-LibraryId       = library.Id
+LibraryId       = the show's own LibraryId
 FolderId        = first FolderLibraries entry's FolderId
 Id              = the match's Id, as a string
 InputFile       = Path.GetFullPath(stagedFile)

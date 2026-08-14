@@ -134,13 +134,14 @@ nor `Bittorrent` references any NoMercy assembly.
 `tests/…Core.Tests/TestSupport/FakeLibrary.cs`
 
 **Steps**
-1. Test (**C6**): libraries are enumerated and only `tv` and `anime` are read; a `movie` library's
-   shows never appear.
+1. Test (**C6**): libraries are enumerated and only media types `tv` and `anime` are read; a
+   `movie` library's shows never appear.
 2. Test: `GetShowsAsync` is called **per library id**, never with null.
 3. Test: a show whose `Folder` is null is skipped.
 4. Test (**C7**): presence is derived from each episode's `HasFile`; a show with
    `HaveEpisodeCount = 0` and episodes on disk is not treated as empty.
-5. Test: the show's library type travels with it, so anime is known without guessing.
+5. Test: the show's media type travels with it, taken from its library, so anime is known without
+   guessing and the show's `LibraryId` is kept for the dispatch.
 6. Test: `Year` comes through.
 7. Implement the adapter; it maps and nothing else.
 
@@ -558,9 +559,11 @@ dashboard shows it the whole way.
 2. Test: when the file list matches nothing, **nothing is dispatched** and a warning names the file.
 3. Test: `Id` is the server's match id as a string; `InputFile` is a full path; `SourceDriverId` is
    unset.
-4. Test: the first `FolderLibraries` entry is used, with no preference.
-5. Test: nothing throws — a missing type logs and returns false.
-6. Implement, and record `dispatched` in history.
+4. Test: the library is the show's own `LibraryId`, so an anime episode is dispatched to the anime
+   library and a television episode to the tv library.
+5. Test: the first `FolderLibraries` entry is used, with no preference.
+6. Test: nothing throws — a missing type logs and returns false.
+7. Implement, and record `dispatched` in history.
 
 ## S6-04 · Downloads page and history
 

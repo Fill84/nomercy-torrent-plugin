@@ -113,9 +113,12 @@ Kept here so no slice re-discovers them.
   Clear the NuGet cache after repacking the same version.
 - The media-server checkout may be a sparse checkout; `git sparse-checkout disable` gets the whole
   tree when something needs looking up.
-- `Library.Type` is a plain indexed string column with no enum behind it
-  (`src/NoMercy.Database/Models/Libraries/Library.cs`). The three values in use are `movie`, `tv`
-  and `anime`, handled together in `src/NoMercy.MediaProcessing/Inbox/InboxClassifier.cs`.
+- Media type (`tv` or `anime`) is the server's classification, from
+  `src/NoMercy.MediaProcessing/Shows/MediaTypeClassifier.cs`, Kitsu-backed. A show is already filed
+  in the library matching its media type, so the plugin reads `PluginLibrary.Type` and classifies
+  nothing itself. `Library.Type` is a free indexed string column with no enum behind it.
+- A downloaded episode is dispatched to the show's own `LibraryId`, so it returns to the library of
+  its media type.
 - `PluginLibraryQuery.GetShowsAsync(null)` returns every show in every library; it only filters when
   a library id is passed.
 - `PluginLibraryShow.HaveEpisodeCount` is `Tv.HaveEpisodes` and is zero for shows with hundreds of

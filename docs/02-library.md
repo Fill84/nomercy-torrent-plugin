@@ -32,27 +32,37 @@ record PluginLibraryFile(int ShowId, int? SeasonNumber, int? EpisodeNumber, stri
 `Year` is the show's first air date's year. `Folder` is relative to the library root and is null
 when the show has none.
 
-## Library types
+## Media type
 
-`PluginLibrary.Type` is the library's own type, chosen when the owner created it. On the server it
-is `Library.Type` — a plain, indexed string column
-(`src/NoMercy.Database/Models/Libraries/Library.cs`), with no enum and no constraint behind it. The
-three values the server works with are **`movie`**, **`tv`** and **`anime`**, handled side by side
-in `src/NoMercy.MediaProcessing/Inbox/InboxClassifier.cs`.
+Whether something is television or anime is the server's own classification, not this plugin's.
+`MediaTypeClassifier.ClassifyAsync(title, year)`
+(`src/NoMercy.MediaProcessing/Shows/MediaTypeClassifier.cs`) answers `"tv"` or `"anime"`, backed by
+Kitsu. `InboxClassifier` calls it for every episodic file and its comment says why: whether a file
+belongs in the anime or the tv library "is decided by the shared Kitsu-backed classifier, never by
+filename shape alone".
 
-Because the column is a free string, the plugin compares case-insensitively and treats anything it
-does not recognise as out of scope rather than guessing.
+**A show is already filed under its media type.** The server put it in the library that matches, so
+the media type of a show this plugin reads is the type of the library it sits in — available as
+`PluginLibrary.Type` from `GetLibrariesAsync`. The plugin classifies nothing and guesses nothing: it
+reads what the server already decided.
 
-**This plugin reads libraries of type `tv` and `anime`, and nothing else.** Anime is a library type,
-not a guess: there is no genre and no origin country in the plugin contract, and none is needed.
-A show in an `anime` library is anime; a show in a `tv` library is television.
+`Library.Type` is a plain, indexed string column
+(`src/NoMercy.Database/Models/Libraries/Library.cs`) with no enum behind it, so the plugin compares
+case-insensitively and treats anything it does not recognise as out of scope.
 
-Films are out of scope. `GetMoviesAsync` is never called.
+**This plugin reads media types `tv` and `anime`, and nothing else.** Films are out of scope;
+`GetMoviesAsync` is never called.
+
+### The episode goes back to the library of its own media type
+
+A downloaded episode is dispatched to the library the show came from — `PluginLibraryShow.LibraryId`
+— so an anime episode lands in the anime library and a television episode in the tv library. The
+plugin never picks a library; it uses the show's own. See `docs/09-host-contract.md`.
 
 ## How the missing list is derived
 
 ```
-for each library where Type is "tv" or "anime"
+for each library whose media type is "tv" or "anime"
     for each show in GetShowsAsync(library.Id)
         skip the show when Folder is null            ← no folder means nowhere to download to
         for each episode in GetEpisodesAsync(show.Id)
