@@ -140,7 +140,12 @@ public sealed class BrowserSolver(
             {
                 string body = await tab.ContentAsync(ct);
 
-                if (!CloudflareChallenge.IsChallengePage(body))
+                // Not a challenge is not the same as ready. A challenge that has
+                // just cleared navigates to the real page, and in between the tab
+                // holds a document that is neither — measured against 1337x,
+                // which answered a head full of stylesheet links and no body at
+                // all.
+                if (!CloudflareChallenge.IsChallengePage(body) && await tab.IsLoadedAsync(ct))
                 {
                     return true;
                 }

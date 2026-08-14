@@ -5,7 +5,12 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-05` · Readers, part one**
+**Slice `S2-05` · Readers, part one** — part done.
+
+`tools/Capture` is built and all four pages are captured into `tests/fixtures/`. What remains is the
+readers themselves and their tests: generic, 1337x, EZTV, KickassTorrents. Read the captures before
+writing them — three things in them do not match `docs/05-sources.md`, and they are listed under
+**Decisions** below.
 
 Specification: `docs/plan/SPRINTS.md`, section `S2-05`.
 
@@ -163,6 +168,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   clearing itself, caught and carried through (**D2**). One reload, then a warning naming the host.
   One tab per host, because clearance is issued per host. `S2-05` needs real captures: it is the
   first slice that cannot be written without `tools/Capture`.
+- `S2-05` (part) `tools/Capture` saves a real page through the same catalogue, fetch and solver the
+  plugin uses. Four captures taken: 1337x, EZTV, KickassTorrents, LimeTorrents. Taking them found two
+  real faults in `S2-04`'s solver — both fixed, one with a test. `Query` writes a term into an
+  address per style (**E3**). The readers are still to write.
 
 ## Decisions
 
@@ -176,6 +185,10 @@ and note it here.
 - There is no follow list. Every show in every `tv` and `anime` library is in scope, and every aired
   episode without a file is fetched, however old.
 - Show status is not used and not needed: an ended show is exactly the kind with gaps to fill.
+- **Three things in the captures do not match `docs/05-sources.md`, and the captures win.** EZTV's
+  titles end `[eztv]`, not `[eztv.re]`. Neither the EZTV nor the KickassTorrents listing carries a
+  magnet at all today, so both need the detail-page route the doc describes for 1337x. Correct that
+  document while writing the readers.
 - **The manifest declares `targetAbi` `10.0`, not the `10.1` the specs said.** The server's
   `PluginAbi.Current` on `dev` is `10.0` and `AbiVerificationStage` is enforced, so `10.1` is refused
   at load. `docs/01-plugin.md` and `docs/reference/README.md` are corrected. `ManifestTests` asks
@@ -189,6 +202,14 @@ and note it here.
   so no ordinary test can tell C1's fix from C1. `AssemblyFolderTests` loads a copy of the assembly
   in its own `AssemblyLoadContext` from another folder, which is the only way they differ in
   process — and the only test a `BaseDirectory` regression fails.
+- **The whole browser chain works end to end on this machine.** `CreateDesktop`, `CreateProcess` with
+  `lpDesktop`, the Chrome download and the Puppeteer connection were all exercised for the first time
+  taking the captures, and all four gated pages came back.
+- **"Not a challenge" is not "ready".** A challenge clears by navigating, and in between the tab
+  holds a document that is neither page: 1337x answered 876 bytes of stylesheet links and no body.
+- **And "ready" is not `readyState === 'complete'`.** An indexer is full of third-party requests that
+  never finish, so waiting for the load event times out on a page readable for forty seconds. The
+  signal that works is a parsed document with a body that has children in it.
 - The browser driver is **PuppeteerSharp** 25.6.0, connected to the browser this plugin started —
   never launching one, since a driver knows nothing about hidden desktops. `Puppeteer.ConnectAsync`
   with `BrowserURL = http://127.0.0.1:{port}`; `IPage.ReloadAsync` takes `ReloadOptions`, not

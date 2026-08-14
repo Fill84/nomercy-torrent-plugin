@@ -88,9 +88,10 @@ internal sealed class PuppeteerTab(IPage page) : IBrowserTab
     {
         await page.GoToAsync(url.ToString(), new NavigationOptions
         {
-            // Not "networkidle": a challenge page keeps talking to its own
-            // endpoint, so waiting for silence waits for the whole timeout even
-            // when the page is ready to be looked at.
+            // DOMContentLoaded, and the poll decides the rest. Neither of the
+            // other two works on a real indexer: "load" waits on adverts that
+            // never arrive, and "networkidle" waits out the whole timeout
+            // because a challenge page keeps talking to its own endpoint.
             WaitUntil = [WaitUntilNavigation.DOMContentLoaded],
         });
     }
@@ -111,6 +112,18 @@ internal sealed class PuppeteerTab(IPage page) : IBrowserTab
     public Task<string> ContentTypeAsync(CancellationToken ct)
     {
         return page.EvaluateExpressionAsync<string>("document.contentType ?? ''");
+    }
+
+    public Task<bool> IsLoadedAsync(CancellationToken ct)
+    {
+        // Not readyState 'complete'. Measured against 1337x: its page is full
+        // of third-party requests that never finish, so the load event never
+        // fires and a wait for it times out on a page that has been readable
+        // for forty seconds. What actually distinguishes the half-navigated
+        // document from the site is that the site has a body with something in
+        // it.
+        return page.EvaluateExpressionAsync<bool>(
+            "document.readyState !== 'loading' && !!document.body && document.body.children.length > 0");
     }
 
     public Task<string> FetchInPageAsync(Uri url, CancellationToken ct)

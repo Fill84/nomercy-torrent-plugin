@@ -9,6 +9,9 @@ TestResults/
 _server/
 _nupkgs/
 _stage/
+
+# The browser tools/Capture downloads, and the profile it drives.
+_capture/
 .mcp.json
 
 # What the health check captured while walking the sources.

@@ -84,6 +84,29 @@ public class BrowserSolverTests
     }
 
     /// <remarks>
+    /// Not a challenge is not the same as ready. A challenge clears by
+    /// navigating, and in between the tab holds a document that is neither
+    /// page — found by the first real capture, where 1337x answered 876 bytes
+    /// of stylesheet links and no body at all.
+    /// </remarks>
+    [Fact]
+    public async Task APageStillLoadingIsNotYetCleared()
+    {
+        FakeTimeProvider clock = new();
+        FakeTabs tabs = new();
+        tabs.Tab("www.1337x.to")
+            .Shows("<html><head><title>the real page</title></head></html>", "<html><body>all of it</body></html>")
+            .StillLoadingFor(1);
+
+        Task<string?> getting = Solver(tabs, clock)
+            .GetPageAsync(new("https://www.1337x.to/search/Silo/"), CancellationToken.None);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+
+        Assert.Equal("<html><body>all of it</body></html>", await getting.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    /// <remarks>
     /// One reload, then a sentence naming the host. A loop of reloads is how a
     /// site decides we are worth blocking properly.
     /// </remarks>

@@ -24,6 +24,23 @@ public interface IBrowserTab : IAsyncDisposable
     Task<string> ContentTypeAsync(CancellationToken ct);
 
     /// <summary>
+    /// Whether the document is worth reading yet — parsed, with a body that has
+    /// something in it.
+    /// </summary>
+    /// <remarks>
+    /// A challenge that has just cleared navigates to the real page, and for a
+    /// moment the tab holds a document that is neither: no longer the
+    /// interstitial and not yet the site. Reading then gets a head with no body
+    /// — measured against 1337x, which answered 876 bytes of stylesheet links
+    /// and nothing else.
+    ///
+    /// Not "has finished loading". Measured against the same page: an indexer
+    /// is full of third-party requests that never complete, so waiting for the
+    /// load event times out on a page that has been readable for forty seconds.
+    /// </remarks>
+    Task<bool> IsLoadedAsync(CancellationToken ct);
+
+    /// <summary>
     /// Fetches <paramref name="url"/> from inside the page and answers the text.
     /// </summary>
     /// <remarks>
