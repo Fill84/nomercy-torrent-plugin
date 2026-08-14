@@ -42,3 +42,24 @@ public interface IPageSource
     /// </remarks>
     Task<string?> GetPageAsync(Uri url, CancellationToken ct);
 }
+
+/// <summary>Posting a form from inside the session that loaded the page.</summary>
+/// <remarks>
+/// TorrentBay answers a signed request to its own endpoint, built from two
+/// values off the row and two off the search page. Sent from this process it
+/// arrives without the session that earned the right to ask, and is refused.
+/// </remarks>
+public interface IInPagePost
+{
+    /// <summary>
+    /// Posts <paramref name="formBody"/> to <paramref name="url"/> from inside
+    /// the page, or answers null when nothing here can.
+    /// </summary>
+    /// <remarks>
+    /// Null rather than an attempt. A post certain to be refused is not worth
+    /// making, and the difference matters to whoever reads the result: the
+    /// caller can say "this site needs a browser", which is actionable, instead
+    /// of "this site refused us", which is not true.
+    /// </remarks>
+    Task<string?> PostAsync(Uri url, string formBody, CancellationToken ct);
+}

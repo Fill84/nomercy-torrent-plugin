@@ -39,6 +39,19 @@
 
   <ItemGroup>
     <!--
+      The browser driver. docs/01-plugin.md § Deploying already says "the
+      browser driver's assemblies" travel with the plugin, so one was always
+      expected; this is the one that phrase was written about.
+
+      It connects to a browser this plugin started, and never launches one
+      itself: the browser has to come up on a hidden stage, which is something
+      no driver knows how to do.
+    -->
+    <PackageReference Include="PuppeteerSharp" Version="25.6.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
       The plugin's own store. A JSON file was 0.3.4's and is the wrong shape:
       every write rewrites everything, two cadences writing at once lose each
       other's work, and asking what is still missing means loading all of it.

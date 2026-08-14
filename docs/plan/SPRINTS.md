@@ -386,8 +386,10 @@ both are proven only on the server.
 
 **Read first:** `docs/07-solver.md`, `docs/10-known-failures.md` § D1, D2.
 
-**Files:** `Core/Sources/IChallengeSolver.cs`, `IPageSource.cs`, `IInPagePost.cs`, `Clearance.cs`,
-`src/…/Solver/BrowserSolver.cs`
+**Files:** `Core/Sources/IChallengeSolver.cs` — which already holds `IPageSource`, `Clearance` and
+now `IInPagePost`, one file rather than four because they are one contract and are read together;
+`src/…/Solver/BrowserSolver.cs`, `IBrowserTab.cs`, `PuppeteerTabs.cs`,
+`tests/…Tests/TestSupport/FakeTabs.cs`
 
 **Steps**
 1. Test (**D1**): a JSON body fetched through the solver is raw JSON; the fixture is Chrome's viewer
@@ -398,7 +400,22 @@ both are proven only on the server.
 4. Test: two requests to one host share one tab; two hosts get two.
 5. Test: clearance is kept per host with its user agent, and spent on refusal.
 6. Test: `PostAsync` returns null when no solver can, and the caller says "this site needs a browser".
-7. Implement.
+7. Test: an HTML page comes back from the **document** — that is where the site's own scripts have
+   finished putting it, and re-fetching would get the markup from before any of them ran.
+8. Implement.
+
+**Notes.** The driver is **PuppeteerSharp**, which is what `docs/01-plugin.md` § Deploying already
+meant by "the browser driver's assemblies". It *connects* to the browser on the port `S2-03` started
+it on and never launches one: a driver knows nothing about hidden desktops, so letting it start
+Chrome would put a window on the owner's screen.
+
+Every judgement is in `BrowserSolver` and is tested against a fake tab — how long to wait, when a
+navigation is the page working rather than failing, one reload then a sentence, and whether the
+document is the answer or a picture of it. `PuppeteerTab` only does as it is told, because nothing
+below that seam can be tested without a browser.
+
+Whether the body is being viewed is decided by `document.contentType`, not by the address: a site can
+serve JSON from a path that looks like anything.
 
 ## S2-05 · Readers, part one
 

@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-04` · The solver**
+**Slice `S2-05` · Readers, part one**
 
-Specification: `docs/plan/SPRINTS.md`, section `S2-04`.
+Specification: `docs/plan/SPRINTS.md`, section `S2-05`.
 
 ## Blocked
 
@@ -45,7 +45,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S2-01` The catalogue and the host gate
 - [x] `S2-02` Fetching
 - [x] `S2-03` The hidden stage, and Chrome
-- [ ] `S2-04` The solver
+- [x] `S2-04` The solver
 - [ ] `S2-05` Readers, part one
 - [ ] `S2-06` Readers, part two
 - [ ] `S2-07` JSON and XML sources, owner sources, and the health tool
@@ -157,6 +157,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   decision separate from asking the operating system. The browser is downloaded once and kept across
   restarts, and an install whose browser has gone is not an install (**C5**). Headless is never used:
   it does not pass a managed challenge. `S2-04` drives the browser it starts.
+- `S2-04` `BrowserSolver` holds every judgement and is tested against a fake tab; `PuppeteerTab` only
+  does as it is told. A JSON body comes back as JSON and not as Chrome's viewer for it (**D1**),
+  decided by `document.contentType` rather than by the address. A navigation mid-poll is the page
+  clearing itself, caught and carried through (**D2**). One reload, then a warning naming the host.
+  One tab per host, because clearance is issued per host. `S2-05` needs real captures: it is the
+  first slice that cannot be written without `tools/Capture`.
 
 ## Decisions
 
@@ -183,6 +189,11 @@ and note it here.
   so no ordinary test can tell C1's fix from C1. `AssemblyFolderTests` loads a copy of the assembly
   in its own `AssemblyLoadContext` from another folder, which is the only way they differ in
   process — and the only test a `BaseDirectory` regression fails.
+- The browser driver is **PuppeteerSharp** 25.6.0, connected to the browser this plugin started —
+  never launching one, since a driver knows nothing about hidden desktops. `Puppeteer.ConnectAsync`
+  with `BrowserURL = http://127.0.0.1:{port}`; `IPage.ReloadAsync` takes `ReloadOptions`, not
+  `NavigationOptions`; `IBrowser.Disconnect()` is synchronous; `InstalledBrowser` is in
+  `PuppeteerSharp.BrowserData`.
 - `CA1416` is on and enforced: a Windows-only or Linux-only type must carry `[SupportedOSPlatform]`
   and be constructed behind an `OperatingSystem.IsWindows()`-style check, not behind an equivalent
   the analyser cannot follow. It caught two real cross-platform slips in `S2-03`.

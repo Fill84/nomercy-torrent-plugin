@@ -1,0 +1,226 @@
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Time.Testing;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources;
+using NoMercy.Plugin.TorrentDownloader.Solver;
+using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using Xunit;
+
+namespace NoMercy.Plugin.TorrentDownloader.Tests.Solver;
+
+public class BrowserSolverTests
+{
+    /// <summary>What Chrome shows instead of a JSON body, and what a DOM reader would parse.</summary>
+    private const string Viewer =
+        """<html><head><meta name="color-scheme" content="light dark"></head><body><pre>[]</pre><div id="json-viewer"></div></body></html>""";
+
+    private const string RealJson = """{"torrents":[{"title":"Silo.S03E06.1080p.WEB.H264-CAKES","seeds":94}]}""";
+
+    private const string Challenge = """<html><head><title>Just a moment...</title></head><body><div id="cf-browser-verification"></div></body></html>""";
+
+    /// <remarks>
+    /// <strong>D1.</strong> A browser asked for a JSON endpoint renders it in
+    /// its own viewer, and reading the document returns that viewer's markup.
+    /// In 0.3.4 every JSON source silently answered an empty array this way,
+    /// and an XML feed reported a parse error naming a <c>meta</c> tag the feed
+    /// never had. The document here <em>is</em> the viewer, so a solver that
+    /// hands back what the tab is showing fails this test.
+    /// </remarks>
+    [Fact]
+    public async Task AJsonBodyComesBackAsJsonAndNotAsChromesPictureOfIt()
+    {
+        FakeTabs tabs = new();
+        tabs.Tab("apibay.org").Shows(Viewer).ContentType = "application/json";
+        tabs.Tab("apibay.org").InPageBody = RealJson;
+
+        string? body = await Solver(tabs).GetPageAsync(new("https://apibay.org/q.php?q=Silo"), CancellationToken.None);
+
+        Assert.Equal(RealJson, body);
+        Assert.DoesNotContain("json-viewer", body ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain("color-scheme", body ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// An HTML page is read from the document, because that is where the site's
+    /// own scripts have finished putting it. Fetching it again inside the page
+    /// would get the markup before any of that ran.
+    /// </remarks>
+    [Fact]
+    public async Task AnHtmlPageComesBackFromTheDocument()
+    {
+        FakeTabs tabs = new();
+        tabs.Tab("katcr.to").Shows("<html><body>the rendered site</body></html>");
+        tabs.Tab("katcr.to").InPageBody = "the markup before anything ran";
+
+        string? body = await Solver(tabs).GetPageAsync(new("https://katcr.to/usearch/Silo/"), CancellationToken.None);
+
+        Assert.Equal("<html><body>the rendered site</body></html>", body);
+    }
+
+    /// <remarks>
+    /// <strong>D2.</strong> A navigation during the poll is the challenge page
+    /// doing exactly what it is supposed to do — reloading itself once it has
+    /// been satisfied. Treating it as a failure gives up at the moment it
+    /// worked, which 0.3.4 did four times in one run.
+    /// </remarks>
+    [Fact]
+    public async Task ANavigationDuringThePollIsNotAFailure()
+    {
+        FakeTimeProvider clock = new();
+        FakeTabs tabs = new();
+        tabs.Tab("predb.me").Shows(Challenge).NavigatesAway().Shows("<html>the real page</html>");
+        tabs.Tab("predb.me").Clearance = "a cookie";
+
+        Task<Clearance?> solving = Solver(tabs, clock)
+            .SolveAsync(new("https://predb.me/?search=Silo"), CancellationToken.None);
+
+        // Two polls: the challenge, then the throw, then the page.
+        clock.Advance(TimeSpan.FromSeconds(1));
+        clock.Advance(TimeSpan.FromSeconds(1));
+
+        Clearance? clearance = await solving.WaitAsync(TimeSpan.FromSeconds(5));
+
+        Assert.Equal("a cookie", clearance?.Cookie);
+        Assert.Equal(0, tabs.Tab("predb.me").Reloads);
+    }
+
+    /// <remarks>
+    /// One reload, then a sentence naming the host. A loop of reloads is how a
+    /// site decides we are worth blocking properly.
+    /// </remarks>
+    [Fact]
+    public async Task AChallengeThatWillNotClearIsReloadedOnceThenGivenUpOnByName()
+    {
+        FakeTimeProvider clock = new();
+        FakeTabs tabs = new();
+        tabs.Tab("torrentbay.st").Shows(Challenge);
+        CapturingLogger log = new();
+
+        Task<Clearance?> solving = new BrowserSolver(
+                tabs,
+                log,
+                clock,
+                solveTimeout: TimeSpan.FromSeconds(3),
+                pollInterval: TimeSpan.FromSeconds(1))
+            .SolveAsync(new("https://torrentbay.st/browse/"), CancellationToken.None);
+
+        for (int tick = 0; tick < 10; tick++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Assert.Null(await solving.WaitAsync(TimeSpan.FromSeconds(5)));
+
+        // Exactly one. A loop of reloads is how a site decides we are worth
+        // blocking properly.
+        Assert.Equal(1, tabs.Tab("torrentbay.st").Reloads);
+
+        // In the sentence the owner actually sees — the debug line while it was
+        // still trying names the host too, and that one nobody reads.
+        Assert.Contains(
+            log.Entries,
+            entry => entry.Level == LogLevel.Warning
+                     && entry.Line.Contains("torrentbay.st", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// One tab per host, kept open. Clearance is issued per host, so two tabs
+    /// on one host solve the same gate twice and each hold half the answer.
+    /// </remarks>
+    [Fact]
+    public async Task TwoRequestsToOneHostShareATabAndTwoHostsGetTwo()
+    {
+        FakeTabs tabs = new();
+        tabs.Tab("katcr.to").Shows("<html>one</html>");
+        tabs.Tab("eztvx.to").Shows("<html>two</html>");
+
+        BrowserSolver solver = Solver(tabs);
+
+        await solver.GetPageAsync(new("https://katcr.to/usearch/Silo/"), CancellationToken.None);
+        await solver.GetPageAsync(new("https://katcr.to/usearch/Lioness/"), CancellationToken.None);
+        await solver.GetPageAsync(new("https://eztvx.to/search/Silo"), CancellationToken.None);
+
+        Assert.Equal(["katcr.to", "katcr.to", "eztvx.to"], tabs.Asked);
+        Assert.Same(tabs.Tab("katcr.to"), tabs.Tab("katcr.to"));
+        Assert.NotSame(tabs.Tab("katcr.to"), tabs.Tab("eztvx.to"));
+    }
+
+    /// <remarks>
+    /// The clearance and the user agent it was issued to travel together.
+    /// Replaying the cookie under any other user agent is a refusal that reads
+    /// like the site changing its mind.
+    /// </remarks>
+    [Fact]
+    public async Task ClearanceComesBackWithTheUserAgentItWasIssuedTo()
+    {
+        FakeTabs tabs = new();
+        tabs.Tab("predb.me").Shows("<html>the real page</html>");
+        tabs.Tab("predb.me").Clearance = "a cookie";
+        tabs.Tab("predb.me").UserAgent = "Mozilla/5.0 (the one it was issued to)";
+
+        Clearance? clearance = await Solver(tabs)
+            .SolveAsync(new("https://predb.me/?search=Silo"), CancellationToken.None);
+
+        Assert.Equal("a cookie", clearance?.Cookie);
+        Assert.Equal("Mozilla/5.0 (the one it was issued to)", clearance?.UserAgent);
+    }
+
+    /// <remarks>
+    /// <strong>Step 6.</strong> Null, not an attempt. A post sent from this
+    /// process arrives without the session that earned the right to ask and is
+    /// refused, so the caller can say "this site needs a browser" — which is
+    /// actionable — instead of "this site refused us", which is not even true.
+    /// </remarks>
+    [Fact]
+    public async Task PostingWithNoBrowserAnswersNullRatherThanTrying()
+    {
+        FakeTabs tabs = new() { HasBrowser = false };
+        CapturingLogger log = new();
+
+        string? posted = await new BrowserSolver(tabs, log)
+            .PostAsync(new("https://torrentbay.st/sign"), "a=1&b=2", CancellationToken.None);
+
+        Assert.Null(posted);
+        Assert.Contains(log.Lines, line => line.Contains("browser", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <remarks>
+    /// And with one, the post goes from inside the page that already has the
+    /// site open.
+    /// </remarks>
+    [Fact]
+    public async Task PostingGoesFromInsideThePage()
+    {
+        FakeTabs tabs = new();
+        tabs.Tab("torrentbay.st").PostedBody = "magnet:?xt=urn:btih:abc";
+
+        string? posted = await Solver(tabs)
+            .PostAsync(new("https://torrentbay.st/sign"), "id=7&token=x", CancellationToken.None);
+
+        Assert.Equal("magnet:?xt=urn:btih:abc", posted);
+        Assert.Equal(["id=7&token=x"], tabs.Tab("torrentbay.st").Posted);
+    }
+
+    /// <remarks>
+    /// With no browser at all there is nothing to solve with, and saying so is
+    /// not the same as saying the challenge failed.
+    /// </remarks>
+    [Fact]
+    public async Task WithNoBrowserNothingIsSolvedAndNothingIsFetched()
+    {
+        FakeTabs tabs = new() { HasBrowser = false };
+        BrowserSolver solver = new(tabs, new CapturingLogger());
+
+        Assert.Null(await solver.SolveAsync(new("https://predb.me/"), CancellationToken.None));
+        Assert.Null(await solver.GetPageAsync(new("https://predb.me/"), CancellationToken.None));
+    }
+
+    private static BrowserSolver Solver(FakeTabs tabs, TimeProvider? clock = null)
+    {
+        return new(
+            tabs,
+            new CapturingLogger(),
+            clock,
+            solveTimeout: TimeSpan.FromSeconds(3),
+            pollInterval: TimeSpan.FromSeconds(1));
+    }
+}

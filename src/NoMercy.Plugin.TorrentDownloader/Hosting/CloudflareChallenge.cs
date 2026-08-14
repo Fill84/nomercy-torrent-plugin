@@ -52,6 +52,20 @@ public static class CloudflareChallenge
         "Just a moment...",
     ];
 
+    /// <summary>
+    /// Whether a page the browser is looking at is still a challenge.
+    /// </summary>
+    /// <remarks>
+    /// In a browser there is no response to read — the tab has one document and
+    /// the question is whether it is the site or the interstitial. The same
+    /// markers, so the two answers cannot disagree about what a challenge is.
+    /// </remarks>
+    public static bool IsChallengePage(string? body)
+    {
+        return !string.IsNullOrEmpty(body)
+               && Markers.Any(marker => body.Contains(marker, StringComparison.OrdinalIgnoreCase));
+    }
+
     /// <summary>Whether <paramref name="response"/> is a challenge rather than a refusal.</summary>
     public static bool IsChallenge(HttpResponseMessage response, string? body)
     {
