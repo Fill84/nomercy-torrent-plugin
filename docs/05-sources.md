@@ -100,13 +100,21 @@ search from their path and want opposite things.
 which says "No results were returned" and is not an error. No magnet on the listing: the row carries
 its own page address.
 
-**EZTV** (gated; also `eztv-api` as a feed) — appends `[eztv.re]` to every title; strip it or nothing
-matches. The API form is JSON and must not be read as HTML.
+**EZTV** (gated; also `eztv-api` as a feed) — appends its own tag to every title; strip it or nothing
+matches. Measured `[eztv.re]` on 13 August 2026 and **`[eztv]`** on 14 August 2026, so the reader
+strips both: a site that has changed this once will change it again. The listing carries **no magnet**
+— the links sit behind a POST form — so the row's own page is the route, as with 1337x. The API form
+is JSON and must not be read as HTML.
 
 **KickassTorrents** (gated) — four anchors per row and three empty; the name is in `cellMainLink`,
-cut into highlighted fragments that must be joined. **A search for a full release name often
-redirects to that release's own page**; when the site reader finds no rows, read the page for a
-magnet anywhere on it.
+cut into highlighted fragments that must be joined — read the anchor whole and strip its tags rather
+than joining its text nodes. The listing carries **no magnet**: the row's own page is the route.
+
+0.3.4 measured that **a search for a full release name redirects to that release's own page**. It
+does not, as of 14 August 2026: the same search answers a listing with one row in it, and
+`tests/fixtures/kickasstorrents-full-name.html` is that page. The reader keeps the fallback — no
+rows, so take a magnet anywhere on the page — because a site that did this once may do it again, but
+**no capture demonstrates it and no test covers it**.
 
 **TorrentBay** (gated) — publishes no magnet. The magnet comes from a **signed POST** to its own
 endpoint, built from two values off the row and two off the search page, sent from inside the

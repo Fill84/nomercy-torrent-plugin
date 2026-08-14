@@ -421,13 +421,34 @@ serve JSON from a path that looks like anything.
 
 Generic, 1337x, EZTV, KickassTorrents, LimeTorrents.
 
+**Files:** `Core/Sources/Query.cs`, `Readers/SourceRow.cs` — which also holds `Html`,
+`Readers/ISourceReader.cs` — and the `Readers` registry, `Readers/GenericReader.cs`,
+`Readers/SiteReaders.cs`, `tools/Capture/`
+
 **Steps**
 1. Capture a real page per site into `tests/fixtures/` with `tools/Capture`.
 2. One test per reader: non-zero row count, first row's title and detail address asserted.
-3. Test (**E4**): the Kickass fixture is the redirected release page; the reader yields one row with a
-   magnet.
-4. Test: EZTV's `[eztv.re]` suffix is stripped.
-5. Test (**C4**): every reader name the catalogue uses resolves to a non-generic reader.
+3. Test (**E4**): a search for a full release name, against the page the site really answers.
+4. Test: EZTV's own tag is stripped from every title.
+5. Test (**C4**): a reader name nothing answers to resolves to **nothing**, never to the generic
+   reader. The whole-catalogue version belongs to `S2-06`, where the last four readers land —
+   asserting it here would only assert that they have not been written yet.
+
+**Notes.** Readers are regular expressions and `Core` keeps its no-dependency rule. `static readonly
+Regex` throughout: `[GeneratedRegex]` was measured returning zero matches on TorrentBay where the
+identical inline expression returned fifty, and zero rows is what a site with nothing looks like.
+
+**E4 no longer reproduces.** 0.3.4 measured Kickass answering a full release name with that release's
+own page; on 14 August 2026 the same search answers a one-row listing, and
+`kickasstorrents-full-name.html` is that page. The reader keeps the no-rows-take-a-magnet fallback
+because a site that did this once may do it again, but **no capture demonstrates it and no test
+covers it**. `docs/05-sources.md` says so.
+
+Neither the EZTV nor the Kickass listing carries a magnet today, so both take 1337x's route: the row
+carries its own page and the magnet is on it. Following it is `S2-06`'s work.
+
+The 1337x size is read from its own cell rather than from the row. No capture distinguishes the two —
+the first size-shaped string in that row *is* the size — so that scoping is defensive and unproven.
 
 ## S2-06 · Readers, part two
 

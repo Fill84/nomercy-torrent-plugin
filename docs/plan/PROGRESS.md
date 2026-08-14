@@ -5,14 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-05` · Readers, part one** — part done.
+**Slice `S2-06` · Readers, part two**
 
-`tools/Capture` is built and all four pages are captured into `tests/fixtures/`. What remains is the
-readers themselves and their tests: generic, 1337x, EZTV, KickassTorrents. Read the captures before
-writing them — three things in them do not match `docs/05-sources.md`, and they are listed under
-**Decisions** below.
-
-Specification: `docs/plan/SPRINTS.md`, section `S2-05`.
+Specification: `docs/plan/SPRINTS.md`, section `S2-06`.
 
 ## Blocked
 
@@ -51,7 +46,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S2-02` Fetching
 - [x] `S2-03` The hidden stage, and Chrome
 - [x] `S2-04` The solver
-- [ ] `S2-05` Readers, part one
+- [x] `S2-05` Readers, part one
 - [ ] `S2-06` Readers, part two
 - [ ] `S2-07` JSON and XML sources, owner sources, and the health tool
 
@@ -171,7 +166,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 - `S2-05` (part) `tools/Capture` saves a real page through the same catalogue, fetch and solver the
   plugin uses. Four captures taken: 1337x, EZTV, KickassTorrents, LimeTorrents. Taking them found two
   real faults in `S2-04`'s solver — both fixed, one with a test. `Query` writes a term into an
-  address per style (**E3**). The readers are still to write.
+  address per style (**E3**).
+- `S2-05` Four readers against four real pages, and eleven of twelve mutations bite. EZTV's tag,
+  Kickass's fragmented names and LimeTorrents' hashed `.torrent` link all behave as captured rather
+  than as documented. A reader name nothing answers to resolves to nothing, never to the generic
+  reader (**C4**) — silent fallback is the fault itself. `S2-06` writes the remaining four readers
+  and follows a detail page to its magnet.
 
 ## Decisions
 
