@@ -19,10 +19,10 @@ Task<IReadOnlyList<PluginLibraryFile>>    GetShowFilesAsync(int showId, Cancella
 ```csharp
 record PluginLibrary(string Id, string Title, string Type);
 
-record PluginLibraryShow(int Id, string Title, int? Year, string LibraryId, string Folder,
+record PluginLibraryShow(int Id, string Title, int? Year, string LibraryId, string? Folder,
                          int EpisodeCount, int HaveEpisodeCount);
 
-record PluginLibraryEpisode(int ShowId, int SeasonNumber, int EpisodeNumber, string Title,
+record PluginLibraryEpisode(int ShowId, int SeasonNumber, int EpisodeNumber, string? Title,
                             DateTime? AirDate, bool HasFile);
 
 record PluginLibraryFile(int ShowId, int? SeasonNumber, int? EpisodeNumber, string Path,
@@ -30,7 +30,8 @@ record PluginLibraryFile(int ShowId, int? SeasonNumber, int? EpisodeNumber, stri
 ```
 
 `Year` is the show's first air date's year. `Folder` is relative to the library root and is null
-when the show has none.
+when the show has none — and a blank one counts as none too, because an empty string is a folder
+name that resolves to the library root. An episode's `Title` is nullable as well.
 
 ## Media type
 

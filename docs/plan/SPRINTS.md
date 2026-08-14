@@ -153,7 +153,12 @@ covers the folder that cannot be created at all.
 
 **Files:** `Core/Domain/Show.cs`, `Episode.cs`, `EpisodeKey.cs`, `LibraryKind.cs`,
 `Core/Ports/ILibrary.cs`, `src/…/Hosting/HostLibrary.cs`,
-`tests/…Core.Tests/TestSupport/FakeLibrary.cs`
+`tests/…Tests/TestSupport/FakeLibraryQuery.cs` — a fake `IPluginLibraryQuery`, which is what the
+adapter's tests need; it returns every show in every library for a null id, exactly as the real one
+does, so the film test is an outcome rather than an inspection.
+
+`tests/…Core.Tests/TestSupport/FakeLibrary.cs` — a fake `ILibrary` — is deferred to `S1-02`, which is
+the first slice with a Core test that needs one. A test double with nothing using it only rots.
 
 **Steps**
 1. Test (**C6**): libraries are enumerated and only media types `tv` and `anime` are read; a
@@ -165,7 +170,13 @@ covers the folder that cannot be created at all.
 5. Test: the show's media type travels with it, taken from its library, so anime is known without
    guessing and the show's `LibraryId` is kept for the dispatch.
 6. Test: `Year` comes through.
-7. Implement the adapter; it maps and nothing else.
+7. Test: an unknown library type is out of scope, and the type is matched without case — the column
+   is a plain indexed string with no enum behind it.
+8. Test: the air date crosses as a date, and its absence stays an absence.
+9. Implement the adapter; it maps and nothing else.
+
+**Note:** neither episode count is on the domain `Show` at all, and a test asserts that. The surest
+way for a number that lies never to be read is for it not to be there to read.
 
 ## S1-02 · The missing list
 

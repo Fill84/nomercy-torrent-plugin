@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 1 — Library and the missing list**
-**Slice `S1-01` · Reading the library**
+**Slice `S1-02` · The missing list**
 
-Specification: `docs/plan/SPRINTS.md`, section `S1-01`.
+Specification: `docs/plan/SPRINTS.md`, section `S1-02`.
 
 ## Blocked
 
@@ -30,7 +30,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S0-05` Settings
 
 ### Sprint 1 — Library and the missing list
-- [ ] `S1-01` Reading the library
+- [x] `S1-01` Reading the library
 - [ ] `S1-02` The missing list
 - [ ] `S1-03` Anime numbering
 - [ ] `S1-04` Shows and Queue pages
@@ -115,6 +115,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   blob and never reach a page: the view is handed key *names*, so it has no value it could render
   even by mistake, and a test proves that from a real stored passkey to every prop of the page.
   `Cron` is written in `Core` and names the field it refused. `S1-01` starts on the library.
+- `S1-01` `ILibrary` in `Core/Ports`, `HostLibrary` in the shell, and it maps and nothing else. Both
+  corrections are in: libraries are enumerated and shows asked for per library id (**C6**), and
+  neither episode count is on the domain `Show` at all (**C7**) — presence is each episode's own
+  `HasFile`. `S1-02` derives the missing list from them.
 
 ## Decisions
 
@@ -137,6 +141,12 @@ and note it here.
 - **Secrets never enter the settings object.** A passkey lives at `tracker:{id}:passkey` and an API
   key at `indexer:{id}:apikey` in `IPluginSecretStore`; the settings carry an announce URL with
   `{passkey}` standing where the secret goes. `docs/04-domain.md` and `docs/08-ui.md` now say so.
+- `PluginLibraryShow.Folder` and `PluginLibraryEpisode.Title` are **nullable** in the contract;
+  `docs/02-library.md` showed both as non-null. The adapter treats a blank folder as none, because an
+  empty string is a folder name that resolves to the library root.
+- An episode's `AirDate` crosses as a `DateOnly`. The library holds a broadcast day, and the hours
+  attached to it are not a time anything aired at — comparing them against "now" would make an
+  episode that aired this morning look as though it had not aired yet.
 - The plugin implements `IPluginServiceRegistrator` and registers itself, so a controller is handed
   the instance the host loaded rather than constructing a second one with no context.
 - Both routes now serve their real page: `/` the dashboard, `/settings` the settings. The
