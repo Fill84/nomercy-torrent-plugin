@@ -116,6 +116,6 @@ Sugar (2024), Lioness (2023), Silo (2023).
 
 ## What is stored
 
-Nothing from the library is stored as fact. The `wanted` table is a derived cache, rebuilt on every
+Nothing from the library is stored as fact. The `episodes` table is a derived cache, rebuilt on every
 maintenance pass, keeping only the plugin's own bookkeeping — how many times an episode has been
 searched and when. A row for an episode the library no longer has is deleted.
