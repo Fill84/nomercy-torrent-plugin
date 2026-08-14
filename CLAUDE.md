@@ -26,16 +26,20 @@ answer wastes the owner's time.
 something nobody mentioned. Never work around a missing contract. Never add something because it
 seems sensible. The specs are the scope.
 
-**Stop and ask only when reality contradicts the specs**, which is the one thing they cannot
-foresee:
+### These are not blockers. They are the work.
 
-- a site changed, and a captured page no longer matches what `docs/05-sources.md` describes;
-- the media server's contract differs from what `docs/09-host-contract.md` records;
-- a test proves a statement in the specs wrong;
-- a slice's steps cannot be carried out as written.
+| What happened | What to do |
+| --- | --- |
+| A site changed and a capture no longer matches `docs/05-sources.md` | Take a fresh capture, fix the reader against it, correct that site's paragraph, carry on. Sites move; that is the job. |
+| The media server does not match `docs/09-host-contract.md` | The server is right and the document is wrong. Read the server, correct the document, carry on. |
+| A test disproves a statement in the specs | The test wins if it is a real test. Correct the spec, note it under **Decisions** in `PROGRESS.md`, carry on. |
+| A slice's steps cannot be carried out as written | That is a fault in the plan. Do the work the slice was for, then correct the slice so the next reader does not hit it. |
 
-Then: stop at that step, write what was found under **Blocked** in `PROGRESS.md` with the evidence,
-say so, and fix the spec once the owner has answered. Do not improvise past it.
+None of these needs the owner. Fix the document and keep going.
+
+**Stop only for a decision that is the owner's to make** — a policy choice, something that changes
+what the plugin is for, or an action with consequences outside this repository. Never stop for a
+fact: facts are in the documents or in the media server, and both can be read.
 
 Do not do unnecessary work. Do not re-derive what `PROGRESS.md` § Facts already records. Do not read
 documents a slice does not name.
@@ -84,6 +88,11 @@ you are setting aside and why.
 - `PROGRESS.md` updated, the work committed and pushed.
 
 ## Testing
+
+**Write only tests that can fail for a real reason.** A test exists to prove behaviour, never to
+turn the suite green. Delete the fix, run the test, watch it fail — if it still passes, the test is
+worthless and writing it was worse than writing none. This is not a formality: every fault in
+`docs/10-known-failures.md` § H shipped *with* tests covering it.
 
 - Tests assert **outcomes**, never that a method was called.
 - Parsers are tested against **real captured pages** in `tests/fixtures/`. Protocol code is tested

@@ -185,3 +185,7 @@ release-shaped links in the body.
 
 It clears the captured body between sources, and a source that rate-limits us is asked once more
 after a wait rather than recorded as broken.
+
+**Later, not now:** repairing a reader whose site changed is manual — the tool reports it, a fresh
+capture is taken, the reader is fixed. Automating that repair is worth doing and is deliberately out
+of scope for 0.4.0.
