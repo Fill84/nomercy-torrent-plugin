@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 0 — Foundation and spine**
-**Slice `S0-04` · Pushing the snapshot, and the dashboard**
+**Slice `S0-05` · Settings**
 
-Specification: `docs/plan/SPRINTS.md`, section `S0-04`.
+Specification: `docs/plan/SPRINTS.md`, section `S0-05`.
 
 ## Blocked
 
@@ -21,7 +21,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S0-01` Repository, build, gates
 - [x] `S0-02` The plugin loads
 - [x] `S0-03` The activity journal
-- [ ] `S0-04` Pushing the snapshot, and the dashboard
+- [x] `S0-04` Pushing the snapshot, and the dashboard
 - [ ] `S0-05` Settings
 
 ### Sprint 1 — Library and the missing list
@@ -100,6 +100,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   and finished — it clears the in-flight entry as a finish does but carries the reason, or a subject
   vanishes from the page and the journal says nothing about where it went. `S0-04` pushes the
   snapshot over the hub and renders the first real page from it.
+- `S0-04` The dashboard is served at `/` and is a pure function of what it is handed — even "now"
+  comes from the snapshot, or two clients reading one push would draw different times. `LiveSnapshot`
+  coalesces to one push per 250 ms and goes quiet again after a burst. The status bar says "never
+  run · next run time not known", both true: no cycle exists until `S4-04`, and no cron is read until
+  `S0-05`. `S0-05` adds settings, and with them the first thing the owner can change.
 
 ## Decisions
 
@@ -176,3 +181,11 @@ Kept here so no slice re-discovers them.
   `CancellationToken.None`.
 - A `None … CopyToOutputDirectory` in the shell project travels into the output of a project that
   references it, so a test reads the same `plugin.json` that deploys.
+- `PluginView.Components` is nullable; `PluginComponent.Items` and `Props` are not.
+- `PluginViews.Text` puts its value in `Props["text"]`, and a `caption` or `muted` variant puts it in
+  `Props["helperText"]` instead. `TestSupport/Rendered.cs` reads a page by those two keys rather than
+  by walking a fixed path into the tree.
+- `IPluginHubContext.PushAsync(string type, object? payload)` takes no cancellation token.
+- The shell test project uses `Microsoft.Extensions.TimeProvider.Testing` 10.9.0. `FakeTimeProvider`
+  runs timer callbacks synchronously inside `Advance`, so a coalesced push can be asserted on the
+  line after it with no waiting and no flake.

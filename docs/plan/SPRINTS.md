@@ -101,15 +101,19 @@ nor `Bittorrent` references any NoMercy assembly.
 **Read first:** `docs/08-ui.md`.
 
 **Files:** `src/…/Hosting/LiveSnapshot.cs`, `src/…/Views/DashboardView.cs`,
-`tests/…Tests/Views/DashboardViewTests.cs`
+`Core/Activity/CycleStatus.cs` — the cadence timing the journal cannot answer,
+`tests/…Tests/Views/DashboardViewTests.cs`, `tests/…Tests/Hosting/LiveSnapshotTests.cs`,
+`TestSupport/FakeHub.cs`, `TestSupport/Rendered.cs`
 
 **Steps**
 1. Test: an idle snapshot renders a status bar saying when the last cycle ran and when the next is
    due — not a spinner, not an empty state.
-2. Test: two in-flight episodes render two rows in **Now** with their stage and what each waits on.
-3. Test: ten journal changes in 100 ms produce one push.
-4. Test: a push that throws does not propagate.
-5. Implement.
+2. Test: never having run says so, and is never drawn as nought.
+3. Test: two in-flight episodes render two rows in **Now** with their stage and what each waits on.
+4. Test: ten journal changes in 100 ms produce one push.
+5. Test: after the burst it goes quiet again — the interval is a floor, not a heartbeat.
+6. Test: a push that throws does not propagate, and does not stop the next one.
+7. Implement, and serve the dashboard at `/`: a page nobody can reach is not a page.
 
 **Done when:** the dashboard is a pure function of the snapshot, with no store access of its own.
 

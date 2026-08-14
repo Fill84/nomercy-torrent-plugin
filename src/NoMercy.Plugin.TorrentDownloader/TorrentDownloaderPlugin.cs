@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
 
@@ -10,9 +12,16 @@ namespace NoMercy.Plugin.TorrentDownloader;
 public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUiPlugin
 {
     private readonly CancellationTokenSource _lifetime = new();
+    private readonly ActivityJournal _journal = new();
     private IPluginContext? _context;
+    private LiveSnapshot? _live;
     private int _announced;
     private bool _disposed;
+
+    /// <summary>
+    /// Where every stage says what it is doing, and what the dashboard renders.
+    /// </summary>
+    public IActivityJournal Journal => _journal;
 
     public string Name => PluginIdentity.Name;
 
@@ -70,6 +79,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public void Initialize(IPluginContext context)
     {
         _context = context;
+
+        // Objects, not I/O: nothing here opens a file, a socket or a database.
+        _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
     }
 
     /// <summary>
@@ -104,7 +116,26 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     public Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
     {
-        return Task.FromResult(Pages.Loaded());
+        // Rendered per request from the current snapshot, never from a tree
+        // held between requests: a cached page goes stale silently, and the
+        // page most worth trusting is the one saying what is happening now.
+        return Task.FromResult(request.Route == Pages.SettingsRoute
+            ? Pages.Loaded()
+            : DashboardView.Render(_journal.Snapshot(), CurrentCycle()));
+    }
+
+    /// <summary>
+    /// What the status bar says about the search cycle.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is known yet, and the page says exactly that rather than drawing
+    /// a nought: no cycle has run because the pipeline that runs one arrives in
+    /// S4-04, and the time of the next is a cron this plugin cannot yet read.
+    /// Reporting a cycle that did not happen is the fault this rule exists for.
+    /// </remarks>
+    private CycleStatus CurrentCycle()
+    {
+        return CycleStatus.Unknown;
     }
 
     public void Dispose()
@@ -121,6 +152,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _disposed = true;
         _lifetime.Cancel();
         _lifetime.Dispose();
+
+        // After the token, so anything stopping on it that publishes a last
+        // change still has somewhere to publish it.
+        _live?.Dispose();
     }
 
     /// <summary>

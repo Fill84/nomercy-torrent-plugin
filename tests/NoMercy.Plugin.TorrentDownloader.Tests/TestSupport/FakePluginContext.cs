@@ -20,6 +20,14 @@ public sealed class FakePluginContext : IPluginContext
 
     public ILogger Logger => Log;
 
+    /// <summary>
+    /// Provided, unlike most of the host: the plugin reaches for the hub while
+    /// it initialises, so every test that initialises one needs it.
+    /// </summary>
+    public FakeHub Pushes { get; } = new();
+
+    public IPluginHubContext Hub => Pushes;
+
     public Ulid PluginId { get; init; } = PluginIdentity.Id;
 
     /// <summary>
@@ -37,7 +45,6 @@ public sealed class FakePluginContext : IPluginContext
     public IPluginLibraryQuery Library => throw NotProvided(nameof(Library));
     public IPluginLibraryWriter? LibraryWriter => null;
     public IPluginGrants Grants => throw NotProvided(nameof(Grants));
-    public IPluginHubContext Hub => throw NotProvided(nameof(Hub));
 
     public Task PublishAsync<T>(string name, T payload, CancellationToken ct = default)
     {

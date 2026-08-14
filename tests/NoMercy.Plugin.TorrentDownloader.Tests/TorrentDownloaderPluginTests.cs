@@ -1,4 +1,6 @@
+using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
 using Xunit;
 
@@ -94,6 +96,25 @@ public class TorrentDownloaderPluginTests
 
         string single = Assert.Single(awake);
         Assert.Contains(PluginIdentity.Version.ToString(), single, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// The landing route is the dashboard, and it renders from the journal
+    /// rather than from anything held between requests. A page nobody can reach
+    /// is not a page: the dashboard has to be what the mount at "/" serves.
+    /// </remarks>
+    [Fact]
+    public async Task TheLandingRouteIsTheDashboard()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        plugin.Initialize(new FakePluginContext());
+        plugin.Journal.Started(ActivityStage.Find, "Silo S03E06", "asking 1337x");
+
+        PluginView view = await plugin.GetViewAsync(
+            new() { Route = Pages.DashboardRoute },
+            CancellationToken.None);
+
+        Assert.Contains(Rendered.Words(view), word => word == "Silo S03E06");
     }
 
     /// <remarks>
