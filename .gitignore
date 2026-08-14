@@ -1,0 +1,15 @@
+bin/
+obj/
+.vs/
+.idea/
+*.user
+*.suo
+artifacts/
+TestResults/
+_server/
+_nupkgs/
+_stage/
+.mcp.json
+
+# What the health check captured while walking the sources.
+health/

@@ -1,0 +1,132 @@
+# Where the work is
+
+Read this first, update it last. Nothing else decides what happens next.
+
+## Current
+
+**Sprint 0 — Foundation and spine**
+**Slice `S0-01` · Repository, build, gates**
+
+Specification: `docs/plan/SPRINTS.md`, section `S0-01`.
+
+## Blocked
+
+Nothing.
+
+## Slices
+
+Tick a box only when the whole definition of done in `CLAUDE.md` holds.
+
+### Sprint 0 — Foundation and spine
+- [ ] `S0-01` Repository, build, gates
+- [ ] `S0-02` The plugin loads
+- [ ] `S0-03` The activity journal
+- [ ] `S0-04` Pushing the snapshot, and the dashboard
+- [ ] `S0-05` Settings
+
+### Sprint 1 — Library and the missing list
+- [ ] `S1-01` Reading the library
+- [ ] `S1-02` The missing list
+- [ ] `S1-03` Anime numbering
+- [ ] `S1-04` Shows and Queue pages
+
+### Sprint 2 — Sources and fetch
+- [ ] `S2-01` The catalogue and the host gate
+- [ ] `S2-02` Fetching
+- [ ] `S2-03` The hidden stage, and Chrome
+- [ ] `S2-04` The solver
+- [ ] `S2-05` Readers, part one
+- [ ] `S2-06` Readers, part two
+- [ ] `S2-07` JSON and XML sources, owner sources, and the health tool
+
+### Sprint 3 — Names
+- [ ] `S3-01` Parsing release names
+- [ ] `S3-02` Harvest
+- [ ] `S3-03` Resolving a name for an episode
+
+### Sprint 4 — Find and decide
+- [ ] `S4-01` The profile
+- [ ] `S4-02` Find
+- [ ] `S4-03` Deciding
+- [ ] `S4-04` The pipeline end to end
+
+### Sprint 5 — BitTorrent
+- [ ] `S5-01` Bencode
+- [ ] `S5-02` Torrent metadata and magnets
+- [ ] `S5-03` The engine shell and its port
+- [ ] `S5-04` Trackers
+- [ ] `S5-05` Peer wire
+- [ ] `S5-06` Pieces, verification and disk
+- [ ] `S5-07` Metadata from peers
+- [ ] `S5-08` Encryption
+- [ ] `S5-09` DHT
+- [ ] `S5-10` Peer exchange and local discovery
+- [ ] `S5-11` Rate limits, choking and seeding
+- [ ] `S5-12` Resume, recovery, stalls, pause and ports
+
+### Sprint 6 — Grab, staging, dispatch
+- [ ] `S6-01` The grab
+- [ ] `S6-02` Completion and staging
+- [ ] `S6-03` Encode dispatch
+- [ ] `S6-04` Downloads page and history
+
+### Sprint 7 — Anime
+- [ ] `S7-01` Anime naming
+- [ ] `S7-02` Dual-form search
+- [ ] `S7-03` Anime end to end
+
+### Sprint 8 — Finish
+- [ ] `S8-01` The remaining pages
+- [ ] `S8-02` The remaining actions
+- [ ] `S8-03` Health automation
+- [ ] `S8-04` Hardening
+- [ ] `S8-05` Release 0.4.0
+
+## Log
+
+One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- _(nothing yet)_
+
+## Decisions
+
+Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
+and note it here.
+
+- The plugin keeps id `1SBQT26FHF98EBRPYVRGD92CZF`, so 0.4.0 is an upgrade of the installed plugin
+  rather than a second one.
+- The BitTorrent protocol is written in this repository. No third-party torrent library.
+- The challenge solver is the plugin's own Chrome on a hidden desktop.
+- There is no follow list. Every show in every `tv` and `anime` library is in scope, and every aired
+  episode without a file is fetched, however old.
+- Show status is not used and not needed: an ended show is exactly the kind with gaps to fill.
+
+## Facts, measured
+
+Kept here so no slice re-discovers them.
+
+- The server runs on `beast-unit`; deploy over ssh with `scripts/deploy-to-server.ps1`.
+- **The owner stops and starts the server.** Never do it.
+- The .NET 10 SDK is user-local: use `~/.dotnet/dotnet.exe`. Bare `dotnet` is 8.0 and cannot build
+  this.
+- The plugin contract is packed from the media-server checkout on branch **`dev`**, not `master`.
+  Clear the NuGet cache after repacking the same version.
+- The media-server checkout may be a sparse checkout; `git sparse-checkout disable` gets the whole
+  tree when something needs looking up.
+- Library types in the server are `movie`, `tv` and `anime`
+  (`src/NoMercy.Api/Controllers/V1/Dashboard/Media/RecommendationsController.cs`).
+- `PluginLibraryQuery.GetShowsAsync(null)` returns every show in every library; it only filters when
+  a library id is passed.
+- `PluginLibraryShow.HaveEpisodeCount` is `Tv.HaveEpisodes` and is zero for shows with hundreds of
+  episodes on disk. Use each episode's `HasFile`.
+- `Tv.Status`, `Tv.InProduction`, `Tv.OriginCountry` exist in the database but are **not** projected
+  into the plugin contract on `dev`. The plugin does not need them.
+- `IPluginSystem` has no server-side implementation on `dev`. Not a route to anything.
+- Plugin data: `%LOCALAPPDATA%\NoMercy\plugins\data\<pluginId>\`.
+- Logs: `%LOCALAPPDATA%\NoMercy\log\run-*.jsonl`, one JSON object per line, with NUL bytes — strip
+  with `tr -d '\000'` before reading.
+- The plugin loads roughly a minute after the server starts; cadences register only then.
+- Approved network grants did not survive a server restart on this machine. Expect to be asked again
+  after every deploy.
+- The library holds ~25 shows and ~42 missing episodes, including shows that need their year to be
+  searchable: Lucky (2026), Sugar (2024), Lioness (2023), Silo (2023).
