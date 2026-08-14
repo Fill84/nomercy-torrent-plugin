@@ -318,16 +318,36 @@ nothing will advance, and an unbounded wait hangs the suite instead of failing i
 
 **Read first:** `docs/05-sources.md` § Fetching, `docs/10-known-failures.md` § G1.
 
-**Files:** `Core/Sources/IFetch.cs`, `FetchFailure.cs`, `src/…/Hosting/ChallengeAwareFetch.cs`,
-`CloudflareChallenge.cs`, `ClearanceStore.cs`
+**Files:** `Core/Sources/IFetch.cs`, `FetchFailure.cs`, `IChallengeSolver.cs` — the solver ports and
+`Clearance`, from `docs/07-solver.md` § The port, so the fetch can name what it needs;
+`src/…/Hosting/ChallengeAwareFetch.cs`, `CloudflareChallenge.cs`, `ClearanceStore.cs`,
+`tests/…Tests/TestSupport/FakeHttp.cs`, `FakeSolver.cs`
 
 **Steps**
 1. Test (**G1**): a refusal names the address and blanks anything matching
-   `api_?key|apikey|passkey|token|secret|rss_?key`.
-2. Test: a gated host never makes an HTTP attempt.
-3. Test: a challenge is solved once; a second after a fresh solve gives up with a clear sentence.
-4. Test: clearance is spent on refusal, not trusted until expiry.
-5. Implement. `LastBody` is exposed for the health tool and cleared by the caller.
+   `api_?key|apikey|passkey|token|secret|rss_?key` — the name stays, only the value goes.
+2. Test: a value that merely looks secret is left alone. A passkey is forty hex characters and so is
+   an info hash; blanking by shape makes every address useless for working out what went wrong.
+3. Test: a gated host never makes an HTTP attempt, and one with no browser says *that* is what is
+   missing rather than blaming the site.
+4. Test: a challenge is solved once; a second after a fresh solve gives up with a clear sentence.
+5. Test: clearance is spent on refusal, not trusted until expiry, and is sent under the user agent it
+   was issued to.
+6. Test: a host with no grant is never asked and earns no backoff.
+7. Implement. `LastBody` is exposed for the health tool and cleared by the caller.
+
+**Notes.** `IInPagePost` from `docs/07-solver.md` § The port is **not** here: nothing needs it until
+TorrentBay's signed POST in `S2-06`, and a port with no caller cannot be judged.
+
+`CloudflareChallenge` reads the **response** — the `cf-mitigated` header first, because that header
+exists so a client need not read the page. Body markers are consulted only after the status has
+narrowed it down, and they are deliberately the least a challenge can be identified by: there is no
+capture of a challenge page in `tests/fixtures/` yet, so pinning more would be guessing at markup.
+Take one when `tools/Capture` exists and tighten them against it.
+
+Tests that fetch one host **twice** cannot use a fake clock: the second request waits on a gap that
+nothing will advance, and the suite hangs instead of failing. They use the real clock with a nought
+interval; what the gate does with intervals is `HostGateTests`' business.
 
 ## S2-03 · The hidden stage, and Chrome
 

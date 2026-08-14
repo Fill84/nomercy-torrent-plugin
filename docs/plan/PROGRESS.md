@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-02` · Fetching**
+**Slice `S2-03` · The hidden stage, and Chrome**
 
-Specification: `docs/plan/SPRINTS.md`, section `S2-02`.
+Specification: `docs/plan/SPRINTS.md`, section `S2-03`.
 
 ## Blocked
 
@@ -43,7 +43,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 2 — Sources and fetch
 - [x] `S2-01` The catalogue and the host gate
-- [ ] `S2-02` Fetching
+- [x] `S2-02` Fetching
 - [ ] `S2-03` The hidden stage, and Chrome
 - [ ] `S2-04` The solver
 - [ ] `S2-05` Readers, part one
@@ -146,6 +146,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   every owner-configured source, search addresses included (**C2**). `HostGate` keeps one gate per
   hostname and owns backoff: a refusal widens, a success halves, and a permission refusal earns
   nothing at all (**B3**). `S2-02` puts a real fetch behind it.
+- `S2-02` `ChallengeAwareFetch` is the whole of "whatever it takes": grant, gate, plain HTTP, browser
+  for a gated address, challenge met once. Every failure names its address with secrets blanked by
+  parameter name (**G1**) — by name and not by shape, because a passkey and an info hash are both
+  forty hex characters. Clearance is spent on refusal, and a second challenge after a fresh solve
+  gives up rather than looping. `S2-03` builds the browser it has been asking for.
 
 ## Decisions
 
@@ -172,6 +177,11 @@ and note it here.
   so no ordinary test can tell C1's fix from C1. `AssemblyFolderTests` loads a copy of the assembly
   in its own `AssemblyLoadContext` from another folder, which is the only way they differ in
   process — and the only test a `BaseDirectory` regression fails.
+- A test that fetches **one host twice** cannot use a fake clock at all: the second request waits on
+  a gap nothing will advance. Use the real clock with a nought interval.
+- The mutation harness under-reports failures whose test names carry `[Theory]` arguments. When it
+  says NOTHING FAILED for a rule that plainly has a test, run that one mutation by hand before
+  believing it — one such report was wrong, and the rule was covered eight times over.
 - A test that waits on a `FakeTimeProvider` must **bound** the wait. A gate regression leaves the
   wait unsatisfiable, and an unbounded one hangs the suite rather than failing it.
 - `PluginGrantKind.NetworkHost` is `"network.host"`; `IPluginGrants.RequestAsync(kind, scope, reason,
