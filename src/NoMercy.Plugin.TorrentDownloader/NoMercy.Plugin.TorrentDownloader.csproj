@@ -7,6 +7,15 @@
   -->
 
   <ItemGroup>
+    <!--
+      The manifest ships beside the assembly and is read by the server before
+      any of this code runs. It travels into the output of whatever references
+      this project too, so a test reads the copy that would actually deploy.
+    -->
+    <None Update="plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\NoMercy.Plugin.TorrentDownloader.Core\NoMercy.Plugin.TorrentDownloader.Core.csproj" />
     <ProjectReference Include="..\NoMercy.Plugin.TorrentDownloader.Bittorrent\NoMercy.Plugin.TorrentDownloader.Bittorrent.csproj" />
   </ItemGroup>

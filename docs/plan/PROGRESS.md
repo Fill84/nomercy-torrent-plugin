@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 0 — Foundation and spine**
-**Slice `S0-02` · The plugin loads**
+**Slice `S0-03` · The activity journal**
 
-Specification: `docs/plan/SPRINTS.md`, section `S0-02`.
+Specification: `docs/plan/SPRINTS.md`, section `S0-03`.
 
 ## Blocked
 
@@ -19,7 +19,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 0 — Foundation and spine
 - [x] `S0-01` Repository, build, gates
-- [ ] `S0-02` The plugin loads
+- [x] `S0-02` The plugin loads
 - [ ] `S0-03` The activity journal
 - [ ] `S0-04` Pushing the snapshot, and the dashboard
 - [ ] `S0-05` Settings
@@ -91,6 +91,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   compiled assembly cannot, because the compiler drops a reference nothing uses yet.
   `scripts/fetch-abstractions.ps1`/`.sh` clone the media server into `_server/` and pack the contract
   into `_nupkgs/`. `S0-02` writes the first real code: it can assume the gates bite.
+- `S0-02` Identity, manifest, the four cadences, the two nav entries, and eleven tests — each one
+  seen to fail against a one-line mutation of the rule it guards. Reading the server to write the
+  manifest turned up the ABI: it declares `10.0`, because `10.1` is refused at load. Nothing is
+  deployed yet; `S0-03` gives the plugin something to say beyond "awake".
 
 ## Decisions
 
@@ -104,6 +108,13 @@ and note it here.
 - There is no follow list. Every show in every `tv` and `anime` library is in scope, and every aired
   episode without a file is fetched, however old.
 - Show status is not used and not needed: an ended show is exactly the kind with gaps to fill.
+- **The manifest declares `targetAbi` `10.0`, not the `10.1` the specs said.** The server's
+  `PluginAbi.Current` on `dev` is `10.0` and `AbiVerificationStage` is enforced, so `10.1` is refused
+  at load. `docs/01-plugin.md` and `docs/reference/README.md` are corrected. `ManifestTests` asks
+  `PluginAbi.IsCompatible` rather than a literal, so this cannot drift again.
+- Until `S0-04` and `S0-05` build the real pages, both routes serve one line: the plugin's name and
+  the version the server actually loaded. It is true, and it is the fact a deploy onto a running
+  server leaves in doubt.
 
 ## Facts, measured
 
@@ -152,3 +163,11 @@ Kept here so no slice re-discovers them.
   fails the build saying so. Both that and `NoWarn=CS1591` are in `Directory.Build.props`.
 - The style gate bites: a block-scoped namespace, a `var` and a braceless `if` were each seen to fail
   `dotnet build -warnaserror` as `IDE0161`, `IDE0008` and `IDE0011`.
+- `PluginManifest.Description` is `required`, so a manifest without one throws on deserialisation.
+  The example in `docs/01-plugin.md` omitted it.
+- `IPluginContext.Logger` is `Microsoft.Extensions.Logging.ILogger`. `System`, `Player` and
+  `LibraryWriter` are nullable with `null` defaults; everything else must be supplied.
+- xunit here is 2.9.3, which has no `TestContext.Current.CancellationToken` — pass
+  `CancellationToken.None`.
+- A `None … CopyToOutputDirectory` in the shell project travels into the output of a project that
+  references it, so a test reads the same `plugin.json` that deploys.

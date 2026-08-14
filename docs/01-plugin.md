@@ -10,8 +10,15 @@ the server's plugin manager, and everything it does goes through the plugin cont
 | Id | `1SBQT26FHF98EBRPYVRGD92CZF` — **unchanged from 0.3.4**; it is the plugin's identity on every server that has it installed |
 | Name | Torrent Downloader |
 | Version | `0.4.0` |
-| Target ABI | `10.1` |
+| Target ABI | `10.0` — the server's own `PluginAbi.Current` on `dev`; see below |
 | Assembly | `NoMercy.Plugin.TorrentDownloader.dll` |
+
+`AbiVerificationStage` is enforced and accepts a manifest only when
+`requested.Major == Current.Major && requested.Minor <= Current.Minor`. A manifest asking for `10.1`
+is therefore **refused outright** by a server whose `PluginAbi.Current` is `10.0`. This document said
+`10.1` until S0-02 read the server; the reference dump's file name still carries that number.
+`ManifestTests` asks `PluginAbi.IsCompatible` rather than a number written down, so the manifest and
+the contract this build compiles against cannot drift apart again.
 
 The id staying the same is what makes 0.4.0 an upgrade rather than a second plugin: the server
 keeps the same data folder, the same grants and the same settings location.
@@ -76,8 +83,10 @@ perfectly healthy. That happened, for a day.
 {
   "id": "1SBQT26FHF98EBRPYVRGD92CZF",
   "name": "Torrent Downloader",
+  // Required by PluginManifest, so a manifest without one fails to deserialise.
+  "description": "Downloads every episode missing from a TV or anime library and hands it to the encoder.",
   "version": "0.4.0",
-  "targetAbi": "10.1",
+  "targetAbi": "10.0",
   "assembly": "NoMercy.Plugin.TorrentDownloader.dll",
   "autoEnabled": true,
   "capabilities": {

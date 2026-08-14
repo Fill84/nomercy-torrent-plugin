@@ -61,10 +61,13 @@ nor `Bittorrent` references any NoMercy assembly.
 
 **Files**
 - `src/…/PluginIdentity.cs` — id `1SBQT26FHF98EBRPYVRGD92CZF`, version `0.4.0`
-- `src/…/plugin.json` — per `docs/01-plugin.md` § Manifest, `network.hosts` empty for now
+- `src/…/plugin.json` — per `docs/01-plugin.md` § Manifest, `network.hosts` empty for now.
+  `description` is **required** by `PluginManifest`, and `targetAbi` is `10.0`, not `10.1`
+- `src/…/JobNames.cs` — the four names and their default crons, as constants
 - `src/…/TorrentDownloaderPlugin.cs` — `IPlugin`, `IScheduledTaskPlugin`, `IUiPlugin`; four jobs with
   the defaults from `docs/04-domain.md` § Settings
-- `src/…/Views/Pages.cs`, `tests/…Tests/ManifestTests.cs`, `TestSupport/FakePluginContext.cs`
+- `src/…/Views/Pages.cs`, `tests/…Tests/ManifestTests.cs`, `tests/…Tests/TorrentDownloaderPluginTests.cs`,
+  `TestSupport/FakePluginContext.cs`, `TestSupport/CapturingLogger.cs`
 
 **Steps**
 1. Test: the manifest deserialises with `PluginManifest`, and its version equals
