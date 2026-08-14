@@ -4,6 +4,7 @@ Nine sprints, forty-seven slices. Every sprint ends with something that can be j
 ends with a green suite and a local commit.
 
 Slice ids are stable. `PROGRESS.md` points at one and nothing else decides what is next.
+Every finished slice is committed and pushed; only a release waits for the owner.
 
 **Read first**, always: `CLAUDE.md`, then the documents the slice names.
 
@@ -645,4 +646,5 @@ store and asserts the numbers (**G3**, **G4**).
 3. Deploy (owner stops the server, we deploy, owner starts it).
 4. **Prove one real cycle**: a missing episode found, downloaded, staged, and an encode queued, with
    the log and the dashboard as evidence.
-5. Tag `v0.4.0` locally. Push only when the owner asks.
+5. Tag `v0.4.0` **only when the owner asks**. Publishing a release is the owner's call; every step
+   before it is pushed as it lands.

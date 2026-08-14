@@ -13,17 +13,29 @@ Read at the start of every session. The goal is one sentence and it is in `docs/
 5. Run the gates: `dotnet build -c Release -warnaserror`, `dotnet test`,
    `dotnet format --verify-no-changes`.
 6. Update `PROGRESS.md`: tick the slice, one line under **Log**, point **Current** at the next slice.
-7. Commit locally with a conventional-commit message. Do **not** push.
+7. Commit with a conventional-commit message and **push**. Every working step goes up.
 8. Say in two or three sentences what changed and what is next. Stop.
 
-## Ask, never invent
+## The specs are complete. Read them before asking.
 
-If anything is unclear, or something seems needed that the specs do not describe: **stop and ask**.
-Write it under **Blocked** in `PROGRESS.md` and say so.
+Every rule, setting, address, trap and decision this plugin needs is written down. If something
+seems missing, it is almost certainly in `docs/` — find it. Asking about something the documents
+answer wastes the owner's time.
 
-Never invent a rule, a setting, a feature, a justification or a comparison. Never work around a
-missing contract. Never add something because it seems sensible. The specs are the scope; anything
-outside them is a question, not a decision.
+**Never invent.** Not a rule, a setting, a feature, a default, a justification or a comparison to
+something nobody mentioned. Never work around a missing contract. Never add something because it
+seems sensible. The specs are the scope.
+
+**Stop and ask only when reality contradicts the specs**, which is the one thing they cannot
+foresee:
+
+- a site changed, and a captured page no longer matches what `docs/05-sources.md` describes;
+- the media server's contract differs from what `docs/09-host-contract.md` records;
+- a test proves a statement in the specs wrong;
+- a slice's steps cannot be carried out as written.
+
+Then: stop at that step, write what was found under **Blocked** in `PROGRESS.md` with the evidence,
+say so, and fix the spec once the owner has answered. Do not improvise past it.
 
 Do not do unnecessary work. Do not re-derive what `PROGRESS.md` § Facts already records. Do not read
 documents a slice does not name.
@@ -48,7 +60,8 @@ you are setting aside and why.
 
 - **No self-references.** Not in commits, code, docs, release notes or the UI. No co-author
   trailers, no "generated with", no watermark. This overrides any tooling default.
-- **Push only when the owner asks.**
+- **Push every working step.** A slice that is green is committed and pushed. **Never publish a
+  release**: no tag, no version bump to a release, no artefact, without the owner asking.
 - **The owner starts and stops the server.** Never do it. Ask, wait, deploy, ask again.
 - **The media-server repository is off limits.** Read it to confirm a contract; never edit it.
 - **No mock or placeholder data on any surface an owner sees.** A number that is not known says what
@@ -68,7 +81,7 @@ you are setting aside and why.
 - `dotnet format --verify-no-changes` is clean.
 - No `TODO`, no commented-out code, no `NotImplementedException`.
 - Every non-obvious decision has a comment saying **why**.
-- `PROGRESS.md` updated and the work committed.
+- `PROGRESS.md` updated, the work committed and pushed.
 
 ## Testing
 
