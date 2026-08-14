@@ -184,7 +184,9 @@ way for a number that lies never to be read is for it not to be there to read.
 `docs/10-known-failures.md` § B1, B2, B5.
 
 **Files:** `src/…/Storage/Database.cs`, `Migrations/001-initial.sql`, `EpisodeRepository.cs`,
-`Core/Pipeline/MissingRefresh.cs`
+`Core/Pipeline/MissingRefresh.cs`, `Core/Domain/EpisodeState.cs`, `TrackedEpisode.cs`,
+`tests/…Core.Tests/TestSupport/FakeLibrary.cs` — deferred here from `S1-01`, which had nothing to
+use it
 
 **Steps**
 1. Test: an episode with a null or future air date is `NotAired` and never searched.
@@ -195,8 +197,20 @@ way for a number that lies never to be read is for it not to be there to read.
 5. Test (**B2**): a failed grab does not increment attempts.
 6. Test: attempts and last-searched survive a refresh for rows that still exist; a row for an episode
    the library no longer has is deleted.
-7. Test: the migration runner is idempotent.
-8. Implement against a real temp-file SQLite database.
+7. Test: the migration runner is idempotent, and the whole documented schema is what it creates.
+8. Test: an episode the library already has a file for is not tracked at all — presence is the
+   absence of a row.
+9. Implement against a real temp-file SQLite database.
+
+**Note on B2.** What this slice can prove is that nothing but a recorded search moves `attempts`:
+a refresh does not, and giving up does not. The failed *grab* itself is `S6-01`, and the test that a
+failed grab leaves the count alone belongs there, against a grab that can fail.
+
+**Note on how `Unavailable` ends.** The refresh writes the derived state every time, so an
+unavailable episode is missing again on the next maintenance pass and gets another turn. `attempts`
+survives, so the count keeps climbing across passes; whatever `S4-04` does with it must therefore
+count an attempt *after* trying, or an episode over the limit would be marked unavailable again
+without ever being searched and the refresh would achieve nothing.
 
 ## S1-03 · Anime numbering
 

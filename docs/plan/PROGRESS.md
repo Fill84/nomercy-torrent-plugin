@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 1 — Library and the missing list**
-**Slice `S1-02` · The missing list**
+**Slice `S1-03` · Anime numbering**
 
-Specification: `docs/plan/SPRINTS.md`, section `S1-02`.
+Specification: `docs/plan/SPRINTS.md`, section `S1-03`.
 
 ## Blocked
 
@@ -31,7 +31,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 1 — Library and the missing list
 - [x] `S1-01` Reading the library
-- [ ] `S1-02` The missing list
+- [x] `S1-02` The missing list
 - [ ] `S1-03` Anime numbering
 - [ ] `S1-04` Shows and Queue pages
 
@@ -119,6 +119,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   corrections are in: libraries are enumerated and shows asked for per library id (**C6**), and
   neither episode count is on the domain `Show` at all (**C7**) — presence is each episode's own
   `HasFile`. `S1-02` derives the missing list from them.
+- `S1-02` `MissingRefresh` in Core derives state from the library alone; SQLite holds the result.
+  The refresh writes the derived state every time, which is what makes `Unavailable` temporary
+  (**B1**), and leaves `attempts` and `last_search_at` untouched — only a recorded search moves them
+  (**B2**). No status is consulted because none exists to consult (**B5**). Rows the library no
+  longer has are deleted, so presence is the absence of a row. `S1-03` fills in `absolute`.
 
 ## Decisions
 
@@ -141,6 +146,12 @@ and note it here.
 - **Secrets never enter the settings object.** A passkey lives at `tracker:{id}:passkey` and an API
   key at `indexer:{id}:apikey` in `IPluginSecretStore`; the settings carry an announce URL with
   `{passkey}` standing where the secret goes. `docs/04-domain.md` and `docs/08-ui.md` now say so.
+- SQLite is `Microsoft.Data.Sqlite` 10.0.11 in the shell project. Migrations are **embedded
+  resources**, so a migration that failed to deploy cannot look like a database already up to date.
+  `PRAGMA user_version` carries the number; each migration and its version bump share a transaction.
+- A test that opens a SQLite file must call `SqliteConnection.ClearAllPools()` before deleting the
+  folder, or the pool holds the file open and the cleanup throws.
+- xunit 2.9.3's `IAsyncLifetime` returns `Task`, not `ValueTask`.
 - `PluginLibraryShow.Folder` and `PluginLibraryEpisode.Title` are **nullable** in the contract;
   `docs/02-library.md` showed both as non-null. The adapter treats a blank folder as none, because an
   empty string is a folder name that resolves to the library root.

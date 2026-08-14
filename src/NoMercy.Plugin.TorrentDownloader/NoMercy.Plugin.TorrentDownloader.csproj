@@ -30,4 +30,22 @@
     <PackageReference Include="NoMercy.Plugins.Mvc" Version="$(NoMercyContractVersion)" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!--
+      The plugin's own store. A JSON file was 0.3.4's and is the wrong shape:
+      every write rewrites everything, two cadences writing at once lose each
+      other's work, and asking what is still missing means loading all of it.
+    -->
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!--
+      Read out of the assembly rather than from beside it: a migration that
+      failed to deploy would otherwise look exactly like a database that was
+      already up to date.
+    -->
+    <EmbeddedResource Include="Storage\Migrations\*.sql" />
+  </ItemGroup>
+
 </Project>
