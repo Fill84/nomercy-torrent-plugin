@@ -53,11 +53,65 @@ public static class Rendered
         }
     }
 
+    /// <summary>
+    /// Every value in the tree, whatever prop it sits under and however deeply
+    /// nested.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Words"/> deliberately reads only what a person is shown, so
+    /// it would not notice a secret written into a field's value. This notices.
+    /// </remarks>
+    public static IReadOnlyList<string> EveryValue(PluginView view)
+    {
+        List<string> found = [];
+
+        foreach (PluginComponent component in All(view))
+        {
+            foreach (object? value in component.Props.Values)
+            {
+                Unpack(value, found);
+            }
+        }
+
+        return found;
+    }
+
+    private static void Unpack(object? value, List<string> found)
+    {
+        switch (value)
+        {
+            case null:
+                return;
+            case string text:
+                found.Add(text);
+                return;
+            case IDictionary<string, object?> nested:
+                foreach (object? inner in nested.Values)
+                {
+                    Unpack(inner, found);
+                }
+
+                return;
+            case System.Collections.IEnumerable list:
+                foreach (object? inner in list)
+                {
+                    Unpack(inner, found);
+                }
+
+                return;
+            default:
+                found.Add(value.ToString() ?? string.Empty);
+                return;
+        }
+    }
+
     private static void Collect(PluginComponent component, List<string> found)
     {
-        // "text" is what the one drawable leaf carries; "helperText" is what a
-        // caption carries. Both are words a person reads.
-        foreach (string key in (string[])["text", "helperText"])
+        // Everything a person is shown or a reader announces: the drawable
+        // leaf's text, a caption's helper text, and the names a control carries.
+        // Not "value" — that is what a person types, and a page is judged on
+        // what it says.
+        foreach (string key in (string[])["text", "helperText", "labelText", "label", "ariaLabel", "placeholder"])
         {
             if (component.Props.TryGetValue(key, out object? value) && value is string word)
             {

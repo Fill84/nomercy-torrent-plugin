@@ -97,7 +97,7 @@ settled by a pack earlier in the same cycle is not asked about again.
 | `SeasonPackThreshold` | 3 | gaps needed before a pack is worth its bytes |
 | `MaxSearchAttempts` | 3 | before an episode goes `Unavailable` |
 | `MaxConcurrentDownloads` | 5 | |
-| `DefaultTrackers` | a shipped list | attached to every grab |
+| `DefaultTrackers` | **empty — none chosen** | attached to every grab |
 | `Indexers` | empty | the owner's own — see `docs/05-sources.md` |
 | `PrivateTrackers` | empty | the owner's own |
 | `DisabledDefaultSources` | empty | shipped sources the owner switched off |
@@ -111,6 +111,16 @@ settled by a pack earlier in the same cycle is not asked about again.
 | `MetadataTimeoutMinutes` | 5 | |
 | `Encryption` | allowed | not required |
 | `DryRun` | off | decide but hand nothing to the client |
+
+This table said `DefaultTrackers` was "a shipped list" and no document anywhere said which trackers
+were in it. It ships empty until the owner chooses: announcing what is being downloaded to hosts
+nobody picked is not a default to invent. `S5-04` and `S6-01` need it filled.
+
+**Secrets are not in this table's shape.** A private tracker's passkey and an indexer's API key are
+never fields on the settings object: that object is serialised whole into the host's configuration
+file in plaintext. They live in `IPluginSecretStore` under `tracker:{id}:passkey` and
+`indexer:{id}:apikey`, and the settings hold an announce URL carrying `{passkey}` where the secret
+goes — which is what lets a page show the address without the secret being in it to show.
 
 ## Storage schema
 

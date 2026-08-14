@@ -1,3 +1,4 @@
+using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -115,6 +116,46 @@ public class TorrentDownloaderPluginTests
             CancellationToken.None);
 
         Assert.Contains(Rendered.Words(view), word => word == "Silo S03E06");
+    }
+
+    /// <remarks>
+    /// The whole way through, with a real secret in a real store: the plugin
+    /// loads the settings, renders the page, and the passkey appears in no prop
+    /// of no component anywhere in it. The view cannot leak one because it is
+    /// never handed one, and this is the test that would notice if that ever
+    /// stopped being true.
+    /// </remarks>
+    [Fact]
+    public async Task AStoredPasskeyNeverReachesTheSettingsPage()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        plugin.Initialize(context);
+
+        Settings settings = new();
+        settings.PrivateTrackers.Add(new()
+        {
+            Id = "trk-1",
+            Host = "tracker.example",
+            AnnounceTemplate = "https://tracker.example/announce?passkey={passkey}",
+        });
+        settings.IncompleteFolder = Path.GetTempPath();
+        settings.IntakeFolder = Path.GetTempPath();
+
+        await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+        await plugin.Settings.SetSecretAsync(
+            SettingsStore.TrackerPasskey("trk-1"),
+            "a1b2c3d4e5f6",
+            CancellationToken.None);
+
+        PluginView page = await plugin.GetViewAsync(
+            new() { Route = Pages.SettingsRoute },
+            CancellationToken.None);
+
+        Assert.All(
+            Rendered.EveryValue(page),
+            value => Assert.DoesNotContain("a1b2c3d4e5f6", value, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains("Passkey: set", string.Join(" ", Rendered.Words(page)), StringComparison.Ordinal);
     }
 
     /// <remarks>

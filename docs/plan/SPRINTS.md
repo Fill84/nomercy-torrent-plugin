@@ -121,17 +121,27 @@ nor `Bittorrent` references any NoMercy assembly.
 
 **Read first:** `docs/08-ui.md` § Settings, `docs/04-domain.md` § Settings.
 
-**Files:** `Core/Domain/Profile.cs`, `Cadences.cs`, `ClientLimits.cs`,
+**Files:** `Core/Domain/Profile.cs`, `Cadences.cs`, `ClientLimits.cs`, `Cron.cs` — five-field
+validation, written here because `Core` references nothing,
 `src/…/Configuration/Settings.cs`, `SettingsStore.cs`, `src/…/Views/SettingsView.cs`,
-`src/…/Controllers/SettingsController.cs`
+`src/…/Controllers/SettingsController.cs`, `TestSupport/FakeConfiguration.cs`,
+`TestSupport/FakeSecretStore.cs`
 
 **Steps**
 1. Test: every setting in `docs/04-domain.md` § Settings round-trips with its documented default.
 2. Test: an invalid cron is refused with the reason and the stored value is unchanged.
 3. Test: an unwritable folder is refused with the reason.
 4. Test: incomplete and intake on different volumes saves, with a warning on the page.
-5. Test: a stored passkey and a stored API key render as *set*, never as their value.
-6. Implement, including Run, Stop and the dry-run switch, which at this point do nothing and say so.
+5. Test: a stored passkey and a stored API key render as *set*, never as their value — asserted the
+   whole way through, from a real secret in the store to every prop of the rendered page.
+6. Test: checking a folder leaves nothing in it. Finding out whether one can be written means
+   writing to it, and only video files may live in a library folder.
+7. Implement, including Run, Stop and the dry-run switch, which at this point do nothing and say so.
+
+**Note:** `SettingsStore` probes a folder by writing to it, because existence is not permission. The
+case that probe catches — a read-only share, a full disk — has **no automated test**: there is no
+in-process way to make a folder that can be created and cannot be written. The test that exists
+covers the folder that cannot be created at all.
 
 ---
 

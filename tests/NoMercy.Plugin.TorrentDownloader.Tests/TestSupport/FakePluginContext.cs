@@ -37,11 +37,19 @@ public sealed class FakePluginContext : IPluginContext
     public string DataFolderPath { get; init; } =
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
 
+    /// <summary>The settings blob, as JSON, so a test can ask what reached it.</summary>
+    public FakeConfiguration Config { get; } = new();
+
+    public IPluginConfiguration Configuration => Config;
+
+    /// <summary>Protected storage. Nothing a test asserts on may ever be here and on a page.</summary>
+    public FakeSecretStore Secrets { get; } = new();
+
+    IPluginSecretStore IPluginContext.Secrets => Secrets;
+
     public IEventBus EventBus => throw NotProvided(nameof(EventBus));
     public IServiceProvider Services => throw NotProvided(nameof(Services));
-    public IPluginConfiguration Configuration => throw NotProvided(nameof(Configuration));
     public HttpClient HttpClient => throw NotProvided(nameof(HttpClient));
-    public IPluginSecretStore Secrets => throw NotProvided(nameof(Secrets));
     public IPluginLibraryQuery Library => throw NotProvided(nameof(Library));
     public IPluginLibraryWriter? LibraryWriter => null;
     public IPluginGrants Grants => throw NotProvided(nameof(Grants));

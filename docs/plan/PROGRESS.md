@@ -4,14 +4,19 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Sprint 0 — Foundation and spine**
-**Slice `S0-05` · Settings**
+**Sprint 1 — Library and the missing list**
+**Slice `S1-01` · Reading the library**
 
-Specification: `docs/plan/SPRINTS.md`, section `S0-05`.
+Specification: `docs/plan/SPRINTS.md`, section `S1-01`.
 
 ## Blocked
 
-Nothing.
+Nothing. One thing waits on the owner without blocking anything:
+
+- **Which trackers ship in `DefaultTrackers`.** The specs said "a shipped list" and never said which.
+  It ships empty; a grab attaches only the trackers its source supplied. `S5-04` and `S6-01` are the
+  slices that want it filled, so there is time. It is the owner's call because it decides which hosts
+  learn what this server is downloading.
 
 ## Slices
 
@@ -22,7 +27,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S0-02` The plugin loads
 - [x] `S0-03` The activity journal
 - [x] `S0-04` Pushing the snapshot, and the dashboard
-- [ ] `S0-05` Settings
+- [x] `S0-05` Settings
 
 ### Sprint 1 — Library and the missing list
 - [ ] `S1-01` Reading the library
@@ -105,6 +110,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   coalesces to one push per 250 ms and goes quiet again after a burst. The status bar says "never
   run · next run time not known", both true: no cycle exists until `S4-04`, and no cron is read until
   `S0-05`. `S0-05` adds settings, and with them the first thing the owner can change.
+- `S0-05` **Sprint 0 is done.** Every documented setting round-trips through the host's serialiser
+  with its documented default. A refused save writes nothing at all. Secrets never enter the settings
+  blob and never reach a page: the view is handed key *names*, so it has no value it could render
+  even by mistake, and a test proves that from a real stored passkey to every prop of the page.
+  `Cron` is written in `Core` and names the field it refused. `S1-01` starts on the library.
 
 ## Decisions
 
@@ -122,9 +132,15 @@ and note it here.
   `PluginAbi.Current` on `dev` is `10.0` and `AbiVerificationStage` is enforced, so `10.1` is refused
   at load. `docs/01-plugin.md` and `docs/reference/README.md` are corrected. `ManifestTests` asks
   `PluginAbi.IsCompatible` rather than a literal, so this cannot drift again.
-- Until `S0-04` and `S0-05` build the real pages, both routes serve one line: the plugin's name and
-  the version the server actually loaded. It is true, and it is the fact a deploy onto a running
-  server leaves in doubt.
+- **`DefaultTrackers` ships empty.** `docs/04-domain.md` said "a shipped list" and no document said
+  which. Corrected there; the choice is the owner's, and it is under **Blocked** above.
+- **Secrets never enter the settings object.** A passkey lives at `tracker:{id}:passkey` and an API
+  key at `indexer:{id}:apikey` in `IPluginSecretStore`; the settings carry an announce URL with
+  `{passkey}` standing where the secret goes. `docs/04-domain.md` and `docs/08-ui.md` now say so.
+- The plugin implements `IPluginServiceRegistrator` and registers itself, so a controller is handed
+  the instance the host loaded rather than constructing a second one with no context.
+- Both routes now serve their real page: `/` the dashboard, `/settings` the settings. The
+  version-only page `S0-02` served in the meantime is gone.
 
 ## Facts, measured
 

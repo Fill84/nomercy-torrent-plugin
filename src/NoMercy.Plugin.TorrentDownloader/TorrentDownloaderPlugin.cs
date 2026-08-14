@@ -1,4 +1,6 @@
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -9,11 +11,12 @@ namespace NoMercy.Plugin.TorrentDownloader;
 /// <summary>
 /// The plugin the server loads: its identity, its four cadences and its pages.
 /// </summary>
-public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUiPlugin
+public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUiPlugin, IPluginServiceRegistrator
 {
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ActivityJournal _journal = new();
     private IPluginContext? _context;
+    private SettingsStore? _settings;
     private LiveSnapshot? _live;
     private int _announced;
     private bool _disposed;
@@ -22,6 +25,17 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// Where every stage says what it is doing, and what the dashboard renders.
     /// </summary>
     public IActivityJournal Journal => _journal;
+
+    /// <summary>
+    /// The settings, and the only door to them.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// Before <see cref="Initialize"/>, because there is no host to read them
+    /// from — an empty store handed out instead would answer with defaults the
+    /// owner never chose and would be believed.
+    /// </exception>
+    public SettingsStore Settings => _settings
+        ?? throw new InvalidOperationException("The plugin has not been initialised, so it has no settings yet.");
 
     public string Name => PluginIdentity.Name;
 
@@ -81,7 +95,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _context = context;
 
         // Objects, not I/O: nothing here opens a file, a socket or a database.
+        // The settings are read when something asks for them, not now.
+        _settings = new(context.Configuration, context.Secrets);
         _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
+    }
+
+    /// <summary>
+    /// Registers the plugin itself, so its controllers can be handed the one
+    /// instance the host loaded rather than construct a second with no context.
+    /// </summary>
+    public void RegisterServices(IServiceCollection services)
+    {
+        services.AddSingleton(this);
     }
 
     /// <summary>
@@ -114,14 +139,22 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return Task.CompletedTask;
     }
 
-    public Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
+    public async Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
     {
-        // Rendered per request from the current snapshot, never from a tree
-        // held between requests: a cached page goes stale silently, and the
-        // page most worth trusting is the one saying what is happening now.
-        return Task.FromResult(request.Route == Pages.SettingsRoute
-            ? Pages.Loaded()
-            : DashboardView.Render(_journal.Snapshot(), CurrentCycle()));
+        // Rendered per request from the current state, never from a tree held
+        // between requests: a cached page goes stale silently, and the page
+        // most worth trusting is the one saying what is happening now.
+        if (request.Route != Pages.SettingsRoute)
+        {
+            return DashboardView.Render(_journal.Snapshot(), CurrentCycle());
+        }
+
+        // Names, never values. The page is given the keys that exist and has no
+        // route to what is behind them.
+        return SettingsView.Render(
+            await Settings.LoadAsync(ct),
+            await Settings.SecretsSetAsync(ct),
+            []);
     }
 
     /// <summary>

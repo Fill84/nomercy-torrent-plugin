@@ -35,20 +35,4 @@ public static class Pages
             Route = SettingsRoute,
         },
     ];
-
-    /// <summary>
-    /// What a viewer sees today: which version of this plugin the server has
-    /// actually loaded.
-    /// </summary>
-    /// <remarks>
-    /// True, and the only thing that is true yet — the dashboard arrives in
-    /// S0-04 and the settings page in S0-05. It is worth a page of its own
-    /// meanwhile: a deploy onto a running server copies nothing and looks
-    /// exactly like one that worked, and this is where that shows.
-    /// </remarks>
-    public static PluginView Loaded()
-    {
-        return PluginViews.Declarative(
-            PluginViews.Text("version", $"{PluginIdentity.Name} {PluginIdentity.Version}", "title"));
-    }
 }
