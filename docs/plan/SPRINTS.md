@@ -183,7 +183,7 @@ nor `Bittorrent` references any NoMercy assembly.
 
 **Steps**
 1. Test: the Shows page's missing count equals the rows for that show, from a seeded store.
-2. Test: the library type is rendered per show.
+2. Test: the media type is rendered per show.
 3. Test: the Queue page separates *looking* from *waiting to air* and never counts an unaired episode
    as missing.
 4. Test: the order is the order they will be asked in.
@@ -599,7 +599,7 @@ in the queue.
 ## S7-03 · Anime end to end
 
 1. Test: a seeded anime library with a Nyaa fixture produces a decision for a missing episode.
-2. Test: the Shows page shows the library type per show.
+2. Test: the Shows page shows the media type per show.
 3. Implement, and run a real dry run over an anime library.
 
 ---
