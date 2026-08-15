@@ -52,7 +52,10 @@ public sealed class BrowserSolver(
             return null;
         }
 
-        await tab.GoToAsync(url, ct);
+        if (!await Navigate(tab, url, ct))
+        {
+            return null;
+        }
 
         if (await WaitForClear(tab, url, ct))
         {
@@ -87,9 +90,7 @@ public sealed class BrowserSolver(
             return null;
         }
 
-        await tab.GoToAsync(url, ct);
-
-        if (!await WaitForClear(tab, url, ct))
+        if (!await Navigate(tab, url, ct) || !await WaitForClear(tab, url, ct))
         {
             return null;
         }
@@ -120,6 +121,34 @@ public sealed class BrowserSolver(
         }
 
         return await tab.PostInPageAsync(url, formBody, ct);
+    }
+
+    /// <summary>
+    /// Goes to <paramref name="url"/>, and answers false rather than throwing
+    /// when it will not load.
+    /// </summary>
+    /// <remarks>
+    /// A navigation that times out is an ordinary outcome for a site behind a
+    /// challenge — measured against TorrentBay, which simply never finished.
+    /// The driver reports it by throwing, and an exception here would leave the
+    /// stage above with no failure to report and nothing to skip: it would take
+    /// down whatever asked. A site that did not answer is a site that did not
+    /// answer.
+    /// </remarks>
+    private async Task<bool> Navigate(IBrowserTab tab, Uri url, CancellationToken ct)
+    {
+        try
+        {
+            await tab.GoToAsync(url, ct);
+
+            return true;
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            logger.LogWarning("{Host} did not load: {Reason}", url.Host, exception.Message);
+
+            return false;
+        }
     }
 
     /// <summary>

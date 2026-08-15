@@ -5,7 +5,11 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-06` · Readers, part two**
+**Slice `S2-06` · Readers, part two** — part done.
+
+All five pages are captured into `tests/fixtures/`. What remains is the readers: TorrentBay,
+TorrentGalaxy, Torrentz2, TorrentDownloads, TorrentFunk — and TorrentBay's signed POST, which is the
+involved one. Read the captures first; what is already known about them is under **Facts** below.
 
 Specification: `docs/plan/SPRINTS.md`, section `S2-06`.
 
@@ -172,6 +176,9 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   than as documented. A reader name nothing answers to resolves to nothing, never to the generic
   reader (**C4**) — silent fallback is the fault itself. `S2-06` writes the remaining four readers
   and follows a detail page to its magnet.
+- `S2-06` (part) Five more captures taken, and a third real fault found by taking them: a navigation
+  that never finishes threw straight out of the solver and took the caller down with it. Fixed, with
+  a test. The readers are still to write.
 
 ## Decisions
 
@@ -185,6 +192,14 @@ and note it here.
 - There is no follow list. Every show in every `tv` and `anime` library is in scope, and every aired
   episode without a file is fetched, however old.
 - Show status is not used and not needed: an ended show is exactly the kind with gaps to fill.
+- **No shipped indexer publishes a magnet on its listing** — not one of the nine captured. Every one
+  of them carries the row's own page instead, so following a detail page to its magnet is not a
+  TorrentBay speciality but the ordinary route.
+- **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
+  forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
+  `title` attribute.
+- **A challenge that will not clear sometimes clears on the next attempt.** KickassTorrents and
+  TorrentBay each refused once and answered a minute later. Retry before concluding a site is gone.
 - **Three things in the captures do not match `docs/05-sources.md`, and the captures win.** EZTV's
   titles end `[eztv]`, not `[eztv.re]`. Neither the EZTV nor the KickassTorrents listing carries a
   magnet at all today, so both need the detail-page route the doc describes for 1337x. Correct that

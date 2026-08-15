@@ -224,6 +224,29 @@ public class BrowserSolverTests
     }
 
     /// <remarks>
+    /// A navigation that never finishes is an ordinary outcome for a site
+    /// behind a challenge — measured against TorrentBay, which simply did not
+    /// load. The driver reports it by throwing, and letting that out leaves the
+    /// caller with no failure to report and nothing to skip: it takes down
+    /// whatever asked, which is what it did the first time.
+    /// </remarks>
+    [Fact]
+    public async Task APageThatWillNotLoadIsReportedRatherThanThrown()
+    {
+        FakeTabs tabs = new();
+        tabs.Tab("torrentbay.st").FailsToLoad("Navigation timeout of 30000 ms exceeded");
+        CapturingLogger log = new();
+
+        BrowserSolver solver = new(tabs, log);
+
+        Assert.Null(await solver.GetPageAsync(new("https://torrentbay.st/browse/"), CancellationToken.None));
+        Assert.Null(await solver.SolveAsync(new("https://torrentbay.st/browse/"), CancellationToken.None));
+        Assert.Contains(
+            log.Entries,
+            entry => entry.Level == LogLevel.Warning && entry.Line.Contains("torrentbay.st", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
     /// With no browser at all there is nothing to solve with, and saying so is
     /// not the same as saying the challenge failed.
     /// </remarks>
