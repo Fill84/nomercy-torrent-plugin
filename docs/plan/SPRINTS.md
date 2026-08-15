@@ -481,6 +481,8 @@ the hrefs are quoted, so the tolerance is proven by the cell regex rather than b
 
 ## S2-07 · JSON and XML sources, owner sources, and the health tool
 
+**Files:** `Core/Sources/Readers/DataReaders.cs`, `tools/SourceHealth/`
+
 **Steps**
 1. Fixtures and readers for apibay, eztv-api, srrdb, nyaa, predb, scnsrc.
 2. Test: srrDB honestly answering zero is not a failure.
@@ -491,6 +493,20 @@ the hrefs are quoted, so the tolerance is proven by the cell regex rather than b
    and reported distinctly.
 6. Test: a page with more than two release-shaped links and zero rows read is reported as a broken
    reader.
+
+**Notes.** **Torznab is the one reader with no capture behind it.** This plugin has no Torznab server
+to ask and one cannot be conjured, so its test uses the published shape written out in the test —
+the only place in the repository that does. Everything about it that *can* be measured is: the
+address is built, the key is really sent, and it appears in no failure, message or log line.
+
+**srrDB writes every dash in a release name as `&#45;`**, so a name matches nothing at all until
+numeric entities are decoded — and a scene name is mostly dashes. `Html.Decode` does it now.
+
+**apibay says "nothing found" as a row saying so**, not as an empty array. Taking it would put a
+release called *No results returned* into the name pool and search every indexer for it.
+
+**Nyaa answers nothing for anything that is not anime**, which is an answer. Both captures are kept:
+one asked for an anime, one for a live-action show.
 
 **Sprint 2 done when** `dotnet run --project tools/SourceHealth` reports all seventeen answering.
 

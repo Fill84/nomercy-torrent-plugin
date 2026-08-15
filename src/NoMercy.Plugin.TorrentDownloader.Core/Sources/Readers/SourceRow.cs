@@ -65,10 +65,30 @@ public static class Html
         return Decode(Spaces.Replace(Tags.Replace(markup, " "), " ").Trim());
     }
 
+    /// <summary>
+    /// A number written as an entity: <c>&amp;#45;</c> for a dash.
+    /// </summary>
+    /// <remarks>
+    /// srrDB writes every dash in a release name this way, so
+    /// <c>Persiana_Jones&amp;#45;Una_Vita</c> is a name that matches nothing at
+    /// all until it is decoded — and a scene name is mostly dashes.
+    /// </remarks>
+    private static readonly Regex Numeric = new(
+        "&#(x?)([0-9a-fA-F]+);",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
+
     /// <summary>The handful of entities a release name really contains.</summary>
     public static string Decode(string text)
     {
-        return text
+        return Numeric.Replace(text, match =>
+            {
+                bool hexadecimal = match.Groups[1].Value.Length > 0;
+                int code = Convert.ToInt32(match.Groups[2].Value, hexadecimal ? 16 : 10);
+
+                // A code point outside what a character can be is not one, and
+                // leaving the entity as written says more than a question mark.
+                return code is > 0 and <= 0x10FFFF ? char.ConvertFromUtf32(code) : match.Value;
+            })
             .Replace("&amp;", "&", StringComparison.Ordinal)
             .Replace("&#039;", "'", StringComparison.Ordinal)
             .Replace("&apos;", "'", StringComparison.Ordinal)

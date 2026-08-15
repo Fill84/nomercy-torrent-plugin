@@ -5,7 +5,10 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-07` · JSON and XML sources, owner sources, and the health tool**
+**Slice `S2-07` · JSON and XML sources, owner sources, and the health tool** — part done.
+
+Steps 1 to 3 are done: the six data readers, the owner's Torznab source, and the key that appears
+nowhere. What remains is `tools/SourceHealth` — steps 4 to 6, including **G2**.
 
 Specification: `docs/plan/SPRINTS.md`, section `S2-07`.
 
@@ -180,6 +183,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   TorrentBay's **signed POST moves to `S6-01`** — the endpoint is in an external script the page never
   names, and the reader's job is the row and the id, which it does. Fourteen rules, fourteen
   mutations, two of which found rules with no test at all.
+- `S2-07` (part) Seven more captures and six data readers: apibay, eztv-api, srrdb, nyaa and the RSS
+  feeds. srrDB encodes every dash in a release name, so `Html.Decode` now reads numeric entities —
+  without it a scene name matches nothing at all. apibay says "nothing found" as a row saying so, and
+  that row is not a release. An owner's Torznab key is sent and appears in no failure, message or log
+  line. `tools/SourceHealth` is what remains.
 
 ## Decisions
 

@@ -64,14 +64,12 @@ internal static class Program
             return 1;
         }
 
-        if (source.SearchAddress is null)
-        {
-            logger.LogError("{Name} takes no search, so there is nothing to capture for a term.", source.Name);
-
-            return 1;
-        }
-
-        Uri address = new(Query.Write(source.SearchAddress, term, source.Query));
+        // A feed takes no question and is read whole, so its own address is the
+        // capture. Refusing would leave the sources that answer "what came out
+        // recently" with no fixture at all.
+        Uri address = source.SearchAddress is null
+            ? new(source.Url)
+            : new(Query.Write(source.SearchAddress, term, source.Query));
 
         // The tool is not the plugin and has no host to ask, so every host is
         // permitted here. The plugin's own grants are the server's business;
@@ -108,7 +106,16 @@ internal static class Program
             return 1;
         }
 
-        string path = Path.Combine(fixtures, $"{Slug(source.Name)}.html");
+        // Named for what it is: a JSON body saved as .html is a fixture nobody
+        // can open without wondering.
+        string extension = result.Body!.TrimStart().StartsWith('{') || result.Body.TrimStart().StartsWith('[')
+            ? "json"
+            : result.Body.TrimStart().StartsWith("<?xml", StringComparison.OrdinalIgnoreCase)
+              || result.Body.Contains("<rss", StringComparison.OrdinalIgnoreCase)
+                ? "xml"
+                : "html";
+
+        string path = Path.Combine(fixtures, $"{Slug(source.Name)}.{extension}");
         await File.WriteAllTextAsync(path, result.Body!, CancellationToken.None);
 
         logger.LogInformation(
