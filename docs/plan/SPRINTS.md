@@ -521,7 +521,10 @@ asked. Done on 15 August 2026: sixteen of sixteen, nothing flagged.
 **Read first:** `docs/04-domain.md` § Release names, `docs/10-known-failures.md` § H3.
 
 **Steps**
-1. Fixture: a file of real release names, scene and anime, taken from the captured pages.
+1. Fixture: the captured pages themselves, read through their own readers — no derived file of
+   names, which is a second copy that drifts from the first. The anime cases the field table names
+   were not on any capture, so five more were taken: `nyaa-absolute`, `nyaa-version`,
+   `nyaa-subsplease`, `nyaa-diacritic` and `torrentdownloads-greek`.
 2. A test per row of the field table, including `264`/`265` without a prefix, `H.265` with its dot, a
    show called *Greek*, a diacritic, `v2`, `137` versus `1080`, a season pack, an anime batch.
 3. `TitleMatcher.Matches` — begins with, not contains. *Lucky* versus *A Bloody Lucky Day*.

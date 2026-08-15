@@ -37,7 +37,7 @@ Show.Title.S02E13.1080p.WEB.x264-GROUP         ← scene-styled anime, also vali
 | Field | Scene | Anime | Trap |
 | --- | --- | --- | --- |
 | Title | before the season tag | after `]`, before ` - ` | an anime title can contain a dash; the separator is ` - ` with spaces and the number after it must be digits |
-| Season/episode | `S03E06` | absolute, or `S02E13` when present | `137` is an episode, `1080` is not — a bare number is only an episode if not followed by `p` |
+| Season/episode | `S03E06` | absolute after ` - `, **or `EP1173` with no separator at all**, or `S02E13` when present | `137` is an episode, `1080` is not — a bare number is only an episode if not followed by `p`. `E` takes up to four digits: `One Piece S01E1173` is a real row |
 | Version | — | `v2`, `v3` | a `v2` supersedes the `v1` of the same episode |
 | Quality | `1080p` | `(1080p)`, `[1080p]` | brackets |
 | Codec | `H264`, `x264`, `H.264`, `AVC` | same | accept `264`/`265` without a prefix; `H.265` has a dot inside |
@@ -45,9 +45,16 @@ Show.Title.S02E13.1080p.WEB.x264-GROUP         ← scene-styled anime, also vali
 | Language | `MULTi`, `VOSTFR`, `Dual.Audio` | `[Multiple Subtitle]`, `Dual Audio` | |
 | Pack | `S01` with no `E` | `01~12`, `Batch`, `Complete` | a pack answers for every gap in the season it covers |
 
-`TitleMatcher.Matches`: normalise both sides (lowercase, punctuation to spaces, collapse), then the
-release title must **begin with** the show title and the slot must match. Beginning with, not
-containing — *A Bloody Lucky Day* contains *Lucky* and is a different programme.
+`TitleMatcher.Matches`: normalise both sides (lowercase, **accents folded**, punctuation to spaces,
+collapse), then the release title must **begin with** the show title and the slot must match.
+Beginning with, not containing — *A Bloody Lucky Day* contains *Lucky* and is a different programme.
+
+Counted in **words**, not in letters: *Silos* begins with the letters of *Silo* and is a different
+show, and the LimeTorrents capture really does carry a row called `Silos / Silo (2023–)`. Accents
+are folded because one Nyaa row writes the same programme both ways in the one title — *Pokémon
+Horizons: The Series* and *Pokemon (2023)* — so insisting on the accent refuses a release of exactly
+the show that was asked for. A letter is anything a language calls one, so a title written in
+Japanese survives being normalised.
 
 ## The profile: where each rule applies
 

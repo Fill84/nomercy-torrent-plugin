@@ -5,10 +5,10 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 3 — Names**
-**Slice `S3-01` · Parsing release names** — not started.
+**Slice `S3-02` · Harvest** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S3-01`. Read first: `docs/04-domain.md` § Release
-names, `docs/10-known-failures.md` § H3.
+Specification: `docs/plan/SPRINTS.md`, section `S3-02`. Read first: `docs/03-architecture.md`
+§ Stages, `docs/10-known-failures.md` § A2.
 
 ## Blocked
 
@@ -52,7 +52,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S2-07` JSON and XML sources, owner sources, and the health tool
 
 ### Sprint 3 — Names
-- [ ] `S3-01` Parsing release names
+- [x] `S3-01` Parsing release names
 - [ ] `S3-02` Harvest
 - [ ] `S3-03` Resolving a name for an episode
 
@@ -197,6 +197,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   Running it found two real faults, both fixed with tests: every source with no `reader` field
   resolved to the reader for an HTML listing, and all four gated sites were sent down plain HTTP.
   `S3-01` starts on names.
+- `S3-01` `ReleaseName.Parse` and `TitleMatcher.Matches` in `Core/Domain`, against every name on
+  every captured page — eight hundred and sixty of them — and twelve named ones each proved to be a
+  row a reader really read. Five more captures were taken because the field table's anime cases were
+  on none of the old ones: absolute numbering, `v2`, a batch, a diacritic and a show called *Greek*.
+  Taking them found two things no document had: `EP1173` with no separator anywhere, which is how
+  One Piece is posted every week and which the parser now reads, and the same programme spelled
+  *Pokémon* and *Pokemon* in one title, which is why accents are folded. `S3-02` harvests names into
+  the pool.
 
 ## Decisions
 
@@ -216,6 +224,20 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **A release name's codec is answered as a family**: `h264`, `h265`, `xvid`, `divx`. `H.264`,
+  `x264`, `AVC` and a bare `264` are one codec, and a rule written against a spelling refuses six
+  copies of the thing it was asked to accept.
+- **Two assertions in `ReleaseNameTests` are written by hand, and they are the only ones.** No
+  captured page carries a title ending in ` - ` with the resolution straight after it, nor one
+  without a season tag carrying a dash against a digit — so the two halves of the separator rule in
+  `docs/04-domain.md` have nothing real holding them in place. CLAUDE.md says parsers are tested
+  against captures only and also that every rule needs a test that fails when the rule is deleted;
+  where the two collide the rule keeps its test, said out loud in a comment beside it. Everything
+  else in that file is a real name, checked against the capture it came from.
+- **The captures disagreed with the field table twice, and the captures won.** An absolute number is
+  written `EP1173` as often as ` - 1173`, and one Nyaa title spells the same programme *Pokémon* and
+  *Pokemon*. Both are corrected in `docs/04-domain.md`: the `EP` form is read, and accents are
+  folded before titles are compared.
 - **The health tool counts release-shaped *names*, not links.** `docs/05-sources.md` said links; six
   of the seventeen sources answer JSON or XML with no anchor and no magnet anywhere in them, so a
   count of links would report every one of those as having nothing to offer on the day its reader
