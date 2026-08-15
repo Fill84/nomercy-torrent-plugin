@@ -162,6 +162,28 @@ public sealed record ReleaseName(
         ("vostfr", new(@"\bvostfr\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("dual audio", new(@"\bdual[\s._-]?audio\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("multiple subtitle", new(@"\bmultiple[\s._-]?subtitles?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+
+        // The rest of the list is what the captures carry, and each of them is
+        // in a test against the row it was found on. Four claims were not
+        // enough for the English-only rule to mean anything: a release in
+        // German says GERMAN and nothing else, and a profile that cannot read
+        // that accepts it as English.
+        ("english", new(@"\b(?:eng|english)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("german", new(@"\bgerman\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("italian", new(@"\b(?:ita|italian)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        // TRUEFRENCH first: there is no word boundary inside it, so the shorter
+        // pattern would not match it at all.
+        ("french", new(@"\b(?:truefrench|french)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("spanish", new(@"\bspanish\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("russian", new(@"\b(?:rus|russian)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("polish", new(@"\bpolish\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("swedish", new(@"\bswesub\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        ("japanese", new(@"\b(?:jap|japanese)\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+
+        // And still no Greek, in a list read off pages where a show called
+        // Greek sits beside a dozen rows carrying Greek subtitles. Three-letter
+        // abbreviations from a subtitle list — GER, FRE, SPA — are left out for
+        // the same reason: they are short enough to be something else.
     ];
 
     /// <summary>

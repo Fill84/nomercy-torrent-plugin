@@ -42,7 +42,7 @@ Show.Title.S02E13.1080p.WEB.x264-GROUP         ← scene-styled anime, also vali
 | Quality | `1080p` | `(1080p)`, `[1080p]` | brackets |
 | Codec | `H264`, `x264`, `H.264`, `AVC` | same | accept `264`/`265` without a prefix; `H.265` has a dot inside |
 | Group | after the last `-` | inside the leading `[...]` | a scene title is full of dashes; the group is after the *last* one and contains no dots |
-| Language | `MULTi`, `VOSTFR`, `Dual.Audio` | `[Multiple Subtitle]`, `Dual Audio` | |
+| Language | `MULTi`, `VOSTFR`, `Dual.Audio`, and the languages the captures name outright — `GERMAN`, `ITA`, `TRUEFRENCH`, `SPANISH`, `RUS`, `POLISH`, `SWESUB`, `JAP`, `ENG` | `[Multiple Subtitle]`, `Dual Audio` | never `Greek`, which is a programme; and never a three-letter abbreviation out of a subtitle list, which is short enough to be something else |
 | Pack | `S01` with no `E` | `01~12`, `Batch`, `Complete` | a pack answers for every gap in the season it covers |
 
 `TitleMatcher.Matches`: normalise both sides (lowercase, **accents folded**, punctuation to spaces,
@@ -65,14 +65,31 @@ Japanese survives being normalised.
 | Resolution on the ladder | ✅ | |
 | Codec, and codec tag required | ✅ | |
 | Language | ✅ | |
-| Blocked group | ✅ | |
+| Blocked group | ✅ | *no list of its own — see below* |
 | Forbidden terms | ✅ | |
 | Season pack allowed | ✅ | |
 | Blacklisted title or hash | ✅ | ✅ |
 | **Seeders at or above the minimum** | | ✅ |
 | **Size within bounds** | | ✅ |
 
-A copy nobody is seeding is refused with a history line naming the site and the count.
+A copy nobody is seeding is refused with a history line naming the site and the count. A site that
+does not publish a count has **not** said nought: judging a copy on a number nobody gave is the same
+category error as judging a name on one, and it would silently drop every source that leaves the
+count out.
+
+**Two rows in that table have no data behind them anywhere in these documents.** *Blocked group* has
+no list of groups in the settings, and it is `ExcludeTerms` doing the work: a forbidden term is
+looked for in the whole name, and a release group is part of the name it appears in. *Size within
+bounds* has no bounds — no setting names a minimum or a maximum — so nothing is checked and nothing
+is invented. Both are recorded rather than guessed at.
+
+A release that does not say what resolution it is is refused, and the reason says so rather than
+naming a resolution it never claimed. The same choice as the codec tag, for the same reason: what a
+release does not say is where the thing you did not want hides.
+
+The language claims a name can make are in § Release names, and the English-only rule reads them as
+follows: a release claiming a language that is not English, and not also claiming English, `MULTi` or
+`Dual Audio`, is refused. Subtitles are not audio and never refuse anything.
 
 Quality is one rung, not a ceiling. `1080p` means 1080p — a ceiling reads as generous and behaves as
 a downgrade, because the 720p copy is usually posted first.

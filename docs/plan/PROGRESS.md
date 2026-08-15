@@ -5,10 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 4 — Find and decide**
-**Slice `S4-01` · The profile** — not started.
+**Slice `S4-02` · Find** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S4-01`. Read first: `docs/04-domain.md` § The
-profile, `docs/10-known-failures.md` § A1, H1.
+Specification: `docs/plan/SPRINTS.md`, section `S4-02`. Read first: `docs/05-sources.md` § Merging.
 
 ## Blocked
 
@@ -57,7 +56,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S3-03` Resolving a name for an episode
 
 ### Sprint 4 — Find and decide
-- [ ] `S4-01` The profile
+- [x] `S4-01` The profile
 - [ ] `S4-02` Find
 - [ ] `S4-03` Deciding
 - [ ] `S4-04` The pipeline end to end
@@ -219,6 +218,15 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   year as well (*Sugar* answers with beekeeping, *Sugar 2024* with the programme), and an anime show
   is asked under the bare title too, because an absolute-numbered release carries no season tag at
   all. What comes back is written to the pool before it is used. `S4-01` judges the names.
+- `S4-01` `ReleaseFilter` and `ReleaseDecider` in Core, every rule of the profile table with a test
+  that fails when the rule is deleted — eighteen of them checked by hand. **A1** is structural: a
+  name has no seeders and no site, so those rules live on `JudgeCopy` and nowhere else, and a profile
+  wanting five hundred seeders still accepts the name it would refuse the copy of. Unknown is not
+  nought either: a site that publishes no count has not said there is nobody there. The ranking is
+  seeders first and site priority **descending**, which 0.3.4 had inverted. Writing the language rule
+  needed the parser's vocabulary widened from four claims to thirteen — a release in German says
+  `GERMAN` and nothing else — with a row of a real capture behind each, and still no Greek in it.
+  `S4-02` asks the indexers.
 
 ## Decisions
 
@@ -238,6 +246,16 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **Two rows of the profile table have no data behind them, and both are recorded rather than
+  guessed at.** *Blocked group* has no list of groups in any document, and `ExcludeTerms` does that
+  work: a forbidden term is looked for in the whole name, and a group is part of the name it appears
+  in. *Size within bounds* has no bounds — no setting names a minimum or a maximum — so nothing is
+  checked. `docs/04-domain.md` now says so in both cases.
+- **A release that does not say what resolution it is is refused**, with a reason saying exactly
+  that. Nothing in the documents covers the case; it is the same choice as the codec tag and for the
+  same reason — what a release does not say is where the thing nobody wanted hides.
+- **A copy whose seeder count the site did not publish is not refused for having none.** Null is not
+  nought, and refusing on a number nobody gave is A1's own category error wearing the other hat.
 - **A show is asked with its year when its title is one word.** `docs/02-library.md` says "where a
   show's title is a common word" and defines no test for one; the four shows in the real library
   that need it — Lucky, Sugar, Lioness, Silo — are all a single word, and adding the year to every

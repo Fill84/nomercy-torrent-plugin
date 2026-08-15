@@ -150,6 +150,44 @@ public class ReleaseNameTests
     }
 
     /// <remarks>
+    /// The languages the captures really claim, which is a longer list than
+    /// four. A release in German says <c>GERMAN</c> and nothing else, and a
+    /// profile that only knows <c>MULTi</c> and <c>VOSTFR</c> accepts it as
+    /// English — which is the English-only rule quietly not working.
+    /// </remarks>
+    [Theory]
+    [InlineData("predb.xml", "rss", "Silo.S03E06.GERMAN.WEBRiP.x264-AVTOMAT", "german")]
+    [InlineData("1337x.html", "1337x", "Silo.S03E06.The.Drive.1080p.ATVP.WEB-DL.ITA.ENG.DDP5.1.Atmos.H.265-G66.mkv", "italian")]
+    [InlineData("1337x.html", "1337x", "Silo.S03E06.The.Drive.1080p.ATVP.WEB-DL.ITA.ENG.DDP5.1.Atmos.H.265-G66.mkv", "english")]
+    [InlineData("nyaa-diacritic.xml", "torrent-rss", "[T3KASHi] Pokemon Master Quest S05 TRUEFRENCH 1080p WEB-DL H.264 (VF)", "french")]
+    [InlineData("torrentdownloads-greek.html", "torrentdownloads", "Greek S01e01 Swesub Hdtv Xvid D_s avi", "swedish")]
+    [InlineData("torrentdownloads-greek.html", "torrentdownloads", "Greek S01e01 2007 Spanish Dvd Xvid [www Torrentmas Com]", "spanish")]
+    [InlineData("nyaa-version.xml", "torrent-rss", "[Erai-raws] Spy x Family Part 2 - 01 ~ 13 (v2) [480p][BATCH][Multiple Subtitle] [ENG][POR-BR][SPA-LA][SPA][ARA][FRE][GER][ITA][RUS]", "russian")]
+    public void ALanguageIsReadWhereverTheCaptureClaimsOne(string fixture, string reader, string name, string language)
+    {
+        Assert.Contains(language, ReleaseName.Parse(Real(fixture, reader, name)).Languages);
+    }
+
+    /// <remarks>
+    /// <strong>H3, still.</strong> <em>Greek</em> is a programme and Greek is
+    /// not in the vocabulary — the page this name came off carries a dozen rows
+    /// with Greek subtitles as well, and both have to read correctly.
+    /// </remarks>
+    [Fact]
+    public void TheLanguageVocabularyStillHasNoGreekInIt()
+    {
+        Assert.Empty(ReleaseName.Parse(Real(
+            "torrentdownloads-greek.html",
+            "torrentdownloads",
+            "Greek S01E01 HR HDTV XviD-2HD")).Languages);
+
+        Assert.Empty(ReleaseName.Parse(Real(
+            "torrentdownloads-greek.html",
+            "torrentdownloads",
+            "Fringe S01e01 Hdtv Xvid notv Greek Subs")).Languages);
+    }
+
+    /// <remarks>
     /// A season with no episode is the whole season, and it answers for every
     /// gap in it. Reading it as an episode would have the plugin download a
     /// season pack believing it was episode nought.
