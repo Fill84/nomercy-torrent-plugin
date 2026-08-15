@@ -5,13 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 2 — Sources and fetch**
-**Slice `S2-06` · Readers, part two** — part done.
+**Slice `S2-07` · JSON and XML sources, owner sources, and the health tool**
 
-All five pages are captured into `tests/fixtures/`. What remains is the readers: TorrentBay,
-TorrentGalaxy, Torrentz2, TorrentDownloads, TorrentFunk — and TorrentBay's signed POST, which is the
-involved one. Read the captures first; what is already known about them is under **Facts** below.
-
-Specification: `docs/plan/SPRINTS.md`, section `S2-06`.
+Specification: `docs/plan/SPRINTS.md`, section `S2-07`.
 
 ## Blocked
 
@@ -51,7 +47,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S2-03` The hidden stage, and Chrome
 - [x] `S2-04` The solver
 - [x] `S2-05` Readers, part one
-- [ ] `S2-06` Readers, part two
+- [x] `S2-06` Readers, part two
 - [ ] `S2-07` JSON and XML sources, owner sources, and the health tool
 
 ### Sprint 3 — Names
@@ -178,7 +174,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   and follows a detail page to its magnet.
 - `S2-06` (part) Five more captures taken, and a third real fault found by taking them: a navigation
   that never finishes threw straight out of the solver and took the caller down with it. Fixed, with
-  a test. The readers are still to write.
+  a test.
+- `S2-06` The five remaining readers, each against its capture. **C4 is now complete**: every reader
+  name in `sources.json` resolves to a reader written for that site, read from the file that ships.
+  TorrentBay's **signed POST moves to `S6-01`** — the endpoint is in an external script the page never
+  names, and the reader's job is the row and the id, which it does. Fourteen rules, fourteen
+  mutations, two of which found rules with no test at all.
 
 ## Decisions
 

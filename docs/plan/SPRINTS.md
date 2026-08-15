@@ -454,14 +454,30 @@ the first size-shaped string in that row *is* the size — so that scoping is de
 
 TorrentBay, TorrentGalaxy, Torrentz2, TorrentDownloads, TorrentFunk.
 
+**Files:** `Core/Sources/Readers/SiteReaders2.cs`
+
 **Steps**
 1. Fixtures for all five.
 2. Test (**D4**): TorrentBay's reader finds rows on the real capture — `static readonly Regex`.
-3. Test: TorrentBay's signed body is built from the four values; a row missing any is not asked.
-4. Test (**E6**): TorrentGalaxy — several bare hashes yield none, exactly one yields it.
-5. Test (**E1, E2**): TorrentFunk — bare attributes parse, and the title keeps its group.
-6. Test: Torrentz2's foreign-site prefix is cut, anchored on ` - `.
-7. Test: TorrentDownloads skips the advert row by matching the numeric id.
+3. Test (**E6**): several bare hashes yield none, exactly one yields it.
+4. Test (**E1, E2**): TorrentFunk — bare attributes parse, and the title keeps its group.
+5. Test: Torrentz2's foreign-site prefix is cut, anchored on ` - `.
+6. Test: TorrentDownloads skips the advert row by matching the numeric id.
+7. Test (**C4**): every reader name in `sources.json` resolves to a non-generic reader, read from the
+   file that ships rather than from a list written in the test.
+
+**TorrentBay's signed POST is not here.** The magnet is fetched by the site's own script from an
+endpoint the page never names: each row carries only a `data-id`, and the page a `csrf-token`. Two of
+the four values are therefore visible and the endpoint is not — it is in an external script that has
+to be read. The reader produces the row and exposes the id; getting a magnet from it is the grab's
+work in `S6-01`, and step 3 of this slice moves there with it.
+
+**E6's rule lives in `Html.OnlyHash`, not in the TorrentGalaxy reader.** The reader takes no hash at
+all, so a mutation there changes nothing — the test that bites is the one on `OnlyHash` itself.
+
+**TorrentFunk answers thirteen real rows** behind a block of advertising that names the search term
+and links to a third host. Its own rows use bare attributes on the cells, which is what E1 is about;
+the hrefs are quoted, so the tolerance is proven by the cell regex rather than by the anchor.
 
 ## S2-07 · JSON and XML sources, owner sources, and the health tool
 

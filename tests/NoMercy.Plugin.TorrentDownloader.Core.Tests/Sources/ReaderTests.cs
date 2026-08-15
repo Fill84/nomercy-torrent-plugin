@@ -1,3 +1,4 @@
+using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using Xunit;
 
@@ -177,28 +178,79 @@ public class ReaderRegistryTests
     {
         Readers readers = All();
 
-        Assert.Null(readers.Named("torrentbay"));
+        // A site nobody has written a reader for. Every name the catalogue
+        // really uses is checked by the test below.
+        Assert.Null(readers.Named("a-site-nobody-has-written-a-reader-for"));
         Assert.NotNull(readers.Named("1337x"));
         Assert.IsType<GenericReader>(readers.For(new("LimeTorrents", "site", "https://x.test/{query}")));
     }
 
     /// <remarks>
-    /// Every reader this slice ships answers to the name the catalogue uses for
-    /// it. The whole-catalogue version of this test belongs to `S2-06`, where
-    /// the last four readers land — asserting it now would only assert that
-    /// they have not been written yet.
+    /// <strong>C4, in full.</strong> Every reader name in <c>sources.json</c>
+    /// resolves to a reader written for that site. The catalogue is read from
+    /// the file that ships rather than from a list written here, so a source
+    /// added with a reader nobody wrote fails this test on the day it is added
+    /// — which is the day it can still be fixed cheaply.
     /// </remarks>
-    [Theory]
-    [InlineData("1337x")]
-    [InlineData("eztv")]
-    [InlineData("kickass")]
-    public void EveryReaderShippedSoFarResolvesToANonGenericReader(string name)
+    [Fact]
+    public void EveryReaderNameTheCatalogueUsesResolvesToANonGenericReader()
     {
-        Assert.IsNotType<GenericReader>(All().Named(name));
+        Readers readers = All();
+
+        string[] named = [.. Catalogue()
+            .Select(source => source.Reader)
+            .Where(reader => reader is not null)
+            .Distinct(StringComparer.OrdinalIgnoreCase)!];
+
+        Assert.NotEmpty(named);
+
+        foreach (string name in named)
+        {
+            ISourceReader? reader = readers.Named(name);
+
+            Assert.True(reader is not null, $"The catalogue names a reader '{name}' that nothing answers to.");
+            Assert.IsNotType<GenericReader>(reader);
+        }
+    }
+
+    /// <summary>The shipped catalogue, read out of the file that deploys.</summary>
+    private static IEnumerable<SourceDefinition> Catalogue()
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+
+        while (directory is not null
+               && !File.Exists(Path.Combine(directory.FullName, "NoMercy.Plugin.TorrentDownloader.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        string json = File.ReadAllText(Path.Combine(
+            directory!.FullName,
+            "src",
+            "NoMercy.Plugin.TorrentDownloader",
+            "sources.json"));
+
+        // Only the reader names are wanted, and Core cannot see the loader that
+        // parses the rest of it.
+        return System.Text.RegularExpressions.Regex
+            .Matches(json, @"""reader""\s*:\s*""([^""]+)""")
+            .Select(match => new SourceDefinition("read from the file", "site", "https://x.test/{query}")
+            {
+                Reader = match.Groups[1].Value,
+            });
     }
 
     private static Readers All()
     {
-        return new(new GenericReader(), new X1337Reader(), new EztvReader(), new KickassReader());
+        return new(
+            new GenericReader(),
+            new X1337Reader(),
+            new EztvReader(),
+            new KickassReader(),
+            new TorrentBayReader(),
+            new TorrentGalaxyReader(),
+            new Torrentz2Reader(),
+            new TorrentDownloadsReader(),
+            new TorrentFunkReader());
     }
 }
