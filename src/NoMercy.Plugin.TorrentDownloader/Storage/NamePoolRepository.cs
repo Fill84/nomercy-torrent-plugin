@@ -54,4 +54,45 @@ public sealed class NamePoolRepository(Database database) : INamePool
 
         await transaction.CommitAsync(ct);
     }
+
+    public async Task<IReadOnlyList<PooledName>> ForAsync(IReadOnlyCollection<string> keys, CancellationToken ct)
+    {
+        if (keys.Count == 0)
+        {
+            return [];
+        }
+
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        // One parameter per key rather than a joined string: a release name is
+        // in the key, and a title with a quote in it would end the statement
+        // and start something else.
+        string[] placeholders = [.. keys.Select((_, index) => $"$key{index}")];
+
+        command.CommandText =
+            $"SELECT normalised, title, source, seen_at FROM name_pool WHERE normalised IN ({string.Join(", ", placeholders)});";
+
+        int position = 0;
+
+        foreach (string key in keys)
+        {
+            command.Parameters.AddWithValue(placeholders[position++], key);
+        }
+
+        List<PooledName> names = [];
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
+
+        while (await reader.ReadAsync(ct))
+        {
+            names.Add(new(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.GetString(2),
+                DateTimeOffset.Parse(reader.GetString(3), System.Globalization.CultureInfo.InvariantCulture)));
+        }
+
+        return names;
+    }
 }

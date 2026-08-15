@@ -27,4 +27,14 @@ public interface INamePool
     /// there under the same key and title.
     /// </summary>
     Task AddAsync(IReadOnlyList<PooledName> names, CancellationToken ct);
+
+    /// <summary>
+    /// Every name kept under any of <paramref name="keys"/>.
+    /// </summary>
+    /// <remarks>
+    /// Asked for many keys at once rather than one at a time: the stage that
+    /// reads this has a whole cycle's worth of episodes in hand, and a query
+    /// per episode is the shape of thing this plugin exists to stop doing.
+    /// </remarks>
+    Task<IReadOnlyList<PooledName>> ForAsync(IReadOnlyCollection<string> keys, CancellationToken ct);
 }

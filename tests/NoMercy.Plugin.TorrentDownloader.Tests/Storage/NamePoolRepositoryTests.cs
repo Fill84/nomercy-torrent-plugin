@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using Xunit;
 
@@ -82,6 +83,43 @@ public class NamePoolRepositoryTests : IAsyncLifetime
         // months is the one worth forgetting first.
         Assert.Equal("SceneSource", only.Source);
         Assert.Equal(When.AddHours(1), await SeenAt(only.Title));
+    }
+
+    /// <remarks>
+    /// Read back by key, and by many keys at once: the stage that reads this
+    /// has a whole cycle's worth of episodes in hand, and a query per episode
+    /// is the shape of thing this plugin exists to stop doing.
+    /// </remarks>
+    [Fact]
+    public async Task NamesAreReadBackByTheKeysTheyWereFiledUnder()
+    {
+        await _pool.AddAsync(
+            [
+                new("silo|s03e06", "Silo.S03E06.1080p.WEB.H264-CAKES", "PreDB", When),
+                new("silo|s03e07", "Silo.S03E07.1080p.WEB.H264-CAKES", "PreDB", When),
+                new("frierenbeyondjourneysend|s01e13", "Frieren.S01E13.1080p.WEB.x264-T3KASHi", "PreDB", When),
+            ],
+            CancellationToken.None);
+
+        IReadOnlyList<PooledName> found = await _pool.ForAsync(
+            ["silo|s03e06", "frierenbeyondjourneysend|s01e13"],
+            CancellationToken.None);
+
+        Assert.Equal(
+            ["Frieren.S01E13.1080p.WEB.x264-T3KASHi", "Silo.S03E06.1080p.WEB.H264-CAKES"],
+            found.Select(name => name.Title).Order());
+    }
+
+    /// <remarks>
+    /// Asking about nothing asks the database nothing. An episode list with no
+    /// misses in it is the ordinary case once the pool is warm.
+    /// </remarks>
+    [Fact]
+    public async Task AskingForNoKeysAnswersNothing()
+    {
+        await _pool.AddAsync([new("silo|s03e06", "Silo.S03E06.1080p.WEB.H264-CAKES", "PreDB", When)], CancellationToken.None);
+
+        Assert.Empty(await _pool.ForAsync([], CancellationToken.None));
     }
 
     /// <remarks>

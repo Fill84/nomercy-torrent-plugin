@@ -558,6 +558,15 @@ failures the owner cannot act on.
 5. Test: forty-two episodes across six seasons cost six queries.
 6. Implement.
 
+**Notes.** `docs/02-library.md` says a show is asked with its year "where a show's title is a common
+word" and defines no test for one. The rule here is **one word**: the four shows in the real library
+that need it are all single words, and adding the year to every show doubles every request.
+
+The pool key is exact, so a release whose title carries more than the show's — `One Piece (Elbaf
+arc)` — is filed under a key nothing looks up. It costs a request and never a wrong download, and
+fixing it means looking the pool up by slot and matching titles with `TitleMatcher`. Recorded under
+**Decisions** rather than done here.
+
 ---
 
 # Sprint 4 — Find and decide

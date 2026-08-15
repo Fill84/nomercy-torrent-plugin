@@ -73,6 +73,34 @@ public sealed class FakeFetch(TimeProvider? time = null) : IFetch
 
     private readonly Dictionary<string, Exception> _throws = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// One body for every address that was not scripted by name.
+    /// </summary>
+    /// <remarks>
+    /// For the tests about <em>what was asked</em> rather than what came back:
+    /// a stage that works out its own query terms cannot have every address it
+    /// will build written down in advance without the test asserting the answer
+    /// twice.
+    /// </remarks>
+    public FakeFetch AnswersAnything(string body)
+    {
+        _anything = body;
+
+        return this;
+    }
+
+    /// <summary>Every address on this host fails, whatever it is.</summary>
+    public FakeFetch FailsHost(string host, FetchOutcome outcome, string reason)
+    {
+        _failedHosts[host] = (outcome, reason);
+
+        return this;
+    }
+
+    private string? _anything;
+    private readonly Dictionary<string, (FetchOutcome Outcome, string Reason)> _failedHosts =
+        new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Whether this address is one the test scripted.</summary>
     public bool Knows(string address)
     {
@@ -86,9 +114,16 @@ public sealed class FakeFetch(TimeProvider? time = null) : IFetch
             _asked.Add(address);
         }
 
+        if (_failedHosts.TryGetValue(address.Host, out (FetchOutcome Outcome, string Reason) refused))
+        {
+            return FetchResult.Failed(FetchFailure.For(refused.Outcome, address, refused.Reason));
+        }
+
         if (!_answers.TryGetValue(address.ToString(), out (string? Body, FetchFailure? Failure, TimeSpan Takes) answer))
         {
-            throw new InvalidOperationException($"Nothing scripted for {address}.");
+            answer = _anything is not null
+                ? (_anything, null, TimeSpan.Zero)
+                : throw new InvalidOperationException($"Nothing scripted for {address}.");
         }
 
         if (_throws.TryGetValue(address.ToString(), out Exception? thrown))

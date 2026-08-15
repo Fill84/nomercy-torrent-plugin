@@ -4,10 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Sprint 3 — Names**
-**Slice `S3-03` · Resolving a name for an episode** — not started.
+**Sprint 4 — Find and decide**
+**Slice `S4-01` · The profile** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S3-03`.
+Specification: `docs/plan/SPRINTS.md`, section `S4-01`. Read first: `docs/04-domain.md` § The
+profile, `docs/10-known-failures.md` § A1, H1.
 
 ## Blocked
 
@@ -53,7 +54,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 3 — Names
 - [x] `S3-01` Parsing release names
 - [x] `S3-02` Harvest
-- [ ] `S3-03` Resolving a name for an episode
+- [x] `S3-03` Resolving a name for an episode
 
 ### Sprint 4 — Find and decide
 - [ ] `S4-01` The profile
@@ -212,6 +213,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   `Frieren.Beyond.Journey.s.End`, `Frieren Beyond Journeys End` and `Frieren- Beyond Journey's End`,
   which are three keys and one episode. The key now runs the words together; matching still counts
   them, because there the gaps are what tell *Silo* from *Silos*. `S3-03` reads the pool.
+- `S3-03` **Sprint 3 is done.** `NameResolve` asks the pool first and a name database only for what
+  the pool cannot answer — and asks it **once per show and season**, so forty-two episodes across six
+  seasons cost six questions per database rather than forty-two. A one-word title is asked with its
+  year as well (*Sugar* answers with beekeeping, *Sugar 2024* with the programme), and an anime show
+  is asked under the bare title too, because an absolute-numbered release carries no season tag at
+  all. What comes back is written to the pool before it is used. `S4-01` judges the names.
 
 ## Decisions
 
@@ -231,6 +238,16 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **A show is asked with its year when its title is one word.** `docs/02-library.md` says "where a
+  show's title is a common word" and defines no test for one; the four shows in the real library
+  that need it — Lucky, Sugar, Lioness, Silo — are all a single word, and adding the year to every
+  show doubles every request for nothing. The rule is one word, and it is in `NameResolve.Terms`.
+- **The pool answers only a release whose title is spelt as the library spells the show.** The key is
+  exact, as `docs/04-domain.md` § Storage schema has it, so `One Piece (Elbaf arc) - 1172` is filed
+  under a key nothing looks up and that name is harvested for nothing. It costs a request, never a
+  wrong download: the name databases are asked and answer. Worth fixing deliberately — the pool would
+  have to be looked up by slot and the titles matched with `TitleMatcher` — and it is not worth
+  inventing a scheme for inside a slice that did not ask for one.
 - **The pool key runs the words of a title together; a title match keeps them apart.** Two
   normalisations, and the reason is in the captures: one Nyaa page spells one episode's show three
   ways, differing only in what became of the apostrophe, so a key that keeps the gaps files three

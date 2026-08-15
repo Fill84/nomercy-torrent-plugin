@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
-using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
@@ -245,33 +244,5 @@ public class HarvestTests
             pool ?? new FakePool(),
             journal ?? new ActivityJournal(),
             clock ?? TimeProvider.System);
-    }
-}
-
-/// <summary>The pool, in memory, so what was written can be looked at.</summary>
-internal sealed class FakePool : INamePool
-{
-    private readonly Lock _lock = new();
-    private readonly List<PooledName> _names = [];
-
-    public IReadOnlyList<PooledName> Names
-    {
-        get
-        {
-            lock (_lock)
-            {
-                return [.. _names];
-            }
-        }
-    }
-
-    public Task AddAsync(IReadOnlyList<PooledName> names, CancellationToken ct)
-    {
-        lock (_lock)
-        {
-            _names.AddRange(names);
-        }
-
-        return Task.CompletedTask;
     }
 }
