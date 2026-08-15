@@ -39,11 +39,35 @@ public sealed class Readers
     public Readers(params ISourceReader[] readers)
     {
         _byName = readers.ToDictionary(reader => reader.Name, StringComparer.OrdinalIgnoreCase);
-        Generic = readers.OfType<GenericReader>().FirstOrDefault() ?? new GenericReader();
     }
 
-    /// <summary>What a source with no reader named gets.</summary>
-    public GenericReader Generic { get; }
+    /// <summary>
+    /// Every reader this plugin has.
+    /// </summary>
+    /// <remarks>
+    /// One list, in one place. A reader written and left out of it reads
+    /// nothing, and the source it was written for goes quiet in a way that
+    /// looks exactly like a site with nothing to offer — which is C4.
+    /// </remarks>
+    public static Readers Shipped()
+    {
+        return new(
+            new GenericReader(),
+            new X1337Reader(),
+            new EztvReader(),
+            new KickassReader(),
+            new TorrentBayReader(),
+            new TorrentGalaxyReader(),
+            new Torrentz2Reader(),
+            new TorrentDownloadsReader(),
+            new TorrentFunkReader(),
+            new RssNameReader(),
+            new TorrentRssReader(),
+            new ApibayReader(),
+            new EztvApiReader(),
+            new SrrdbReader(),
+            new TorznabReader());
+    }
 
     /// <summary>Every reader by name, for the test that keeps the catalogue honest.</summary>
     public IReadOnlyDictionary<string, ISourceReader> ByName => _byName;
@@ -64,8 +88,20 @@ public sealed class Readers
     }
 
     /// <summary>The reader a source should be read with.</summary>
+    /// <remarks>
+    /// The reader it names, or failing that the one named after its kind — and
+    /// nothing else. Ten of the seventeen shipped sources name no reader:
+    /// PreDB's kind is <c>rss</c> and that is the whole of how it is placed, so
+    /// a lookup that only consulted the reader field would hand every feed and
+    /// every JSON endpoint to the reader for an HTML listing.
+    ///
+    /// A named reader nothing answers to still resolves to nothing rather than
+    /// falling through to the kind. That is C4: the generic reader answers
+    /// <em>something</em> on many pages, and something is indistinguishable from
+    /// working.
+    /// </remarks>
     public ISourceReader? For(SourceDefinition source)
     {
-        return source.Reader is null ? Generic : Named(source.Reader);
+        return source.Reader is not null ? Named(source.Reader) : Named(source.Kind);
     }
 }

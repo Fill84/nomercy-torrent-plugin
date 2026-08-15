@@ -33,7 +33,12 @@ public sealed class GenericReader : ISourceReader
         @"<a\s[^>]*href=""([^""]+)""[^>]*>(.*?)</a>",
         RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
 
-    public string Name => "generic";
+    /// <summary>
+    /// The kind it is the reader for, because that is how the catalogue asks
+    /// for it: a source of kind <c>site</c> naming no reader of its own means
+    /// this one, and there is no second way of saying it.
+    /// </summary>
+    public string Name => "site";
 
     public IReadOnlyList<SourceRow> Read(string body, Uri from)
     {

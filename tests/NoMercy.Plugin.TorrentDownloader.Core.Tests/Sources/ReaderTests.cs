@@ -240,17 +240,15 @@ public class ReaderRegistryTests
             });
     }
 
+    /// <summary>
+    /// The registry that ships, never a list written here.
+    /// </summary>
+    /// <remarks>
+    /// A list in the test passes whatever the plugin actually registers, which
+    /// is how a reader can exist, be tested, and be reachable by nothing.
+    /// </remarks>
     private static Readers All()
     {
-        return new(
-            new GenericReader(),
-            new X1337Reader(),
-            new EztvReader(),
-            new KickassReader(),
-            new TorrentBayReader(),
-            new TorrentGalaxyReader(),
-            new Torrentz2Reader(),
-            new TorrentDownloadsReader(),
-            new TorrentFunkReader());
+        return Readers.Shipped();
     }
 }

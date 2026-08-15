@@ -85,6 +85,21 @@ public sealed record SourceDefinition(
     public string? SearchAddress => SearchUrl ?? (Url.Contains("{query}", StringComparison.Ordinal) ? Url : null);
 
     /// <summary>
+    /// Whether <see cref="SearchAddress"/> is the one behind a challenge.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="SearchGated"/> describes <see cref="SearchUrl"/>, and a
+    /// source whose search <em>is</em> its own address has no
+    /// <see cref="SearchUrl"/> for it to describe — 1337x carries
+    /// <c>{query}</c> in the one address it has. Reading
+    /// <see cref="SearchGated"/> for that source says "not gated" about an
+    /// address the catalogue plainly marked gated, and the whole point of the
+    /// flag is to go straight to the browser rather than spend a guaranteed
+    /// refusal finding out.
+    /// </remarks>
+    public bool SearchAddressGated => SearchUrl is not null ? SearchGated : Gated;
+
+    /// <summary>
     /// Every host this source reaches, without duplicates.
     /// </summary>
     /// <remarks>

@@ -95,7 +95,13 @@ internal static class Program
 
         logger.LogInformation("Asking {Name} for '{Term}' at {Address}.", source.Name, term, address);
 
-        FetchResult result = await fetch.GetAsync(address, source.SearchGated || source.Gated, CancellationToken.None);
+        // The flag belonging to the address being asked. Either flag would do
+        // for every source shipped today, but a source with a gated feed and an
+        // open search would be walked into the browser for no reason.
+        FetchResult result = await fetch.GetAsync(
+            address,
+            source.SearchAddress is null ? source.Gated : source.SearchAddressGated,
+            CancellationToken.None);
 
         if (!result.Ok)
         {

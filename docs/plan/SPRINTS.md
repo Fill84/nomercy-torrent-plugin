@@ -491,7 +491,7 @@ the hrefs are quoted, so the tolerance is proven by the cell regex rather than b
 4. Build `tools/SourceHealth` per `docs/05-sources.md` § The health tool.
 5. Test (**G2**): the captured body is cleared between sources; a rate-limited source is retried once
    and reported distinctly.
-6. Test: a page with more than two release-shaped links and zero rows read is reported as a broken
+6. Test: a page with more than two release-shaped names and zero rows read is reported as a broken
    reader.
 
 **Notes.** **Torznab is the one reader with no capture behind it.** This plugin has no Torznab server
@@ -508,7 +508,9 @@ release called *No results returned* into the name pool and search every indexer
 **Nyaa answers nothing for anything that is not anime**, which is an answer. Both captures are kept:
 one asked for an anime, one for a live-action show.
 
-**Sprint 2 done when** `dotnet run --project tools/SourceHealth` reports all seventeen answering.
+**Sprint 2 done when** `dotnet run --project tools/SourceHealth` reports every enabled source
+answering — sixteen of the seventeen shipped, YTS being switched off in the catalogue and so never
+asked. Done on 15 August 2026: sixteen of sixteen, nothing flagged.
 
 ---
 

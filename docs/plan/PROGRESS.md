@@ -4,13 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Sprint 2 — Sources and fetch**
-**Slice `S2-07` · JSON and XML sources, owner sources, and the health tool** — part done.
+**Sprint 3 — Names**
+**Slice `S3-01` · Parsing release names** — not started.
 
-Steps 1 to 3 are done: the six data readers, the owner's Torznab source, and the key that appears
-nowhere. What remains is `tools/SourceHealth` — steps 4 to 6, including **G2**.
-
-Specification: `docs/plan/SPRINTS.md`, section `S2-07`.
+Specification: `docs/plan/SPRINTS.md`, section `S3-01`. Read first: `docs/04-domain.md` § Release
+names, `docs/10-known-failures.md` § H3.
 
 ## Blocked
 
@@ -51,7 +49,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S2-04` The solver
 - [x] `S2-05` Readers, part one
 - [x] `S2-06` Readers, part two
-- [ ] `S2-07` JSON and XML sources, owner sources, and the health tool
+- [x] `S2-07` JSON and XML sources, owner sources, and the health tool
 
 ### Sprint 3 — Names
 - [ ] `S3-01` Parsing release names
@@ -188,6 +186,17 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   without it a scene name matches nothing at all. apibay says "nothing found" as a row saying so, and
   that row is not a release. An owner's Torznab key is sent and appears in no failure, message or log
   line. `tools/SourceHealth` is what remains.
+- `S2-07` **Sprint 2 is done: sixteen of sixteen answering, nothing flagged.** `tools/SourceHealth`
+  walks every enabled source through the same catalogue, fetch, solver and readers the plugin uses
+  and writes `health/report.md` beside the page each one returned. The page is cleared **before**
+  each ask rather than after (**G2**), because a run that throws leaves no way out — and a stale
+  body is how one source's page came to be reported under another's name. A rate-limited source is
+  asked once more, waiting out the gap the gate has just widened, and twice refused is reported as
+  rate-limited and never as a broken reader. Zero rows off a page covered in releases is a broken
+  reader; a source that was never read has no row count at all, because nought means read and empty.
+  Running it found two real faults, both fixed with tests: every source with no `reader` field
+  resolved to the reader for an HTML listing, and all four gated sites were sent down plain HTTP.
+  `S3-01` starts on names.
 
 ## Decisions
 
@@ -207,12 +216,33 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **The health tool counts release-shaped *names*, not links.** `docs/05-sources.md` said links; six
+  of the seventeen sources answer JSON or XML with no anchor and no magnet anywhere in them, so a
+  count of links would report every one of those as having nothing to offer on the day its reader
+  broke. A name is release-shaped when it carries a resolution, a codec or a source — never the
+  episode number, which is in the term searched for and so appears on every page that echoes the
+  question back. Corrected in that document.
+- **A route to a torrent counts the row's own page.** No shipped indexer publishes a magnet on its
+  listing, so a health check insisting on one would flag all of them.
+- **The health tool's tests live in the shell's test project.** The tool sits on top of the shell's
+  fetch — the body it clears is the fetch's own — and Core can see neither.
 - **A challenge that will not clear sometimes clears on the next attempt.** KickassTorrents and
   TorrentBay each refused once and answered a minute later. Retry before concluding a site is gone.
 - **Three things in the captures do not match `docs/05-sources.md`, and the captures win.** EZTV's
   titles end `[eztv]`, not `[eztv.re]`. Neither the EZTV nor the KickassTorrents listing carries a
   magnet at all today, so both need the detail-page route the doc describes for 1337x. Correct that
   document while writing the readers.
+- **A reader is chosen by the source's `reader` field or, failing that, by its `kind`.** Ten of the
+  seventeen shipped sources name no reader at all — PreDB's kind is `rss` and that is the whole of
+  how it is placed — and `Readers.For` consulted only the reader field, so every feed and every JSON
+  endpoint resolved to the reader for an HTML listing. The generic reader's name is now `site`, the
+  kind it answers to, which leaves one rule and no fallback: a *named* reader nothing answers to
+  still resolves to nothing, because falling through to the kind is C4 itself. `Readers.Shipped()`
+  is the one registry and every test reads it rather than a list of its own.
+- **`SearchGated` describes `SearchUrl`, and nothing else.** A source whose search *is* its own
+  address — 1337x carries `{query}` in the one address it has — is gated by `Gated`.
+  `SearchAddressGated` says which applies. The health tool's first real run sent all four gated
+  sites down plain HTTP and every one of them answered with a challenge.
 - **The manifest declares `targetAbi` `10.0`, not the `10.1` the specs said.** The server's
   `PluginAbi.Current` on `dev` is `10.0` and `AbiVerificationStage` is enforced, so `10.1` is refused
   at load. `docs/01-plugin.md` and `docs/reference/README.md` are corrected. `ManifestTests` asks
@@ -299,6 +329,13 @@ Kept here so no slice re-discovers them.
 - Plugin data: `%LOCALAPPDATA%\NoMercy\plugins\data\<pluginId>\`.
 - Logs: `%LOCALAPPDATA%\NoMercy\log\run-*.jsonl`, one JSON object per line, with NUL bytes — strip
   with `tr -d '\000'` before reading.
+- **All sixteen enabled sources answered on 15 August 2026**, gated ones included, and every reader
+  read what its source sent. `health/report.md` is written by `dotnet run --project tools/SourceHealth`
+  and is not committed.
+- A Chrome left behind by a tool run that was killed keeps the profile and port 9222, and a later
+  run's browser hands off to it and exits — so "Starting the browser" appears once per gated source
+  and every tab belongs to the old one. Kill strays under `_capture\browser` before believing a
+  health run. A run that finishes normally leaves none.
 - The plugin loads roughly a minute after the server starts; cadences register only then.
 - Approved network grants did not survive a server restart on this machine. Expect to be asked again
   after every deploy.

@@ -183,6 +183,43 @@ public class SourceDefinitionTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <c>SearchGated</c> describes <c>SearchUrl</c>, and a source whose search
+    /// <em>is</em> its own address has no <c>SearchUrl</c> for it to describe.
+    /// Reading it anyway says "not gated" about an address the catalogue
+    /// plainly marked gated.
+    /// </para>
+    /// <para>
+    /// Measured, and it is why this exists: the health tool sent all four
+    /// gated sites down plain HTTP on its first real run, and every one of them
+    /// answered with a challenge that no amount of retrying was going to clear.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ASourceWhoseSearchIsItsOwnAddressIsGatedByThatAddressesOwnFlag()
+    {
+        SourceDefinition oneAddress = new("1337x", "site", "https://www.1337x.to/search/{query}/1/")
+        {
+            Gated = true,
+        };
+
+        Assert.True(oneAddress.SearchAddressGated);
+
+        // Two addresses, and only the second of them is behind a challenge.
+        SourceDefinition twoAddresses = new("PreDB", "rss", "https://predb.me/?rss=1")
+        {
+            SearchUrl = "https://predb.me/?search={query}&rss=1",
+            SearchGated = true,
+        };
+
+        Assert.True(twoAddresses.SearchAddressGated);
+        Assert.False(twoAddresses.Gated);
+
+        // And a source with one address that is not gated is not gated.
+        Assert.False(new SourceDefinition("Nyaa", "torrent-rss", "https://nyaa.si/?page=rss&q={query}").SearchAddressGated);
+    }
+
+    /// <remarks>
     /// The placeholder is not legal in a URI, so an address carrying one still
     /// has to yield its host.
     /// </remarks>

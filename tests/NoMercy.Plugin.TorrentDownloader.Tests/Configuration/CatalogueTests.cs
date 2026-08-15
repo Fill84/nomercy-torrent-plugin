@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugins.Abstractions;
@@ -42,6 +43,32 @@ public class CatalogueTests
         IReadOnlyList<SourceDefinition> sources = new CatalogueLoader(new CapturingLogger()).Load();
 
         Assert.All(sources, source => Assert.NotEqual(SourceRole.None, source.Role));
+    }
+
+    /// <remarks>
+    /// <strong>C4, from the other end.</strong> The registry test in Core asks
+    /// that every reader the catalogue <em>names</em> exists. This asks the
+    /// larger question: that every enabled source is read by a reader written
+    /// for it. Ten of the seventeen name no reader at all and are placed by
+    /// their kind, so a source whose kind nothing answers to would be fetched
+    /// every cycle and read by whatever happened to be the fallback — which is
+    /// C4 wearing a different hat.
+    /// </remarks>
+    [Fact]
+    public void EveryEnabledShippedSourceIsReadByTheReaderNamedForIt()
+    {
+        Readers readers = Readers.Shipped();
+        IReadOnlyList<SourceDefinition> sources = new CatalogueLoader(new CapturingLogger()).Load();
+
+        Assert.NotEmpty(sources);
+
+        foreach (SourceDefinition source in sources.Where(source => source.Enabled))
+        {
+            ISourceReader? reader = readers.For(source);
+
+            Assert.True(reader is not null, $"Nothing reads {source.Name}.");
+            Assert.Equal(source.Reader ?? source.Kind, reader!.Name);
+        }
     }
 
     /// <remarks>

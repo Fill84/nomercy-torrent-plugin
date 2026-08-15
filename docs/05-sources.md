@@ -189,7 +189,14 @@ each source returned.
 A source is flagged when it does not answer, offers no route to a torrent, returns far fewer rows
 than last time, or — the case it exists for — when **the page is covered in torrents and the reader
 saw none of them**. It distinguishes that from a site that honestly has nothing by counting
-release-shaped links in the body.
+release-shaped **names** in the body: six of the seventeen answer JSON or XML with no anchor and no
+magnet anywhere in them, so a count of links would report every one of those as having nothing on
+the day its reader broke. A name is release-shaped when it carries a resolution, a codec or a
+source — never the episode number, which is in the term that was searched for and so appears on
+every page that echoes the question back.
+
+A route to a torrent is a magnet, an info hash **or the row's own page**. No shipped indexer
+publishes a magnet on its listing, so insisting on one would flag all of them.
 
 It clears the captured body between sources, and a source that rate-limits us is asked once more
 after a wait rather than recorded as broken.

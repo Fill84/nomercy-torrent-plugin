@@ -1,6 +1,13 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The shell, against a fake host. Still no network. -->
+  <!--
+    The shell, against a fake host. Still no network.
+
+    It also holds the health tool's tests. The tool is where that judgement
+    lives — what a source answered, and whether the reader saw it — and it sits
+    on top of the shell's fetch, so its tests belong on this side of the wall
+    rather than in Core, which cannot see either.
+  -->
 
   <PropertyGroup>
     <IsTestProject>true</IsTestProject>
@@ -15,6 +22,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\NoMercy.Plugin.TorrentDownloader\NoMercy.Plugin.TorrentDownloader.csproj" />
+    <ProjectReference Include="..\..\tools\SourceHealth\SourceHealth.csproj" />
   </ItemGroup>
 
 </Project>
