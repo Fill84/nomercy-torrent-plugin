@@ -2,7 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace NoMercy.Plugin.TorrentDownloader.Core.Domain;
+namespace NoMercy.Plugin.TorrentDownloader.Core.Naming;
 
 /// <summary>
 /// Whether a release is for the show that was asked about.
@@ -38,6 +38,33 @@ public static class TitleMatcher
         return show.Length != 0
                && release.Length >= show.Length
                && release.Take(show.Length).SequenceEqual(show, StringComparer.Ordinal);
+    }
+
+    /// <summary>
+    /// A title as one string, normalised the same way a comparison normalises
+    /// it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the pool key, which two stages that never meet have to spell
+    /// identically. Sharing the folding rather than repeating it is the point:
+    /// a second copy that handled accents differently would file a name under a
+    /// key nothing ever looks up.
+    /// </para>
+    /// <para>
+    /// The words are run together here, and that is the difference from
+    /// <see cref="Matches"/>. One Nyaa page carries the same episode as
+    /// <c>Frieren.Beyond.Journey.s.End</c>, <c>Frieren Beyond Journeys End</c>
+    /// and <c>Frieren- Beyond Journey's End</c>: the apostrophe is a space in
+    /// one, a letter's worth of nothing in another and a dot in the third, so
+    /// any key that keeps the gaps files three names for one episode. Matching
+    /// keeps its words, because there the gaps are what tell <em>Silo</em> from
+    /// <em>Silos</em>.
+    /// </para>
+    /// </remarks>
+    public static string Normalised(string title)
+    {
+        return string.Concat(Words(title));
     }
 
     /// <summary>

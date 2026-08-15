@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace NoMercy.Plugin.TorrentDownloader.Core.Domain;
+namespace NoMercy.Plugin.TorrentDownloader.Core.Naming;
 
 /// <summary>
 /// What a release name says about itself.

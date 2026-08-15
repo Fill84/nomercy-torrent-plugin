@@ -5,10 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 3 — Names**
-**Slice `S3-02` · Harvest** — not started.
+**Slice `S3-03` · Resolving a name for an episode** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S3-02`. Read first: `docs/03-architecture.md`
-§ Stages, `docs/10-known-failures.md` § A2.
+Specification: `docs/plan/SPRINTS.md`, section `S3-03`.
 
 ## Blocked
 
@@ -53,7 +52,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 3 — Names
 - [x] `S3-01` Parsing release names
-- [ ] `S3-02` Harvest
+- [x] `S3-02` Harvest
 - [ ] `S3-03` Resolving a name for an episode
 
 ### Sprint 4 — Find and decide
@@ -205,6 +204,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   One Piece is posted every week and which the parser now reads, and the same programme spelled
   *Pokémon* and *Pokemon* in one title, which is why accents are folded. `S3-02` harvests names into
   the pool.
+- `S3-02` `Harvest` in Core reads every feed at its own address, all of them at once, and keeps what
+  it finds in `name_pool` through `INamePool`. **A2** is one line: a feed is read at `Url` and never
+  at its search address. A feed that refuses, and a feed that throws, each cost that feed and
+  nothing else — 0.3.4 read them in turn inside one try block, so the first refusal ended the pass.
+  Writing the pool key found a real fault: one Nyaa page carries one episode as
+  `Frieren.Beyond.Journey.s.End`, `Frieren Beyond Journeys End` and `Frieren- Beyond Journey's End`,
+  which are three keys and one episode. The key now runs the words together; matching still counts
+  them, because there the gaps are what tell *Silo* from *Silos*. `S3-03` reads the pool.
 
 ## Decisions
 
@@ -224,6 +231,15 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **The pool key runs the words of a title together; a title match keeps them apart.** Two
+  normalisations, and the reason is in the captures: one Nyaa page spells one episode's show three
+  ways, differing only in what became of the apostrophe, so a key that keeps the gaps files three
+  names for one episode. A match cannot run them together, or *Silos* begins with *Silo*.
+- **The feed cadence is not wired to the harvest yet.** It needs the fetch chain, the browser and
+  the host grants assembled in one place, which is `S4-04`. Noted in `SPRINTS.md` under `S3-02` and
+  in the plugin beside the cadence itself, so neither reads as an oversight.
+- **Release-name parsing lives in `Core/Naming`**, where `docs/03-architecture.md` § Project layout
+  puts it. `S3-01` wrote it into `Core/Domain`; moved with no other change.
 - **A release name's codec is answered as a family**: `h264`, `h265`, `xvid`, `divx`. `H.264`,
   `x264`, `AVC` and a bare `264` are one codec, and a rule written against a spelling refuses six
   copies of the thing it was asked to accept.

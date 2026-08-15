@@ -1,7 +1,7 @@
-using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using Xunit;
 
-namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Domain;
+namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Naming;
 
 /// <summary>
 /// Whether a release is for the show that was asked about.

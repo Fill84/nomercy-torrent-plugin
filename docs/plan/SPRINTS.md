@@ -543,6 +543,10 @@ asked. Done on 15 August 2026: sixteen of sixteen, nothing flagged.
 5. Test: every harvest step publishes to the journal.
 6. Implement, writing the pool to `name_pool` so a restart mid-cycle does not re-harvest.
 
+**Notes.** The feed cadence is **not** wired to the harvest here. Running it needs the fetch chain,
+the browser and the host grants assembled in one place, which is `S4-04`; half a chain would report
+failures the owner cannot act on.
+
 ## S3-03 · Resolving a name for an episode
 
 **Steps**

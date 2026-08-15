@@ -191,7 +191,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         AnnounceOnce();
 
         // Every cadence's work arrives in its own slice: transfers in S6-02,
-        // feed in S3-02, search in S4-04, maintenance in S1-02.
+        // maintenance in S1-02, and the rest in S4-04 — the harvest exists and
+        // is tested, but running it needs the fetch chain, the browser and the
+        // host grants assembled in one place, which is what that slice is for.
+        // Half a chain here would report failures the owner could not act on.
         return Task.CompletedTask;
     }
 

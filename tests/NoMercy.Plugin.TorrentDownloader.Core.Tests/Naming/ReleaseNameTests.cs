@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
-using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using Xunit;
 
-namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Domain;
+namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Naming;
 
 /// <summary>
 /// Parsing a release name, against names sites really printed.
