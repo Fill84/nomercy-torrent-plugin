@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 4 — Find and decide**
-**Slice `S4-03` · Deciding** — not started.
+**Slice `S4-04` · The pipeline end to end** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S4-03`.
+Specification: `docs/plan/SPRINTS.md`, section `S4-04`.
 
 ## Blocked
 
@@ -58,7 +58,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 4 — Find and decide
 - [x] `S4-01` The profile
 - [x] `S4-02` Find
-- [ ] `S4-03` Deciding
+- [x] `S4-03` Deciding
 - [ ] `S4-04` The pipeline end to end
 
 ### Sprint 5 — BitTorrent
@@ -235,6 +235,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   and only when it has no magnet: `tools/Capture` grew a `--page` form to take the two detail
   captures that proves it, one publishing a magnet and one printing a bare hash and nothing else.
   `S4-03` decides between what comes back.
+- `S4-03` `Decisions` holds what one cycle has decided so far, which is where the rules that need
+  more than one release live: a pack is worth its bytes only once the season's gaps reach
+  `SeasonPackThreshold`, a pack that is taken settles every gap it covers so none of them is searched
+  for again, and everything refused is kept with the episode, the site and the reason for the Skipped
+  page. A name the profile refused is recorded with **no** site against it — nothing was asked, so no
+  site refused anything. `S4-04` runs the whole chain.
 
 ## Decisions
 
