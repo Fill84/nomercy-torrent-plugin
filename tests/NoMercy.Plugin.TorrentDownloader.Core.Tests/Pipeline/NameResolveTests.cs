@@ -181,6 +181,35 @@ public class NameResolveTests
     }
 
     /// <remarks>
+    /// A season pack in the pool is a candidate for every episode of that
+    /// season — the harvest files one under its season and nothing else would
+    /// ever look there, so without this the pack rules could not be reached at
+    /// all. It is not an <em>answer</em>, though: whether a pack is worth
+    /// taking depends on how many gaps the season has, and an episode whose
+    /// only candidate is a pack still asks the name databases for a release of
+    /// its own.
+    /// </remarks>
+    [Fact]
+    public async Task ASeasonPackIsACandidateForEveryEpisodeOfThatSeasonAndNeverAnAnswer()
+    {
+        FakePool pool = new();
+        await pool.AddAsync(
+            [new(PoolKey.ForSeason("Silo", 3), "Silo.S03.1080p.WEB.H264-CAKES", "PreDB", When)],
+            CancellationToken.None);
+
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, pool)
+            .ResolveAsync([Episode("Silo", 3, 6)], CancellationToken.None);
+
+        Assert.Contains("Silo.S03.1080p.WEB.H264-CAKES", Assert.Single(resolved).Titles);
+
+        // And it was still asked, because a pack is not an answer.
+        Assert.NotEmpty(fetch.Asked);
+    }
+
+    /// <remarks>
     /// What comes back is pooled, so the next episode of that season — and the
     /// next cycle — costs nothing. A stage that asked and threw the answer away
     /// would ask again every six hours for ever.

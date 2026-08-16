@@ -25,6 +25,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private IPluginContext? _context;
     private SettingsStore? _settings;
     private LiveSnapshot? _live;
+    private Chain? _chain;
+
+    /// <summary>What the last search cycle decided, for the pages that say so.</summary>
+    private CycleReport? _lastCycle;
+    private DateTimeOffset? _lastCycleAt;
+    private int _running;
+    private int _unconfigured;
     private int _announced;
     private bool _disposed;
 
@@ -116,6 +123,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
     }
 
+    /// <summary>The database, migrated up to date before anything opens it.</summary>
+    private async Task<Database> DatabaseAsync(CancellationToken ct)
+    {
+        await EpisodesAsync(ct);
+
+        return _database ?? throw new InvalidOperationException("The plugin has not been initialised.");
+    }
+
     /// <summary>
     /// The episode store, migrated up to date before it is first handed out.
     /// </summary>
@@ -174,7 +189,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return ExecuteAsync(JobNames.Transfers, ct);
     }
 
-    public Task ExecuteAsync(string jobName, CancellationToken ct = default)
+    public async Task ExecuteAsync(string jobName, CancellationToken ct = default)
     {
         if (!JobNames.All.Contains(jobName))
         {
@@ -190,12 +205,128 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         AnnounceOnce();
 
-        // Every cadence's work arrives in its own slice: transfers in S6-02,
-        // maintenance in S1-02, and the rest in S4-04 — the harvest exists and
-        // is tested, but running it needs the fetch chain, the browser and the
-        // host grants assembled in one place, which is what that slice is for.
-        // Half a chain here would report failures the owner could not act on.
-        return Task.CompletedTask;
+        // The plugin's own lifetime, never the caller's: a cycle belongs to the
+        // plugin and a cadence tick that returns must not take it down with it.
+        using CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(Lifetime);
+
+        switch (jobName)
+        {
+            case JobNames.Feed:
+                await HarvestAsync(work.Token);
+                break;
+
+            case JobNames.Search:
+                await SearchAsync(work.Token);
+                break;
+
+            // Transfers arrive in S6-02 and maintenance in S8-04; both need
+            // something this build does not have yet — a torrent client and a
+            // library refresh on a cadence.
+            default:
+                break;
+        }
+    }
+
+    /// <summary>Reads every feed into the name pool.</summary>
+    private async Task HarvestAsync(CancellationToken ct)
+    {
+        if (await ChainAsync(ct) is not (Chain chain, Settings settings))
+        {
+            return;
+        }
+
+        await chain.Harvest(settings).RunAsync(ct);
+    }
+
+    /// <summary>
+    /// Looks for every missing episode and takes what the profile accepts.
+    /// </summary>
+    /// <remarks>
+    /// The report is kept so the pages can say what this cycle decided about
+    /// each episode. Nothing is written to the store here: recording a grab is
+    /// <c>S6-01</c>, and a decision the plugin cannot yet act on is not a fact
+    /// about an episode.
+    /// </remarks>
+    private async Task SearchAsync(CancellationToken ct)
+    {
+        if (await ChainAsync(ct) is not (Chain chain, Settings settings))
+        {
+            return;
+        }
+
+        IReadOnlyList<TrackedEpisode> tracked = await Tracked(ct);
+
+        Interlocked.Increment(ref _running);
+
+        try
+        {
+            _lastCycle = await chain.Search(settings).RunAsync(
+                tracked,
+                settings.Profile,
+                // The blacklist is S6-02's, written when a download fails.
+                // Nothing has ever written to it yet, and an empty set says
+                // exactly that.
+                Blacklist.None,
+                settings.DryRun,
+                ct);
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _running);
+            _lastCycleAt = DateTimeOffset.UtcNow;
+        }
+    }
+
+    /// <summary>What the last cycle decided about each episode it looked at.</summary>
+    /// <remarks>
+    /// Held rather than stored: a decision the plugin cannot yet act on is not
+    /// a fact about an episode, and writing one would have the pages state it
+    /// as though it were. Recording a real grab is <c>S6-01</c>.
+    /// </remarks>
+    public IReadOnlyList<EpisodeOutcome> LastCycle => _lastCycle?.Outcomes ?? [];
+
+    /// <summary>
+    /// The one chain, built on first use and kept.
+    /// </summary>
+    /// <remarks>
+    /// Not in <c>Initialize</c>, which does no I/O: this reads the settings,
+    /// the catalogue beside the assembly and asks the server for grants. Behind
+    /// the same semaphore as the migration because two cadences can tick at
+    /// once on a plugin that has just loaded.
+    /// </remarks>
+    private async Task<(Chain Chain, Settings Settings)?> ChainAsync(CancellationToken ct)
+    {
+        Settings settings = await Settings.LoadAsync(ct);
+
+        if (settings.IncompleteFolder.Length == 0 || settings.IntakeFolder.Length == 0)
+        {
+            // A plugin nobody has configured does nothing at all, and says so
+            // once. It has nowhere to put a download, so searching for one
+            // would spend every site's patience on a file that could only be
+            // thrown away — and the owner would see activity and no results.
+            SayOnce(ref _unconfigured, "No folders are configured, so nothing is searched for. Set them in Settings.");
+
+            return null;
+        }
+
+        await _migrating.WaitAsync(ct);
+
+        try
+        {
+            _chain ??= new(
+                _context ?? throw new InvalidOperationException("The plugin has not been initialised."),
+                _journal,
+                new NamePoolRepository(await DatabaseAsync(ct)),
+                new CatalogueLoader(_context.Logger).Load());
+        }
+        finally
+        {
+            _migrating.Release();
+        }
+
+        await _chain.PrepareAsync(settings, ct);
+
+        return (_chain, settings);
     }
 
     public async Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
@@ -233,14 +364,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// What the status bar says about the search cycle.
     /// </summary>
     /// <remarks>
-    /// Nothing is known yet, and the page says exactly that rather than drawing
-    /// a nought: no cycle has run because the pipeline that runs one arrives in
-    /// S4-04, and the time of the next is a cron this plugin cannot yet read.
-    /// Reporting a cycle that did not happen is the fault this rule exists for.
+    /// When a cycle has run, when it finished; before then, null — which the
+    /// page draws as "never run" rather than as nought. The time of the next
+    /// one stays unknown: a cadence's schedule belongs to the host that
+    /// registered it, and this plugin is never told it.
     /// </remarks>
     private CycleStatus CurrentCycle()
     {
-        return CycleStatus.Unknown;
+        return new(_running > 0, _lastCycleAt, null);
     }
 
     public void Dispose()
@@ -256,6 +387,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         _disposed = true;
         _lifetime.Cancel();
+
+        // Before the token source goes: the chain owns a browser and a desktop,
+        // and a Chrome that outlives the plugin is one nobody can see to close.
+        _chain?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _lifetime.Dispose();
 
         // After the token, so anything stopping on it that publishes a last
@@ -273,6 +408,22 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// onto one that was not stopped fails and the old build stays, which looks
     /// exactly like a deploy that worked (docs/01-plugin.md § Deploying).
     /// </remarks>
+    /// <summary>
+    /// Says something once, however many times a cadence ticks.
+    /// </summary>
+    /// <remarks>
+    /// Transfers alone ticks every minute, and a line a minute is a line
+    /// nobody reads — which is how a message that mattered went unnoticed in
+    /// 0.3.4's log.
+    /// </remarks>
+    private void SayOnce(ref int said, string message)
+    {
+        if (Interlocked.Exchange(ref said, 1) == 0)
+        {
+            _context?.Logger.LogInformation("{Message}", message);
+        }
+    }
+
     private void AnnounceOnce()
     {
         if (Interlocked.Exchange(ref _announced, 1) != 0)

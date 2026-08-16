@@ -87,7 +87,7 @@ public class DecisionsTests
     public void ASingleEpisodeSettlesOnlyItself()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "1080p", MinimumSeeders = 2 },
+            new() { MaximumResolution = "720p", MinimumSeeders = 2 },
             [Silo(6), Silo(7)],
             Blacklist.None);
 
@@ -106,7 +106,7 @@ public class DecisionsTests
     public void ABlacklistedTitleOrHashIsNeverChosen()
     {
         Decisions byTitle = new(
-            new() { MaximumResolution = "1080p", MinimumSeeders = 2 },
+            new() { MaximumResolution = "720p", MinimumSeeders = 2 },
             [Silo(6)],
             Blacklist.Of(Blacklist.KeyOf(Single.Original)));
 
@@ -114,7 +114,7 @@ public class DecisionsTests
         Assert.Null(byTitle.Choose(Silo(6), Single, [Copy(Single.Original, seeders: 40)]).Chosen);
 
         Decisions byHash = new(
-            new() { MaximumResolution = "1080p", MinimumSeeders = 2 },
+            new() { MaximumResolution = "720p", MinimumSeeders = 2 },
             [Silo(6)],
             Blacklist.Of(Hash));
 
@@ -131,7 +131,7 @@ public class DecisionsTests
     public void ARefusedReleaseIsRecordedWithItsReason()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "1080p", MinimumSeeders = 10 },
+            new() { MaximumResolution = "720p", MinimumSeeders = 10 },
             [Silo(6)],
             Blacklist.None);
 

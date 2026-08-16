@@ -183,6 +183,35 @@ public class FindTests
     }
 
     /// <remarks>
+    /// And a copy that carries a hash needs no page at all: a hash is
+    /// everything a magnet is made of. LimeTorrents publishes a hashed
+    /// <c>.torrent</c> link on every row and no magnet anywhere, so following
+    /// those pages would be one request per grab for a torrent already in hand.
+    /// </remarks>
+    [Fact]
+    public async Task ACopyThatCarriesAHashIsNotFollowedEither()
+    {
+        FakeFetch fetch = new();
+
+        ReleaseCopy hashed = new(
+            Name,
+            "LimeTorrents",
+            35,
+            "92D8A3F6864911EF292B4BE0DD5286406396D2B3",
+            null,
+            new(Detail),
+            12);
+
+        ReleaseCopy answered = await Finding(fetch).FollowAsync(hashed, CancellationToken.None);
+
+        Assert.Empty(fetch.Asked);
+        Assert.StartsWith(
+            "magnet:?xt=urn:btih:92D8A3F6864911EF292B4BE0DD5286406396D2B3",
+            answered.Magnet,
+            StringComparison.Ordinal);
+    }
+
+    /// <remarks>
     /// <strong>B4.</strong> Between two acceptable copies the higher-rated
     /// indexer wins, asserted with priorities that differ. 0.3.4 sorted the
     /// other way and took the worst-rated site every time two copies were level

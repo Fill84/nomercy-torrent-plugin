@@ -59,7 +59,7 @@ public sealed class NameResolve(
         // One question for the whole cycle rather than one per episode: the
         // store is a file on a disk the media server is also using.
         IReadOnlyList<PooledName> pooled = await pool.ForAsync(
-            [.. episodes.SelectMany(Keys).Distinct(StringComparer.Ordinal)],
+            [.. episodes.SelectMany(AllKeys).Distinct(StringComparer.Ordinal)],
             ct);
 
         Dictionary<string, List<string>> byKey = Group(pooled);
@@ -103,7 +103,7 @@ public sealed class NameResolve(
             .. episodes.Select(episode => new ResolvedNames(
                 episode.Key,
                 [
-                    .. Keys(episode)
+                    .. AllKeys(episode)
                         .SelectMany(key => byKey.TryGetValue(key, out List<string>? titles) ? titles : [])
                         .Distinct(StringComparer.Ordinal),
                 ])),
@@ -245,11 +245,12 @@ public sealed class NameResolve(
     }
 
     /// <summary>
-    /// Every key this episode could be answered under.
+    /// Every key that <em>answers</em> for this episode.
     /// </summary>
     /// <remarks>
     /// Two for anime, because the same episode is posted under both forms and
-    /// neither can be worked out from the other.
+    /// neither can be worked out from the other. A season pack is deliberately
+    /// not among them — see <see cref="AllKeys"/>.
     /// </remarks>
     private static IEnumerable<string> Keys(TrackedEpisode episode)
     {
@@ -259,6 +260,29 @@ public sealed class NameResolve(
         {
             yield return PoolKey.ForAbsolute(episode.ShowTitle, absolute);
         }
+    }
+
+    /// <summary>
+    /// Every key worth reading for this episode, the season's pack included.
+    /// </summary>
+    /// <remarks>
+    /// A pack is a <em>candidate</em> and never an answer, and the difference
+    /// is the whole reason there are two of these. It is a candidate because
+    /// the harvest files a pack under its season and nothing else would ever
+    /// look there, so the pack rules could not be reached at all. It is not an
+    /// answer because whether a pack is worth taking depends on how many gaps
+    /// that season has — and if a single pack sitting in the pool counted as
+    /// having answered, an episode in a season with one gap would never be
+    /// asked about again.
+    /// </remarks>
+    private static IEnumerable<string> AllKeys(TrackedEpisode episode)
+    {
+        foreach (string key in Keys(episode))
+        {
+            yield return key;
+        }
+
+        yield return PoolKey.ForSeason(episode.ShowTitle, episode.Key.Season);
     }
 
     private static Dictionary<string, List<string>> Group(IReadOnlyList<PooledName> names)

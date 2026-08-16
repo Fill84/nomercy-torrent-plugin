@@ -75,6 +75,34 @@ public class TorrentDownloaderPluginTests
     }
 
     /// <remarks>
+    /// A plugin nobody has configured does nothing at all, and says so once. It
+    /// has nowhere to put a download, so searching for one would spend every
+    /// site's patience on a file that could only be thrown away — and the owner
+    /// would see activity and no results.
+    ///
+    /// It is also what keeps this project's rule true: these tests touch no
+    /// network. A feed tick on a fresh install builds no chain, starts no
+    /// browser and asks nobody anything.
+    /// </remarks>
+    [Fact]
+    public async Task AnUnconfiguredPluginSearchesForNothingAndSaysSo()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        plugin.Initialize(context);
+
+        await plugin.ExecuteAsync(JobNames.Feed, CancellationToken.None);
+        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+
+        Assert.Empty(plugin.LastCycle);
+        Assert.Empty(plugin.Journal.Snapshot().History);
+
+        string[] said = [.. context.Log.Lines.Where(line => line.Contains("No folders", StringComparison.Ordinal))];
+
+        Assert.Single(said);
+    }
+
+    /// <remarks>
     /// One line, however many ticks. Transfers alone ticks every minute, and a
     /// line a minute is a line nobody reads. What it answers is which version
     /// is loaded — the question a deploy that copied nothing leaves open.

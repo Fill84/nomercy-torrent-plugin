@@ -134,7 +134,29 @@ public sealed class Decisions
     /// </summary>
     public Decision Choose(TrackedEpisode episode, ReleaseName name, IReadOnlyList<ReleaseCopy> copies)
     {
-        Decision decision = _decider.Decide(copies, _blacklisted);
+        // What a site answered with is not necessarily what it was asked for.
+        // A search puts a release name to seventeen indexers and each one
+        // answers with whatever its own search engine thought; the copy's own
+        // announced title has to pass the same rules the name did, or a row
+        // for another programme entirely is taken because it happened to come
+        // back well seeded.
+        List<ReleaseCopy> forThisEpisode = [];
+
+        foreach (ReleaseCopy copy in copies)
+        {
+            Verdict verdict = _filter.JudgeName(ReleaseName.Parse(copy.Title), episode, _blacklisted);
+
+            if (verdict.Accepted)
+            {
+                forThisEpisode.Add(copy);
+            }
+            else
+            {
+                _skipped.Add(new(episode.Key, copy.Title, copy.Source, verdict.Reason));
+            }
+        }
+
+        Decision decision = _decider.Decide(forThisEpisode, _blacklisted);
 
         foreach ((ReleaseCopy copy, string reason) in decision.Refused)
         {

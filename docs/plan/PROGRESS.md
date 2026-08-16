@@ -4,15 +4,20 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Sprint 4 — Find and decide**
-**Slice `S4-04` · The pipeline end to end** — not started.
+**Sprint 5 — BitTorrent**
+**Slice `S5-01` · Bencode** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S4-04`.
+Specification: `docs/plan/SPRINTS.md`, section `S5-01`. Read `docs/06-torrent-client.md` once at the
+start of the sprint.
 
 ## Blocked
 
 Nothing. Two things wait on the owner without blocking anything:
 
+- **Sprint 4's acceptance on the real library.** The chain decides end to end and is proven against
+  real captured pages, but "the dashboard shows what it would take for every missing episode" needs
+  0.4.0 on `beast-unit` and a stopped server. It runs with no torrent client and says so per episode,
+  which is exactly what dry run shows; say when, and it can be deployed and watched.
 - **Sprint 1's acceptance against the real library.** `HandCountedLibraryTests` proves the chain
   against a library counted by hand, but "the Shows page matches *the* library" needs 0.4.0 on
   `beast-unit`, and a deploy needs the server stopped. Say when, and it can be checked against the
@@ -59,7 +64,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S4-01` The profile
 - [x] `S4-02` Find
 - [x] `S4-03` Deciding
-- [ ] `S4-04` The pipeline end to end
+- [x] `S4-04` The pipeline end to end
 
 ### Sprint 5 — BitTorrent
 - [ ] `S5-01` Bencode
@@ -241,6 +246,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   for again, and everything refused is kept with the episode, the site and the reason for the Skipped
   page. A name the profile refused is recorded with **no** site against it — nothing was asked, so no
   site refused anything. `S4-04` runs the whole chain.
+- `S4-04` **Sprint 4 is done.** `SearchCycle` runs names, search, decision and grab for every gap in
+  queue order, and reports one outcome per episode with the release, the site, the count and a reason
+  in words. `Chain` in the shell assembles what talks to the outside — catalogue, gate, grants,
+  browser, solver, pool — once, and the feed and search cadences run through it. Three real faults
+  came out of joining the parts up: a season pack was pooled under its season and looked up by
+  nobody, so no pack could ever be taken; nothing checked that a copy a site answered with was a copy
+  of what was asked for; and a copy carrying a hash was followed to its own page for a magnet it
+  already had. All three are fixed with tests. `S5-01` starts the torrent client.
 
 ## Decisions
 
@@ -260,6 +273,20 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **An unconfigured plugin searches for nothing and says so once.** It has nowhere to put a
+  download, so a cycle would spend every site's patience on a file that could only be thrown away.
+  It is also what keeps the shell's tests off the network: a feed tick on a fresh install builds no
+  chain and starts no browser.
+- **A copy's own announced title is judged by the name rules too.** A search puts a release name to
+  seventeen indexers and each answers with whatever its own search engine thought; without this a row
+  for another programme is taken because it came back well seeded.
+- **A season pack is a candidate for every episode of its season, and never an answer.** The harvest
+  files a pack under its season and nothing else would look there, so the pack rules were
+  unreachable. It is not an answer because an episode whose season has one gap would otherwise never
+  be asked about again.
+- **At most `MaxSearchAttempts` names are searched for per episode per cycle.** Twenty spellings of
+  one release times seventeen indexers is a cycle that gets the plugin banned. The setting already
+  means "how many times an episode is looked for", so it is that number rather than a new one.
 - **A magnet is built from a bare info hash when a detail page prints one.** TorrentFunk's page
   carries no magnet at all — the real capture has exactly one forty-hex string on it — and a hash is
   all a magnet needs. The trackers come from whatever else knows the torrent, and from the owner's

@@ -54,6 +54,16 @@ public sealed class Find(
             return chosen;
         }
 
+        if (chosen.InfoHash is string known)
+        {
+            // A hash is all a magnet needs, so a copy that has one is already
+            // reachable and its page has nothing to add. LimeTorrents publishes
+            // a hashed .torrent link on every row and nothing else, and
+            // following those pages would be a request per grab for a torrent
+            // already in hand.
+            return chosen with { Magnet = Magnets.For(known, chosen.Title) };
+        }
+
         SourceDefinition? indexer = catalogue.Enabled
             .FirstOrDefault(source => string.Equals(source.Name, chosen.Source, StringComparison.OrdinalIgnoreCase));
 
