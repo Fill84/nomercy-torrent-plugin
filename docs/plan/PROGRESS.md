@@ -5,10 +5,10 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-02` · Torrent metadata and magnets** — not started.
+**Slice `S5-03` · The engine shell and its port** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-02`. `docs/06-torrent-client.md` § Metadata is
-the spec; it was read at the start of the sprint.
+Specification: `docs/plan/SPRINTS.md`, section `S5-03`. `docs/06-torrent-client.md` § The port and
+§ Lifecycle are the spec.
 
 ## Blocked
 
@@ -68,7 +68,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 5 — BitTorrent
 - [x] `S5-01` Bencode
-- [ ] `S5-02` Torrent metadata and magnets
+- [x] `S5-02` Torrent metadata and magnets
 - [ ] `S5-03` The engine shell and its port
 - [ ] `S5-04` Trackers
 - [ ] `S5-05` Peer wire
@@ -261,6 +261,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   is SHA-1 over those bytes as they arrived — and re-encoding the whole file reproduces it byte for
   byte. Malformed input is refused with the offset it went wrong at, the end of the input included,
   which is where a truncated download stops being a torrent. `S5-02` reads what is inside it.
+- `S5-02` `TorrentMetadata` and `Magnet`, against two real torrents: Ubuntu's single-file image and
+  the Internet Archive's twenty-three-file scan. A multi-file torrent is one byte stream laid across
+  files, so a piece pays no attention to where one ends — the first piece of the Archive one covers
+  the end of a thumbnail and the start of a nine-megabyte scan, and `Slice` answers both runs. The
+  last piece is short, the info hash is over the raw info bytes, and a magnet's hash is the same
+  forty characters whether it was written in hex or base32. `S5-03` starts the engine itself.
 
 ## Decisions
 
@@ -280,6 +286,9 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **A mutation run that is interrupted can leave a stale assembly behind**, and the suite then fails
+  on code that is already restored. `rm -rf bin obj` for that project and run it again before
+  believing a failure that appeared straight after a mutation.
 - **The bencode types live in the assembly's own namespace**, not a `Bencode` one: a class and the
   namespace above it cannot share a name, and `Bencode.Read` is what every caller writes.
 - **Every number asserted about the torrent fixture was read out of it by a second implementation**
