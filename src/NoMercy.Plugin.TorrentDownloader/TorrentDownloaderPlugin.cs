@@ -262,12 +262,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             _lastCycle = await chain.Search(settings).RunAsync(
                 tracked,
-                settings.Profile,
-                // The blacklist is S6-02's, written when a download fails.
-                // Nothing has ever written to it yet, and an empty set says
-                // exactly that.
-                Blacklist.None,
-                settings.DryRun,
+                new(
+                    settings.Profile,
+                    // The blacklist is S6-02's, written when a download fails.
+                    // Nothing has ever written to it yet, and an empty set says
+                    // exactly that.
+                    Blacklist.None,
+                    settings.DryRun,
+                    settings.IncompleteFolder),
                 ct);
         }
         finally

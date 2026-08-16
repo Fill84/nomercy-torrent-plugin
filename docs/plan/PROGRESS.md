@@ -5,10 +5,10 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-03` · The engine shell and its port** — not started.
+**Slice `S5-04` · Trackers** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-03`. `docs/06-torrent-client.md` § The port and
-§ Lifecycle are the spec.
+Specification: `docs/plan/SPRINTS.md`, section `S5-04`. `docs/06-torrent-client.md` § Trackers is
+the spec.
 
 ## Blocked
 
@@ -69,7 +69,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 5 — BitTorrent
 - [x] `S5-01` Bencode
 - [x] `S5-02` Torrent metadata and magnets
-- [ ] `S5-03` The engine shell and its port
+- [x] `S5-03` The engine shell and its port
 - [ ] `S5-04` Trackers
 - [ ] `S5-05` Peer wire
 - [ ] `S5-06` Pieces, verification and disk
@@ -267,6 +267,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   the end of a thumbnail and the start of a nine-megabyte scan, and `Slice` answers both runs. The
   last piece is short, the info hash is over the raw info bytes, and a magnet's hash is the same
   forty characters whether it was written in hex or base32. `S5-03` starts the engine itself.
+- `S5-03` `ITorrentEngine` now has the shape `docs/06-torrent-client.md` gives it, `BittorrentEngine`
+  in the shell implements it, and `ListenSockets` in the protocol assembly binds the one port for TCP
+  and UDP together. Started once and stopped once whatever ticks in between; disposing twice is safe;
+  a port it cannot have is reported **with its number** and the client carries on, because taking the
+  plugin down over a port costs the owner everything else it does. A magnet just taken on is
+  `FetchingMetadata` and not a shade of downloading. Nothing hands it work yet — that is `S6-01`.
+  `S5-04` announces to the trackers.
 
 ## Decisions
 
@@ -286,6 +293,12 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **UDP chooses the port, then TCP is bound to the same number.** Windows reserves ranges for
+  Hyper-V and WSL and refuses them for UDP while handing the same numbers out for TCP, so asking TCP
+  first gives a number UDP often cannot have — measured, on this machine, as a test that failed with
+  a permission error rather than an in-use one. The refusal now says which of the two it was.
+- **A test that needs a port holds it rather than sampling one and letting go.** A port this process
+  released is one another test can take between the two lines, and that was a real flake here.
 - **A mutation run that is interrupted can leave a stale assembly behind**, and the suite then fails
   on code that is already restored. `rm -rf bin obj` for that project and run it again before
   believing a failure that appeared straight after a mutation.

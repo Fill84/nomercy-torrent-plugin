@@ -25,6 +25,23 @@ public sealed record EpisodeOutcome(
     bool HandedOver,
     string Detail);
 
+/// <summary>
+/// What one cycle is allowed to do, and with what.
+/// </summary>
+/// <param name="Profile">What the owner will accept.</param>
+/// <param name="Blacklisted">Keys already refused, read once for the cycle.</param>
+/// <param name="DryRun">
+/// Decide everything and hand nothing over. It says what to do with a decision
+/// rather than what makes one acceptable, which is why it is not on the
+/// profile.
+/// </param>
+/// <param name="IncompleteFolder">Where a download lands while it runs.</param>
+public sealed record CycleOptions(
+    Profile Profile,
+    IReadOnlySet<string> Blacklisted,
+    bool DryRun,
+    string IncompleteFolder);
+
 /// <summary>Everything one cycle decided.</summary>
 /// <param name="Outcomes">One per episode looked at, in the order they were looked at.</param>
 /// <param name="Skipped">Every release refused, with its reason, for the Skipped page.</param>
@@ -53,26 +70,18 @@ public sealed class SearchCycle(
     ITorrentEngine? engine = null)
 {
     /// <param name="missing">The gaps to look at, in whatever order they arrive.</param>
-    /// <param name="profile">What the owner will accept.</param>
-    /// <param name="blacklisted">Keys already refused, read once for the cycle.</param>
-    /// <param name="dryRun">
-    /// Decide everything and hand nothing over. It is a setting rather than a
-    /// property of the profile because it says what to do with a decision, not
-    /// what makes one acceptable.
-    /// </param>
+    /// <param name="options">What the owner will accept, and what to do with what is found.</param>
     /// <param name="ct">The plugin's own lifetime, never a caller's request.</param>
     public async Task<CycleReport> RunAsync(
         IReadOnlyList<TrackedEpisode> missing,
-        Profile profile,
-        IReadOnlySet<string> blacklisted,
-        bool dryRun,
+        CycleOptions options,
         CancellationToken ct)
     {
         // The order the Queue page shows, so the page states what the plugin
         // will do rather than guessing at it.
         TrackedEpisode[] queue = [.. QueueOrder.Order(missing)];
 
-        Decisions decisions = new(profile, queue, blacklisted);
+        Decisions decisions = new(options.Profile, queue, options.Blacklisted);
 
         IReadOnlyList<ResolvedNames> resolved = await names.ResolveAsync(queue, ct);
 
@@ -93,8 +102,7 @@ public sealed class SearchCycle(
                 episode,
                 byEpisode.GetValueOrDefault(episode.Key, []),
                 decisions,
-                profile,
-                dryRun,
+                options,
                 ct));
         }
 
@@ -105,8 +113,7 @@ public sealed class SearchCycle(
         TrackedEpisode episode,
         IReadOnlyList<string> candidates,
         Decisions decisions,
-        Profile profile,
-        bool dryRun,
+        CycleOptions options,
         CancellationToken ct)
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
@@ -146,7 +153,7 @@ public sealed class SearchCycle(
             // and never more than the owner's own MaxSearchAttempts: twenty
             // spellings of one release times seventeen indexers is a cycle that
             // gets the plugin banned from every site it asks.
-            foreach (string title in acceptable.Take(Math.Max(1, profile.MaxSearchAttempts)))
+            foreach (string title in acceptable.Take(Math.Max(1, options.Profile.MaxSearchAttempts)))
             {
                 ReleaseName name = ReleaseName.Parse(title);
 
@@ -163,7 +170,7 @@ public sealed class SearchCycle(
 
                 journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}");
 
-                return await GrabAsync(episode, chosen, dryRun, ct);
+                return await GrabAsync(episode, chosen, options, ct);
             }
 
             journal.Finished(ActivityStage.Decide, subject, "nobody is serving an acceptable copy");
@@ -187,7 +194,7 @@ public sealed class SearchCycle(
     private async Task<EpisodeOutcome> GrabAsync(
         TrackedEpisode episode,
         ReleaseCopy chosen,
-        bool dryRun,
+        CycleOptions options,
         CancellationToken ct)
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
@@ -201,7 +208,7 @@ public sealed class SearchCycle(
             return new(episode.Key, chosen.Title, chosen.Source, chosen.Seeders, false, "no way to the torrent");
         }
 
-        if (dryRun)
+        if (options.DryRun)
         {
             return new(
                 episode.Key,
@@ -228,8 +235,8 @@ public sealed class SearchCycle(
 
         journal.Started(ActivityStage.Grab, subject, chosen.Title);
 
-        string hash = await engine.AddAsync(
-            new(chosen.Title, chosen.Magnet, chosen.Trackers),
+        TorrentHandle taken = await engine.AddAsync(
+            new(chosen.Magnet, chosen.Trackers, options.IncompleteFolder, chosen.SizeBytes),
             ct);
 
         journal.Finished(ActivityStage.Grab, subject, $"{chosen.Title} from {chosen.Source}");
@@ -240,6 +247,6 @@ public sealed class SearchCycle(
             chosen.Source,
             chosen.Seeders,
             true,
-            $"taken from {chosen.Source}, {hash}");
+            $"taken from {chosen.Source}, {taken.InfoHash}");
     }
 }

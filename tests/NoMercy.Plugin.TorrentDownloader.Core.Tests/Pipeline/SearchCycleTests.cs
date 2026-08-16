@@ -28,13 +28,11 @@ public class SearchCycleTests
     public async Task EveryEpisodeGetsOneDecisionWithTheReleaseTheSiteAndTheCount()
     {
         FakeFetch fetch = Answering();
-        FakeEngine engine = new();
+        FakeTorrentEngine engine = new();
 
         CycleReport report = await Cycle(fetch, engine).RunAsync(
             [Silo(6), Silo(7)],
-            Wanted,
-            Blacklist.None,
-            dryRun: false,
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         Assert.Equal(2, report.Outcomes.Count);
@@ -50,7 +48,14 @@ public class SearchCycleTests
         Assert.NotNull(taken.Seeders);
         Assert.True(taken.HandedOver);
 
-        Assert.Equal("Silo S03E06 1080p WEB H264-CAKES", Assert.Single(engine.Taken).Title);
+        // The magnet built from the hash the listing carried: this site
+        // publishes a hashed .torrent link and no magnet at all.
+        Assert.Contains(
+            "92D8A3F6864911EF292B4BE0DD5286406396D2B3",
+            Assert.Single(engine.Taken).Source,
+            StringComparison.OrdinalIgnoreCase);
+
+        Assert.Equal(Folder, engine.Taken[0].DownloadFolder);
 
         // And the episode nothing has a name for says exactly that, rather than
         // disappearing from the report.
@@ -73,9 +78,7 @@ public class SearchCycleTests
 
         await Cycle(Answering(), new(), journal).RunAsync(
             [Silo(6)],
-            Wanted,
-            Blacklist.None,
-            dryRun: false,
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         ActivityStage[] seen = [.. journal.Snapshot().History.Select(entry => entry.Stage).Distinct()];
@@ -113,9 +116,7 @@ public class SearchCycleTests
 
         CycleReport report = await Cycle(fetch, new()).RunAsync(
             episodes,
-            Wanted,
-            Blacklist.None,
-            dryRun: false,
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         Assert.Equal(42, report.Outcomes.Count);
@@ -137,13 +138,11 @@ public class SearchCycleTests
     [Fact]
     public async Task WithDryRunOnNothingIsHandedOverAndTheReportSaysWhatItWouldTake()
     {
-        FakeEngine engine = new();
+        FakeTorrentEngine engine = new();
 
         CycleReport report = await Cycle(Answering(), engine).RunAsync(
             [Silo(6)],
-            Wanted,
-            Blacklist.None,
-            dryRun: true,
+            new(Wanted, Blacklist.None, DryRun: true, Folder),
             CancellationToken.None);
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
@@ -165,9 +164,7 @@ public class SearchCycleTests
     {
         CycleReport report = await Cycle(Answering(), engine: null).RunAsync(
             [Silo(6)],
-            Wanted,
-            Blacklist.None,
-            dryRun: false,
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
@@ -195,9 +192,7 @@ public class SearchCycleTests
 
         CycleReport report = await Cycle(fetch, new()).RunAsync(
             [Silo(6)],
-            new() { MaximumResolution = "1080p", MaxSearchAttempts = 2 },
-            Blacklist.None,
-            dryRun: false,
+            new(new() { MaximumResolution = "1080p", MaxSearchAttempts = 2 }, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         Assert.Equal(2, fetch.Asked.Count(address => address.Host == "www.limetorrents.lol"));
@@ -221,17 +216,15 @@ public class SearchCycleTests
         FakeFetch fetch = new();
         fetch.AnswersAnything(Capture.Fixture("nyaa-diacritic.xml"));
 
-        FakeEngine engine = new();
+        FakeTorrentEngine engine = new();
 
         CycleReport report = await Cycle(fetch, engine, sources: WithNyaa).RunAsync(
             [Pokemon(1), Pokemon(2), Pokemon(3)],
-            new() { MaximumResolution = "1080p", EnglishOnly = false, SeasonPackThreshold = 3 },
-            Blacklist.None,
-            dryRun: false,
+            new(new() { MaximumResolution = "1080p", EnglishOnly = false, SeasonPackThreshold = 3 }, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         TorrentRequest taken = Assert.Single(engine.Taken);
-        Assert.Contains("S05", taken.Title, StringComparison.Ordinal);
+        Assert.StartsWith("magnet:?", taken.Source, StringComparison.Ordinal);
 
         Assert.Equal(
             2,
@@ -249,15 +242,16 @@ public class SearchCycleTests
         CycleReport report = await Cycle(Answering(), new()).RunAsync(
             [Silo(6)],
             // Wanting 2160p refuses every name the capture carries for it.
-            new() { MaximumResolution = "2160p" },
-            Blacklist.None,
-            dryRun: false,
+            new(new() { MaximumResolution = "2160p" }, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         Assert.NotEmpty(report.Skipped);
         Assert.All(report.Skipped, skipped => Assert.Equal(Silo(6).Key, skipped.Episode));
         Assert.All(report.Skipped, skipped => Assert.NotEqual(string.Empty, skipped.Reason));
     }
+
+    /// <summary>Where a download would land, if anything were downloading.</summary>
+    private const string Folder = @"C:\downloads";
 
     /// <summary>What the owner wants, at its documented defaults.</summary>
     private static Profile Wanted => new() { MaximumResolution = "1080p" };
@@ -298,7 +292,7 @@ public class SearchCycleTests
 
     private static SearchCycle Cycle(
         FakeFetch fetch,
-        FakeEngine? engine,
+        FakeTorrentEngine? engine,
         ActivityJournal? journal = null,
         SourceDefinition[]? sources = null)
     {
@@ -341,23 +335,5 @@ public class SearchCycleTests
             null,
             new DateOnly(2026, 8, 1),
             EpisodeState.Missing);
-    }
-}
-
-/// <summary>The torrent client, standing still so the chain can be watched.</summary>
-/// <remarks>
-/// It decides nothing: it records what it was handed. Sprint 5 writes the real
-/// one, and this is the only thing in these tests that is not the shipping
-/// code.
-/// </remarks>
-internal sealed class FakeEngine : ITorrentEngine
-{
-    public List<TorrentRequest> Taken { get; } = [];
-
-    public Task<string> AddAsync(TorrentRequest request, CancellationToken ct)
-    {
-        Taken.Add(request);
-
-        return Task.FromResult("92D8A3F6864911EF292B4BE0DD5286406396D2B3");
     }
 }
