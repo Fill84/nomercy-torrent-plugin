@@ -21,6 +21,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Domain;
 /// judging a name on one.
 /// </param>
 /// <param name="SizeBytes">How big it is, or null when the site does not say.</param>
+/// <param name="Trackers">
+/// Every tracker any site's magnet named for this torrent. The same torrent on
+/// five sites is one torrent with five sets of trackers, and more trackers is a
+/// faster download — which is the whole reason every indexer is asked rather
+/// than the first one that answers.
+/// </param>
 public sealed record ReleaseCopy(
     string Title,
     string Source,
@@ -29,4 +35,9 @@ public sealed record ReleaseCopy(
     string? Magnet = null,
     Uri? DetailUrl = null,
     int? Seeders = null,
-    long? SizeBytes = null);
+    long? SizeBytes = null,
+    IReadOnlyList<string>? Trackers = null)
+{
+    /// <summary>Never null: a copy naming no tracker names none.</summary>
+    public IReadOnlyList<string> Trackers { get; init; } = Trackers ?? [];
+}

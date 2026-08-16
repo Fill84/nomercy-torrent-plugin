@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 4 — Find and decide**
-**Slice `S4-02` · Find** — not started.
+**Slice `S4-03` · Deciding** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S4-02`. Read first: `docs/05-sources.md` § Merging.
+Specification: `docs/plan/SPRINTS.md`, section `S4-03`.
 
 ## Blocked
 
@@ -57,7 +57,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 4 — Find and decide
 - [x] `S4-01` The profile
-- [ ] `S4-02` Find
+- [x] `S4-02` Find
 - [ ] `S4-03` Deciding
 - [ ] `S4-04` The pipeline end to end
 
@@ -227,6 +227,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   needed the parser's vocabulary widened from four claims to thirteen — a release in German says
   `GERMAN` and nothing else — with a row of a real capture behind each, and still no Greek in it.
   `S4-02` asks the indexers.
+- `S4-02` `Find` asks every indexer at once for the **full release name** (**A3**) and merges what
+  comes back by info hash: the highest seeder count, the site that had it, and the trackers of all of
+  them, because more trackers is a faster download and that is the whole reason every indexer is
+  asked. A copy with no hash is never merged into anything — nothing says two rows with the same
+  title are the same file. **C3** is answered by following the chosen copy to its own page, once,
+  and only when it has no magnet: `tools/Capture` grew a `--page` form to take the two detail
+  captures that proves it, one publishing a magnet and one printing a bare hash and nothing else.
+  `S4-03` decides between what comes back.
 
 ## Decisions
 
@@ -246,6 +254,13 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **A magnet is built from a bare info hash when a detail page prints one.** TorrentFunk's page
+  carries no magnet at all — the real capture has exactly one forty-hex string on it — and a hash is
+  all a magnet needs. The trackers come from whatever else knows the torrent, and from the owner's
+  own list at the grab.
+- **`tools/Capture` can save one particular address**, not only a search: `Capture "TorrentFunk"
+  --page <url> <name>`. A detail page cannot be captured any other way, because it has to go through
+  that source's own gate and clearance.
 - **Two rows of the profile table have no data behind them, and both are recorded rather than
   guessed at.** *Blocked group* has no list of groups in any document, and `ExcludeTerms` does that
   work: a forbidden term is looked for in the whole name, and a group is part of the name it appears

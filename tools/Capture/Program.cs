@@ -26,18 +26,26 @@ internal static class Program
             Console.Error.WriteLine(
                 """
                 Capture <source name> [<search term>]
+                Capture <source name> --page <address> <file name>
 
                   Saves what a source answers into tests/fixtures/. The source name is
                   the one in sources.json, quoted if it has a space.
 
                   Capture "LimeTorrents" "Silo S03E06"
+                  Capture "TorrentFunk" --page https://www.torrentfunk.com/torrent/1/x.html torrentfunk-detail
+
+                  The second form saves one particular address — a row's own page —
+                  through that source's gate and its clearance, which is the only way
+                  a detail page can be captured at all: the site treats a request with
+                  no session as a challenge.
                 """);
 
             return 1;
         }
 
         string wanted = arguments[0];
-        string term = arguments.Length > 1 ? arguments[1] : "Silo S03E06";
+        bool onePage = arguments.Length > 2 && arguments[1] == "--page";
+        string term = !onePage && arguments.Length > 1 ? arguments[1] : "Silo S03E06";
 
         using ILoggerFactory logging = LoggerFactory.Create(builder => builder
             .AddSimpleConsole(console => console.SingleLine = true)
@@ -67,9 +75,11 @@ internal static class Program
         // A feed takes no question and is read whole, so its own address is the
         // capture. Refusing would leave the sources that answer "what came out
         // recently" with no fixture at all.
-        Uri address = source.SearchAddress is null
-            ? new(source.Url)
-            : new(Query.Write(source.SearchAddress, term, source.Query));
+        Uri address = onePage
+            ? new(arguments[2])
+            : source.SearchAddress is null
+                ? new(source.Url)
+                : new(Query.Write(source.SearchAddress, term, source.Query));
 
         // The tool is not the plugin and has no host to ask, so every host is
         // permitted here. The plugin's own grants are the server's business;
@@ -121,7 +131,9 @@ internal static class Program
                 ? "xml"
                 : "html";
 
-        string path = Path.Combine(fixtures, $"{Slug(source.Name)}.{extension}");
+        string path = Path.Combine(
+            fixtures,
+            $"{(onePage && arguments.Length > 3 ? arguments[3] : Slug(source.Name))}.{extension}");
         await File.WriteAllTextAsync(path, result.Body!, CancellationToken.None);
 
         logger.LogInformation(
