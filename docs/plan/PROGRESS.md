@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-04` · Trackers** — not started.
+**Slice `S5-05` · Peer wire** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-04`. `docs/06-torrent-client.md` § Trackers is
+Specification: `docs/plan/SPRINTS.md`, section `S5-05`. `docs/06-torrent-client.md` § Peer wire is
 the spec.
 
 ## Blocked
@@ -70,7 +70,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-01` Bencode
 - [x] `S5-02` Torrent metadata and magnets
 - [x] `S5-03` The engine shell and its port
-- [ ] `S5-04` Trackers
+- [x] `S5-04` Trackers
 - [ ] `S5-05` Peer wire
 - [ ] `S5-06` Pieces, verification and disk
 - [ ] `S5-07` Metadata from peers
@@ -274,6 +274,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   plugin down over a port costs the owner everything else it does. A magnet just taken on is
   `FetchingMetadata` and not a shade of downloading. Nothing hands it work yet — that is `S6-01`.
   `S5-04` announces to the trackers.
+- `S5-04` HTTP and UDP announces, against what two real trackers really answered — the Internet
+  Archive's over HTTP and opentrackr's over UDP, both captured by `tools/Capture`. An info hash goes
+  into a query percent-encoded **a byte at a time**: the first version put it through a text encoder,
+  every byte above 0x7F became two, and the tracker answered "not authorized" for a torrent it was
+  serving. That refusal is a fixture now. A connection id is kept for the minute BEP 15 allows,
+  retries are `15 * 2^n` up to eight, every tracker is announced to at once, and one that will not
+  answer costs only itself. `S5-05` speaks to the peers they name.
 
 ## Decisions
 
@@ -299,9 +306,15 @@ and note it here.
   a permission error rather than an in-use one. The refusal now says which of the two it was.
 - **A test that needs a port holds it rather than sampling one and letting go.** A port this process
   released is one another test can take between the two lines, and that was a real flake here.
-- **A mutation run that is interrupted can leave a stale assembly behind**, and the suite then fails
-  on code that is already restored. `rm -rf bin obj` for that project and run it again before
-  believing a failure that appeared straight after a mutation.
+- **The mutation harness must touch a file after restoring it.** `shutil.move` keeps the original
+  timestamp, so the restored source is *older* than the assembly built from the mutated one and
+  MSBuild sees nothing to do — the suite then fails on code that is already correct. Three failures
+  in this sprint were that and nothing else. The scripts now set the modification time on restore;
+  when in doubt, `rm -rf bin obj` for that project and run again.
+- **A captured tracker answer has its peer addresses replaced with TEST-NET-1.** The first peer a
+  tracker names is usually this machine, and the rest are strangers in a public swarm; a fixture in a
+  public repository must not publish either. Everything else — the lengths, the order, the intervals,
+  the counts — is exactly as it arrived, and those are what a parser can be wrong about.
 - **The bencode types live in the assembly's own namespace**, not a `Bencode` one: a class and the
   namespace above it cannot share a name, and `Bencode.Read` is what every caller writes.
 - **Every number asserted about the torrent fixture was read out of it by a second implementation**

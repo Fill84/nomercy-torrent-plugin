@@ -1,3 +1,5 @@
+using System.Buffers.Binary;
+using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
@@ -28,6 +30,8 @@ internal static class Program
                 Capture <source name> [<search term>]
                 Capture <source name> --page <address> <file name>
                 Capture --file <address> <file name>
+                Capture --announce <tracker> <info hash> <file name>
+                Capture --udp-announce <host:port> <info hash> <file name>
 
                   Saves what a source answers into tests/fixtures/. The source name is
                   the one in sources.json, quoted if it has a space.
@@ -42,6 +46,16 @@ internal static class Program
                 """);
 
             return 1;
+        }
+
+        if (arguments[0] == "--announce" && arguments.Length > 3)
+        {
+            return await AnnounceAsync(arguments[1], arguments[2], arguments[3]);
+        }
+
+        if (arguments[0] == "--udp-announce" && arguments.Length > 3)
+        {
+            return await UdpAnnounceAsync(arguments[1], arguments[2], arguments[3]);
         }
 
         if (arguments[0] == "--file" && arguments.Length > 2)
@@ -177,6 +191,177 @@ internal static class Program
         Console.Error.WriteLine($"Wrote {bytes.Length} bytes to {path}.");
 
         return 0;
+    }
+
+    /// <summary>
+    /// Announces to a real HTTP tracker and saves what it answered.
+    /// </summary>
+    /// <remarks>
+    /// A real announce for a real public torrent, asking for a handful of peers
+    /// and then withdrawing with <c>stopped</c> straight away. The response is
+    /// bencode with compact peers in it, and nothing but a tracker produces
+    /// one — a hand-written sample would be a parser agreeing with itself.
+    /// </remarks>
+    private static async Task<int> AnnounceAsync(string tracker, string infoHash, string name)
+    {
+        byte[] hash = Convert.FromHexString(infoHash);
+        string peerId = "-NM0400-" + Guid.NewGuid().ToString("n")[..12];
+
+        string Query(string @event, int want) =>
+            $"{tracker}?info_hash={Percent(hash)}"
+            + $"&peer_id={Uri.EscapeDataString(peerId)}"
+            + $"&port=51413&uploaded=0&downloaded=0&left=6345887744&compact=1&numwant={want}&event={@event}";
+
+        using HttpClient http = new();
+
+        byte[] answer = await http.GetByteArrayAsync(Query("started", 10), CancellationToken.None);
+
+        // Everything the tracker sent, except the addresses in the peer list.
+        int peers = Find(answer, "5:peers"u8);
+
+        if (peers >= 0)
+        {
+            int colon = Array.IndexOf(answer, (byte)':', peers + 7);
+            int length = int.Parse(System.Text.Encoding.ASCII.GetString(answer, peers + 7, colon - peers - 7));
+
+            Anonymise(answer.AsSpan(colon + 1, length));
+        }
+
+        string path = Path.Combine(RepositoryRoot(), "tests", "fixtures", name);
+        await File.WriteAllBytesAsync(path, answer, CancellationToken.None);
+
+        Console.Error.WriteLine($"Wrote {answer.Length} bytes to {path}.");
+
+        // Out of the swarm again immediately: this machine is not seeding an
+        // Ubuntu image and should not be offered to anybody as though it were.
+        await http.GetAsync(Query("stopped", 0), CancellationToken.None);
+
+        return 0;
+    }
+
+    /// <summary>
+    /// The same over UDP: connect, then announce, saving both answers.
+    /// </summary>
+    /// <remarks>
+    /// BEP 15 is two exchanges and the first one exists only to get a
+    /// connection id, so both are captured — a reader tested against the
+    /// announce alone would never have met the sixteen bytes in front of it.
+    /// </remarks>
+    private static async Task<int> UdpAnnounceAsync(string endpoint, string infoHash, string name)
+    {
+        string[] parts = endpoint.Split(':');
+        using UdpClient udp = new();
+        udp.Client.ReceiveTimeout = 8000;
+        udp.Connect(parts[0], int.Parse(parts[1]));
+
+        // Connect: the magic protocol id, action 0, and a transaction id we
+        // choose and the tracker echoes.
+        byte[] connect = new byte[16];
+        BinaryPrimitives.WriteInt64BigEndian(connect, 0x41727101980L);
+        BinaryPrimitives.WriteInt32BigEndian(connect.AsSpan(8), 0);
+        BinaryPrimitives.WriteInt32BigEndian(connect.AsSpan(12), 0x1234ABCD);
+
+        await udp.SendAsync(connect, CancellationToken.None);
+        UdpReceiveResult first = await udp.ReceiveAsync(CancellationToken.None);
+
+        string folder = Path.Combine(RepositoryRoot(), "tests", "fixtures");
+        await File.WriteAllBytesAsync(Path.Combine(folder, $"{name}-connect.bin"), first.Buffer, CancellationToken.None);
+
+        long connectionId = BinaryPrimitives.ReadInt64BigEndian(first.Buffer.AsSpan(8));
+
+        byte[] hash = Convert.FromHexString(infoHash);
+        byte[] announce = new byte[98];
+        BinaryPrimitives.WriteInt64BigEndian(announce, connectionId);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(8), 1);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(12), 0x1234ABCE);
+        hash.CopyTo(announce.AsSpan(16));
+        System.Text.Encoding.ASCII.GetBytes("-NM0400-" + Guid.NewGuid().ToString("n")[..12]).CopyTo(announce.AsSpan(36));
+        BinaryPrimitives.WriteInt64BigEndian(announce.AsSpan(56), 0);
+        BinaryPrimitives.WriteInt64BigEndian(announce.AsSpan(64), 6345887744);
+        BinaryPrimitives.WriteInt64BigEndian(announce.AsSpan(72), 0);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(80), 2);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(84), 0);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(88), 0);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(92), 10);
+        BinaryPrimitives.WriteUInt16BigEndian(announce.AsSpan(96), 51413);
+
+        await udp.SendAsync(announce, CancellationToken.None);
+        UdpReceiveResult second = await udp.ReceiveAsync(CancellationToken.None);
+
+        // The header as sent; the addresses replaced, as over HTTP.
+        byte[] announced = second.Buffer;
+
+        if (announced.Length > 20)
+        {
+            Anonymise(announced.AsSpan(20));
+        }
+
+        await File.WriteAllBytesAsync(Path.Combine(folder, $"{name}-announce.bin"), announced, CancellationToken.None);
+
+        Console.Error.WriteLine(
+            $"Wrote {first.Buffer.Length} and {second.Buffer.Length} bytes into {folder} as {name}-connect.bin and {name}-announce.bin.");
+
+        // Withdrawn straight away, as over HTTP.
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(80), 3);
+        await udp.SendAsync(announce, CancellationToken.None);
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Replaces the address of every compact peer, keeping its port.
+    /// </summary>
+    /// <remarks>
+    /// A tracker answers with the addresses of real people, and the first one
+    /// in the list is usually this machine. A fixture in a public repository
+    /// must not publish either, so the four address bytes of each six become
+    /// TEST-NET-1 — the range reserved for documentation — and everything else
+    /// the tracker sent, the lengths and the intervals and the order, stays
+    /// exactly as it arrived. What the parser is tested on is the shape, and
+    /// the shape is untouched.
+    /// </remarks>
+    private static void Anonymise(Span<byte> peers)
+    {
+        for (int at = 0; at + 6 <= peers.Length; at += 6)
+        {
+            peers[at] = 192;
+            peers[at + 1] = 0;
+            peers[at + 2] = 2;
+            peers[at + 3] = (byte)(at / 6 + 1);
+        }
+    }
+
+    private static int Find(byte[] haystack, ReadOnlySpan<byte> needle)
+    {
+        return haystack.AsSpan().IndexOf(needle);
+    }
+
+    /// <summary>
+    /// Twenty raw bytes, percent-encoded one byte at a time.
+    /// </summary>
+    /// <remarks>
+    /// Byte by byte, and never through a string. An info hash is bytes, not
+    /// text: putting it through a text encoder turns every byte above 0x7F into
+    /// two, and the tracker answers "not authorized" for a torrent it has —
+    /// which is what happened the first time this was written.
+    /// </remarks>
+    private static string Percent(byte[] bytes)
+    {
+        System.Text.StringBuilder text = new(bytes.Length * 3);
+
+        foreach (byte value in bytes)
+        {
+            if (char.IsAsciiLetterOrDigit((char)value) || value is (byte)'-' or (byte)'_' or (byte)'.' or (byte)'~')
+            {
+                text.Append((char)value);
+            }
+            else
+            {
+                text.Append('%').Append(value.ToString("X2"));
+            }
+        }
+
+        return text.ToString();
     }
 
     /// <summary>A file name that is the source's name and nothing clever.</summary>
