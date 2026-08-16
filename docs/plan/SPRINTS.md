@@ -637,6 +637,12 @@ The protocol, written here, in `src/…Bittorrent/`, tested against captured wir
 5. Test: malformed input is refused with the offset, never an exception from deep inside.
 6. Implement over `ReadOnlySpan<byte>`.
 
+**Notes.** The fixture is `tests/fixtures/ubuntu-desktop.torrent` — Ubuntu's own published torrent,
+real and freely distributable, with 484 KB of piece hashes in it. `tools/Capture` grew a `--file`
+form to save it: a `.torrent` is binary, and the plugin's fetch answers a string. Every number
+asserted about it was read out of the file by a second implementation, so no test here is this
+parser agreeing with itself.
+
 ## S5-02 · Torrent metadata and magnets
 
 1. Test: the info hash of a real `.torrent` matches the known hash, computed over the raw `info`

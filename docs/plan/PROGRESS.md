@@ -5,10 +5,10 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-01` · Bencode** — not started.
+**Slice `S5-02` · Torrent metadata and magnets** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-01`. Read `docs/06-torrent-client.md` once at the
-start of the sprint.
+Specification: `docs/plan/SPRINTS.md`, section `S5-02`. `docs/06-torrent-client.md` § Metadata is
+the spec; it was read at the start of the sprint.
 
 ## Blocked
 
@@ -67,7 +67,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S4-04` The pipeline end to end
 
 ### Sprint 5 — BitTorrent
-- [ ] `S5-01` Bencode
+- [x] `S5-01` Bencode
 - [ ] `S5-02` Torrent metadata and magnets
 - [ ] `S5-03` The engine shell and its port
 - [ ] `S5-04` Trackers
@@ -254,6 +254,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nobody, so no pack could ever be taken; nothing checked that a copy a site answered with was a copy
   of what was asked for; and a copy carrying a hash was followed to its own page for a magnet it
   already had. All three are fixed with tests. `S5-01` starts the torrent client.
+- `S5-01` Bencode reads and writes over `ReadOnlySpan<byte>`, against Ubuntu's own published torrent
+  — a real file with 484 KB of piece hashes in it. Byte strings stay bytes: the piece hashes are not
+  valid UTF-8 at all, and a reader that decoded them would fail every piece it later verified. The
+  reader records the byte range of the **top-level** `info` and nothing else, because the info hash
+  is SHA-1 over those bytes as they arrived — and re-encoding the whole file reproduces it byte for
+  byte. Malformed input is refused with the offset it went wrong at, the end of the input included,
+  which is where a truncated download stops being a torrent. `S5-02` reads what is inside it.
 
 ## Decisions
 
@@ -273,6 +280,13 @@ and note it here.
 - **TorrentGalaxy's rows are `tgxtablerow` divs, not table rows**, and the page holds seven distinct
   forty-hex strings with no magnet anywhere — which is **E6** exactly. Its title is on the anchor's
   `title` attribute.
+- **The bencode types live in the assembly's own namespace**, not a `Bencode` one: a class and the
+  namespace above it cannot share a name, and `Bencode.Read` is what every caller writes.
+- **Every number asserted about the torrent fixture was read out of it by a second implementation**
+  — a few lines of Python — including the info range and its SHA-1. A parser tested against numbers
+  it produced itself agrees with itself and with nothing else.
+- **`tools/Capture --file <address> <name>` saves raw bytes.** A `.torrent` is binary and the
+  plugin's fetch answers a string; nothing else in the tool could save one.
 - **An unconfigured plugin searches for nothing and says so once.** It has nowhere to put a
   download, so a cycle would spend every site's patience on a file that could only be thrown away.
   It is also what keeps the shell's tests off the network: a feed tick on a fresh install builds no

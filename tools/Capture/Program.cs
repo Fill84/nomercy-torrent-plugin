@@ -27,6 +27,7 @@ internal static class Program
                 """
                 Capture <source name> [<search term>]
                 Capture <source name> --page <address> <file name>
+                Capture --file <address> <file name>
 
                   Saves what a source answers into tests/fixtures/. The source name is
                   the one in sources.json, quoted if it has a space.
@@ -41,6 +42,15 @@ internal static class Program
                 """);
 
             return 1;
+        }
+
+        if (arguments[0] == "--file" && arguments.Length > 2)
+        {
+            // Bytes, not text. A .torrent is bencode and bencode is binary: an
+            // info dictionary read as a string and written back has a different
+            // SHA-1, and every peer refuses the handshake on it. Nothing else
+            // in this tool can save one.
+            return await SaveFileAsync(arguments[1], arguments[2]);
         }
 
         string wanted = arguments[0];
@@ -142,6 +152,29 @@ internal static class Program
             path);
 
         browser.Dispose();
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Saves one address as the bytes it really is.
+    /// </summary>
+    /// <remarks>
+    /// For a <c>.torrent</c>, which is bencode and therefore binary. It goes
+    /// straight out over HTTP rather than through the plugin's fetch: the fetch
+    /// answers a string, and a string is exactly what must not happen to these
+    /// bytes.
+    /// </remarks>
+    private static async Task<int> SaveFileAsync(string address, string name)
+    {
+        string path = Path.Combine(RepositoryRoot(), "tests", "fixtures", name);
+
+        using HttpClient http = new();
+        byte[] bytes = await http.GetByteArrayAsync(address, CancellationToken.None);
+
+        await File.WriteAllBytesAsync(path, bytes, CancellationToken.None);
+
+        Console.Error.WriteLine($"Wrote {bytes.Length} bytes to {path}.");
 
         return 0;
     }
