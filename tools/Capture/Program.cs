@@ -37,6 +37,8 @@ internal static class Program
                 Capture --udp-announce <host:port> <info hash> <file name>
                 Capture --peer <udp tracker host:port> <info hash> <file name>
                 Capture --mse <udp tracker host:port> <info hash> <file name>
+                Capture --dht <host:port> <info hash>
+                Capture --dht-peers <host:port> <info hash>
 
                   Saves what a source answers into tests/fixtures/. The source name is
                   the one in sources.json, quoted if it has a space.
@@ -66,6 +68,16 @@ internal static class Program
         if (arguments[0] == "--peer" && arguments.Length > 3)
         {
             return await PeerAsync(arguments[1], arguments[2], arguments[3]);
+        }
+
+        if (arguments[0] == "--dht" && arguments.Length > 2)
+        {
+            return await DhtAsync(arguments[1], arguments[2]);
+        }
+
+        if (arguments[0] == "--dht-peers" && arguments.Length > 2)
+        {
+            return await DhtPeersAsync(arguments[1], arguments[2]);
         }
 
         if (arguments[0] == "--mse" && arguments.Length > 3)
@@ -334,6 +346,242 @@ internal static class Program
         await udp.SendAsync(announce, CancellationToken.None);
 
         return 0;
+    }
+
+    /// <summary>
+    /// Asks a real DHT node the four questions and saves what it answers.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A DHT node answers a UDP packet from anybody, which is why these can be
+    /// captured at all when a peer conversation cannot: nothing has to accept a
+    /// connection.
+    /// </para>
+    /// <para>
+    /// Every address in an answer is replaced with TEST-NET-1 before it is
+    /// saved, keeping the port and the node id. The nodes a router names are
+    /// strangers, and a fixture in a public repository must not publish where
+    /// they are.
+    /// </para>
+    /// </remarks>
+    private static async Task<int> DhtAsync(string node, string infoHash)
+    {
+        string[] parts = node.Split(':');
+        byte[] hash = Convert.FromHexString(infoHash);
+        byte[] id = RandomNumberGenerator.GetBytes(20);
+
+        using UdpClient udp = new();
+        udp.Connect(parts[0], int.Parse(parts[1]));
+
+        (string Name, BencodeValue Query)[] questions =
+        [
+            ("dht-ping.bin", Krpc("aa", "ping", [new("id"u8.ToArray(), new BencodeBytes(id))])),
+            ("dht-find-node.bin", Krpc("ab", "find_node",
+            [
+                new("id"u8.ToArray(), new BencodeBytes(id)),
+                new("target"u8.ToArray(), new BencodeBytes(hash)),
+            ])),
+            ("dht-get-peers.bin", Krpc("ac", "get_peers",
+            [
+                new("id"u8.ToArray(), new BencodeBytes(id)),
+                new("info_hash"u8.ToArray(), new BencodeBytes(hash)),
+            ])),
+        ];
+
+        foreach ((string name, BencodeValue query) in questions)
+        {
+            await udp.SendAsync(Bencode.Write(query), CancellationToken.None);
+
+            using CancellationTokenSource waiting = new(8000);
+
+            try
+            {
+                UdpReceiveResult answer = await udp.ReceiveAsync(waiting.Token);
+                byte[] bytes = Anonymised(answer.Buffer);
+
+                string path = Path.Combine(RepositoryRoot(), "tests", "fixtures", name);
+                await File.WriteAllBytesAsync(path, bytes, CancellationToken.None);
+
+                Console.Error.WriteLine($"Wrote {bytes.Length} bytes to {path}.");
+            }
+            catch (OperationCanceledException)
+            {
+                Console.Error.WriteLine($"{node} did not answer {name}.");
+
+                return 1;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Follows the nodes a router names until one answers with real peers.
+    /// </summary>
+    /// <remarks>
+    /// A router only ever answers <c>get_peers</c> with more nodes; the peers
+    /// live further in, on the nodes closest to the hash. This is not the
+    /// client's walk — it keeps no routing table and sorts nothing — it exists
+    /// only to reach a node that will send a <c>values</c> list, so that the
+    /// reader of one is tested against a real answer rather than a made-up one.
+    /// </remarks>
+    private static async Task<int> DhtPeersAsync(string node, string infoHash)
+    {
+        string[] parts = node.Split(':');
+        byte[] hash = Convert.FromHexString(infoHash);
+        byte[] id = RandomNumberGenerator.GetBytes(20);
+
+        using UdpClient udp = new();
+
+        IPEndPoint router = new(
+            (await Dns.GetHostAddressesAsync(parts[0]))[0],
+            int.Parse(parts[1]));
+
+        List<IPEndPoint> asking = [router];
+        HashSet<string> asked = [];
+
+        for (int round = 0; round < 6 && asking.Count > 0; round++)
+        {
+            List<IPEndPoint> next = [];
+
+            foreach (IPEndPoint one in asking.Take(24))
+            {
+                if (!asked.Add(one.ToString()))
+                {
+                    continue;
+                }
+
+                byte[] query = Bencode.Write(Krpc("gp", "get_peers",
+                [
+                    new("id"u8.ToArray(), new BencodeBytes(id)),
+                    new("info_hash"u8.ToArray(), new BencodeBytes(hash)),
+                ]));
+
+                try
+                {
+                    await udp.SendAsync(query, one, CancellationToken.None);
+
+                    using CancellationTokenSource waiting = new(2000);
+
+                    UdpReceiveResult answer = await udp.ReceiveAsync(waiting.Token);
+
+                    if (Find(answer.Buffer, "6:valuesl"u8) >= 0)
+                    {
+                        byte[] bytes = Anonymised(answer.Buffer);
+                        string path = Path.Combine(RepositoryRoot(), "tests", "fixtures", "dht-values.bin");
+
+                        await File.WriteAllBytesAsync(path, bytes, CancellationToken.None);
+
+                        Console.Error.WriteLine($"Wrote {bytes.Length} bytes to {path}, after {asked.Count} nodes.");
+
+                        return 0;
+                    }
+
+                    next.AddRange(NodesIn(answer.Buffer));
+                }
+                catch (Exception whatever) when (whatever is OperationCanceledException or SocketException)
+                {
+                    // A node that does not answer is the normal case out here.
+                }
+            }
+
+            asking = next;
+        }
+
+        Console.Error.WriteLine($"No node named a peer, after {asked.Count} of them.");
+
+        return 1;
+    }
+
+    /// <summary>The compact nodes in an answer, as somewhere to ask next.</summary>
+    private static IEnumerable<IPEndPoint> NodesIn(byte[] answer)
+    {
+        int nodes = Find(answer, "5:nodes"u8);
+
+        if (nodes < 0)
+        {
+            yield break;
+        }
+
+        int colon = Array.IndexOf(answer, (byte)':', nodes + 7);
+        int length = int.Parse(System.Text.Encoding.ASCII.GetString(answer, nodes + 7, colon - nodes - 7));
+
+        for (int at = colon + 1; at + 26 <= colon + 1 + length && at + 26 <= answer.Length; at += 26)
+        {
+            yield return new(
+                new IPAddress(answer.AsSpan(at + 20, 4)),
+                BinaryPrimitives.ReadUInt16BigEndian(answer.AsSpan(at + 24, 2)));
+        }
+    }
+
+    /// <summary>One KRPC query, bencoded as BEP 5 puts it.</summary>
+    private static BencodeValue Krpc(string transaction, string name, BencodeEntry[] arguments)
+    {
+        return new BencodeDictionary(
+        [
+            new("t"u8.ToArray(), new BencodeBytes(System.Text.Encoding.ASCII.GetBytes(transaction))),
+            new("y"u8.ToArray(), new BencodeBytes("q"u8.ToArray())),
+            new("q"u8.ToArray(), new BencodeBytes(System.Text.Encoding.ASCII.GetBytes(name))),
+            new("a"u8.ToArray(), new BencodeDictionary(arguments)),
+        ]);
+    }
+
+    /// <summary>
+    /// Every address in a DHT answer replaced with TEST-NET-1, keeping ports
+    /// and node ids.
+    /// </summary>
+    /// <remarks>
+    /// <c>nodes</c> is twenty-six bytes each — twenty of node id, four of
+    /// address, two of port — and <c>values</c> is six bytes each. Both are
+    /// somebody's address and neither belongs in a public repository.
+    /// </remarks>
+    private static byte[] Anonymised(byte[] answer)
+    {
+        byte[] copy = [.. answer];
+
+        // BEP 42's `ip`, which is where the node tells us our own address as it
+        // sees it. That is this machine's public address and the one thing in
+        // the answer that is nobody else's business at all.
+        int mine = Find(copy, "2:ip6:"u8);
+
+        if (mine >= 0)
+        {
+            Replace(copy.AsSpan(mine + 6, 4), which: 99);
+        }
+
+        int nodes = Find(copy, "5:nodes"u8);
+
+        if (nodes >= 0)
+        {
+            int colon = Array.IndexOf(copy, (byte)':', nodes + 7);
+            int length = int.Parse(System.Text.Encoding.ASCII.GetString(copy, nodes + 7, colon - nodes - 7));
+
+            for (int at = colon + 1, which = 1; at + 26 <= colon + 1 + length; at += 26, which++)
+            {
+                Replace(copy.AsSpan(at + 20, 4), which);
+            }
+        }
+
+        int values = Find(copy, "6:valuesl"u8);
+
+        if (values >= 0)
+        {
+            // A list of six-byte strings, each one "6:" and then the peer.
+            for (int at = values + 9, which = 1; at + 8 <= copy.Length && copy[at] == (byte)'6'; at += 8, which++)
+            {
+                Replace(copy.AsSpan(at + 2, 4), which);
+            }
+        }
+
+        return copy;
+    }
+
+    private static void Replace(Span<byte> address, int which)
+    {
+        address[0] = 192;
+        address[1] = 0;
+        address[2] = 2;
+        address[3] = (byte)which;
     }
 
     /// <summary>

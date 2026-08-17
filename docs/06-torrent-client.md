@@ -138,6 +138,20 @@ Kademlia over UDP on the same port. Routing table of 160 buckets, split on inser
 `ping`, `find_node`, `get_peers`, `announce_peer`. Bootstrapped from the shipped node list on first
 run, then persisted to the data folder and reloaded, so a restart does not start from nothing.
 
+**The shipped node list**, which nothing said before `S5-09` and which was measured rather than
+copied. On 18 August 2026 these answered a `ping` from a machine here:
+
+- `dht.transmissionbt.com:6881`
+- `dht.libtorrent.org:25401`
+
+`router.bittorrent.com:6881` and `router.utorrent.com:6881` — the two everybody quotes — answered
+nothing at all. The captured packets in `tests/fixtures/dht-*.bin` came from the first of the two
+that did.
+
+What is persisted is the node list **and this client's own node id**. An id that changes on every
+restart is a client every other table has to learn again, and every `announce_peer` it ever made is
+thrown away with it.
+
 A torrent whose metadata says `private` never touches the DHT.
 
 ## Peer exchange and local discovery

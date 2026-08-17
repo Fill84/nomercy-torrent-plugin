@@ -5,12 +5,11 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-09` · DHT** — not started.
+**Slice `S5-10` · Peer exchange and local discovery** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-09`. `docs/06-torrent-client.md` § DHT is the
-spec. Its second step wants **captured packets**, and a DHT node answers a UDP packet from anybody —
-unlike a peer, which has to accept a TCP connection. `tools/Capture` should be able to take these
-for real; see the note under **Decisions** about what this machine can and cannot reach.
+Specification: `docs/plan/SPRINTS.md`, section `S5-10`. `docs/06-torrent-client.md` § Peer exchange
+and local discovery is the spec. `ut_pex` arrives over the extension protocol, which `S5-07` built;
+local discovery is multicast on this machine's own network and can be tested against itself.
 
 ## Blocked
 
@@ -77,7 +76,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-06` Pieces, verification and disk
 - [x] `S5-07` Metadata from peers
 - [x] `S5-08` Encryption
-- [ ] `S5-09` DHT
+- [x] `S5-09` DHT
 - [ ] `S5-10` Peer exchange and local discovery
 - [ ] `S5-11` Rate limits, choking and seeding
 - [ ] `S5-12` Resume, recovery, stalls, pause and ports
@@ -313,6 +312,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   hash can tell. Both methods are offered always, encryption is tried first and a peer that answers
   with a plaintext handshake is dialled again in the clear. Allowed, never required.
   `S5-09` is the DHT.
+- `S5-09` Kademlia over UDP, against real packets: a node id and an info hash live in the same space,
+  distance is exclusive-or, and "who is nearest this torrent" is the same question as "who is nearest
+  this id". A bucket per shared prefix bit, eight to a bucket, and a full bucket keeps what it has —
+  the eight in it have answered and the newcomer has not. A search walks towards the hash until
+  nobody can name anybody nearer, asking nobody twice. The table and **this client's own id** are
+  persisted, because an id that changes on restart is a stranger to every table that knew it. A
+  private torrent sends **not one packet**. `S5-10` is peer exchange and local discovery.
 
 ## Decisions
 
@@ -354,6 +360,24 @@ and note it here.
 - **`EndgamePieces` is eight and no document gives a number.** It is the point at which the last
   pieces are asked of every peer at once; the tail of a download is otherwise spent waiting on the
   slowest peer holding the last one. Written as a documented constant in the picker.
+- **The DHT is the one part of this client that could be captured for real.** A node answers a UDP
+  packet from anybody, so `tools/Capture --dht` took a `ping`, a `find_node` and a `get_peers` from
+  `dht.transmissionbt.com:6881`, and `--dht-peers` followed the nodes it named thirteen hops into the
+  Ubuntu swarm until one answered with real peers. Two things in those answers are worth knowing:
+  a **router hands out no token at all** — it holds nothing and nothing may be announced to it, so a
+  client that assumed a token was always there would throw on its first answer — and a router's
+  `nodes` is the **same node id at eight addresses**, which is one logical node behind a cluster.
+  A real node's `nodes`, by contrast, is eight different ids that all share at least twelve leading
+  bits with the hash asked about; that is Kademlia visible in captured data, and it is the property
+  the walk relies on.
+- **A captured DHT answer carries this machine's own public address** in BEP 42's `ip` field, and the
+  anonymiser did not know about it until it nearly went into a fixture. It now replaces that too,
+  alongside every `nodes` and `values` address. Anything captured from now on gets read before it is
+  committed.
+- **The bootstrap node list was measured, because no document named one.** On 18 August 2026
+  `dht.transmissionbt.com:6881` and `dht.libtorrent.org:25401` answered a ping from here;
+  `router.bittorrent.com:6881` and `router.utorrent.com:6881`, the two everybody quotes, answered
+  nothing. `docs/06-torrent-client.md` § DHT now carries the list and that measurement.
 - **The mutation harness counted a mutation that would not compile as "caught".** Warnings are
   errors here, so a mutation that leaves a field or a using unused fails the build — and a build
   that fails makes `dotnet test` exit non-zero, which the old script read as a test doing its job.
