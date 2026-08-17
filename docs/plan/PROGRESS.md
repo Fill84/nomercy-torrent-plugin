@@ -5,10 +5,11 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-07` · Metadata from peers** — not started.
+**Slice `S5-08` · Encryption** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-07`. `docs/06-torrent-client.md` § Metadata is
-the spec. **It needs a peer that will talk** — see the note under **Decisions** about this network.
+Specification: `docs/plan/SPRINTS.md`, section `S5-08`. `docs/06-torrent-client.md` § Encryption is
+the spec. Its first step wants **a captured MSE exchange**, and no peer on this network has held a
+conversation yet — read the note under **Decisions** before starting, and take a capture first.
 
 ## Blocked
 
@@ -73,7 +74,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-04` Trackers
 - [x] `S5-05` Peer wire
 - [x] `S5-06` Pieces, verification and disk
-- [ ] `S5-07` Metadata from peers
+- [x] `S5-07` Metadata from peers
 - [ ] `S5-08` Encryption
 - [ ] `S5-09` DHT
 - [ ] `S5-10` Peer exchange and local discovery
@@ -296,6 +297,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   Archive torrent's first piece covers the end of a thumbnail and the start of a nine-megabyte scan.
   Files are made at full size and marked sparse, so a six-gigabyte torrent does not cost six
   gigabytes before a peer has answered. `S5-07` fetches metadata from peers.
+- `S5-07` A magnet is a hash and a name; everything a download needs is in the info dictionary, and
+  the only place to get it is a peer that already has it. BEP 10's handshake settles what to call the
+  message — the id is the peer's own choice and differs per peer — and BEP 9 carries the dictionary
+  in sixteen-kibibyte pieces, the raw bytes following the bencoded header because bencode has nowhere
+  to put them. The whole thing is hashed once against the magnet's hash: there is no per-piece hash,
+  so a fetch that fails drops every peer that contributed and starts again from nothing. A magnet
+  nobody will serve the metadata for is failed after `MetadataTimeoutMinutes` with the reason, said
+  once rather than once a tick. `S5-08` is encryption.
 
 ## Decisions
 
@@ -326,12 +335,30 @@ and note it here.
   MSBuild sees nothing to do — the suite then fails on code that is already correct. Three failures
   in this sprint were that and nothing else. The scripts now set the modification time on restore;
   when in doubt, `rm -rf bin obj` for that project and run again.
+- **One full-suite run during `S5-07` failed seven tests and would not reproduce.** It came straight
+  after an eighteen-mutation sweep; five later runs, including the same format-build-test chain, were
+  green, and no trx was kept, so there are no names to work from. It is written down rather than
+  waved away: if it happens again, run with `--logger "trx"` first and the names will say whether it
+  is the stale-assembly fault above or something to do with sockets after that many back-to-back runs.
 - **A bitfield is high bit first**: the top bit of the first byte is piece nought, which is the
   opposite of what a bit index usually means. A client that got it backwards would ask every peer for
   what they do not have and refuse what they do.
 - **`EndgamePieces` is eight and no document gives a number.** It is the point at which the last
   pieces are asked of every peer at once; the tail of a download is otherwise spent waiting on the
   slowest peer holding the last one. Written as a documented constant in the picker.
+- **The metadata is tested against the real info dictionary, not a made-up one.** The 484 kilobytes
+  inside `ubuntu-desktop.torrent` are taken out as raw bytes, handed back a piece at a time through
+  the writer and the reader, and have to reassemble to Ubuntu's own published info hash and to the
+  same file list, piece length and piece count the whole-file reader gives. The framing around them
+  is BEP 9's and BEP 10's, stated, for the reason in the note below.
+- **`Bencode.ReadPrefix` is the one reader allowed to leave bytes behind it.** Everything else refuses
+  trailing bytes, because a torrent with something appended is not a torrent. BEP 9 is the exception:
+  a metadata piece is raw bytes following a bencoded dictionary, and where the dictionary ended is
+  the only way to find where they start.
+- **Blacklisting a failed hash and returning its episode to missing is `S6-01`'s, not `S5-07`'s.**
+  Both need the grab — the only thing that knows which episodes a hash was fetched for — and nothing
+  writes one until Sprint 6. The engine fails the torrent and says why; `S6-01` acts on it, for a
+  metadata timeout and for a stall alike. `SPRINTS.md` has been corrected on both sides.
 - **No peer on this network will send a message, so the peer-*message* tests are stated rather than
   captured.** Fifty peers were dialled over several announces by `tools/Capture --peer`: almost none
   accepted a connection at all, and the one that did shook hands and said nothing further, even after

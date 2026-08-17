@@ -116,9 +116,39 @@ public sealed record TorrentMetadata(
             throw new TorrentFormatException("There is no info dictionary in it.");
         }
 
+        return Of(info, torrent.Slice(start, length), TrackersOf(root));
+    }
+
+    /// <summary>
+    /// Reads the info dictionary on its own, as it arrives from a peer.
+    /// </summary>
+    /// <remarks>
+    /// A magnet's metadata is the info dictionary and nothing else — no
+    /// <c>announce</c>, no <c>announce-list</c>, no creation date. The trackers
+    /// come from the magnet and from the owner's own list, which is why they
+    /// are a parameter here and were read out of the file in <see cref="Read"/>.
+    /// </remarks>
+    /// <exception cref="BencodeFormatException">The bytes are not bencode.</exception>
+    /// <exception cref="TorrentFormatException">They are bencode, and not an info dictionary.</exception>
+    public static TorrentMetadata FromInfo(ReadOnlySpan<byte> info, IReadOnlyList<string> trackers)
+    {
+        if (Bencode.Read(info).Root is not BencodeDictionary dictionary)
+        {
+            throw new TorrentFormatException("The metadata is not an info dictionary.");
+        }
+
+        return Of(dictionary, info, trackers);
+    }
+
+    /// <summary>One torrent, out of its info dictionary and the raw bytes of it.</summary>
+    private static TorrentMetadata Of(
+        BencodeDictionary info,
+        ReadOnlySpan<byte> raw,
+        IReadOnlyList<string> trackers)
+    {
         // Over the bytes as they arrived, never over anything re-encoded: this
         // is the torrent's identity and every peer checks it.
-        string hash = Convert.ToHexString(SHA1.HashData(torrent.Slice(start, length)));
+        string hash = Convert.ToHexString(SHA1.HashData(raw));
 
         string name = info.Text("name")
             ?? throw new TorrentFormatException("The info dictionary has no name.");
@@ -148,7 +178,7 @@ public sealed record TorrentMetadata(
             hashes,
             FilesOf(info, name, out long total),
             total,
-            TrackersOf(root),
+            trackers,
             info.Number("private") == 1);
     }
 

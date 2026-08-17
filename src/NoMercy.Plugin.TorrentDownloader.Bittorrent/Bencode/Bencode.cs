@@ -42,6 +42,13 @@ public sealed class BencodeFormatException(BencodeError error)
 public sealed record BencodeDocument(BencodeValue Root, int? InfoStart, int? InfoLength);
 
 /// <summary>
+/// One value read off the front of something longer.
+/// </summary>
+/// <param name="Root">The value.</param>
+/// <param name="Length">How many bytes it took, so whatever follows can be found.</param>
+public sealed record BencodePrefix(BencodeValue Root, int Length);
+
+/// <summary>
 /// BEP 3's encoding, read and written over bytes.
 /// </summary>
 /// <remarks>
@@ -69,6 +76,28 @@ public static class Bencode
         return TryRead(bytes, out BencodeDocument? document, out BencodeError? error)
             ? document!
             : throw new BencodeFormatException(error!);
+    }
+
+    /// <summary>
+    /// Reads one value off the front and says how many bytes it took.
+    /// </summary>
+    /// <remarks>
+    /// For BEP 9, where a metadata piece is sixteen kibibytes of raw bytes
+    /// following a bencoded dictionary. Bencode has nowhere to put them and the
+    /// only way to find where they start is where the dictionary ended, so this
+    /// is the one reader that is allowed to leave bytes behind it.
+    /// </remarks>
+    /// <exception cref="BencodeFormatException">The bytes do not start with one.</exception>
+    public static BencodePrefix ReadPrefix(ReadOnlySpan<byte> bytes)
+    {
+        Cursor cursor = new(bytes);
+
+        if (!ReadValue(ref cursor, depth: 0, top: true, out BencodeValue? root))
+        {
+            throw new BencodeFormatException(cursor.Error!);
+        }
+
+        return new(root!, cursor.At);
     }
 
     /// <summary>Reads one complete value, or says where it stopped.</summary>

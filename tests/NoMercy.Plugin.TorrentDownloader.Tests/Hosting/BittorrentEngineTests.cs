@@ -1,5 +1,7 @@
+using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
@@ -23,7 +25,7 @@ public class BittorrentEngineTests
     {
         // Nought, so the operating system picks the number: what matters is
         // that four ticks leave one port and not four.
-        using BittorrentEngine engine = new(0, new ActivityJournal(), new CapturingLogger());
+        using BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger());
 
         engine.Start();
 
@@ -46,7 +48,7 @@ public class BittorrentEngineTests
     [Fact]
     public void DisposingItTwiceIsSafe()
     {
-        BittorrentEngine engine = new(0, new ActivityJournal(), new CapturingLogger());
+        BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger());
 
         engine.Start();
         engine.Dispose();
@@ -68,7 +70,7 @@ public class BittorrentEngineTests
 
         ActivityJournal journal = new();
 
-        using BittorrentEngine engine = new(port, journal, new CapturingLogger());
+        using BittorrentEngine engine = new(port, Timeout, journal, new CapturingLogger());
 
         engine.Start();
 
@@ -188,15 +190,136 @@ public class BittorrentEngineTests
         Assert.Contains("thing.torrent", refused.Message, StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <c>MetadataTimeoutMinutes</c>' own default, five minutes. The tests that
+    /// are not about the clock never reach it.
+    /// </summary>
+    private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(new ClientLimits().MetadataTimeoutMinutes);
+
     private static readonly TorrentRequest Request = new(
         "magnet:?xt=urn:btih:92D8A3F6864911EF292B4BE0DD5286406396D2B3&dn=Silo+S03E06&tr=udp%3A%2F%2Fone.example%3A80",
         ["udp://two.example:80"],
         "C:\\downloads",
         4_388_742_440);
 
+    /// <remarks>
+    /// <para>
+    /// A magnet with no peer in the swarm that has the metadata never resolves,
+    /// and until it is failed the episode it was grabbed for is never looked
+    /// for again — it has been grabbed, as far as anything else can tell. 0.3.4
+    /// left those sitting at "fetching metadata" for as long as the server ran.
+    /// </para>
+    /// <para>
+    /// Not a minute early: the limit is the limit, and failing a torrent whose
+    /// metadata was about to arrive throws away a real download.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AMagnetWhoseMetadataNeverArrivesFailsWhenTheLimitPasses()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
+        ActivityJournal journal = new(clock);
+
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), journal, new CapturingLogger(), clock);
+
+        engine.Start();
+
+        await engine.AddAsync(Request, CancellationToken.None);
+
+        clock.Advance(TimeSpan.FromSeconds(299));
+
+        Assert.Equal(TorrentState.FetchingMetadata, (await engine.StatusAsync(CancellationToken.None))[0].State);
+        Assert.Null((await engine.StatusAsync(CancellationToken.None))[0].Error);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+
+        TorrentStatus failed = (await engine.StatusAsync(CancellationToken.None))[0];
+
+        Assert.Equal(TorrentState.Error, failed.State);
+        Assert.Contains("5 minutes", failed.Error!, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// Transfers ticks every minute. A failure said once a tick is a journal
+    /// nobody can read by the following morning.
+    /// </remarks>
+    [Fact]
+    public async Task TheFailureIsSaidOnceAndNotOnceATick()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
+        ActivityJournal journal = new(clock);
+
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), journal, new CapturingLogger(), clock);
+
+        engine.Start();
+
+        await engine.AddAsync(Request, CancellationToken.None);
+
+        for (int tick = 0; tick < 10; tick++)
+        {
+            clock.Advance(TimeSpan.FromMinutes(1));
+
+            await engine.StatusAsync(CancellationToken.None);
+        }
+
+        Assert.Single(
+            journal.Snapshot().History,
+            entry => entry.Outcome == ActivityOutcome.Failed);
+    }
+
+    /// <remarks>
+    /// A torrent resumed after the limit had passed is asked for again, and the
+    /// clock starts with it. Keeping the old one would fail it on the very next
+    /// tick without a single peer having been asked.
+    /// </remarks>
+    [Fact]
+    public async Task ResumingAFailedMagnetStartsItsClockAgain()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
+
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), new ActivityJournal(clock), new CapturingLogger(), clock);
+
+        engine.Start();
+
+        TorrentHandle handle = await engine.AddAsync(Request, CancellationToken.None);
+
+        clock.Advance(TimeSpan.FromMinutes(6));
+
+        Assert.Equal(TorrentState.Error, (await engine.StatusAsync(CancellationToken.None))[0].State);
+
+        await engine.ResumeAsync(handle.InfoHash, CancellationToken.None);
+
+        TorrentStatus resumed = (await engine.StatusAsync(CancellationToken.None))[0];
+
+        Assert.Equal(TorrentState.FetchingMetadata, resumed.State);
+        Assert.Null(resumed.Error);
+    }
+
+    /// <remarks>
+    /// Paused is not fetching. A torrent the owner stopped is not failed for
+    /// having sat there while it was stopped.
+    /// </remarks>
+    [Fact]
+    public async Task APausedMagnetIsNotFailedByTheClock()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
+
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), new ActivityJournal(clock), new CapturingLogger(), clock);
+
+        engine.Start();
+
+        TorrentHandle handle = await engine.AddAsync(Request, CancellationToken.None);
+
+        await engine.PauseAsync(handle.InfoHash, CancellationToken.None);
+
+        clock.Advance(TimeSpan.FromHours(9));
+
+        Assert.Equal(TorrentState.Paused, (await engine.StatusAsync(CancellationToken.None))[0].State);
+    }
+
     private static BittorrentEngine Started()
     {
-        BittorrentEngine engine = new(0, new ActivityJournal(), new CapturingLogger());
+        BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger());
 
         engine.Start();
 

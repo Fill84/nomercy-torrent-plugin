@@ -21,11 +21,17 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// already has and report it as somebody else's.
 /// </para>
 /// </remarks>
-public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, ILogger logger)
+public sealed class BittorrentEngine(
+    int listenPort,
+    TimeSpan metadataTimeout,
+    IActivityJournal journal,
+    ILogger logger,
+    TimeProvider? time = null)
     : ITorrentEngine, IDisposable
 {
     private readonly Lock _lock = new();
     private readonly Dictionary<string, Transfer> _torrents = new(StringComparer.OrdinalIgnoreCase);
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
     private ListenSockets? _sockets;
     private bool _started;
     private bool _disposed;
@@ -109,7 +115,8 @@ public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, I
                     // the ones the find stage merged, without duplicates.
                     [.. magnet.Trackers.Union(request.Trackers, StringComparer.OrdinalIgnoreCase)],
                     request.DownloadFolder,
-                    request.ExpectedBytes);
+                    request.ExpectedBytes,
+                    _time.GetUtcNow());
             }
             else
             {
@@ -144,6 +151,13 @@ public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, I
     {
         lock (_lock)
         {
+            DateTimeOffset now = _time.GetUtcNow();
+
+            foreach (Transfer transfer in _torrents.Values)
+            {
+                Expire(transfer, now);
+            }
+
             return Task.FromResult<IReadOnlyList<TorrentStatus>>([.. _torrents.Values.Select(one => one.Status())]);
         }
     }
@@ -155,10 +169,21 @@ public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, I
 
     public Task ResumeAsync(string infoHash, CancellationToken ct)
     {
-        // Back to waiting for its metadata, which is where every torrent here
-        // still is: nothing fetches it until the slice that does arrives, and
-        // saying "downloading" would be saying something untrue.
-        return Set(infoHash, TorrentState.FetchingMetadata);
+        lock (_lock)
+        {
+            if (_torrents.TryGetValue(infoHash, out Transfer? transfer))
+            {
+                // Back to waiting for its metadata, which is where every
+                // torrent here still is: nothing fetches it until the slice
+                // that does arrives, and saying "downloading" would be saying
+                // something untrue. The clock restarts with it, or a torrent
+                // resumed after the limit had passed would fail on the tick
+                // that followed without anybody having been asked again.
+                transfer.Restart(_time.GetUtcNow());
+            }
+
+            return Task.CompletedTask;
+        }
     }
 
     public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct)
@@ -199,6 +224,36 @@ public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, I
         }
     }
 
+    /// <summary>
+    /// Fails a magnet whose metadata nobody in the swarm will serve.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>MetadataTimeoutMinutes</c> from settings. Without it a magnet with no
+    /// peer that has the metadata sits in the list saying "fetching metadata"
+    /// for as long as the server runs, and the episode it was grabbed for is
+    /// never looked for again — which is what 0.3.4 did.
+    /// </para>
+    /// <para>
+    /// Said once, not once a tick: transfers ticks every minute, and the state
+    /// it moves to is the thing that stops it being said again.
+    /// </para>
+    /// </remarks>
+    private void Expire(Transfer transfer, DateTimeOffset now)
+    {
+        if (transfer.State != TorrentState.FetchingMetadata || now - transfer.Since < metadataTimeout)
+        {
+            return;
+        }
+
+        // Its own words, and they name the limit so the owner knows which
+        // setting to change.
+        transfer.Fail($"No peer sent its metadata within {metadataTimeout.TotalMinutes:0.#} minutes.");
+
+        logger.LogWarning("{Hash} was dropped: {Reason}", transfer.InfoHash, transfer.Error);
+        journal.Failed(ActivityStage.Download, transfer.Name ?? transfer.InfoHash, transfer.Error!);
+    }
+
     private Task Set(string infoHash, TorrentState state)
     {
         lock (_lock)
@@ -218,11 +273,20 @@ public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, I
         string? name,
         IEnumerable<string> trackers,
         string folder,
-        long? expectedBytes)
+        long? expectedBytes,
+        DateTimeOffset since)
     {
         private readonly List<string> _trackers = [.. trackers];
 
+        public string InfoHash { get; } = infoHash;
+
         public string? Name { get; } = name;
+
+        /// <summary>When its metadata was last asked for.</summary>
+        public DateTimeOffset Since { get; private set; } = since;
+
+        /// <summary>What went wrong, in its own words, or null.</summary>
+        public string? Error { get; private set; }
 
         public IReadOnlyList<string> Trackers => _trackers;
 
@@ -231,6 +295,21 @@ public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, I
         public IReadOnlyList<TorrentFile> Files { get; } = [];
 
         public TorrentState State { get; set; } = TorrentState.FetchingMetadata;
+
+        /// <summary>Back to fetching its metadata, with the clock started again.</summary>
+        public void Restart(DateTimeOffset now)
+        {
+            State = TorrentState.FetchingMetadata;
+            Error = null;
+            Since = now;
+        }
+
+        /// <summary>Puts it in the error state with the reason it got there.</summary>
+        public void Fail(string reason)
+        {
+            State = TorrentState.Error;
+            Error = reason;
+        }
 
         public void Add(IEnumerable<string> more)
         {
@@ -248,7 +327,7 @@ public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, I
             _ = Folder;
 
             return new(
-                infoHash,
+                InfoHash,
                 Name,
                 State,
                 // Nothing has been downloaded, and every number says so rather
@@ -264,7 +343,7 @@ public sealed class BittorrentEngine(int listenPort, IActivityJournal journal, I
                 // ratio to have.
                 Ratio: null,
                 Eta: null,
-                Error: null);
+                Error);
         }
     }
 }

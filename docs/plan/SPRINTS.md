@@ -697,9 +697,14 @@ parser agreeing with itself.
 1. Test: the extension handshake advertises `ut_metadata` and reads the peer's message id.
 2. Test: metadata pieces are requested, assembled and verified against the info hash.
 3. Test: a peer whose metadata does not hash correctly is dropped.
-4. Test: metadata not arriving within `MetadataTimeoutMinutes` fails the torrent, blacklists the hash,
-   and returns the episode to missing.
+4. Test: metadata not arriving within `MetadataTimeoutMinutes` fails the torrent with the reason, once
+   and not once a tick, and a paused torrent is not failed by the clock.
 5. Implement.
+
+**Blacklisting the hash and returning the episode to missing is not this slice's.** Both need the
+grab — the only thing that knows which episodes a hash was fetched for — and that arrives in `S6-01`,
+which has the step. This slice fails the torrent and says why; `S6-01` acts on it, for a metadata
+timeout and for a stall (`S5-12`) alike.
 
 ## S5-08 · Encryption
 
@@ -767,7 +772,9 @@ dashboard shows it the whole way.
    search attempt (**B2**).
 3. Test: the merged trackers and `DefaultTrackers` both travel with the request.
 4. Test: free space is checked first, and a refusal names how much was needed and how much there is.
-5. Implement.
+5. Test: a torrent the engine has failed — a metadata timeout (`S5-07`), a stall (`S5-12`) — blacklists
+   its hash with the engine's own reason and returns every episode that grab covered to missing.
+6. Implement.
 
 ## S6-02 · Completion and staging
 
