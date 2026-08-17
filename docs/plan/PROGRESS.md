@@ -5,10 +5,10 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-05` · Peer wire** — not started.
+**Slice `S5-06` · Pieces, verification and disk** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-05`. `docs/06-torrent-client.md` § Peer wire is
-the spec.
+Specification: `docs/plan/SPRINTS.md`, section `S5-06`. `docs/06-torrent-client.md` § Piece picking
+and § Disk are the spec.
 
 ## Blocked
 
@@ -71,7 +71,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-02` Torrent metadata and magnets
 - [x] `S5-03` The engine shell and its port
 - [x] `S5-04` Trackers
-- [ ] `S5-05` Peer wire
+- [x] `S5-05` Peer wire
 - [ ] `S5-06` Pieces, verification and disk
 - [ ] `S5-07` Metadata from peers
 - [ ] `S5-08` Encryption
@@ -281,6 +281,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   serving. That refusal is a fixture now. A connection id is kept for the minute BEP 15 allows,
   retries are `15 * 2^n` up to eight, every tracker is announced to at once, and one that will not
   answer costs only itself. `S5-05` speaks to the peers they name.
+- `S5-05` The handshake, the messages and the reassembly. A real peer's handshake is captured —
+  Transmission 4.1.3 in the Ubuntu swarm — and it proves the reserved bits are read at the offsets a
+  real client writes them: the extension bit on byte five, the DHT bit on byte seven. A peer
+  answering with another torrent's hash is another torrent and is dropped. Messages are reassembled
+  across arbitrary reads, because TCP is a stream: a bitfield arrives in several and two small
+  messages arrive in one. A keep-alive is four bytes of nought and not a fault; a block nobody asked
+  for is refused, length included. `S5-06` verifies pieces and writes them.
 
 ## Decisions
 
@@ -311,6 +318,14 @@ and note it here.
   MSBuild sees nothing to do — the suite then fails on code that is already correct. Three failures
   in this sprint were that and nothing else. The scripts now set the modification time on restore;
   when in doubt, `rm -rf bin obj` for that project and run again.
+- **No peer on this network will send a message, so the peer-*message* tests are stated rather than
+  captured.** Fifty peers were dialled over several announces by `tools/Capture --peer`: almost none
+  accepted a connection at all, and the one that did shook hands and said nothing further, even after
+  an `interested`. The handshake fixture is that real conversation. The message bytes are BEP 3's own
+  layout written out, round-tripped through the writer and the reader, and labelled as such in the
+  test file — and the capture tool is already written for the day a peer will talk. Worth checking
+  whether this machine's outbound connections to high ports are filtered: `S5-07` needs a peer that
+  answers.
 - **A captured tracker answer has its peer addresses replaced with TEST-NET-1.** The first peer a
   tracker names is usually this machine, and the rest are strangers in a public swarm; a fixture in a
   public repository must not publish either. Everything else — the lengths, the order, the intervals,

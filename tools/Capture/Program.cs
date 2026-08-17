@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Net;
 using System.Net.Sockets;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
@@ -32,6 +33,7 @@ internal static class Program
                 Capture --file <address> <file name>
                 Capture --announce <tracker> <info hash> <file name>
                 Capture --udp-announce <host:port> <info hash> <file name>
+                Capture --peer <udp tracker host:port> <info hash> <file name>
 
                   Saves what a source answers into tests/fixtures/. The source name is
                   the one in sources.json, quoted if it has a space.
@@ -56,6 +58,24 @@ internal static class Program
         if (arguments[0] == "--udp-announce" && arguments.Length > 3)
         {
             return await UdpAnnounceAsync(arguments[1], arguments[2], arguments[3]);
+        }
+
+        if (arguments[0] == "--peer" && arguments.Length > 3)
+        {
+            return await PeerAsync(arguments[1], arguments[2], arguments[3]);
+        }
+
+        if (arguments[0] == "--peer-at" && arguments.Length > 3)
+        {
+            string[] where = arguments[1].Split(':');
+
+            return await ShakeHandsAsync(
+                where[0],
+                int.Parse(where[1]),
+                Convert.FromHexString(arguments[2]),
+                arguments[3])
+                ? 0
+                : 1;
         }
 
         if (arguments[0] == "--file" && arguments.Length > 2)
@@ -306,6 +326,151 @@ internal static class Program
         await udp.SendAsync(announce, CancellationToken.None);
 
         return 0;
+    }
+
+    /// <summary>
+    /// Shakes hands with a real peer and saves everything it said.
+    /// </summary>
+    /// <remarks>
+    /// A tracker is asked for peers, and each is dialled in turn until one
+    /// answers. What is saved is what the <em>peer</em> sent — its handshake and
+    /// whatever messages followed, usually a bitfield and a have or two. Only a
+    /// real client produces those, and a reader tested against bytes somebody
+    /// typed is a reader tested against somebody's idea of the protocol.
+    /// </remarks>
+    private static async Task<int> PeerAsync(string tracker, string infoHash, string name)
+    {
+        string[] parts = tracker.Split(':');
+        byte[] hash = Convert.FromHexString(infoHash);
+        byte[] peerId = System.Text.Encoding.ASCII.GetBytes("-NM0400-" + Guid.NewGuid().ToString("n")[..12]);
+
+        using UdpClient udp = new();
+        udp.Client.ReceiveTimeout = 8000;
+        udp.Connect(parts[0], int.Parse(parts[1]));
+
+        byte[] connect = new byte[16];
+        BinaryPrimitives.WriteInt64BigEndian(connect, 0x41727101980L);
+        BinaryPrimitives.WriteInt32BigEndian(connect.AsSpan(8), 0);
+        BinaryPrimitives.WriteInt32BigEndian(connect.AsSpan(12), 0x2222AAAA);
+
+        await udp.SendAsync(connect, CancellationToken.None);
+        UdpReceiveResult connected = await udp.ReceiveAsync(CancellationToken.None);
+
+        byte[] announce = new byte[98];
+        BinaryPrimitives.WriteInt64BigEndian(announce, BinaryPrimitives.ReadInt64BigEndian(connected.Buffer.AsSpan(8)));
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(8), 1);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(12), 0x2222AAAB);
+        hash.CopyTo(announce.AsSpan(16));
+        peerId.CopyTo(announce.AsSpan(36));
+        BinaryPrimitives.WriteInt64BigEndian(announce.AsSpan(64), 6345887744);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(80), 2);
+        BinaryPrimitives.WriteInt32BigEndian(announce.AsSpan(92), 50);
+        BinaryPrimitives.WriteUInt16BigEndian(announce.AsSpan(96), 51413);
+
+        await udp.SendAsync(announce, CancellationToken.None);
+        UdpReceiveResult answered = await udp.ReceiveAsync(CancellationToken.None);
+
+        // Our own handshake: the length, the name, the reserved bytes with the
+        // extension and DHT bits on, the info hash and who we are.
+        byte[] handshake = new byte[68];
+        handshake[0] = 19;
+        "BitTorrent protocol"u8.CopyTo(handshake.AsSpan(1));
+        handshake[25] = 0x10;
+        handshake[27] = 0x01;
+        hash.CopyTo(handshake.AsSpan(28));
+        peerId.CopyTo(handshake.AsSpan(48));
+
+        _ = handshake;
+
+        for (int at = 20; at + 6 <= answered.Buffer.Length; at += 6)
+        {
+            IPAddress address = new(answered.Buffer.AsSpan(at, 4));
+            int port = BinaryPrimitives.ReadUInt16BigEndian(answered.Buffer.AsSpan(at + 4, 2));
+
+            if (await ShakeHandsAsync(address.ToString(), port, hash, name))
+            {
+                return 0;
+            }
+        }
+
+        Console.Error.WriteLine("No peer answered.");
+
+        return 1;
+    }
+
+    /// <summary>
+    /// Dials one peer, shakes hands, and saves everything it says back.
+    /// </summary>
+    /// <remarks>
+    /// The reserved bytes carry the extension bit on byte five and the DHT bit
+    /// on byte seven, exactly as the client will send them — a peer that reads
+    /// them decides what it offers us on the strength of them, so a capture
+    /// taken without them is a conversation this client will never have.
+    /// </remarks>
+    private static async Task<bool> ShakeHandsAsync(string host, int port, byte[] hash, string name)
+    {
+        byte[] peerId = System.Text.Encoding.ASCII.GetBytes("-NM0400-" + Guid.NewGuid().ToString("n")[..12]);
+
+        byte[] handshake = new byte[68];
+        handshake[0] = 19;
+        "BitTorrent protocol"u8.CopyTo(handshake.AsSpan(1));
+        handshake[25] = 0x10;
+        handshake[27] = 0x01;
+        hash.CopyTo(handshake.AsSpan(28));
+        peerId.CopyTo(handshake.AsSpan(48));
+
+        try
+        {
+            using TcpClient peer = new();
+            await peer.ConnectAsync(host, port, new CancellationTokenSource(4000).Token);
+
+            NetworkStream stream = peer.GetStream();
+            await stream.WriteAsync(handshake, CancellationToken.None);
+
+            // Interested, as a real client says straight after handshaking. A
+            // peer that hears nothing from us has no reason to say anything
+            // back, and the capture is then a handshake and silence.
+            await stream.WriteAsync(new byte[] { 0, 0, 0, 1, 2 }, CancellationToken.None);
+
+            using MemoryStream heard = new();
+            byte[] buffer = new byte[16 * 1024];
+            CancellationTokenSource listening = new(15000);
+
+            while (heard.Length < 128 * 1024)
+            {
+                int read = await stream.ReadAsync(buffer, listening.Token);
+
+                if (read == 0)
+                {
+                    break;
+                }
+
+                heard.Write(buffer.AsSpan(0, read));
+            }
+
+            // A handshake and nothing else is a peer that hung up on a
+            // stranger: worth keeping once, and not what a reader of messages
+            // can be tested against.
+            if (heard.Length <= 68)
+            {
+                Console.Error.WriteLine($"{host}:{port} shook hands and said nothing else.");
+
+                return false;
+            }
+
+            string path = Path.Combine(RepositoryRoot(), "tests", "fixtures", name);
+            await File.WriteAllBytesAsync(path, heard.ToArray(), CancellationToken.None);
+
+            Console.Error.WriteLine($"Wrote {heard.Length} bytes to {path}, from {host}:{port}.");
+
+            return true;
+        }
+        catch (Exception whatever) when (whatever is SocketException or OperationCanceledException or IOException)
+        {
+            Console.Error.WriteLine($"{host}:{port} did not answer.");
+
+            return false;
+        }
     }
 
     /// <summary>
