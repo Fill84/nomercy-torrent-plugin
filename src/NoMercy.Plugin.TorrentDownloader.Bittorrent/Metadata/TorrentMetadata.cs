@@ -146,8 +146,13 @@ public sealed record TorrentMetadata(
         ReadOnlySpan<byte> raw,
         IReadOnlyList<string> trackers)
     {
-        // Over the bytes as they arrived, never over anything re-encoded: this
-        // is the torrent's identity and every peer checks it.
+        // Over the bytes as they arrived. This reader keeps every entry it did
+        // not recognise and writes them back in the order they were read, so a
+        // re-encode of a real torrent comes out byte for byte the same — which
+        // BencodeTests asserts, and which is the only reason the two are the
+        // same thing today. A file whose keys are out of order would not be:
+        // it would hash one way through a re-encode and another through what
+        // arrived, and what arrived is the one every peer checks.
         string hash = Convert.ToHexString(SHA1.HashData(raw));
 
         string name = info.Text("name")

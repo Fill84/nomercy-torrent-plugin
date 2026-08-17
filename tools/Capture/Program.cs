@@ -1,7 +1,9 @@
 using System.Buffers.Binary;
 using System.Net;
 using System.Net.Sockets;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
+using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -34,6 +36,7 @@ internal static class Program
                 Capture --announce <tracker> <info hash> <file name>
                 Capture --udp-announce <host:port> <info hash> <file name>
                 Capture --peer <udp tracker host:port> <info hash> <file name>
+                Capture --mse <udp tracker host:port> <info hash> <file name>
 
                   Saves what a source answers into tests/fixtures/. The source name is
                   the one in sources.json, quoted if it has a space.
@@ -63,6 +66,11 @@ internal static class Program
         if (arguments[0] == "--peer" && arguments.Length > 3)
         {
             return await PeerAsync(arguments[1], arguments[2], arguments[3]);
+        }
+
+        if (arguments[0] == "--mse" && arguments.Length > 3)
+        {
+            return await PeerAsync(arguments[1], arguments[2], arguments[3], encrypted: true);
         }
 
         if (arguments[0] == "--peer-at" && arguments.Length > 3)
@@ -338,7 +346,7 @@ internal static class Program
     /// real client produces those, and a reader tested against bytes somebody
     /// typed is a reader tested against somebody's idea of the protocol.
     /// </remarks>
-    private static async Task<int> PeerAsync(string tracker, string infoHash, string name)
+    private static async Task<int> PeerAsync(string tracker, string infoHash, string name, bool encrypted = false)
     {
         string[] parts = tracker.Split(':');
         byte[] hash = Convert.FromHexString(infoHash);
@@ -387,7 +395,7 @@ internal static class Program
             IPAddress address = new(answered.Buffer.AsSpan(at, 4));
             int port = BinaryPrimitives.ReadUInt16BigEndian(answered.Buffer.AsSpan(at + 4, 2));
 
-            if (await ShakeHandsAsync(address.ToString(), port, hash, name))
+            if (await ShakeHandsAsync(address.ToString(), port, hash, name, encrypted))
             {
                 return 0;
             }
@@ -407,7 +415,7 @@ internal static class Program
     /// them decides what it offers us on the strength of them, so a capture
     /// taken without them is a conversation this client will never have.
     /// </remarks>
-    private static async Task<bool> ShakeHandsAsync(string host, int port, byte[] hash, string name)
+    private static async Task<bool> ShakeHandsAsync(string host, int port, byte[] hash, string name, bool encrypted = false)
     {
         byte[] peerId = System.Text.Encoding.ASCII.GetBytes("-NM0400-" + Guid.NewGuid().ToString("n")[..12]);
 
@@ -424,8 +432,29 @@ internal static class Program
             using TcpClient peer = new();
             await peer.ConnectAsync(host, port, new CancellationTokenSource(4000).Token);
 
-            NetworkStream stream = peer.GetStream();
-            await stream.WriteAsync(handshake, CancellationToken.None);
+            Stream stream = peer.GetStream();
+
+            if (encrypted)
+            {
+                // MSE, which is what a great many peers insist on before they
+                // will say anything at all. The handshake travels with it, so
+                // what is read back is already in the clear.
+                MseLink link = await MseNegotiation.InitiateAsync(
+                    stream,
+                    hash,
+                    handshake,
+                    MseMethod.Plaintext | MseMethod.Rc4,
+                    RandomNumberGenerator.Create(),
+                    new CancellationTokenSource(8000).Token);
+
+                Console.Error.WriteLine($"{host}:{port} agreed {link.Method}.");
+
+                stream = link.Stream;
+            }
+            else
+            {
+                await stream.WriteAsync(handshake, CancellationToken.None);
+            }
 
             // Interested, as a real client says straight after handshaking. A
             // peer that hears nothing from us has no reason to say anything

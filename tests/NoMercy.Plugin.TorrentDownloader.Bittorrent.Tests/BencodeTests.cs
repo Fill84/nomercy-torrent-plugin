@@ -217,6 +217,38 @@ public class BencodeTests
         return haystack.AsSpan().IndexOf(needle);
     }
 
+    /// <remarks>
+    /// <para>
+    /// A real torrent, read and written back, byte for byte — including the
+    /// entries this reader has no opinion about, and in the order they were in.
+    /// </para>
+    /// <para>
+    /// It is here because of what it protects. The info hash is taken over the
+    /// raw bytes of the info dictionary rather than over a re-encode of it, and
+    /// a mutation that swapped one for the other survived every test in this
+    /// suite: with a faithful writer the two really are the same bytes. This is
+    /// what makes them the same, so a writer that changed how it spells an
+    /// integer or a string fails here, next to the reason.
+    /// </para>
+    /// <para>
+    /// What it cannot catch is a writer that sorts the keys, because a real
+    /// torrent's are sorted already — bencode requires it. A file whose keys
+    /// are out of order would hash differently through a re-encode and
+    /// identically through the raw bytes, and no fixture here is one. That is
+    /// the whole argument for hashing what arrived rather than what was
+    /// rebuilt, and it is an argument rather than a test.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("ubuntu-desktop.torrent")]
+    [InlineData("archive-multifile.torrent")]
+    public void ARealTorrentIsWrittenBackByteForByte(string file)
+    {
+        byte[] torrent = File.ReadAllBytes(Path.Combine(Path.GetDirectoryName(Torrent)!, file));
+
+        Assert.Equal(torrent, Bencode.Write(Bencode.Read(torrent).Root));
+    }
+
     private static string Torrent
     {
         get

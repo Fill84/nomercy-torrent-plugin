@@ -5,11 +5,12 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-08` · Encryption** — not started.
+**Slice `S5-09` · DHT** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-08`. `docs/06-torrent-client.md` § Encryption is
-the spec. Its first step wants **a captured MSE exchange**, and no peer on this network has held a
-conversation yet — read the note under **Decisions** before starting, and take a capture first.
+Specification: `docs/plan/SPRINTS.md`, section `S5-09`. `docs/06-torrent-client.md` § DHT is the
+spec. Its second step wants **captured packets**, and a DHT node answers a UDP packet from anybody —
+unlike a peer, which has to accept a TCP connection. `tools/Capture` should be able to take these
+for real; see the note under **Decisions** about what this machine can and cannot reach.
 
 ## Blocked
 
@@ -75,7 +76,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-05` Peer wire
 - [x] `S5-06` Pieces, verification and disk
 - [x] `S5-07` Metadata from peers
-- [ ] `S5-08` Encryption
+- [x] `S5-08` Encryption
 - [ ] `S5-09` DHT
 - [ ] `S5-10` Peer exchange and local discovery
 - [ ] `S5-11` Rate limits, choking and seeding
@@ -305,6 +306,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   so a fetch that fails drops every peer that contributed and starts again from nothing. A magnet
   nobody will serve the metadata for is failed after `MetadataTimeoutMinutes` with the reason, said
   once rather than once a tick. `S5-08` is encryption.
+- `S5-08` MSE/PE, which is obfuscation and not security: Diffie-Hellman over the 768-bit prime every
+  client uses, then RC4 with the first 1024 bytes of keystream thrown away, a different key each
+  way. The info hash never goes on the wire — which torrent is said as a hash exclusive-ored with
+  one derived from the shared secret, so only a peer that did the exchange *and* already has the
+  hash can tell. Both methods are offered always, encryption is tried first and a peer that answers
+  with a plaintext handshake is dialled again in the clear. Allowed, never required.
+  `S5-09` is the DHT.
 
 ## Decisions
 
@@ -346,6 +354,19 @@ and note it here.
 - **`EndgamePieces` is eight and no document gives a number.** It is the point at which the last
   pieces are asked of every peer at once; the tail of a download is otherwise spent waiting on the
   slowest peer holding the last one. Written as a documented constant in the picker.
+- **The mutation harness counted a mutation that would not compile as "caught".** Warnings are
+  errors here, so a mutation that leaves a field or a using unused fails the build — and a build
+  that fails makes `dotnet test` exit non-zero, which the old script read as a test doing its job.
+  One real hole was hiding behind it (below). The harness now builds and tests as two steps and says
+  **NO BUILD** when the mutation proves nothing. Any sweep run before this is worth repeating; the
+  `S5-07` set was, and one of its eighteen was this.
+- **The info hash is taken over the raw bytes, and no test can tell.** A mutation hashing a
+  re-encode of the parsed info dictionary survives every test in the suite, because this reader keeps
+  every entry it did not recognise and this writer puts them back in the order they were read — for
+  a real torrent the two are the same bytes. `BencodeTests` now asserts that byte-for-byte round trip
+  on both real torrents, which catches a writer that changed how it spells an integer or a string. It
+  cannot catch one that sorts keys, because a real torrent's keys are sorted already. The raw bytes
+  stay: what a peer checks is what arrived, and a file whose keys were out of order would prove it.
 - **The metadata is tested against the real info dictionary, not a made-up one.** The 484 kilobytes
   inside `ubuntu-desktop.torrent` are taken out as raw bytes, handed back a piece at a time through
   the writer and the reader, and have to reassemble to Ubuntu's own published info hash and to the
@@ -364,9 +385,15 @@ and note it here.
   accepted a connection at all, and the one that did shook hands and said nothing further, even after
   an `interested`. The handshake fixture is that real conversation. The message bytes are BEP 3's own
   layout written out, round-tripped through the writer and the reader, and labelled as such in the
-  test file — and the capture tool is already written for the day a peer will talk. Worth checking
-  whether this machine's outbound connections to high ports are filtered: `S5-07` needs a peer that
-  answers.
+  test file — and the capture tool is already written for the day a peer will talk.
+- **This machine's outbound connections are not filtered; the peers simply will not accept one.**
+  Measured: TCP to ports 80, 8080, 6881 and 51413 on a host that answers on every port all connected.
+  Fifty peers out of a real Ubuntu announce, dialled with MSE by `tools/Capture --mse`, refused the
+  connection every one. They are behind NAT and reachable only if they dial *us*, and nothing can
+  dial us until the port is mapped, which is `S5-12`. A real peer conversation therefore needs one of
+  three things: the listen port forwarded, a real client run on this machine or the LAN to dial, or
+  `S5-12`'s UPnP working. Until then peer-*message* bytes stay stated rather than captured. A DHT
+  node, by contrast, answers a UDP packet from anybody, so `S5-09` can capture for real.
 - **A captured tracker answer has its peer addresses replaced with TEST-NET-1.** The first peer a
   tracker names is usually this machine, and the rest are strangers in a public swarm; a fixture in a
   public repository must not publish either. Everything else — the lengths, the order, the intervals,

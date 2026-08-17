@@ -708,8 +708,12 @@ timeout and for a stall (`S5-12`) alike.
 
 ## S5-08 · Encryption
 
-1. Test: the MSE handshake against a captured exchange — DH key agreement, the `req1`/`req2`/`req3`
-   hashes, and the RC4 keystream discard of 1024 bytes.
+1. Test: the MSE handshake — DH key agreement, the `req1`/`req2`/`req3` hashes, and the RC4 keystream
+   discard of 1024 bytes. **A captured exchange was not possible**: no peer in a real swarm will
+   accept a connection from this machine (see `PROGRESS.md` § Decisions, which has the measurements).
+   The cipher is put to RFC 6229's published vectors instead, the prime to a primality test, and the
+   exchange to this client's own other end — so the two constants that would make a client talk only
+   to itself are checked against something outside this repository.
 2. Test: both crypto methods are offered and plaintext is accepted when the peer chooses it.
 3. Test: an outgoing connection tries encrypted first and falls back to plaintext.
 4. Implement.
