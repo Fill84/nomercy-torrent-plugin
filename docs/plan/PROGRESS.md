@@ -5,10 +5,10 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-06` · Pieces, verification and disk** — not started.
+**Slice `S5-07` · Metadata from peers** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-06`. `docs/06-torrent-client.md` § Piece picking
-and § Disk are the spec.
+Specification: `docs/plan/SPRINTS.md`, section `S5-07`. `docs/06-torrent-client.md` § Metadata is
+the spec. **It needs a peer that will talk** — see the note under **Decisions** about this network.
 
 ## Blocked
 
@@ -72,7 +72,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-03` The engine shell and its port
 - [x] `S5-04` Trackers
 - [x] `S5-05` Peer wire
-- [ ] `S5-06` Pieces, verification and disk
+- [x] `S5-06` Pieces, verification and disk
 - [ ] `S5-07` Metadata from peers
 - [ ] `S5-08` Encryption
 - [ ] `S5-09` DHT
@@ -288,6 +288,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   across arbitrary reads, because TCP is a stream: a bitfield arrives in several and two small
   messages arrive in one. A keep-alive is four bytes of nought and not a fault; a block nobody asked
   for is refused, length included. `S5-06` verifies pieces and writes them.
+- `S5-06` Rarest-first, with the first four picked at random so something is verified early, and the
+  last few asked of everybody at once. A piece is verified against the twenty bytes the torrent named
+  **before** anything of it reaches the disk; a piece that fails is discarded whole, because there is
+  no telling which block was bad, and a peer present at two failures is banned for the session. On
+  disk a piece is written across as many files as it covers, at each one's own offset — the real
+  Archive torrent's first piece covers the end of a thumbnail and the start of a nine-megabyte scan.
+  Files are made at full size and marked sparse, so a six-gigabyte torrent does not cost six
+  gigabytes before a peer has answered. `S5-07` fetches metadata from peers.
 
 ## Decisions
 
@@ -318,6 +326,12 @@ and note it here.
   MSBuild sees nothing to do — the suite then fails on code that is already correct. Three failures
   in this sprint were that and nothing else. The scripts now set the modification time on restore;
   when in doubt, `rm -rf bin obj` for that project and run again.
+- **A bitfield is high bit first**: the top bit of the first byte is piece nought, which is the
+  opposite of what a bit index usually means. A client that got it backwards would ask every peer for
+  what they do not have and refuse what they do.
+- **`EndgamePieces` is eight and no document gives a number.** It is the point at which the last
+  pieces are asked of every peer at once; the tail of a download is otherwise spent waiting on the
+  slowest peer holding the last one. Written as a documented constant in the picker.
 - **No peer on this network will send a message, so the peer-*message* tests are stated rather than
   captured.** Fifty peers were dialled over several announces by `tools/Capture --peer`: almost none
   accepted a connection at all, and the one that did shook hands and said nothing further, even after
