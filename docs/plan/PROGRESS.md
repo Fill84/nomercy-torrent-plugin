@@ -6,11 +6,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **Sprint 5 — BitTorrent**
 **Sprint 6 — Grab, staging, dispatch**
-**Slice `S6-02` · Completion and staging** — not started.
+**Slice `S6-03` · Encode dispatch** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S6-02`. `docs/06-torrent-client.md` § Around the
-transfer is the spec. **Only video files are written into a library folder** — that is a hard rule
-from `CLAUDE.md`, not a preference — and the largest video in a multi-file torrent is the episode.
+Specification: `docs/plan/SPRINTS.md`, section `S6-03`. **Read first: `docs/09-host-contract.md`
+§ Dispatching an encode — every line.** It is the one slice that reaches into the media server, and
+the contract is exact about the four type names, the scope, and which library an episode goes to.
 
 ## Blocked
 
@@ -85,7 +85,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 6 — Grab, staging, dispatch
 - [x] `S6-01` The grab
-- [ ] `S6-02` Completion and staging
+- [x] `S6-02` Completion and staging
 - [ ] `S6-03` Encode dispatch
 - [ ] `S6-04` Downloads page and history
 
@@ -352,7 +352,15 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   store keeps the magnet, so a torrent the client has forgotten is re-added rather than downloaded
   again, and keeps every episode a grab covers, so a season pack that fails puts all of them back to
   missing at once — blacklisted by hash, in one transaction, which is where a metadata timeout and a
-  stall both arrive. `S6-02` is completion and staging.
+  stall both arrive. `S6-02` stages what finished.
+- `S6-02` **Only video files are written into a library folder**, and the check is the extension —
+  a scene release ships a `.rar` the size of the episode, which no sample rule would catch. The
+  largest video is the episode; a sample is never it. Size only says "sample" when the torrent holds
+  something bigger for it to be a sample of, so a twenty-minute anime at a low bitrate is not
+  refused. A pack is matched by the episode number in each file's own name, never by order, and an
+  episode no file answered for is said to be missing rather than quietly counted as arrived. The move
+  is a copy, a length check and only then a delete, so an unwritable intake folder costs nothing:
+  the download is exactly where it was. `S6-03` dispatches the encode.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its
@@ -410,6 +418,13 @@ and note it here.
   `SecretsNeverEscapeTests`. What is missing is the actions that add one, which `docs/08-ui.md` names
   as `AddPrivateTracker` and which `S8-02` owns. Nothing is wrong; it is simply not reachable from
   the page yet.
+- **A sample filter was hiding the video filter.** Every non-video in the staging test was small
+  enough to be taken for a sample, so removing the extension check entirely still passed — a mutation
+  found it. The test now carries a three-gigabyte `.rar`, which is what a scene release really ships,
+  and the rule that matters is the extension.
+- **"Smaller than fifty megabytes" was condemning legitimate episodes.** A twenty-minute anime at a
+  low bitrate is smaller than that and is the whole torrent. Size now only says "sample" when there
+  is something bigger in the same torrent for it to be a sample of.
 - **A size was being formatted in the machine's culture.** "needs 3,7 GB" on a server set to Dutch,
   which is this one. Every number a person reads is now written in the invariant culture: a figure
   whose meaning depends on where the machine was set up is one nobody can quote back reliably. Found
