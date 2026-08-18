@@ -212,6 +212,63 @@ public sealed class GrabRepository(Database database)
         return covered.Count;
     }
 
+    /// <summary>
+    /// Records that an episode's encode was queued.
+    /// </summary>
+    /// <remarks>
+    /// The history is what the owner reads to answer "what happened to that
+    /// episode". A grab that reached the encoder and one that stopped at the
+    /// intake folder look identical from the outside, and this line is the
+    /// difference.
+    /// </remarks>
+    public async Task DispatchedAsync(
+        EpisodeKey episode,
+        string showTitle,
+        string releaseTitle,
+        string library,
+        DateTimeOffset at,
+        CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+            VALUES ($at, 'dispatched', $show, $season, $episode, $title, $release, NULL, $detail);
+            """;
+
+        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$show", episode.ShowId);
+        command.Parameters.AddWithValue("$season", episode.Season);
+        command.Parameters.AddWithValue("$episode", episode.Number);
+        command.Parameters.AddWithValue("$title", showTitle);
+        command.Parameters.AddWithValue("$release", releaseTitle);
+        command.Parameters.AddWithValue("$detail", $"encode dispatched to library {library}");
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>What the history says happened, newest first.</summary>
+    public async Task<IReadOnlyList<(string Event, string? Detail)>> HistoryAsync(CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText = "SELECT event, detail FROM history ORDER BY id DESC;";
+
+        List<(string, string?)> lines = [];
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
+
+        while (await reader.ReadAsync(ct))
+        {
+            lines.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+        }
+
+        return lines;
+    }
+
     /// <summary>Every key the profile should refuse, for the decide stage.</summary>
     public async Task<IReadOnlySet<string>> BlacklistedAsync(CancellationToken ct)
     {

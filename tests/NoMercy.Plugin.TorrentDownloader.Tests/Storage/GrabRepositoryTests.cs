@@ -160,6 +160,30 @@ public class GrabRepositoryTests : IDisposable
         Assert.Equal(1, await grabs.FailedAsync(Hash.ToLowerInvariant(), "gone", When, CancellationToken.None));
     }
 
+    /// <remarks>
+    /// The history is what the owner reads to answer "what happened to that
+    /// episode". A grab that reached the encoder and one that stopped at the
+    /// intake folder look identical from outside without this line.
+    /// </remarks>
+    [Fact]
+    public async Task ADispatchedEncodeIsRecordedInHistory()
+    {
+        GrabRepository grabs = Repository();
+
+        await grabs.DispatchedAsync(
+            Episode(6),
+            "Silo",
+            "Silo S03E06 1080p",
+            "library-tv",
+            When,
+            CancellationToken.None);
+
+        (string Event, string? Detail) line = Assert.Single(await grabs.HistoryAsync(CancellationToken.None));
+
+        Assert.Equal("dispatched", line.Event);
+        Assert.Contains("library-tv", line.Detail!, StringComparison.Ordinal);
+    }
+
     public void Dispose()
     {
         // The pool holds the file open, so it cannot be deleted until every

@@ -6,11 +6,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **Sprint 5 — BitTorrent**
 **Sprint 6 — Grab, staging, dispatch**
-**Slice `S6-03` · Encode dispatch** — not started.
+**Slice `S6-04` · Downloads page and history** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S6-03`. **Read first: `docs/09-host-contract.md`
-§ Dispatching an encode — every line.** It is the one slice that reaches into the media server, and
-the contract is exact about the four type names, the scope, and which library an episode goes to.
+Specification: `docs/plan/SPRINTS.md`, section `S6-04`. `docs/08-ui.md` is the spec. **G4**: a grab
+with no transfer yet renders a row saying so, rather than vanishing from the page — and every number
+on it is real or says it is not known.
 
 ## Blocked
 
@@ -86,7 +86,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 6 — Grab, staging, dispatch
 - [x] `S6-01` The grab
 - [x] `S6-02` Completion and staging
-- [ ] `S6-03` Encode dispatch
+- [x] `S6-03` Encode dispatch
 - [ ] `S6-04` Downloads page and history
 
 ### Sprint 7 — Anime
@@ -361,6 +361,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   episode no file answered for is said to be missing rather than quietly counted as arrived. The move
   is a copy, a length check and only then a delete, so an unwritable intake folder costs nothing:
   the download is exactly where it was. `S6-03` dispatches the encode.
+- `S6-03` The encoder is reached **by name through `IServiceProvider`**, never by reference, or it
+  and the entity model would become part of this plugin's ABI. Every trap in
+  `docs/09-host-contract.md` is now a test: the ambiguous `ILibraryRepository` spelled in full, the
+  full `GetLibraryByIdAsync` rather than the folderless Lite one, everything resolved **inside a
+  scope**, the id taken from the server rather than the filename and **nothing dispatched when
+  nothing matched**, the show's own library, and the *first* folder with no preference. Nothing in
+  the path throws: it once unwound the whole transfers cadence, so one type mismatch stopped every
+  download in flight from being looked at. `S6-04` is the Downloads page.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its
@@ -418,6 +426,12 @@ and note it here.
   `SecretsNeverEscapeTests`. What is missing is the actions that add one, which `docs/08-ui.md` names
   as `AddPrivateTracker` and which `S8-02` owns. Nothing is wrong; it is simply not reachable from
   the page yet.
+- **The encode dispatch is tested by being the server.** `tests/.../Hosting/FakeServer.cs` declares
+  types under the exact namespaces `docs/09-host-contract.md` names, so the plugin's by-name
+  resolution finds them. It is the only way this path can be tested at all without referencing the
+  real encoder — which is the thing the contract exists to prevent — and it means the Lite variant,
+  the three-argument file-list overload and the unregistered `ILibraryRepository` are all present to
+  be wrongly chosen.
 - **A sample filter was hiding the video filter.** Every non-video in the staging test was small
   enough to be taken for a sample, so removing the extension check entirely still passed — a mutation
   found it. The test now carries a three-gigabyte `.rar`, which is what a scene release really ships,
