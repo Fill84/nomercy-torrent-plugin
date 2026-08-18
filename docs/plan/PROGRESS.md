@@ -6,11 +6,16 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **Sprint 5 — BitTorrent**
 **Sprint 6 — Grab, staging, dispatch**
-**Slice `S6-04` · Downloads page and history** — not started.
+**Sprint 7 — Anime**
+**Slice `S7-01` · Anime naming** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S6-04`. `docs/08-ui.md` is the spec. **G4**: a grab
-with no transfer yet renders a row saying so, rather than vanishing from the page — and every number
-on it is real or says it is not known.
+Specification: `docs/plan/SPRINTS.md`, section `S7-01`. It wants **real Nyaa pages and real fansub
+release names** as fixtures first — `docs/04-domain.md` § The grammar has the rows, and `H3` is why
+nothing here may be written from imagination.
+
+**Sprint 6 is otherwise done.** What is left of it is the wiring: nothing calls `Grab`, `Staging`,
+`Stager`, `EncodeDispatch` or the Downloads page yet, because the transfers cadence that would is
+`S8-02`'s. Every part is built and tested on its own.
 
 ## Blocked
 
@@ -87,7 +92,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S6-01` The grab
 - [x] `S6-02` Completion and staging
 - [x] `S6-03` Encode dispatch
-- [ ] `S6-04` Downloads page and history
+- [x] `S6-04` Downloads page and history
 
 ### Sprint 7 — Anime
 - [ ] `S7-01` Anime naming
@@ -369,6 +374,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nothing matched**, the show's own library, and the *first* folder with no preference. Nothing in
   the path throws: it once unwound the whole transfers cadence, so one type mismatch stopped every
   download in flight from being looked at. `S6-04` is the Downloads page.
+- `S6-04` **G4**: the Downloads page is built from the **grabs** and the transfer is what may be
+  missing, so a grab the client has not taken up — or has quietly lost — is a row that says which of
+  the two it is, rather than being on no page at all while the episode shows as unavailable. Every
+  number is real or says it is not known: peers, seeds and ratio show a dash rather than nought,
+  because "0 peers" is a torrent nobody is sharing and this one has not been asked yet. A size of
+  nought gets no percentage either — dividing by it prints something that is not a number. History
+  carries the reason on every kind of line, since "skipped" and "failed" without one are exactly the
+  entries the page is opened for.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its
