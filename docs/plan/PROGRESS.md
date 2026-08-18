@@ -6,20 +6,22 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **Sprint 5 — BitTorrent**
 **Sprint 6 — Grab, staging, dispatch**
-**Sprint 7 — Anime**
-**Slice `S7-01` · Anime naming** — not started.
+**Sprint 8 — Finish**
+**Slice `S8-01` · The remaining pages** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S7-01`. It wants **real Nyaa pages and real fansub
-release names** as fixtures first — `docs/04-domain.md` § The grammar has the rows, and `H3` is why
-nothing here may be written from imagination.
-
-**Sprint 6 is otherwise done.** What is left of it is the wiring: nothing calls `Grab`, `Staging`,
-`Stager`, `EncodeDispatch` or the Downloads page yet, because the transfers cadence that would is
-`S8-02`'s. Every part is built and tested on its own.
+Specification: `docs/plan/SPRINTS.md`, section `S8-01`. **The owner chose Sprint 8 before Sprint 7**
+(18 August 2026): the parts of Sprint 6 are all built and tested on their own and nothing calls them,
+so the wiring in `S8-02` is what makes any of it real. Anime naming (`S7-01`) follows afterwards; its
+Nyaa fixtures are already captured, so it will start with the grammar rather than with the network.
 
 ## Blocked
 
-Nothing. Two things wait on the owner without blocking anything:
+**The acceptance run is ready to go and needs the server stopped.** The owner asked for it on
+18 August 2026. The sequence is: owner stops the media server, says so; `scripts/deploy-to-server.ps1
+-Build` runs; owner starts it again; the dashboard is watched over the real library for Sprints 1, 4
+and 6. Nothing else is waiting.
+
+Two things wait on the owner without blocking anything:
 
 - **Sprint 4's acceptance on the real library.** The chain decides end to end and is proven against
   real captured pages, but "the dashboard shows what it would take for every missing episode" needs
@@ -460,6 +462,15 @@ and note it here.
   the way in and on the way to a query, so matching is exact; a mutation removing the collation
   survived every test, because nothing this code writes could ever need it. The normalisation is the
   rule, it is tested, and the collation is gone.
+- **`DefaultTrackers` ships empty, and that is the owner's decision** (18 August 2026). Only the
+  trackers a source's own magnet supplied travel with a grab, so nothing announces what is being
+  downloaded to a host the owner never agreed to. It costs speed on a public torrent with few
+  trackers, and that is the trade the owner chose. The setting is still there for anyone who wants to
+  fill it in.
+- **A port that cannot be mapped must tell the owner to forward it by hand** (owner, 18 August 2026):
+  try UPnP, then NAT-PMP, and when both fail say plainly that TCP and UDP 51413 need forwarding to
+  this machine. `PortMapping` already tries both and keeps every refusal; what is missing is
+  rendering it, which is now a step in `S8-01`.
 - **The end-to-end transfer found two faults that no unit test could have.** A peer's unchoke was
   being swallowed by the connection — it updated the flag and never told the session — so nothing was
   ever requested and the download sat at nought for ever. And the test itself deadlocked: the side

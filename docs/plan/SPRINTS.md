@@ -879,7 +879,15 @@ in the queue.
 ## S8-01 · The remaining pages
 
 Downloads, History, Skipped, Sources per `docs/08-ui.md`, each with a test that renders from a seeded
-store and asserts the numbers (**G3**, **G4**).
+store and asserts the numbers (**G3**, **G4**). Downloads and History are done in `S6-04`; Skipped and
+Sources are what is left.
+
+Also: **the Settings page says when the port could not be mapped, and what to do about it.** UPnP is
+tried, then NAT-PMP, and when both fail the page tells the owner in plain words that TCP and UDP
+`ListenPort` need forwarding to this machine by hand — with every refusal the router gave. The
+owner asked for exactly this on 18 August 2026, and it is what makes an unreachable client something
+they can fix rather than something they have to notice. `PortMapping` already collects the reasons;
+nothing renders them yet.
 
 ## S8-02 · The remaining actions
 
