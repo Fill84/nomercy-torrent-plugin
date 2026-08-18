@@ -1,3 +1,4 @@
+using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugins.Abstractions;
@@ -25,7 +26,8 @@ public static class SettingsView
     public static PluginView Render(
         Settings settings,
         IReadOnlyCollection<string> secretsSet,
-        IReadOnlyList<string> problems)
+        IReadOnlyList<string> problems,
+        PortMapResult? mapping = null)
     {
         HashSet<string> present = new(secretsSet, StringComparer.Ordinal);
 
@@ -36,6 +38,7 @@ public static class SettingsView
             [
                 .. problems.Select((string problem, int index) =>
                     PluginViews.Text($"problem-{index}", problem, "caption")),
+                .. Port(settings, mapping),
                 Folders(settings),
                 CadenceSection(settings.Cadences),
                 Quality(settings.Profile),
@@ -45,6 +48,43 @@ public static class SettingsView
                 NotWiredYet(settings),
             ],
         };
+    }
+
+    /// <summary>
+    /// What became of the attempt to have the router open the listening port.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nothing at all while it worked, and while it has not been tried. When
+    /// both UPnP and NAT-PMP have refused, it says so and says what to do about
+    /// it: the owner has to forward the port by hand, and a client nobody can
+    /// dial is one that downloads from the few peers it reaches out to and
+    /// seeds to nobody.
+    /// </para>
+    /// <para>
+    /// With the router's own words underneath, because "port mapping failed"
+    /// and "your router has UPnP turned off" are different problems and only
+    /// one of them is worth walking to the cupboard for.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<PluginComponent> Port(Settings settings, PortMapResult? mapping)
+    {
+        if (mapping is null || mapping.Mapped)
+        {
+            yield break;
+        }
+
+        yield return PluginViews.Text(
+            "port-mapping",
+            $"The router would not open port {settings.Client.ListenPort}. "
+            + $"Forward TCP and UDP {settings.Client.ListenPort} to this machine by hand, "
+            + "or no peer will be able to reach it.",
+            "caption");
+
+        if (mapping.Reason is string refused)
+        {
+            yield return PluginViews.Text("port-mapping-reason", refused, "caption");
+        }
     }
 
     private static PluginComponent Folders(Settings settings)

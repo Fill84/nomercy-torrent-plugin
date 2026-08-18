@@ -9,6 +9,10 @@ Read this first, update it last. Nothing else decides what happens next.
 **Sprint 8 — Finish**
 **Slice `S8-01` · The remaining pages** — not started.
 
+**Part of it is done**: the Settings page now says when the port could not be mapped and that TCP and
+UDP `ListenPort` need forwarding by hand, with the router's own refusals under it. What is left of
+`S8-01` is the Skipped and Sources pages.
+
 Specification: `docs/plan/SPRINTS.md`, section `S8-01`. **The owner chose Sprint 8 before Sprint 7**
 (18 August 2026): the parts of Sprint 6 are all built and tested on their own and nothing calls them,
 so the wiring in `S8-02` is what makes any of it real. Anime naming (`S7-01`) follows afterwards; its

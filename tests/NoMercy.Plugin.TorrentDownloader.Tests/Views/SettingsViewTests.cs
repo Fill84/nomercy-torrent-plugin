@@ -1,3 +1,4 @@
+using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -112,5 +113,55 @@ public class SettingsViewTests
     public void TheSettingsPageIsAForm()
     {
         Assert.Equal(PluginLayout.Form, SettingsView.Render(new(), [], []).Layout);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The owner asked for exactly this: try UPnP, then NAT-PMP, and when both
+    /// fail say plainly that the port needs forwarding by hand. A client nobody
+    /// can dial downloads from the few peers it reaches out to and seeds to
+    /// nobody — and on this network neither protocol answers at all, so this is
+    /// the message that gets seen rather than an edge case.
+    /// </para>
+    /// <para>
+    /// The router's own words go underneath, because "port mapping failed" and
+    /// "your router has UPnP turned off" are different problems and only one is
+    /// worth walking to the cupboard for.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void APortThatCouldNotBeMappedTellsTheOwnerToForwardItByHand()
+    {
+        PluginView view = SettingsView.Render(
+            new(),
+            [],
+            [],
+            new(MappedBy.Nothing, 51413, "UPnP: no device answered the search; NAT-PMP: the gateway did not answer"));
+
+        string page = string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]);
+
+        Assert.Contains("51413", page, StringComparison.Ordinal);
+        Assert.Contains("by hand", page, StringComparison.Ordinal);
+        Assert.Contains("TCP and UDP", page, StringComparison.Ordinal);
+        Assert.Contains("no device answered the search", page, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// And nothing at all when the port is open, or when nothing has tried yet.
+    /// A page that said "the port is fine" on every load would be one more
+    /// thing to read past.
+    /// </remarks>
+    [Fact]
+    public void APortThatIsOpenSaysNothingAboutItself()
+    {
+        foreach (PortMapResult? mapping in new PortMapResult?[] { null, new(MappedBy.Upnp, 51413, null) })
+        {
+            PluginView view = SettingsView.Render(new(), [], [], mapping);
+
+            Assert.DoesNotContain(
+                "by hand",
+                string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]),
+                StringComparison.Ordinal);
+        }
     }
 }
