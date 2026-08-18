@@ -5,12 +5,12 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-11` · Rate limits, choking and seeding** — not started.
+**Slice `S5-12` · Resume, recovery, stalls, pause and ports** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-11`. `docs/06-torrent-client.md` § Rate limits,
-§ Choking and § Seeding are the spec. Its seventh step — **a passkey never appears in any rendered
-string, log line or journal entry** — is a hard rule from `CLAUDE.md` and wants a test that sweeps
-what is rendered rather than one that checks a single page.
+Specification: `docs/plan/SPRINTS.md`, section `S5-12`. `docs/06-torrent-client.md` § Stalls,
+§ Ports, § Lifecycle and § Recovery are the spec. It is the last slice of Sprint 5 and the biggest:
+nine steps. Its eighth — **UPnP then NAT-PMP** — is also what would let a peer dial this machine,
+which every peer-wire capture has wanted since `S5-05`.
 
 ## Blocked
 
@@ -79,7 +79,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-08` Encryption
 - [x] `S5-09` DHT
 - [x] `S5-10` Peer exchange and local discovery
-- [ ] `S5-11` Rate limits, choking and seeding
+- [x] `S5-11` Rate limits, choking and seeding
 - [ ] `S5-12` Resume, recovery, stalls, pause and ports
 
 ### Sprint 6 — Grab, staging, dispatch
@@ -327,6 +327,16 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   cookie so a client does not connect to itself. Both are refused outright for a private torrent, in
   both directions: a peer list arriving is the same leak as one leaving. `S5-11` is rate limits,
   choking and seeding.
+- `S5-11` Token buckets that start **empty** — one that started full would take a second's worth the
+  instant the plugin came up, which is when the owner is most likely to be watching something — and
+  hold at most a second's worth, so an hour idle is not an hour of allowance. The lower of the global
+  and the per-torrent limit decides and both are charged for what really went. Choking is tit for
+  tat: the four interested peers sending the most, worked out every ten seconds, plus one at random
+  every thirty so a peer that has never been given anything can prove itself. While seeding the
+  ranking is by upload rate, or the choice would be between peers all at nought. Seeding stops at the
+  ratio or the hours, whichever comes first, and **never early for a private torrent**. A passkey and
+  an API key are swept for across every page, every prop value, the journal and the log.
+  `S5-12` finishes Sprint 5.
 
 ## Decisions
 
@@ -368,6 +378,12 @@ and note it here.
 - **`EndgamePieces` is eight and no document gives a number.** It is the point at which the last
   pieces are asked of every peer at once; the tail of a download is otherwise spent waiting on the
   slowest peer holding the last one. Written as a documented constant in the picker.
+- **The Settings page renders no private-tracker rows yet, because nothing configures one.** The
+  view draws them from `settings.PrivateTrackers` and does it correctly — the passkey field says the
+  secret is set and the announce address shows `{passkey}` where it goes, both asserted in
+  `SecretsNeverEscapeTests`. What is missing is the actions that add one, which `docs/08-ui.md` names
+  as `AddPrivateTracker` and which `S8-02` owns. Nothing is wrong; it is simply not reachable from
+  the page yet.
 - **Local discovery is the first thing in this client with a real network test that passes.** Two
   sockets on this machine, a real announce on 239.192.152.143:6771, really heard — it is in
   `tests/*.Integration` because a machine with no multicast route would fail it, and that is a fact
