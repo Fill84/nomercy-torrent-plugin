@@ -5,14 +5,13 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-13` · The client, joined up** — not started, and it is new.
+**Sprint 6 — Grab, staging, dispatch**
+**Slice `S6-01` · The grab** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-13`. **Sprint 5's twelve slices built the parts of
-a torrent client and nothing drives them**: `AddAsync` records a torrent and opens no socket for it,
-so no magnet has ever downloaded a byte. No slice was ever written for the loop that joins them,
-which is a fault in the plan, and Sprint 5 cannot be accepted without it. `S5-13` now says so and
-carries the steps. Its fifth is the one that finally makes a real peer conversation possible: a
-second instance of this client, on this machine, seeding a fixture.
+Specification: `docs/plan/SPRINTS.md`, section `S6-01`. It is where the store of grabs is written,
+and three things already built are waiting on it: blacklisting a failed hash and returning its
+episode to missing (`S5-07`), carrying out `Recovery.Plan` (`S5-12`), and the engine being given
+somewhere to record what it is downloading.
 
 ## Blocked
 
@@ -83,7 +82,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-10` Peer exchange and local discovery
 - [x] `S5-11` Rate limits, choking and seeding
 - [x] `S5-12` Resume, recovery, stalls, pause and ports
-- [ ] `S5-13` The client, joined up
+- [x] `S5-13` The client, joined up
 
 ### Sprint 6 — Grab, staging, dispatch
 - [ ] `S6-01` The grab
@@ -340,6 +339,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   ratio or the hours, whichever comes first, and **never early for a private torrent**. A passkey and
   an API key are swept for across every page, every prop value, the journal and the log.
   `S5-13` joins the parts up.
+- `S5-13` **One instance of this client downloads a whole torrent from another**, over a real TCP
+  connection on this machine, and the file that lands is byte for byte the file that was seeded. That
+  is Sprint 5's acceptance in miniature: handshake, bitfield, interested, unchoke, requests, blocks,
+  SHA-1 verification, the picker and the disk, all running together for the first time. A peer that
+  answers with rubbish of the right length has **none of it written**, which is why a piece is
+  verified before it reaches the disk rather than after. Sprint 6 is the grab and staging.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its
@@ -397,6 +402,12 @@ and note it here.
   `SecretsNeverEscapeTests`. What is missing is the actions that add one, which `docs/08-ui.md` names
   as `AddPrivateTracker` and which `S8-02` owns. Nothing is wrong; it is simply not reachable from
   the page yet.
+- **The end-to-end transfer found two faults that no unit test could have.** A peer's unchoke was
+  being swallowed by the connection — it updated the flag and never told the session — so nothing was
+  ever requested and the download sat at nought for ever. And the test itself deadlocked: the side
+  that answers reads before it writes, so awaiting its handshake before the dialling side has sent
+  one waits for ever. Both are in the code and the test as comments, because both are exactly what a
+  real client does to itself.
 - **Neither UPnP nor NAT-PMP answers on this network, and that is measured.** An SSDP search for
   `ssdp:all`, `upnp:rootdevice`, `InternetGatewayDevice:1` and `WANIPConnection:1` was answered by no
   device at all, and the gateway at 192.168.178.1 did not answer NAT-PMP either. So the port-mapping

@@ -790,6 +790,12 @@ joins the parts, and Sprint 5 cannot be accepted without it.
 dashboard shows it the whole way. `S5-13` is what makes that possible; the twelve slices before it
 are its parts.
 
+`S5-13` transfers a whole torrent between two instances of this client over a real socket, which is
+that criterion proved as far as it can be proved here. What is left of it needs the owner: a **real**
+magnet needs a peer in a public swarm to accept a connection from this machine, and none will —
+nothing on this network maps a port, so nobody can dial in. Deploying to `beast-unit`, where the
+port may be reachable, is what settles the rest.
+
 ---
 
 # Sprint 6 — Grab, staging, dispatch
