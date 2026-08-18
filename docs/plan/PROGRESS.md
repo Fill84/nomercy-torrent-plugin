@@ -6,12 +6,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **Sprint 5 — BitTorrent**
 **Sprint 6 — Grab, staging, dispatch**
-**Slice `S6-01` · The grab** — not started.
+**Slice `S6-02` · Completion and staging** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S6-01`. It is where the store of grabs is written,
-and three things already built are waiting on it: blacklisting a failed hash and returning its
-episode to missing (`S5-07`), carrying out `Recovery.Plan` (`S5-12`), and the engine being given
-somewhere to record what it is downloading.
+Specification: `docs/plan/SPRINTS.md`, section `S6-02`. `docs/06-torrent-client.md` § Around the
+transfer is the spec. **Only video files are written into a library folder** — that is a hard rule
+from `CLAUDE.md`, not a preference — and the largest video in a multi-file torrent is the episode.
 
 ## Blocked
 
@@ -85,7 +84,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-13` The client, joined up
 
 ### Sprint 6 — Grab, staging, dispatch
-- [ ] `S6-01` The grab
+- [x] `S6-01` The grab
 - [ ] `S6-02` Completion and staging
 - [ ] `S6-03` Encode dispatch
 - [ ] `S6-04` Downloads page and history
@@ -345,6 +344,15 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   SHA-1 verification, the picker and the disk, all running together for the first time. A peer that
   answers with rubbish of the right length has **none of it written**, which is why a piece is
   verified before it reaches the disk rather than after. Sprint 6 is the grab and staging.
+- `S6-01` A grab checks there is room **first** — a torrent that fills the disk takes the media
+  server with it, since the same disk holds the library and the database — and a refusal names how
+  much was needed and how much there is, because "not enough space" tells the owner nothing they can
+  act on. Every tracker anybody named travels with it. **B2**: nothing that goes wrong here counts as
+  a search attempt, because a client that would not take a magnet is not the episode's fault. The
+  store keeps the magnet, so a torrent the client has forgotten is re-added rather than downloaded
+  again, and keeps every episode a grab covers, so a season pack that fails puts all of them back to
+  missing at once — blacklisted by hash, in one transaction, which is where a metadata timeout and a
+  stall both arrive. `S6-02` is completion and staging.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its
@@ -402,6 +410,14 @@ and note it here.
   `SecretsNeverEscapeTests`. What is missing is the actions that add one, which `docs/08-ui.md` names
   as `AddPrivateTracker` and which `S8-02` owns. Nothing is wrong; it is simply not reachable from
   the page yet.
+- **A size was being formatted in the machine's culture.** "needs 3,7 GB" on a server set to Dutch,
+  which is this one. Every number a person reads is now written in the invariant culture: a figure
+  whose meaning depends on where the machine was set up is one nobody can quote back reliably. Found
+  by a test that expected "3.7 GB" and got the comma.
+- **`COLLATE NOCASE` in the grab store was defending against nothing.** Every hash is upper-cased on
+  the way in and on the way to a query, so matching is exact; a mutation removing the collation
+  survived every test, because nothing this code writes could ever need it. The normalisation is the
+  rule, it is tested, and the collation is gone.
 - **The end-to-end transfer found two faults that no unit test could have.** A peer's unchoke was
   being swallowed by the connection — it updated the flag and never told the session — so nothing was
   ever requested and the download sat at nought for ever. And the test itself deadlocked: the side
