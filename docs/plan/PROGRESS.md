@@ -5,11 +5,12 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-10` · Peer exchange and local discovery** — not started.
+**Slice `S5-11` · Rate limits, choking and seeding** — not started.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-10`. `docs/06-torrent-client.md` § Peer exchange
-and local discovery is the spec. `ut_pex` arrives over the extension protocol, which `S5-07` built;
-local discovery is multicast on this machine's own network and can be tested against itself.
+Specification: `docs/plan/SPRINTS.md`, section `S5-11`. `docs/06-torrent-client.md` § Rate limits,
+§ Choking and § Seeding are the spec. Its seventh step — **a passkey never appears in any rendered
+string, log line or journal entry** — is a hard rule from `CLAUDE.md` and wants a test that sweeps
+what is rendered rather than one that checks a single page.
 
 ## Blocked
 
@@ -77,7 +78,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-07` Metadata from peers
 - [x] `S5-08` Encryption
 - [x] `S5-09` DHT
-- [ ] `S5-10` Peer exchange and local discovery
+- [x] `S5-10` Peer exchange and local discovery
 - [ ] `S5-11` Rate limits, choking and seeding
 - [ ] `S5-12` Resume, recovery, stalls, pause and ports
 
@@ -319,6 +320,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nobody can name anybody nearer, asking nobody twice. The table and **this client's own id** are
   persisted, because an id that changes on restart is a stranger to every table that knew it. A
   private torrent sends **not one packet**. `S5-10` is peer exchange and local discovery.
+- `S5-10` Two ways peers arrive without anybody being asked. `ut_pex` sends **differences** — who
+  joined and who left since that peer was last told — which is why what was sent is remembered per
+  peer and why the once-a-minute limit is per peer too. Local discovery is a multicast packet shaped
+  like HTTP and parsed by nobody's web server, at one hop so it never leaves this network, with a
+  cookie so a client does not connect to itself. Both are refused outright for a private torrent, in
+  both directions: a peer list arriving is the same leak as one leaving. `S5-11` is rate limits,
+  choking and seeding.
 
 ## Decisions
 
@@ -360,6 +368,11 @@ and note it here.
 - **`EndgamePieces` is eight and no document gives a number.** It is the point at which the last
   pieces are asked of every peer at once; the tail of a download is otherwise spent waiting on the
   slowest peer holding the last one. Written as a documented constant in the picker.
+- **Local discovery is the first thing in this client with a real network test that passes.** Two
+  sockets on this machine, a real announce on 239.192.152.143:6771, really heard — it is in
+  `tests/*.Integration` because a machine with no multicast route would fail it, and that is a fact
+  about the network rather than the code. The first packet after joining a group is lost often enough
+  on Windows that the test sends two.
 - **The DHT is the one part of this client that could be captured for real.** A node answers a UDP
   packet from anybody, so `tools/Capture --dht` took a `ping`, a `find_node` and a `get_peers` from
   `dht.transmissionbt.com:6881`, and `--dht-peers` followed the nodes it named thirteen hops into the
