@@ -754,6 +754,10 @@ timeout and for a stall (`S5-12`) alike.
 3. Test: pause keeps the pieces and resume continues from them.
 4. Test: a hash in the store but not the engine is re-added from its magnet.
 5. Test: a hash in the engine but not the store is stopped, files kept, logged.
+
+   **Steps 4, 5 and 6 decide and do not act.** `Recovery.Plan` sorts every torrent into add, stop,
+   stage or carry, and is tested against all four; carrying the plan out needs the store of grabs,
+   which `S6-01` writes. `S6-01` has the step.
 6. Test (**F4**): a torrent that finished while the server was down is staged on the first transfers
    tick.
 7. Test: no progress and no peers for `StallMinutes` is stalled; progress without peers is not, and
@@ -762,8 +766,29 @@ timeout and for a stall (`S5-12`) alike.
    the client carries on.
 9. Implement.
 
+## S5-13 · The client, joined up
+
+**Read first:** `docs/06-torrent-client.md` § Lifecycle and § Around the transfer.
+
+Sprints 5's slices each built a part — trackers, peers, pieces, disk, metadata, encryption, DHT, peer
+exchange, rate limits, resume — and **nothing drives them**. `BittorrentEngine.AddAsync` records a
+torrent and answers its hash; no socket is opened for it, so no magnet has ever downloaded a byte.
+That is a fault in the plan rather than in the code: no slice was ever written for the loop that
+joins the parts, and Sprint 5 cannot be accepted without it.
+
+1. Test: adding a magnet announces to its trackers and dials the peers they name.
+2. Test: a peer that completes the handshake is asked for metadata, and the torrent moves from
+   `FetchingMetadata` to `Downloading` when it arrives.
+3. Test: blocks are requested from unchoked peers, verified pieces reach the disk, and the bitfield
+   and the resume file follow.
+4. Test: `StatusAsync` reports real progress, rates, peers and seeds while it runs.
+5. Test: the whole of it against a peer on this machine — a second instance of this client seeding a
+   fixture torrent, since no peer in a public swarm will accept a connection from here.
+6. Implement.
+
 **Sprint 5 done when** a real magnet downloads to completion, survives a restart mid-flight, and the
-dashboard shows it the whole way.
+dashboard shows it the whole way. `S5-13` is what makes that possible; the twelve slices before it
+are its parts.
 
 ---
 

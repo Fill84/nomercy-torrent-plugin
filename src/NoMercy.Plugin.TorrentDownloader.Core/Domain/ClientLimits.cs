@@ -41,6 +41,18 @@ public sealed class ClientLimits
 
     public int MetadataTimeoutMinutes { get; set; } = 5;
 
+    /// <summary>
+    /// How often resume data is written while a torrent is running.
+    /// </summary>
+    /// <remarks>
+    /// A minute. docs/06-torrent-client.md names <c>ResumeInterval</c> and no
+    /// document anywhere gives a number, so this is the one this client uses:
+    /// it is what a crash costs in verification, and a minute of re-hashing is
+    /// short enough not to matter and long enough that the disk is not busy
+    /// writing resume files instead of the download.
+    /// </remarks>
+    public int ResumeIntervalSeconds { get; set; } = 60;
+
     public EncryptionPolicy Encryption { get; set; } = EncryptionPolicy.Allowed;
 
     /// <summary>

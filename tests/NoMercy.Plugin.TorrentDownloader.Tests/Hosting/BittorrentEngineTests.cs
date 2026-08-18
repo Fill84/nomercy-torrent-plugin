@@ -190,6 +190,42 @@ public class BittorrentEngineTests
         Assert.Contains("thing.torrent", refused.Message, StringComparison.Ordinal);
     }
 
+    /// <remarks>
+    /// Pause keeps the pieces. A client that threw the bitfield away when the
+    /// owner pressed pause would verify the whole torrent again on resume —
+    /// minutes of the server doing nothing else for a six-gigabyte file, and
+    /// from the page it would look exactly like starting over.
+    /// </remarks>
+    [Fact]
+    public async Task PauseKeepsTheVerifiedPiecesAndResumeContinuesFromThem()
+    {
+        using BittorrentEngine engine = Started();
+
+        TorrentHandle handle = await engine.AddAsync(Request, CancellationToken.None);
+
+        Bitfield verified = new(100);
+
+        verified.Set(0);
+        verified.Set(1);
+        verified.Set(99);
+
+        engine.Verified(handle.InfoHash, verified);
+
+        await engine.PauseAsync(handle.InfoHash, CancellationToken.None);
+
+        Assert.Equal(TorrentState.Paused, (await engine.StatusAsync(CancellationToken.None))[0].State);
+        Assert.Equal(3, engine.VerifiedPieces(handle.InfoHash)!.Count);
+
+        await engine.ResumeAsync(handle.InfoHash, CancellationToken.None);
+
+        Bitfield after = engine.VerifiedPieces(handle.InfoHash)!;
+
+        Assert.Equal(3, after.Count);
+        Assert.True(after.Has(0));
+        Assert.True(after.Has(99));
+        Assert.False(after.Has(2));
+    }
+
     /// <summary>
     /// <c>MetadataTimeoutMinutes</c>' own default, five minutes. The tests that
     /// are not about the clock never reach it.

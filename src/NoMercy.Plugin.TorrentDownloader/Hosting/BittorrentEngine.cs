@@ -164,7 +164,37 @@ public sealed class BittorrentEngine(
 
     public Task PauseAsync(string infoHash, CancellationToken ct)
     {
+        // Only the state. Everything else the transfer knows — what is verified
+        // above all — is what makes resuming cost nothing.
         return Set(infoHash, TorrentState.Paused);
+    }
+
+    /// <summary>
+    /// What this torrent has verified on disk, or null while nothing knows.
+    /// </summary>
+    /// <remarks>
+    /// Not on the port: the pipeline has no use for a bitfield and would only
+    /// be able to misread it. It is here so that a pause, a resume and a
+    /// restart can all be seen to keep it.
+    /// </remarks>
+    public Bitfield? VerifiedPieces(string infoHash)
+    {
+        lock (_lock)
+        {
+            return _torrents.TryGetValue(infoHash, out Transfer? transfer) ? transfer.Verified : null;
+        }
+    }
+
+    /// <summary>Notes what verification found, so that a pause does not lose it.</summary>
+    public void Verified(string infoHash, Bitfield verified)
+    {
+        lock (_lock)
+        {
+            if (_torrents.TryGetValue(infoHash, out Transfer? transfer))
+            {
+                transfer.Verified = verified;
+            }
+        }
     }
 
     public Task ResumeAsync(string infoHash, CancellationToken ct)
@@ -284,6 +314,17 @@ public sealed class BittorrentEngine(
 
         /// <summary>When its metadata was last asked for.</summary>
         public DateTimeOffset Since { get; private set; } = since;
+
+        /// <summary>
+        /// Which pieces are verified on disk, or null before anything is known.
+        /// </summary>
+        /// <remarks>
+        /// It survives a pause. A client that threw the bitfield away when the
+        /// owner pressed pause would verify the whole torrent again on resume,
+        /// which for a six-gigabyte file is minutes of the server doing nothing
+        /// else — and would look, from the page, exactly like starting over.
+        /// </remarks>
+        public Bitfield? Verified { get; set; }
 
         /// <summary>What went wrong, in its own words, or null.</summary>
         public string? Error { get; private set; }

@@ -133,6 +133,7 @@ settled by a pack earlier in the same cycle is not asked about again.
 | `SeedHours` | 48 | whichever comes first |
 | `StallMinutes` | 30 | no progress **and** no peers |
 | `MetadataTimeoutMinutes` | 5 | |
+| `ResumeIntervalSeconds` | 60 | named as `ResumeInterval` in `docs/06`; the number is `S5-12`'s |
 | `Encryption` | allowed | not required |
 | `DryRun` | off | decide but hand nothing to the client |
 

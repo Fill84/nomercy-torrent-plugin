@@ -5,12 +5,14 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **Sprint 5 — BitTorrent**
-**Slice `S5-12` · Resume, recovery, stalls, pause and ports** — not started.
+**Slice `S5-13` · The client, joined up** — not started, and it is new.
 
-Specification: `docs/plan/SPRINTS.md`, section `S5-12`. `docs/06-torrent-client.md` § Stalls,
-§ Ports, § Lifecycle and § Recovery are the spec. It is the last slice of Sprint 5 and the biggest:
-nine steps. Its eighth — **UPnP then NAT-PMP** — is also what would let a peer dial this machine,
-which every peer-wire capture has wanted since `S5-05`.
+Specification: `docs/plan/SPRINTS.md`, section `S5-13`. **Sprint 5's twelve slices built the parts of
+a torrent client and nothing drives them**: `AddAsync` records a torrent and opens no socket for it,
+so no magnet has ever downloaded a byte. No slice was ever written for the loop that joins them,
+which is a fault in the plan, and Sprint 5 cannot be accepted without it. `S5-13` now says so and
+carries the steps. Its fifth is the one that finally makes a real peer conversation possible: a
+second instance of this client, on this machine, seeding a fixture.
 
 ## Blocked
 
@@ -80,7 +82,8 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-09` DHT
 - [x] `S5-10` Peer exchange and local discovery
 - [x] `S5-11` Rate limits, choking and seeding
-- [ ] `S5-12` Resume, recovery, stalls, pause and ports
+- [x] `S5-12` Resume, recovery, stalls, pause and ports
+- [ ] `S5-13` The client, joined up
 
 ### Sprint 6 — Grab, staging, dispatch
 - [ ] `S6-01` The grab
@@ -336,7 +339,17 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   ranking is by upload rate, or the choice would be between peers all at nought. Seeding stops at the
   ratio or the hours, whichever comes first, and **never early for a private torrent**. A passkey and
   an API key are swept for across every page, every prop value, the journal and the log.
-  `S5-12` finishes Sprint 5.
+  `S5-13` joins the parts up.
+- `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
+  changed takes every piece covering it back to unverified, including the pieces it shares with the
+  file either side — asserted against the real Archive torrent, where the largest file shares its
+  last piece with its neighbour. It is written every interval and on a clean stop, to a temporary
+  name and moved into place. A stall is no progress **and** no peers for the whole limit, with the
+  clock starting at the first reading rather than the second, or a restart quietly buys a dead
+  torrent one more interval every time. Pause keeps the verified pieces. Recovery sorts every torrent
+  into add, stop, stage or carry — **F4** is the stage pile — and a magnet with no metadata is not
+  mistaken for a finished torrent, which is the trap in comparing two numbers that can both be
+  nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
 
@@ -384,6 +397,21 @@ and note it here.
   `SecretsNeverEscapeTests`. What is missing is the actions that add one, which `docs/08-ui.md` names
   as `AddPrivateTracker` and which `S8-02` owns. Nothing is wrong; it is simply not reachable from
   the page yet.
+- **Neither UPnP nor NAT-PMP answers on this network, and that is measured.** An SSDP search for
+  `ssdp:all`, `upnp:rootdevice`, `InternetGatewayDevice:1` and `WANIPConnection:1` was answered by no
+  device at all, and the gateway at 192.168.178.1 did not answer NAT-PMP either. So the port-mapping
+  code is stated protocol, round-tripped, like MSE — and, more usefully, **this is why no peer has
+  ever been able to dial this machine**. On this network the owner would have to forward the port by
+  hand, which is exactly what the failure message on the Settings page is for.
+- **`ResumeInterval` was named in `docs/06` and existed nowhere else.** It is now
+  `ResumeIntervalSeconds`, default sixty, in `ClientLimits` and in `docs/04-domain.md` § Settings.
+  Sixty seconds is what a crash costs in re-hashing: short enough not to matter, long enough that the
+  disk is not busy writing resume files instead of the download.
+- **The atomic resume write is not covered by a test, and cannot be.** The file is written under
+  another name and moved into place, so the old one stays good until the new one is whole; a mutation
+  that writes straight to the destination survives every test in the suite, because the difference
+  only shows on a power failure between the two writes. What is asserted is what is observable: the
+  file reloads, and no temporary is left behind.
 - **Local discovery is the first thing in this client with a real network test that passes.** Two
   sockets on this machine, a real announce on 239.192.152.143:6771, really heard — it is in
   `tests/*.Integration` because a machine with no multicast route would fail it, and that is a fact

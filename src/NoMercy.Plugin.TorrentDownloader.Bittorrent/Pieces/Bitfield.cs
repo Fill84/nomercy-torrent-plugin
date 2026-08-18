@@ -101,6 +101,24 @@ public sealed class Bitfield
         _bits[piece / 8] |= (byte)(0x80 >> (piece % 8));
     }
 
+    /// <summary>
+    /// Puts one piece back to unverified.
+    /// </summary>
+    /// <remarks>
+    /// For resume: a file that something else has touched takes every piece
+    /// covering it back to unverified, and they are then read off the disk and
+    /// hashed again.
+    /// </remarks>
+    public void Clear(int piece)
+    {
+        if (piece < 0 || piece >= Pieces)
+        {
+            throw new PeerProtocolException($"Piece {piece} is not in a torrent of {Pieces}.");
+        }
+
+        _bits[piece / 8] &= (byte)~(0x80 >> (piece % 8));
+    }
+
     /// <summary>Every piece this one is missing that the other has.</summary>
     public IEnumerable<int> Wanted(Bitfield theirs)
     {
