@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
@@ -231,11 +232,39 @@ public class HarvestTests
         new("srrDB", "rss", "https://www.srrdb.com/feed/srrs"),
     ];
 
+    /// <remarks>
+    /// A feed is a source like any other, and the Sources page says what every
+    /// source last answered. Written down only for the indexers, the page would
+    /// report every feed as never asked however often the harvest ran.
+    /// </remarks>
+    [Fact]
+    public async Task EveryFeedReadIsWrittenDownWithWhatItAnswered()
+    {
+        FakeFetch fetch = new();
+        RecordingLedger ledger = new();
+
+        fetch.Answers("https://predb.me/?rss=1", Capture.Fixture("predb.xml"));
+        fetch.Fails("https://www.scnsrc.me/feed/", FetchOutcome.Unreachable, "no such host");
+
+        await Harvesting(fetch, ledger: ledger).RunAsync(CancellationToken.None);
+
+        SourceAnswer answered = ledger.Answers.Single(one => one.Name == "PreDB");
+
+        Assert.True(answered.Rows > 0, "The captured feed is full of release names.");
+        Assert.Null(answered.Refusal);
+
+        SourceAnswer unreachable = ledger.Answers.Single(one => one.Name == "SceneSource");
+
+        Assert.Equal(0, unreachable.Rows);
+        Assert.Contains("no such host", unreachable.Refusal!, StringComparison.Ordinal);
+    }
+
     private static Harvest Harvesting(
         FakeFetch fetch,
         TimeProvider? clock = null,
         FakePool? pool = null,
-        ActivityJournal? journal = null)
+        ActivityJournal? journal = null,
+        ISourceLedger? ledger = null)
     {
         return new(
             SourceCatalogue.Build(Feeds.Where(feed => fetch.Knows(feed.Url)), [], []),
@@ -243,6 +272,7 @@ public class HarvestTests
             Readers.Shipped(),
             pool ?? new FakePool(),
             journal ?? new ActivityJournal(),
-            clock ?? TimeProvider.System);
+            clock ?? TimeProvider.System,
+            ledger);
     }
 }

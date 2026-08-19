@@ -4,6 +4,8 @@ using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -21,11 +23,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private readonly SemaphoreSlim _migrating = new(1, 1);
     private Database? _database;
     private EpisodeRepository? _episodes;
+    private GrabRepository? _grabs;
     private bool _migrated;
     private IPluginContext? _context;
     private SettingsStore? _settings;
     private LiveSnapshot? _live;
     private Chain? _chain;
+    private SourceLedgerRepository? _ledger;
+    private IReadOnlyList<SourceDefinition>? _shipped;
 
     /// <summary>What the last search cycle decided, for the pages that say so.</summary>
     private CycleReport? _lastCycle;
@@ -120,6 +125,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _settings = new(context.Configuration, context.Secrets);
         _database = new(context.DataFolderPath);
         _episodes = new(_database);
+        _grabs = new(_database);
+        _ledger = new(_database);
         _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
     }
 
@@ -169,6 +176,20 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
 
         return _episodes;
+    }
+
+    /// <summary>
+    /// The grab store, over the same migrated database as the episodes.
+    /// </summary>
+    /// <remarks>
+    /// Through <see cref="EpisodesAsync"/> rather than beside it, so there is
+    /// one migration and one place that decides when it has run.
+    /// </remarks>
+    public async Task<GrabRepository> GrabsAsync(CancellationToken ct)
+    {
+        await EpisodesAsync(ct);
+
+        return _grabs ?? throw new InvalidOperationException("The plugin has not been initialised, so it has no store yet.");
     }
 
     /// <summary>
@@ -319,7 +340,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 _context ?? throw new InvalidOperationException("The plugin has not been initialised."),
                 _journal,
                 new NamePoolRepository(await DatabaseAsync(ct)),
-                new CatalogueLoader(_context.Logger).Load());
+                Shipped(),
+                ledger: await LedgerAsync(ct));
         }
         finally
         {
@@ -352,6 +374,19 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             case Pages.QueueRoute:
                 return QueueView.Render(await Tracked(ct));
 
+            case Pages.DownloadsRoute:
+                return DownloadsView.Render(await DownloadRowsAsync(ct));
+
+            case Pages.SourcesRoute:
+                return SourcesView.Render(await SourceReportsAsync(ct), DateTimeOffset.UtcNow);
+
+            case Pages.SkippedRoute:
+                return SkippedView.Render(await (await GrabsAsync(ct)).SkippedAsync(ct));
+
+            case Pages.HistoryRoute:
+                return HistoryView.Render(
+                    [.. (await (await GrabsAsync(ct)).HistoryAsync(ct)).Select(Line)]);
+
             default:
                 return DashboardView.Render(_journal.Snapshot(), CurrentCycle());
         }
@@ -360,6 +395,130 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private async Task<IReadOnlyList<TrackedEpisode>> Tracked(CancellationToken ct)
     {
         return await (await EpisodesAsync(ct)).AllAsync(ct);
+    }
+
+    /// <summary>
+    /// One row per grab, with what the client says about it beside it.
+    /// </summary>
+    /// <remarks>
+    /// <strong>G4.</strong> The rows are the grabs and the transfer is what may
+    /// be missing, never the other way round: 0.3.4 built this page from the
+    /// client's list, so a grab the client had not taken up was on no page at
+    /// all while its episode showed as unavailable.
+    /// </remarks>
+    private async Task<IReadOnlyList<DownloadRow>> DownloadRowsAsync(CancellationToken ct)
+    {
+        Settings settings = await Settings.LoadAsync(ct);
+        IReadOnlyList<StoredDownload> grabbed = await (await GrabsAsync(ct)).OpenAsync(ct);
+
+        Dictionary<string, TorrentStatus> byHash = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (TorrentStatus status in await TransfersAsync(ct))
+        {
+            byHash[status.InfoHash] = status;
+        }
+
+        return
+        [
+            .. grabbed.Select(one => new DownloadRow(
+                one,
+                byHash.GetValueOrDefault(one.InfoHash),
+                settings.IncompleteFolder)),
+        ];
+    }
+
+    /// <summary>
+    /// Every source in the catalogue, with what it last answered.
+    /// </summary>
+    /// <remarks>
+    /// Every source, not only the ones that have answered: a site nobody has
+    /// asked is missing from the ledger, and a page built from the ledger alone
+    /// would leave it off entirely rather than saying it has never been asked.
+    /// </remarks>
+    private async Task<IReadOnlyList<SourceReport>> SourceReportsAsync(CancellationToken ct)
+    {
+        Settings settings = await Settings.LoadAsync(ct);
+        IReadOnlyDictionary<string, SourceAnswer> answers = await (await LedgerAsync(ct)).AllAsync(ct);
+
+        List<SourceReport> reports = [];
+
+        foreach (SourceDefinition source in Chain.Catalogue(Shipped(), settings).Enabled)
+        {
+            if (!answers.TryGetValue(source.Name, out SourceAnswer? answer))
+            {
+                reports.Add(new(source.Name, null, 0, null, TimeSpan.Zero, null));
+
+                continue;
+            }
+
+            reports.Add(new(
+                source.Name,
+                answer.At,
+                answer.Rows,
+                answer.Refusal,
+                answer.Duration,
+
+                // The gate's current pace, which a refusal has widened. The
+                // configured figure would say a rate-limited site is askable
+                // now, which is exactly the confusion this column exists to end.
+                answer.At + (_chain?.IntervalFor(source) ?? TimeSpan.FromSeconds(source.MinimumIntervalSeconds))));
+        }
+
+        return reports;
+    }
+
+    /// <summary>The ledger, over the same migrated database as everything else.</summary>
+    private async Task<SourceLedgerRepository> LedgerAsync(CancellationToken ct)
+    {
+        await EpisodesAsync(ct);
+
+        return _ledger ?? throw new InvalidOperationException("The plugin has not been initialised, so it has no store yet.");
+    }
+
+    /// <summary>
+    /// The sources that ship, read once.
+    /// </summary>
+    /// <remarks>
+    /// A file beside the assembly that cannot change while the server runs, so
+    /// a page render must not pay to read it again.
+    /// </remarks>
+    private IReadOnlyList<SourceDefinition> Shipped()
+    {
+        return _shipped ??= new CatalogueLoader(
+            (_context ?? throw new InvalidOperationException("The plugin has not been initialised.")).Logger).Load();
+    }
+
+    /// <summary>
+    /// One stored history row as the page reads it.
+    /// </summary>
+    /// <remarks>
+    /// The subject is the show and the slot when the line is about an episode,
+    /// and the release when it is not — a line reading only "dispatched" is
+    /// exactly the entry an owner opens this page for and learns nothing from.
+    /// </remarks>
+    private static HistoryLine Line(HistoryRow row)
+    {
+        string subject = row is { ShowTitle: string show, Season: int season, Number: int number }
+            ? $"{show} S{season:00}E{number:00}"
+            : row.ReleaseTitle ?? row.Event;
+
+        return new(row.Event, row.At, subject, row.Detail);
+    }
+
+    /// <summary>
+    /// What the torrent client says it is holding, or nothing when there is no
+    /// client.
+    /// </summary>
+    /// <remarks>
+    /// Nothing is not the same as nought transfers, and the page treats it as
+    /// such: a grab with no transfer beside it says the client has not taken it
+    /// up rather than drawing a torrent stuck at nought per cent.
+    /// </remarks>
+    private Task<IReadOnlyList<TorrentStatus>> TransfersAsync(CancellationToken ct)
+    {
+        _ = ct;
+
+        return Task.FromResult<IReadOnlyList<TorrentStatus>>([]);
     }
 
     /// <summary>

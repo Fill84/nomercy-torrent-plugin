@@ -6,6 +6,27 @@ using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
 namespace NoMercy.Plugin.TorrentDownloader.Storage;
 
+/// <summary>One line of the history, as the table holds it.</summary>
+/// <param name="Event">grabbed, skipped, failed, dispatched or allowed.</param>
+/// <param name="At">When it happened.</param>
+/// <param name="ShowId">Which show, when the line is about an episode.</param>
+/// <param name="Season">Which season, when the line is about an episode.</param>
+/// <param name="Number">Which episode, when the line is about an episode.</param>
+/// <param name="ShowTitle">What the show is called.</param>
+/// <param name="ReleaseTitle">What the release was called.</param>
+/// <param name="Source">The site it came from, when one was named.</param>
+/// <param name="Detail">The reason, the library, or whatever that event carries.</param>
+public sealed record HistoryRow(
+    string Event,
+    DateTimeOffset At,
+    int? ShowId,
+    int? Season,
+    int? Number,
+    string? ShowTitle,
+    string? ReleaseTitle,
+    string? Source,
+    string? Detail);
+
 /// <summary>
 /// What has been grabbed, and what became of it.
 /// </summary>
@@ -249,21 +270,112 @@ public sealed class GrabRepository(Database database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    /// <summary>What the history says happened, newest first.</summary>
-    public async Task<IReadOnlyList<(string Event, string? Detail)>> HistoryAsync(CancellationToken ct)
+    /// <summary>
+    /// Records a release the profile or the blacklist refused, and why.
+    /// </summary>
+    /// <remarks>
+    /// In the history rather than in a list held for the cycle, because the
+    /// Skipped page is opened after the fact — usually the next morning, and
+    /// usually because an episode did not arrive. A refusal that lived only in
+    /// memory would be gone by then, and the page would say nothing was
+    /// refused when something was.
+    /// </remarks>
+    public async Task RecordSkippedAsync(
+        EpisodeKey episode,
+        string showTitle,
+        string releaseTitle,
+        string? source,
+        string reason,
+        DateTimeOffset at,
+        CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);
         await using SqliteCommand command = connection.CreateCommand();
 
-        command.CommandText = "SELECT event, detail FROM history ORDER BY id DESC;";
+        command.CommandText =
+            """
+            INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+            VALUES ($at, 'skipped', $show, $season, $episode, $title, $release, $source, $reason);
+            """;
 
-        List<(string, string?)> lines = [];
+        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$show", episode.ShowId);
+        command.Parameters.AddWithValue("$season", episode.Season);
+        command.Parameters.AddWithValue("$episode", episode.Number);
+        command.Parameters.AddWithValue("$title", showTitle);
+        command.Parameters.AddWithValue("$release", releaseTitle);
+        command.Parameters.AddWithValue("$source", (object?)source ?? DBNull.Value);
+        command.Parameters.AddWithValue("$reason", reason);
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Every refusal, newest first, as the Skipped page reads them.</summary>
+    public async Task<IReadOnlyList<SkippedRelease>> SkippedAsync(CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT show_id, season, episode, release_title, source, detail FROM history
+            WHERE event = 'skipped' ORDER BY id DESC;
+            """;
+
+        List<SkippedRelease> refused = [];
 
         await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
 
         while (await reader.ReadAsync(ct))
         {
-            lines.Add((reader.GetString(0), reader.IsDBNull(1) ? null : reader.GetString(1)));
+            refused.Add(new(
+                new(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2)),
+                reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+
+                // Never blank. A refusal with no reason is the one thing the
+                // owner opened the page to read, and an empty string there
+                // would render as a row that refuses to say why.
+                reader.IsDBNull(5) ? "no reason was recorded" : reader.GetString(5)));
+        }
+
+        return refused;
+    }
+
+    /// <summary>What the history says happened, newest first.</summary>
+    /// <remarks>
+    /// Every column, not the two the first caller wanted. The page says when a
+    /// thing happened, which episode it was about and why, and a reader that
+    /// answered only the event and the reason would have the page inventing the
+    /// other two.
+    /// </remarks>
+    public async Task<IReadOnlyList<HistoryRow>> HistoryAsync(CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT event, at, show_id, season, episode, show_title, release_title, source, detail
+            FROM history ORDER BY id DESC;
+            """;
+
+        List<HistoryRow> lines = [];
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
+
+        while (await reader.ReadAsync(ct))
+        {
+            lines.Add(new(
+                reader.GetString(0),
+                DateTimeOffset.Parse(reader.GetString(1), CultureInfo.InvariantCulture),
+                reader.IsDBNull(2) ? null : reader.GetInt32(2),
+                reader.IsDBNull(3) ? null : reader.GetInt32(3),
+                reader.IsDBNull(4) ? null : reader.GetInt32(4),
+                reader.IsDBNull(5) ? null : reader.GetString(5),
+                reader.IsDBNull(6) ? null : reader.GetString(6),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8)));
         }
 
         return lines;

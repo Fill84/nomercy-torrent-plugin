@@ -41,6 +41,7 @@ public sealed class Chain : IAsyncDisposable
     private readonly PuppeteerTabs _tabs;
     private readonly BrowserSolver _solver;
     private readonly INamePool _pool;
+    private readonly ISourceLedger? _ledger;
     private readonly ITorrentEngine? _engine;
 
     /// <summary>
@@ -60,13 +61,15 @@ public sealed class Chain : IAsyncDisposable
         INamePool pool,
         IReadOnlyList<SourceDefinition> shipped,
         HttpMessageHandler? handler = null,
-        ITorrentEngine? engine = null)
+        ITorrentEngine? engine = null,
+        ISourceLedger? ledger = null)
     {
         _context = context;
         _logger = context.Logger;
         _journal = journal;
         _pool = pool;
         _engine = engine;
+        _ledger = ledger;
         _gate = new(TimeProvider.System);
         Shipped = shipped;
 
@@ -96,10 +99,39 @@ public sealed class Chain : IAsyncDisposable
     /// </remarks>
     public SourceCatalogue Catalogue(Settings settings)
     {
+        return Catalogue(Shipped, settings);
+    }
+
+    /// <summary>
+    /// The same catalogue, without a chain to build it with.
+    /// </summary>
+    /// <remarks>
+    /// A page that lists the sources needs the catalogue and none of the rest
+    /// of the chain: rendering it must not start a browser or ask the server
+    /// for a grant.
+    /// </remarks>
+    public static SourceCatalogue Catalogue(IReadOnlyList<SourceDefinition> shipped, Settings settings)
+    {
         return SourceCatalogue.Build(
-            Shipped,
+            shipped,
             [.. settings.Indexers.Select(Owned)],
             settings.DisabledDefaultSources);
+    }
+
+    /// <summary>
+    /// How long this source is being left between asks, as the gate has it now.
+    /// </summary>
+    /// <remarks>
+    /// The gate's own figure, not the configured one: a refusal widens it and a
+    /// success halves it again, and the widened figure is what the Sources page
+    /// has to say — a site being left alone for fifteen minutes after refusing
+    /// is not the same as one on its ordinary fifteen-second pace.
+    /// </remarks>
+    public TimeSpan IntervalFor(SourceDefinition source)
+    {
+        return source.Hosts.FirstOrDefault() is string host
+            ? _gate.IntervalFor(host)
+            : TimeSpan.FromSeconds(source.MinimumIntervalSeconds);
     }
 
     /// <summary>
@@ -132,7 +164,7 @@ public sealed class Chain : IAsyncDisposable
     /// <summary>Reads every feed into the pool.</summary>
     public Harvest Harvest(Settings settings)
     {
-        return new(Catalogue(settings), Fetch(), _readers, _pool, _journal, TimeProvider.System);
+        return new(Catalogue(settings), Fetch(), _readers, _pool, _journal, TimeProvider.System, _ledger);
     }
 
     /// <summary>The whole search chain: names, indexers, decision, grab.</summary>
@@ -143,7 +175,7 @@ public sealed class Chain : IAsyncDisposable
 
         return new(
             new NameResolve(catalogue, fetch, _readers, _pool, _journal, TimeProvider.System),
-            new Find(catalogue, fetch, _readers, _journal),
+            new Find(catalogue, fetch, _readers, _journal, _ledger),
             _journal,
             _engine);
     }

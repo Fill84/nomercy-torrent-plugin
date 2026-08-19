@@ -155,9 +155,10 @@ public class ShowsAndQueueViewTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = new();
 
-        Assert.Equal(
-            [Pages.DashboardRoute, Pages.ShowsRoute, Pages.QueueRoute, Pages.SettingsRoute],
-            plugin.Routes.Routes.Select(route => route.Path));
+        // Which pages the table holds is asserted whole in PagesReachableTests;
+        // what matters here is that these two are on it and are not mounts.
+        Assert.Contains(Pages.ShowsRoute, plugin.Routes.Routes.Select(route => route.Path));
+        Assert.Contains(Pages.QueueRoute, plugin.Routes.Routes.Select(route => route.Path));
 
         // Resolve answers null for a path no page claims, which is the point of
         // declaring the table at all.

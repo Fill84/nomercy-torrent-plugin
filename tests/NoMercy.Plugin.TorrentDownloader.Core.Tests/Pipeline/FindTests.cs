@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
@@ -276,6 +277,37 @@ public class FindTests
         Assert.Empty(journal.Snapshot().InFlight);
     }
 
+    /// <remarks>
+    /// The Sources page is opened after the fact, usually because an episode did
+    /// not arrive, and the journal it would otherwise have to read is bounded at
+    /// five hundred entries and gone by then. So every ask writes down what the
+    /// site answered: how many rows, or its refusal in its own words.
+    /// </remarks>
+    [Fact]
+    public async Task EveryAskIsWrittenDownWithWhatTheSiteAnswered()
+    {
+        FakeFetch fetch = new();
+        RecordingLedger ledger = new();
+
+        fetch.Answers(Address("LimeTorrents"), Capture.Fixture("limetorrents.html"));
+        fetch.Fails(Address("TorrentFunk"), FetchOutcome.RateLimited, "429 Too Many Requests");
+        fetch.Fails(Address("TorrentDownloads"), FetchOutcome.Refused, "403 Forbidden");
+
+        await Finding(fetch, ledger: ledger).SearchAsync(Name, CancellationToken.None);
+
+        SourceAnswer answered = ledger.Answers.Single(one => one.Name == "LimeTorrents");
+
+        Assert.True(answered.Rows > 0, "The captured page is covered in releases.");
+        Assert.Null(answered.Refusal);
+
+        SourceAnswer refused = ledger.Answers.Single(one => one.Name == "TorrentFunk");
+
+        // Its own words. "Broken" would be this plugin's judgement of a site
+        // that simply asked to be left alone for a while, which is G2 exactly.
+        Assert.Equal(0, refused.Rows);
+        Assert.Contains("429", refused.Refusal!, StringComparison.Ordinal);
+    }
+
     private const string Name = "Silo.S03E06.1080p.WEB.H264-CAKES";
 
     private const string Detail = "https://www.torrentfunk.com/torrent/50533062/silo-s03e06.html";
@@ -304,7 +336,11 @@ public class FindTests
         return Query.Write(indexer.SearchAddress!, Name, indexer.Query);
     }
 
-    private static Find Finding(FakeFetch fetch, TimeProvider? clock = null, ActivityJournal? journal = null)
+    private static Find Finding(
+        FakeFetch fetch,
+        TimeProvider? clock = null,
+        ActivityJournal? journal = null,
+        ISourceLedger? ledger = null)
     {
         _ = clock;
 
@@ -312,6 +348,7 @@ public class FindTests
             SourceCatalogue.Build(Indexers, [], []),
             fetch,
             Readers.Shipped(),
-            journal ?? new ActivityJournal());
+            journal ?? new ActivityJournal(),
+            ledger);
     }
 }

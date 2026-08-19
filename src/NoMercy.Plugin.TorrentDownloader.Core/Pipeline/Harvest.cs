@@ -29,7 +29,8 @@ public sealed class Harvest(
     Readers readers,
     INamePool pool,
     IActivityJournal journal,
-    TimeProvider time)
+    TimeProvider time,
+    ISourceLedger? ledger = null)
 {
     /// <summary>
     /// Reads every feed and answers how many names were kept.
@@ -68,6 +69,8 @@ public sealed class Harvest(
 
     private async Task<PooledName[]> ReadAsync(SourceDefinition feed, CancellationToken ct)
     {
+        long started = time.GetTimestamp();
+
         journal.Started(ActivityStage.Harvest, feed.Name);
 
         try
@@ -79,6 +82,7 @@ public sealed class Harvest(
             if (result.Failure is FetchFailure failure)
             {
                 journal.Failed(ActivityStage.Harvest, feed.Name, failure.ToString());
+                await WroteAsync(feed, started, 0, failure.ToString(), ct);
 
                 return [];
             }
@@ -87,10 +91,10 @@ public sealed class Harvest(
 
             if (reader is null)
             {
-                journal.Failed(
-                    ActivityStage.Harvest,
-                    feed.Name,
-                    $"It answered and nothing here reads a source of kind '{feed.Kind}'.");
+                string unread = $"It answered and nothing here reads a source of kind '{feed.Kind}'.";
+
+                journal.Failed(ActivityStage.Harvest, feed.Name, unread);
+                await WroteAsync(feed, started, 0, unread, ct);
 
                 return [];
             }
@@ -109,6 +113,7 @@ public sealed class Harvest(
             ];
 
             journal.Finished(ActivityStage.Harvest, feed.Name, $"{names.Length} names");
+            await WroteAsync(feed, started, names.Length, null, ct);
 
             return names;
         }
@@ -120,8 +125,35 @@ public sealed class Harvest(
             // is not caught: that is the plugin shutting down, not a feed
             // failing.
             journal.Failed(ActivityStage.Harvest, feed.Name, exception.Message);
+            await WroteAsync(feed, started, 0, exception.Message, ct);
 
             return [];
         }
+    }
+
+    /// <summary>
+    /// Writes down what one feed answered, for the Sources page.
+    /// </summary>
+    /// <remarks>
+    /// A feed is a source like any other. Written down only for the indexers,
+    /// the page would report every feed as never asked however often the
+    /// harvest ran — and a feed that has quietly stopped answering is exactly
+    /// the thing the page is opened to find.
+    /// </remarks>
+    private async Task WroteAsync(
+        SourceDefinition feed,
+        long started,
+        int rows,
+        string? refusal,
+        CancellationToken ct)
+    {
+        if (ledger is null)
+        {
+            return;
+        }
+
+        await ledger.RecordAsync(
+            new(feed.Name, time.GetUtcNow(), rows, refusal, time.GetElapsedTime(started)),
+            ct);
     }
 }

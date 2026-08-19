@@ -891,13 +891,41 @@ nothing renders them yet.
 
 ## S8-02 · The remaining actions
 
-1. Test: `SearchNow` searches one episode immediately and the journal shows it.
-2. Test: `PauseDownload` and `ResumeDownload` reach the engine and the page reflects the state.
-3. Test: `CancelDownload` stops it, removes it and returns the episode to missing.
-4. Test: `AddTorrent` accepts a magnet and a `.torrent` URL, and a bad one is refused with the reason.
-5. Test: `AllowRelease` grabs a release the profile had refused and records an `allowed` history entry
-   naming the original reason.
-6. Implement.
+**Read first:** `docs/08-ui.md` § Actions and § Detail pages.
+
+The steps below were written as though the actions were all that was left, and they are not. Every
+one of them is a control on a page the route table does not serve, reaching a torrent client the
+plugin never constructs, against a grab store nothing has ever written a row into. Sprint 6 built
+its parts and no slice ever wired them, so this slice is three things in order, each green and
+pushed on its own.
+
+**Part one — the pages are reachable.**
+
+1. Test: the route table serves Downloads, History, Skipped and Sources, and every one of them
+   renders from a seeded store.
+2. Test: `source_reports` is written by a real ask and read by the Sources page, so the page states
+   what each site last did rather than what it was configured to do.
+3. Implement.
+
+**Part two — the transfers cadence.**
+
+4. Test: a grab records a row, and the transfers tick moves it along.
+5. Test (**F4**): a torrent that finished while the server was down is staged on the first tick, and
+   an encode is dispatched for it.
+6. Test: a torrent the client has failed blacklists its hash and returns its episodes to missing.
+7. Implement, and make the engine something the plugin owns and starts once.
+
+**Part three — the actions.**
+
+8. Test: `RunNow` starts a cycle and answers before it is done; `StopRun` cancels it.
+9. Test: `SearchNow` searches one episode immediately and the journal shows it.
+10. Test: `PauseDownload` and `ResumeDownload` reach the engine and the page reflects the state.
+11. Test: `CancelDownload` stops it, removes it and returns the episode to missing.
+12. Test: `AddTorrent` accepts a magnet and a `.torrent` URL, and a bad one is refused with the
+    reason.
+13. Test: `AllowRelease` grabs a release the profile had refused and records an `allowed` history
+    entry naming the original reason.
+14. Implement.
 
 ## S8-03 · Health automation
 

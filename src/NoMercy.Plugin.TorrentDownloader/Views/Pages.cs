@@ -19,6 +19,18 @@ public static class Pages
     /// <summary>What is being looked for, given up on, and still to air.</summary>
     public const string QueueRoute = "/queue";
 
+    /// <summary>What is transferring, and what was grabbed and is not yet.</summary>
+    public const string DownloadsRoute = "/downloads";
+
+    /// <summary>Grabbed, skipped, failed, dispatched and allowed, newest first.</summary>
+    public const string HistoryRoute = "/history";
+
+    /// <summary>What the profile or the blacklist refused, and the control to overrule it.</summary>
+    public const string SkippedRoute = "/skipped";
+
+    /// <summary>Per source: what it last answered, and when it is next askable.</summary>
+    public const string SourcesRoute = "/sources";
+
     /// <summary>
     /// The pages this plugin serves, declared rather than matched inside the
     /// view.
@@ -51,6 +63,34 @@ public static class Pages
             Path = QueueRoute,
             Name = "queue",
             Label = "Queue",
+            Layout = PluginLayout.ListDetail,
+        },
+        new PluginRoute
+        {
+            Path = DownloadsRoute,
+            Name = "downloads",
+            Label = "Downloads",
+            Layout = PluginLayout.ListDetail,
+        },
+        new PluginRoute
+        {
+            Path = HistoryRoute,
+            Name = "history",
+            Label = "History",
+            Layout = PluginLayout.ListDetail,
+        },
+        new PluginRoute
+        {
+            Path = SkippedRoute,
+            Name = "skipped",
+            Label = "Skipped",
+            Layout = PluginLayout.ListDetail,
+        },
+        new PluginRoute
+        {
+            Path = SourcesRoute,
+            Name = "sources",
+            Label = "Sources",
             Layout = PluginLayout.ListDetail,
         },
         new PluginRoute

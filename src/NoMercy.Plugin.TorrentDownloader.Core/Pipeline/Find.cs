@@ -1,5 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 
@@ -17,8 +18,12 @@ public sealed class Find(
     SourceCatalogue catalogue,
     IFetch fetch,
     Readers readers,
-    IActivityJournal journal)
+    IActivityJournal journal,
+    ISourceLedger? ledger = null,
+    TimeProvider? time = null)
 {
+    private readonly TimeProvider _time = time ?? TimeProvider.System;
+
     /// <summary>
     /// Every copy of <paramref name="releaseName"/> anybody is serving.
     /// </summary>
@@ -150,6 +155,7 @@ public sealed class Find(
     private async Task<ReleaseCopy[]> AskAsync(SourceDefinition indexer, string releaseName, CancellationToken ct)
     {
         string subject = $"{releaseName} · {indexer.Name}";
+        long started = _time.GetTimestamp();
 
         journal.Started(ActivityStage.Find, subject);
 
@@ -162,6 +168,7 @@ public sealed class Find(
             if (result.Failure is FetchFailure failure)
             {
                 journal.Failed(ActivityStage.Find, subject, failure.ToString());
+                await WroteAsync(indexer, started, 0, failure.ToString(), ct);
 
                 return [];
             }
@@ -170,10 +177,10 @@ public sealed class Find(
 
             if (reader is null)
             {
-                journal.Failed(
-                    ActivityStage.Find,
-                    subject,
-                    $"It answered and nothing here reads a source of kind '{indexer.Kind}'.");
+                string unread = $"It answered and nothing here reads a source of kind '{indexer.Kind}'.";
+
+                journal.Failed(ActivityStage.Find, subject, unread);
+                await WroteAsync(indexer, started, 0, unread, ct);
 
                 return [];
             }
@@ -193,6 +200,7 @@ public sealed class Find(
             ];
 
             journal.Finished(ActivityStage.Find, subject, $"{copies.Length} copies");
+            await WroteAsync(indexer, started, copies.Length, null, ct);
 
             return copies;
         }
@@ -201,8 +209,36 @@ public sealed class Find(
             // One site is one site, exactly as it is in the harvest. An episode
             // is worth more than the indexer that failed on it.
             journal.Failed(ActivityStage.Find, subject, exception.Message);
+            await WroteAsync(indexer, started, 0, exception.Message, ct);
 
             return [];
         }
+    }
+
+    /// <summary>
+    /// Writes down what one source answered, for the Sources page.
+    /// </summary>
+    /// <remarks>
+    /// Nought rows with no refusal and nought rows with one are two different
+    /// answers, and both are written: a site that answered and had nothing is a
+    /// working site. Reporting a site's own rate limit as a broken reader is
+    /// <strong>G2</strong>, and keeping the refusal in the site's own words is
+    /// what stops it.
+    /// </remarks>
+    private async Task WroteAsync(
+        SourceDefinition indexer,
+        long started,
+        int rows,
+        string? refusal,
+        CancellationToken ct)
+    {
+        if (ledger is null)
+        {
+            return;
+        }
+
+        await ledger.RecordAsync(
+            new(indexer.Name, _time.GetUtcNow(), rows, refusal, _time.GetElapsedTime(started)),
+            ct);
     }
 }

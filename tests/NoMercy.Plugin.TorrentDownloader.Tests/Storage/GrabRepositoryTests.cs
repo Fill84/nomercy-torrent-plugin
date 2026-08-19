@@ -178,7 +178,7 @@ public class GrabRepositoryTests : IDisposable
             When,
             CancellationToken.None);
 
-        (string Event, string? Detail) line = Assert.Single(await grabs.HistoryAsync(CancellationToken.None));
+        HistoryRow line = Assert.Single(await grabs.HistoryAsync(CancellationToken.None));
 
         Assert.Equal("dispatched", line.Event);
         Assert.Contains("library-tv", line.Detail!, StringComparison.Ordinal);

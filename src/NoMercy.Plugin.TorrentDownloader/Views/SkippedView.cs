@@ -95,8 +95,11 @@ public static class SkippedView
                 ["episode"] = skipped.Episode.Number,
                 ["title"] = skipped.Title,
             },
-            "Allow",
-            null!);
+
+            // REST, because allowing a release has an answer: it was grabbed,
+            // or it was not and the page says why. The hub is for what the
+            // plugin will keep reporting on.
+            PluginActionTransport.Rest);
     }
 
     /// <summary>Which episode it was refused for, as a person writes it.</summary>
