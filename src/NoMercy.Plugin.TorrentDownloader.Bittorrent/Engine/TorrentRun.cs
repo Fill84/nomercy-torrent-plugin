@@ -77,6 +77,7 @@ public sealed class TorrentRun : IDisposable
     private readonly byte[] _peerId;
     private readonly int _listenPort;
     private readonly TimeProvider _time;
+    private readonly ResumeKeeper? _resume;
     private readonly Lock _lock = new();
 
     /// <summary>
@@ -119,7 +120,8 @@ public sealed class TorrentRun : IDisposable
         byte[] peerId,
         int listenPort,
         TimeProvider time,
-        TorrentMetadata? torrent = null)
+        TorrentMetadata? torrent = null,
+        ResumeKeeper? resume = null)
     {
         _infoHash = infoHash;
         _trackers = [.. trackers];
@@ -130,6 +132,7 @@ public sealed class TorrentRun : IDisposable
         _listenPort = listenPort;
         _time = time;
         _torrent = torrent;
+        _resume = resume;
     }
 
     /// <summary>The metadata, once anything knows it.</summary>
@@ -203,6 +206,12 @@ public sealed class TorrentRun : IDisposable
         {
             return;
         }
+
+        // Before the announce, not when a peer turns up: a client that knows
+        // what the torrent is has somewhere for the first block to go, and the
+        // files have to exist before the resume file can be judged against
+        // them.
+        Session();
 
         IReadOnlyList<TrackerResult> answers = await _trackerSet
             .AnnounceAsync(_trackers, Request(), ct)
@@ -535,9 +544,81 @@ public sealed class TorrentRun : IDisposable
             _disk = new(_torrent, _folder);
             _disk.Create();
 
-            _session = new(_torrent, _disk, new Bitfield(_torrent.PieceCount));
+            _session = new(_torrent, _disk, Verified(_torrent, _disk));
 
             return _session;
+        }
+    }
+
+    /// <summary>
+    /// What is already on disk and can be believed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The resume file, judged against the files as they are now. Without it
+    /// every restart verifies the whole torrent again, which for a
+    /// six-gigabyte file on a spinning disk is minutes of the server doing
+    /// nothing else — and it is what 0.3.4 did on every start.
+    /// </para>
+    /// <para>
+    /// It is a cache and is treated as one: a file whose size or modification
+    /// time has changed takes every piece covering it back to unverified,
+    /// because the bytes are the truth and the file is only a claim about them.
+    /// </para>
+    /// </remarks>
+    private Bitfield Verified(TorrentMetadata torrent, TorrentDisk disk)
+    {
+        if (_resume?.Load(torrent.InfoHash) is not ResumeData stored)
+        {
+            return new(torrent.PieceCount);
+        }
+
+        Dictionary<string, ResumeFile> onDisk = new(StringComparer.Ordinal);
+
+        foreach (TorrentFileEntry file in torrent.Files)
+        {
+            FileInfo now = new(disk.PathOf(file));
+
+            if (now.Exists)
+            {
+                onDisk[file.Path] = new(file.Path, now.Length, now.LastWriteTimeUtc);
+            }
+        }
+
+        return stored.Trust(torrent, onDisk);
+    }
+
+    /// <summary>
+    /// What to write down about this torrent, or nothing while there is nothing
+    /// worth writing.
+    /// </summary>
+    /// <remarks>
+    /// A torrent with no metadata has no piece count and nothing verified, and
+    /// a resume file for it would be a claim about a torrent nobody can
+    /// describe.
+    /// </remarks>
+    public ResumeData? ResumePoint()
+    {
+        lock (_lock)
+        {
+            if (_session is null || _torrent is null || _disk is null)
+            {
+                return null;
+            }
+
+            SessionProgress progress = _session.Progress();
+
+            return new(
+                _torrent.InfoHash,
+                _session.Verified,
+                progress.Uploaded,
+                progress.Downloaded,
+                [
+                    .. _torrent.Files
+                        .Select(file => new FileInfo(_disk.PathOf(file)))
+                        .Where(one => one.Exists)
+                        .Zip(_torrent.Files, (one, file) => new ResumeFile(file.Path, one.Length, one.LastWriteTimeUtc)),
+                ]);
         }
     }
 }

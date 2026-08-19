@@ -106,6 +106,52 @@ public class ResumeAndPortsTests
 
     /// <remarks>
     /// <para>
+    /// Through the file, not around it. A resume file records a modification
+    /// time in whole seconds and a real file's is not a whole number of them,
+    /// so compared exactly every file looks touched the moment the resume has
+    /// been written and read back — nothing is ever believed, and every restart
+    /// verifies the whole torrent.
+    /// </para>
+    /// <para>
+    /// That is the fault this class exists to prevent, and it survived because
+    /// every other test here judges a <c>ResumeData</c> built in memory that
+    /// has never been through <c>Write</c>.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AResumeThatHasBeenWrittenAndReadBackStillBelievesItsFiles()
+    {
+        TorrentMetadata torrent = Archive();
+
+        // What a real file's timestamp looks like: seconds and a fraction.
+        DateTimeOffset touched = new DateTimeOffset(2026, 8, 19, 9, 30, 0, TimeSpan.Zero)
+                                 + TimeSpan.FromMilliseconds(437);
+
+        Bitfield everything = new(torrent.PieceCount);
+
+        for (int piece = 0; piece < torrent.PieceCount; piece++)
+        {
+            everything.Set(piece);
+        }
+
+        ResumeData written = new(
+            torrent.InfoHash,
+            everything,
+            Uploaded: 0,
+            Downloaded: torrent.TotalLength,
+            [.. torrent.Files.Select(one => new ResumeFile(one.Path, one.Length, touched))]);
+
+        ResumeData read = Assert.IsType<ResumeData>(ResumeData.Read(written.Write()));
+
+        Bitfield trusted = read.Trust(
+            torrent,
+            torrent.Files.ToDictionary(one => one.Path, one => new ResumeFile(one.Path, one.Length, touched)));
+
+        Assert.Equal(torrent.PieceCount, trusted.Count);
+    }
+
+    /// <remarks>
+    /// <para>
     /// A file that has changed size, or been written to since, has been touched
     /// by something that is not this client — and every piece covering any part
     /// of it goes back to unverified.

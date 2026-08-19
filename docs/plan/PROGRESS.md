@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S5-14` · The engine drives the session** — steps 1 and 2 done and pushed, step 3 next.
+**Slice `S5-14` · The engine drives the session** — steps 1 to 3 done and pushed, step 4 next.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -14,9 +14,10 @@ the peers they name once each, and holds each conversation on its own so one pee
 costs that peer. `IPeerDialler` is the seam the sockets sit behind, so all of it is judged without a
 network. The metadata exchange runs: a peer is asked under the id *it* chose, the whole is checked against
 the info hash before any of it is believed, and what comes out is a torrent with its file list and
-the magnet's own trackers. **Step 3 is next** — the disk opened under the download folder and the
-resume file. Then the real status and rates, pause and resume, a socket tracker transport, an accept
-loop for peers dialling in, and the two-instance acceptance through `ITorrentEngine`.
+the magnet's own trackers. The disk is opened as soon as anything knows what the torrent is, and a restart
+starts from what the resume file says was verified. **Step 4 is next** — the real status and rates
+through the port. Then pause and resume, a socket tracker transport, an accept loop for peers
+dialling in, and the two-instance acceptance through `ITorrentEngine`.
 
 **Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three after
 `S5-14`.
@@ -493,6 +494,15 @@ and note it here.
   handed a number out of its own reserved range. A port the owner named is still asked for once and
   refused by its number. The exception named the number that was asked for rather than the one that
   failed, so a request for any port reported "Port 0", which is the one thing nobody can act on.
+- **Resume could never be believed, and every restart verified the whole torrent** (19 August 2026).
+  The resume file records a modification time in whole seconds — deliberately, because that is the
+  same number on any machine it is moved to — and `Trust` compared it to the live one exactly. A real
+  file's timestamp carries a fraction of a second, so every file looked touched the moment the resume
+  had been written and read back, every piece went to unverified, and a six-gigabyte torrent was
+  re-hashed on every start. It is exactly what `S5-12` was written to prevent. It survived because
+  every test of `Trust` judged a `ResumeData` built in memory that had never been through `Write`.
+  The comparison is to the second now, which is all the file keeps and finer than any change worth
+  noticing: nothing rewrites a file and leaves its length alone inside the same second.
 - **`BittorrentEngine` does not download, and no slice was ever written for the part that would**
   (19 August 2026). It parses a magnet, records the hash and the trackers, and stops: nothing
   announces to a tracker, dials a peer, fetches metadata, opens a disk or writes a byte, and

@@ -143,7 +143,99 @@ public class TorrentRunTests : IDisposable
         Assert.Null(run.Torrent);
     }
 
-    private TorrentRun Run(AnsweringTrackers transport, IPeerDialler dialler)
+    /// <remarks>
+    /// The disk is opened as soon as anything knows what the torrent is, not
+    /// when a peer turns up: a client with the metadata and no peers still has
+    /// somewhere for the first block to go, and the files have to exist before
+    /// resume can be judged against them.
+    /// </remarks>
+    [Fact]
+    public async Task TheDiskIsOpenedUnderTheDownloadFolderAsSoonAsTheTorrentIsKnown()
+    {
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler(), torrent);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.All(
+            torrent.Files,
+            file => Assert.True(
+                File.Exists(Path.Combine(_folder, torrent.Name, file.Path.Replace('/', Path.DirectorySeparatorChar))),
+                $"{file.Path} was not created."));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// A restart starts from what was verified last time. Without it every
+    /// restart re-verifies the whole torrent, which for a six-gigabyte file on
+    /// a spinning disk is several minutes of the server doing nothing else —
+    /// and 0.3.4 did exactly that on every start.
+    /// </para>
+    /// <para>
+    /// The resume file is a cache and is treated as one: what makes this test
+    /// mean anything is that the files on disk are the same ones it claims,
+    /// which is why the first run creates them.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ARestartStartsFromWhatTheResumeFileSaysWasVerified()
+    {
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+        ResumeKeeper keeper = new(_folder, TimeSpan.Zero, TimeProvider.System);
+
+        using (TorrentRun first = Run(new AnsweringTrackers(), new RecordingDialler(), torrent, keeper))
+        {
+            await first.OnceAsync(CancellationToken.None);
+
+            Assert.Equal(0, first.Progress().BytesDone);
+        }
+
+        keeper.Stop([Claimed(torrent, verified: 10)]);
+
+        using TorrentRun again = Run(new AnsweringTrackers(), new RecordingDialler(), torrent, keeper);
+
+        await again.OnceAsync(CancellationToken.None);
+
+        // The weight of those ten pieces, added up rather than multiplied: the
+        // last piece of a torrent is short, and a client that multiplied would
+        // report one bigger than it is.
+        Assert.Equal(
+            Enumerable.Range(0, 10).Sum(torrent.LengthOfPiece),
+            again.Progress().BytesDone);
+    }
+
+    /// <summary>A resume file claiming the first pieces, over the files really on disk.</summary>
+    private ResumeData Claimed(TorrentMetadata torrent, int verified)
+    {
+        Bitfield has = new(torrent.PieceCount);
+
+        for (int piece = 0; piece < verified; piece++)
+        {
+            has.Set(piece);
+        }
+
+        return new(
+            torrent.InfoHash,
+            has,
+            Uploaded: 0,
+            Downloaded: 0,
+            [
+                .. torrent.Files.Select(file => new ResumeFile(
+                    file.Path,
+                    file.Length,
+                    new FileInfo(Path.Combine(
+                        _folder,
+                        torrent.Name,
+                        file.Path.Replace('/', Path.DirectorySeparatorChar))).LastWriteTimeUtc)),
+            ]);
+    }
+
+    private TorrentRun Run(
+        AnsweringTrackers transport,
+        IPeerDialler dialler,
+        TorrentMetadata? torrent = null,
+        ResumeKeeper? resume = null)
     {
         return new(
             ArchiveHash,
@@ -153,7 +245,9 @@ public class TorrentRunTests : IDisposable
             dialler,
             Id("NM0001"),
             listenPort: 51413,
-            TimeProvider.System);
+            TimeProvider.System,
+            torrent,
+            resume);
     }
 
     /// <summary>The archive torrent's own info hash, which all of this comes back to.</summary>

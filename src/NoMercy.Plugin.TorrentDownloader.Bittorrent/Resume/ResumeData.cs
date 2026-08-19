@@ -172,8 +172,21 @@ public sealed record ResumeData(
         }
     }
 
+    /// <summary>
+    /// Whether the file on disk is the one that was recorded.
+    /// </summary>
+    /// <remarks>
+    /// To the second, because that is all the resume file keeps. A real file's
+    /// modification time carries a fraction of a second as well, so comparing
+    /// exactly made every file look touched the moment the resume had been
+    /// written and read back — nothing was ever believed and every restart
+    /// verified the whole torrent, which is the one thing this file exists to
+    /// prevent. A second is also finer than any change worth noticing: nothing
+    /// rewrites a file and leaves its length alone inside the same second.
+    /// </remarks>
     private static bool Same(ResumeFile was, ResumeFile now)
     {
-        return was.Length == now.Length && was.ModifiedUtc == now.ModifiedUtc;
+        return was.Length == now.Length
+               && was.ModifiedUtc.ToUnixTimeSeconds() == now.ModifiedUtc.ToUnixTimeSeconds();
     }
 }

@@ -820,8 +820,9 @@ which is why `S5-13` reads as done.
    peer chose, the whole is checked against the info hash before any of it is believed, and the
    torrent comes out with its file list and the magnet's trackers. A peer that offers no id to ask
    under is asked for nothing at all.
-3. Test: the disk is opened under the download folder, pieces are verified before they are written,
-   and the bitfield and the resume file follow.
+3. **Done.** Test: the disk is opened under the download folder as soon as anything knows what the
+   torrent is, and a restart starts from what the resume file says was verified. Verifying a piece
+   before it reaches the disk is `S5-06`'s and is proved there.
 4. Test: `StatusAsync` reports real progress, rates, peers and seeds while it runs, and `FilesAsync`
    answers with the metadata's own file list. Rates are measured between polls, never averaged over
    the whole transfer.
