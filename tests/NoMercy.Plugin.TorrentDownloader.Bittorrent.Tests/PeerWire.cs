@@ -109,5 +109,25 @@ public sealed class PeerWire
         {
             throw new NotSupportedException();
         }
+
+        /// <summary>
+        /// Hangs up, as a socket does.
+        /// </summary>
+        /// <remarks>
+        /// Disposing the writing end completes the pipe, so the far side's next
+        /// read answers nought rather than waiting for ever. Without it a test
+        /// that watches a peer being dropped waits on a connection nothing will
+        /// ever close.
+        /// </remarks>
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                writing.Dispose();
+                reading.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
     }
 }

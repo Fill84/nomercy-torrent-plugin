@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S5-14` · The engine drives the session** — step 1 done and pushed, step 2 next.
+**Slice `S5-14` · The engine drives the session** — steps 1 and 2 done and pushed, step 3 next.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -12,9 +12,11 @@ part three, because the actions move bookkeeping until the client can download.
 `TorrentRun` is the loop Sprint 5 never had: it announces to every tracker a magnet carries, dials
 the peers they name once each, and holds each conversation on its own so one peer that misbehaves
 costs that peer. `IPeerDialler` is the seam the sockets sit behind, so all of it is judged without a
-network. **Step 2 is the one that matters next** — the metadata exchange, without which a magnet is
-a hash and nothing else and nothing downloads. Then the disk, the real status, pause and resume, a
-socket transport, an accept loop, and the two-instance acceptance.
+network. The metadata exchange runs: a peer is asked under the id *it* chose, the whole is checked against
+the info hash before any of it is believed, and what comes out is a torrent with its file list and
+the magnet's own trackers. **Step 3 is next** — the disk opened under the download folder and the
+resume file. Then the real status and rates, pause and resume, a socket tracker transport, an accept
+loop for peers dialling in, and the two-instance acceptance through `ITorrentEngine`.
 
 **Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three after
 `S5-14`.

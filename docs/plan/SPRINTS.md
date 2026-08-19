@@ -816,9 +816,10 @@ which is why `S5-13` reads as done.
    name, once each however many trackers name the same one, and a tracker that will not answer costs
    that tracker alone. `TorrentRun` in the Bittorrent assembly, with `IPeerDialler` as the seam the
    sockets sit behind.
-2. Test: a peer that completes the handshake is asked for metadata, and the torrent moves from
-   `FetchingMetadata` to `Downloading` when it arrives, with its file list. Until this is done a
-   magnet is still a hash and nothing else, so nothing downloads.
+2. **Done.** Test: a peer that completes the handshake is asked for the metadata under the id that
+   peer chose, the whole is checked against the info hash before any of it is believed, and the
+   torrent comes out with its file list and the magnet's trackers. A peer that offers no id to ask
+   under is asked for nothing at all.
 3. Test: the disk is opened under the download folder, pieces are verified before they are written,
    and the bitfield and the resume file follow.
 4. Test: `StatusAsync` reports real progress, rates, peers and seeds while it runs, and `FilesAsync`

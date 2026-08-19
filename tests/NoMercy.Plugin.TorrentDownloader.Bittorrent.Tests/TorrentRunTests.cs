@@ -88,10 +88,65 @@ public class TorrentRunTests : IDisposable
         Assert.Single(dialler.Dialled);
     }
 
-    private TorrentRun Run(AnsweringTrackers transport, RecordingDialler dialler)
+    /// <remarks>
+    /// A magnet is a hash and a list of trackers. Everything else — the name,
+    /// the file list, the piece length, the hashes every block is checked
+    /// against — comes from a peer, and until it does there is no disk to open
+    /// and nothing to ask anybody for. This is the exchange that turns one into
+    /// the other.
+    /// </remarks>
+    [Fact]
+    public async Task TheMetadataIsFetchedFromAPeerAndTheTorrentGetsItsFileList()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+
+        byte[] info = ArchiveInfo();
+        ScriptedPeer peer = new(ArchiveHash, info);
+
+        using TorrentRun run = Run(new AnsweringTrackers(), peer);
+
+        await run.OnceAsync(stopping.Token);
+        await peer.ServeAsync(stopping.Token);
+        await run.Metadata.WaitAsync(TimeSpan.FromSeconds(10), stopping.Token);
+
+        TorrentMetadata torrent = Assert.IsType<TorrentMetadata>(run.Torrent);
+
+        Assert.Equal(379, torrent.PieceCount);
+        Assert.Equal(198588270, torrent.TotalLength);
+        Assert.NotEmpty(run.Files);
+
+        // The trackers come from the magnet: the info dictionary has none, and
+        // a client that took its word for it would announce to nobody.
+        Assert.Equal(
+            ["http://one.example/announce", "http://two.example/announce"],
+            torrent.Trackers.Order());
+    }
+
+    /// <remarks>
+    /// A peer that does not speak <c>ut_metadata</c> is asked for nothing. Most
+    /// of a swarm does speak it, and a client that asked anyway would be
+    /// sending a message every one of the others rejects.
+    /// </remarks>
+    [Fact]
+    public async Task APeerThatDoesNotSpeakTheMetadataExtensionIsAskedForNothing()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+
+        ScriptedPeer peer = new(ArchiveHash, ArchiveInfo()) { Speaks = false };
+
+        using TorrentRun run = Run(new AnsweringTrackers(), peer);
+
+        await run.OnceAsync(stopping.Token);
+        await peer.ServeAsync(stopping.Token);
+
+        Assert.Equal(0, peer.Requested);
+        Assert.Null(run.Torrent);
+    }
+
+    private TorrentRun Run(AnsweringTrackers transport, IPeerDialler dialler)
     {
         return new(
-            Hash,
+            ArchiveHash,
             ["http://one.example/announce", "http://two.example/announce"],
             _folder,
             new TrackerSet(transport, TimeProvider.System),
@@ -101,7 +156,18 @@ public class TorrentRunTests : IDisposable
             TimeProvider.System);
     }
 
-    private static byte[] Hash => [.. Enumerable.Range(0, 20).Select(one => (byte)one)];
+    /// <summary>The archive torrent's own info hash, which all of this comes back to.</summary>
+    private static byte[] ArchiveHash =>
+        Convert.FromHexString(TorrentMetadata.Read(Fixture("archive-multifile.torrent")).InfoHash);
+
+    /// <summary>The raw info dictionary out of the real torrent.</summary>
+    private static byte[] ArchiveInfo()
+    {
+        byte[] torrent = Fixture("archive-multifile.torrent");
+        BencodeDocument document = Bencode.Read(torrent);
+
+        return torrent[document.InfoStart!.Value..(document.InfoStart.Value + document.InfoLength!.Value)];
+    }
 
     private static byte[] Id(string name)
     {
@@ -190,6 +256,176 @@ public class TorrentRunTests : IDisposable
             // Null is a peer that would not talk, which is most of the
             // addresses a tracker gives out.
             return Task.FromResult<PeerConnection?>(null);
+        }
+    }
+
+    /// <summary>
+    /// A peer on the other end of a pipe, answering as a real one does.
+    /// </summary>
+    /// <remarks>
+    /// It serves the metadata and nothing else: what is being judged is whether
+    /// this client asks the right questions and makes a torrent out of the
+    /// answers, and everything below that is proved elsewhere.
+    /// </remarks>
+    private sealed class ScriptedPeer(byte[] infoHash, byte[] info) : IPeerDialler
+    {
+        private readonly PeerWire _wire = new();
+        private PeerConnection? _theirs;
+
+        /// <summary>The id it wants its metadata messages under, which is not ours.</summary>
+        private const int TheirId = 3;
+
+        /// <summary>Whether it offers <c>ut_metadata</c> at all.</summary>
+        public bool Speaks { get; init; } = true;
+
+        /// <summary>How many pieces of the metadata it was asked for.</summary>
+        public int Requested { get; private set; }
+
+        public async Task<PeerConnection?> DialAsync(
+            PeerAddress peer,
+            byte[] hash,
+            byte[] peerId,
+            int pieces,
+            CancellationToken ct)
+        {
+            // Both at once. The answering side reads before it writes, so
+            // waiting for it before the dialling side has said anything is a
+            // deadlock — which is what a real client does to itself if it
+            // accepts connections on the thread that dials.
+            Task<PeerConnection?> answering = PeerConnection.IntroduceAsync(
+                _wire.Receiver, infoHash, Id("PEER00"), pieces: 0, dialling: false, ct);
+
+            Task<PeerConnection?> dialling = PeerConnection.IntroduceAsync(
+                _wire.Initiator, hash, peerId, pieces, dialling: true, ct);
+
+            PeerConnection?[] both = await Task.WhenAll(answering, dialling);
+
+            _theirs = both[0];
+
+            return both[1];
+        }
+
+        /// <summary>Answers whatever this client asks, until it has asked for everything.</summary>
+        public async Task ServeAsync(CancellationToken ct)
+        {
+            PeerConnection theirs = _theirs ?? throw new InvalidOperationException("nobody dialled");
+
+            await theirs.SendAsync(Introduction(), ct).ConfigureAwait(false);
+
+            if (!Speaks)
+            {
+                // It offered nothing, so it has nothing to serve — but it keeps
+                // listening until the client drops it, counting anything it is
+                // asked for anyway. Without that, "it was asked for nothing"
+                // would be true of a peer that was never listening.
+                await ListenAsync(theirs, ct).ConfigureAwait(false);
+
+                return;
+            }
+
+            int served = 0;
+            int pieces = MetadataTransfer.Pieces(info.Length);
+
+            while (served < pieces && !ct.IsCancellationRequested)
+            {
+                PeerMessage? message = await theirs.NextAsync(ct).ConfigureAwait(false);
+
+                if (message is null)
+                {
+                    return;
+                }
+
+                if (message.Id != PeerMessageId.Extended
+                    || message.Payload.Length < 1
+                    || message.Payload[0] != TheirId)
+                {
+                    continue;
+                }
+
+                MetadataPart part = MetadataTransfer.Read(message);
+
+                if (part.Kind != MetadataMessage.Request)
+                {
+                    continue;
+                }
+
+                Requested++;
+
+                await theirs
+                    .SendAsync(
+                        MetadataTransfer.Data(Extensions.OurMetadataId, part.Piece, info.Length, Slice(part.Piece)),
+                        ct)
+                    .ConfigureAwait(false);
+
+                served++;
+            }
+        }
+
+        /// <summary>Reads until the client hangs up, counting what it was asked for.</summary>
+        private async Task ListenAsync(PeerConnection theirs, CancellationToken ct)
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                PeerMessage? message = await theirs.NextAsync(ct).ConfigureAwait(false);
+
+                if (message is null)
+                {
+                    return;
+                }
+
+                // Any extended message that is not the handshake, whatever id
+                // it carries. "It was asked for nothing" has to mean nothing at
+                // all: a client that fell back to sending requests under its
+                // own id has still asked a peer that offered nothing.
+                if (message.Id == PeerMessageId.Extended
+                    && message.Payload.Length > 0
+                    && message.Payload[0] != Extensions.HandshakeId)
+                {
+                    Requested++;
+                }
+            }
+        }
+
+        /// <summary>
+        /// This peer's extension handshake, written by hand.
+        /// </summary>
+        /// <remarks>
+        /// Under an id of its own choosing and not ours, because that is the
+        /// whole point of the handshake: a client that sent its requests under
+        /// its own id would be understood by nobody. Three rather than one, so
+        /// a client that confused the two would be caught here.
+        /// </remarks>
+        private PeerMessage Introduction()
+        {
+            List<BencodeEntry> entries =
+            [
+                new(
+                    "m"u8.ToArray(),
+                    new BencodeDictionary(Speaks
+                        ?
+                        [
+                            new(
+                                System.Text.Encoding.ASCII.GetBytes(Extensions.Metadata),
+                                new BencodeInteger(TheirId)),
+                        ]
+                        : [])),
+            ];
+
+            // The size either way. A peer that says how big the metadata is and
+            // offers no id to ask for it is a real case — it has dropped the
+            // extension since it last spoke — and it is the case that tells
+            // "no id" apart from "no size".
+            entries.Add(new("metadata_size"u8.ToArray(), new BencodeInteger(info.Length)));
+
+            return Extensions.Extended(Extensions.HandshakeId, new BencodeDictionary(entries));
+        }
+
+        /// <summary>One sixteen-kibibyte piece of the metadata, the last one short.</summary>
+        private byte[] Slice(int piece)
+        {
+            int at = piece * MetadataTransfer.PieceLength;
+
+            return info[at..Math.Min(at + MetadataTransfer.PieceLength, info.Length)];
         }
     }
 

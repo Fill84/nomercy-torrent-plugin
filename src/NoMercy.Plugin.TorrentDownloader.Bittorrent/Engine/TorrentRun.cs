@@ -90,6 +90,21 @@ public sealed class TorrentRun : IDisposable
     private readonly HashSet<string> _tried = new(StringComparer.Ordinal);
 
     private readonly List<PeerConnection> _peers = [];
+    private readonly List<Task> _conversations = [];
+
+    /// <summary>Completes the first time the metadata is whole and hashes right.</summary>
+    private readonly TaskCompletionSource _metadata = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// The metadata being collected, shared across every peer.
+    /// </summary>
+    /// <remarks>
+    /// One fetch for the torrent rather than one per peer: the pieces are
+    /// sixteen kibibytes each and a large torrent has thirty of them, so asking
+    /// every peer for all of them is thirty times the traffic for one answer.
+    /// </remarks>
+    private MetadataFetch? _fetch;
+
     private TorrentSession? _session;
     private TorrentDisk? _disk;
     private TorrentMetadata? _torrent;
@@ -131,6 +146,16 @@ public sealed class TorrentRun : IDisposable
 
     /// <summary>Whether this run is stopped and dialling nobody.</summary>
     public bool Paused { get; private set; }
+
+    /// <summary>
+    /// Completes when the metadata has arrived and hashed right.
+    /// </summary>
+    /// <remarks>
+    /// A torrent added from a magnet has no name, no size and no files until
+    /// this does — which is why <c>FetchingMetadata</c> is a state of its own
+    /// rather than nought per cent of downloading.
+    /// </remarks>
+    public Task Metadata => _metadata.Task;
 
     /// <summary>Where it stands, with every number real or absent.</summary>
     public RunProgress Progress()
@@ -201,7 +226,23 @@ public sealed class TorrentRun : IDisposable
             }
         }
 
-        await Task.WhenAll(fresh.Select(peer => TalkAsync(peer, ct))).ConfigureAwait(false);
+        // The dials are awaited and the conversations are not. A dial has an
+        // end — the peer answers or it does not — and a conversation lasts as
+        // long as the peer does, so an announce pass that waited for one would
+        // never come round again.
+        foreach (PeerConnection? peer in await Task.WhenAll(fresh.Select(one => DialAsync(one, ct))))
+        {
+            if (peer is null)
+            {
+                continue;
+            }
+
+            lock (_lock)
+            {
+                _peers.Add(peer);
+                _conversations.Add(ConverseAsync(peer, ct));
+            }
+        }
     }
 
     /// <summary>Stops dialling and drops every connection, keeping the pieces.</summary>
@@ -281,32 +322,42 @@ public sealed class TorrentRun : IDisposable
             AnnounceEvent.Started);
     }
 
-    /// <summary>
-    /// Dials one peer and keeps talking to it until it goes.
-    /// </summary>
+    /// <summary>Opens one conversation, or answers nothing.</summary>
     /// <remarks>
-    /// Every failure costs this peer and nothing else. There are always more
-    /// peers, and a torrent with forty of them must not be taken down by the
-    /// one that hung up mid-message.
+    /// A peer that will not talk is the ordinary case rather than a fault: most
+    /// of the addresses a tracker hands out are stale.
     /// </remarks>
-    private async Task TalkAsync(PeerAddress address, CancellationToken ct)
+    private async Task<PeerConnection?> DialAsync(PeerAddress address, CancellationToken ct)
     {
-        PeerConnection? peer = null;
-
         try
         {
-            peer = await _dialler
+            return await _dialler
                 .DialAsync(address, _infoHash, _peerId, Torrent?.PieceCount ?? 0, ct)
                 .ConfigureAwait(false);
+        }
+        catch (Exception gone) when (gone is not OperationCanceledException)
+        {
+            return null;
+        }
+    }
 
-            if (peer is null)
+    /// <summary>
+    /// Talks to one peer until it goes or the run is stopped.
+    /// </summary>
+    /// <remarks>
+    /// The metadata first when there is none, because until it arrives there is
+    /// nothing to ask anybody for a block of, and then the session. Every
+    /// failure costs this peer and nothing else: there are always more, and a
+    /// torrent with forty of them must not be taken down by the one that hung
+    /// up mid-message.
+    /// </remarks>
+    private async Task ConverseAsync(PeerConnection peer, CancellationToken ct)
+    {
+        try
+        {
+            if (Torrent is null)
             {
-                return;
-            }
-
-            lock (_lock)
-            {
-                _peers.Add(peer);
+                await FetchAsync(peer, ct).ConfigureAwait(false);
             }
 
             if (Session() is TorrentSession session)
@@ -316,22 +367,148 @@ public sealed class TorrentRun : IDisposable
         }
         catch (Exception gone) when (gone is not OperationCanceledException)
         {
-            // One peer is one peer. Half a swarm hangs up mid-message and the
-            // torrent is worth more than any of them.
+            // One peer is one peer.
         }
         finally
         {
-            if (peer is not null)
+            lock (_lock)
             {
-                lock (_lock)
-                {
-                    _peers.Remove(peer);
-                }
-
-                peer.Dispose();
+                _peers.Remove(peer);
             }
+
+            peer.Dispose();
         }
     }
+
+    /// <summary>
+    /// Asks one peer for the metadata a magnet does not carry.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The extension handshake first, because the id every <c>ut_metadata</c>
+    /// message must be sent under is whatever that peer chose and is in it. A
+    /// peer that does not offer the extension is asked for nothing at all.
+    /// </para>
+    /// <para>
+    /// It returns the moment the metadata is whole and leaves the connection
+    /// open for the session: the peer that had the metadata is the one most
+    /// likely to have the pieces.
+    /// </para>
+    /// </remarks>
+    private async Task FetchAsync(PeerConnection peer, CancellationToken ct)
+    {
+        await peer.SendAsync(Extensions.Handshake(Client), ct).ConfigureAwait(false);
+
+        int? theirs = null;
+
+        while (Torrent is null && !ct.IsCancellationRequested)
+        {
+            PeerMessage? message = await peer.NextAsync(ct).ConfigureAwait(false);
+
+            if (message is null)
+            {
+                return;
+            }
+
+            if (message.Id != PeerMessageId.Extended || message.Payload.Length < 1)
+            {
+                continue;
+            }
+
+            if (message.Payload[0] == Extensions.HandshakeId)
+            {
+                ExtensionHandshake handshake = Extensions.Read(message);
+
+                if (handshake.MetadataId is not int id || handshake.MetadataSize is not int size)
+                {
+                    // It cannot help with this. Not a fault and not worth a
+                    // line: it is still a peer, and the session will have it.
+                    return;
+                }
+
+                theirs = id;
+
+                await AskAsync(peer, id, Fetch(size), ct).ConfigureAwait(false);
+
+                continue;
+            }
+
+            if (message.Payload[0] != Extensions.OurMetadataId || theirs is not int already)
+            {
+                continue;
+            }
+
+            await TakeAsync(peer, already, message, ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Takes one metadata message from a peer, and finishes if it was the last.</summary>
+    private async Task TakeAsync(PeerConnection peer, int theirs, PeerMessage message, CancellationToken ct)
+    {
+        MetadataPart part = MetadataTransfer.Read(message);
+
+        if (part.Kind != MetadataMessage.Data)
+        {
+            // A reject is a peer that has dropped the metadata since its
+            // handshake, and a request is one asking us for what we have not
+            // got yet. Neither is an answer.
+            return;
+        }
+
+        MetadataFetch fetch = Fetch(part.TotalSize);
+
+        fetch.Add(part.Piece, part.Data, peer.Introduction.Client);
+
+        if (!fetch.Complete)
+        {
+            return;
+        }
+
+        if (!fetch.Verified)
+        {
+            // Every piece arrived and the whole does not hash to the info hash
+            // this torrent is for, so at least one peer sent rubbish. Every
+            // contributor is dropped and it starts again.
+            fetch.Discard();
+
+            await AskAsync(peer, theirs, fetch, ct).ConfigureAwait(false);
+
+            return;
+        }
+
+        lock (_lock)
+        {
+            // The trackers come from the magnet: an info dictionary carries
+            // none, and a client that took its word for it would announce to
+            // nobody.
+            _torrent ??= fetch.Read(_trackers);
+        }
+
+        _metadata.TrySetResult();
+    }
+
+    /// <summary>Asks one peer for every piece of the metadata still wanted.</summary>
+    private static async Task AskAsync(PeerConnection peer, int theirs, MetadataFetch fetch, CancellationToken ct)
+    {
+        foreach (int piece in fetch.Wanted().ToArray())
+        {
+            await peer.SendAsync(MetadataTransfer.Request(theirs, piece), ct).ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>The one fetch for this torrent, made the first time a peer says how big it is.</summary>
+    private MetadataFetch Fetch(int size)
+    {
+        lock (_lock)
+        {
+            // The first size any peer gave. Two peers that disagree cannot both
+            // be right, and the hash at the end is what settles it.
+            return _fetch ??= new(_infoHash, size, _time.GetUtcNow());
+        }
+    }
+
+    /// <summary>What this client calls itself to a peer.</summary>
+    private const string Client = "NoMercy Torrent Downloader";
 
     /// <summary>
     /// The session, opened the first time there is metadata to open it with.
