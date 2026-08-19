@@ -346,6 +346,64 @@ public class PeerWireTests
         return Assert.IsType<PeerMessage>(reader.Next());
     }
 
+    /// <remarks>
+    /// <para>
+    /// An encrypted dial sends this client's handshake inside the encryption
+    /// negotiation, so by the time there is a connection to make, ours has gone
+    /// and theirs has already been read off the wire — and whatever they sent
+    /// after it has been read too.
+    /// </para>
+    /// <para>
+    /// Those extra bytes are the peer's first real message, most often its
+    /// bitfield. Thrown away, the client would believe a peer that has the whole
+    /// torrent has nothing, and would never ask it for a piece.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AHandshakeAlreadyReadIsUsedAndWhatFollowedItIsNotLost()
+    {
+        byte[] theirs = Fixture("peer-handshake.bin");
+        byte[] infoHash = theirs[28..48];
+        PeerMessage bitfield = new(PeerMessageId.Bitfield, new byte[] { 0xFF });
+
+        // Their handshake and their first message, in one read, which is how a
+        // peer that answers in a single round trip arrives.
+        byte[] already = [.. theirs, .. bitfield.Write()];
+
+        using MemoryStream wire = new();
+
+        PeerConnection connection = Assert.IsType<PeerConnection>(
+            await PeerConnection.IntroducedAsync(wire, infoHash, pieces: 8, already, CancellationToken.None));
+
+        using (connection)
+        {
+            PeerMessage first = Assert.IsType<PeerMessage>(await connection.NextAsync(CancellationToken.None));
+
+            Assert.Equal(PeerMessageId.Bitfield, first.Id);
+            Assert.True(connection.Has.All, "the peer said it has everything and was not believed");
+        }
+    }
+
+    /// <remarks>
+    /// A peer offering another torrent is a different swarm, not a confused
+    /// peer. BEP 3 says to drop it, and writing its blocks into these files
+    /// would be writing somebody else's bytes.
+    /// </remarks>
+    [Fact]
+    public async Task AHandshakeAlreadyReadForAnotherTorrentIsRefused()
+    {
+        byte[] theirs = Fixture("peer-handshake.bin");
+
+        using MemoryStream wire = new();
+
+        Assert.Null(await PeerConnection.IntroducedAsync(
+            wire,
+            [.. Enumerable.Range(0, 20).Select(one => (byte)one)],
+            pieces: 8,
+            theirs,
+            CancellationToken.None));
+    }
+
     private static byte[] Fixture(string name)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

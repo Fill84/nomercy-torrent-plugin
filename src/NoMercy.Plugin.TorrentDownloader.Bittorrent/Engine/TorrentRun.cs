@@ -38,6 +38,11 @@ public interface IPeerDialler
 /// <param name="Seeds">How many of those have the lot.</param>
 /// <param name="Downloaded">Bytes of pieces that have arrived.</param>
 /// <param name="Uploaded">Bytes of pieces that have gone out.</param>
+/// <param name="DownloadRateBytesPerSecond">
+/// How fast it is moving now, measured between the last two readings and never
+/// averaged over the whole transfer.
+/// </param>
+/// <param name="UploadRateBytesPerSecond">The same, going out.</param>
 /// <param name="Complete">Whether every piece is verified.</param>
 public sealed record RunProgress(
     string? Name,
@@ -48,6 +53,8 @@ public sealed record RunProgress(
     int Seeds,
     long Downloaded,
     long Uploaded,
+    double DownloadRateBytesPerSecond,
+    double UploadRateBytesPerSecond,
     bool Complete);
 
 /// <summary>
@@ -78,6 +85,8 @@ public sealed class TorrentRun : IDisposable
     private readonly int _listenPort;
     private readonly TimeProvider _time;
     private readonly ResumeKeeper? _resume;
+    private readonly RateMeter _down;
+    private readonly RateMeter _up;
     private readonly Lock _lock = new();
 
     /// <summary>
@@ -133,6 +142,8 @@ public sealed class TorrentRun : IDisposable
         _time = time;
         _torrent = torrent;
         _resume = resume;
+        _down = new(time);
+        _up = new(time);
     }
 
     /// <summary>The metadata, once anything knows it.</summary>
@@ -171,7 +182,18 @@ public sealed class TorrentRun : IDisposable
                 // percentage of a size nobody knows is a number made up on the
                 // page. Peers are still real: they are what the metadata will
                 // come from.
-                return new(_torrent?.Name, _torrent is not null, 0, _torrent?.TotalLength, _peers.Count, 0, 0, 0, false);
+                return new(
+                    _torrent?.Name,
+                    _torrent is not null,
+                    0,
+                    _torrent?.TotalLength,
+                    _peers.Count,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    false);
             }
 
             SessionProgress progress = _session.Progress();
@@ -185,6 +207,12 @@ public sealed class TorrentRun : IDisposable
                 progress.Seeds,
                 progress.Downloaded,
                 progress.Uploaded,
+
+                // Measured between this reading and the last, which is what
+                // makes a stalled torrent read as nought rather than as its
+                // average since it started.
+                _down.Measure(progress.Downloaded),
+                _up.Measure(progress.Uploaded),
                 progress.Complete);
         }
     }

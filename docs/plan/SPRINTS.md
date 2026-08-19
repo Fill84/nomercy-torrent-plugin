@@ -823,12 +823,16 @@ which is why `S5-13` reads as done.
 3. **Done.** Test: the disk is opened under the download folder as soon as anything knows what the
    torrent is, and a restart starts from what the resume file says was verified. Verifying a piece
    before it reaches the disk is `S5-06`'s and is proved there.
-4. Test: `StatusAsync` reports real progress, rates, peers and seeds while it runs, and `FilesAsync`
-   answers with the metadata's own file list. Rates are measured between polls, never averaged over
-   the whole transfer.
+4. **Part done.** The run reports rates measured between the last two readings, never averaged over
+   the transfer, and a reading taken too soon after the last keeps the one before it rather than
+   dividing by nought. What is left of this step is `BittorrentEngine` answering `StatusAsync` and
+   `FilesAsync` from a `TorrentRun` instead of from a record, which is step 9.
 5. Test: `PauseAsync` stops the peers and keeps the verified pieces; `ResumeAsync` picks up from them.
-6. A real `ITrackerTransport` over sockets — an HTTP GET and a datagram, both of them integration
-   tests. Everything that decides anything is already in `TrackerSet`.
+6. **Done.** A real `ITrackerTransport` and a real `IPeerDialler` over sockets, both judged over the
+   loopback: a datagram goes out and the answer comes back, a tracker that takes it and says nothing
+   times out naming itself, one that is not there says so at once rather than waiting out the
+   patience, and a peer that is not there is a peer that will not talk rather than an exception.
+   The dial is encrypted first and in the clear when the peer will not have it.
 7. An accept loop on the listening socket, so a peer that dials in is taken up.
 8. Test: the whole of it through `ITorrentEngine` against a second instance of this client seeding a
    fixture torrent — the same acceptance as `S5-13`, one layer up.

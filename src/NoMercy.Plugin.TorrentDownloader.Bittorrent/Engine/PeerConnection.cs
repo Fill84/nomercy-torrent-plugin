@@ -194,6 +194,62 @@ public sealed class PeerConnection(Stream wire, PeerHandshake introduction, int 
         return new(wire, introduction, pieces);
     }
 
+    /// <summary>
+    /// Makes a connection out of a handshake that has already been read.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An encrypted dial sends this client's handshake inside the encryption
+    /// negotiation, so by the time there is a connection to make, ours has gone
+    /// and theirs has come back — along with whatever the peer sent after it,
+    /// because a peer that answers in one round trip puts its first message in
+    /// the same write.
+    /// </para>
+    /// <para>
+    /// Those extra bytes are kept and read before the wire. Thrown away, a peer
+    /// whose bitfield arrived with its handshake would look like a peer that
+    /// has nothing, and would never be asked for a piece.
+    /// </para>
+    /// </remarks>
+    /// <param name="wire">The stream, with the handshake already off it.</param>
+    /// <param name="infoHash">Which torrent this connection is for.</param>
+    /// <param name="pieces">How many pieces the torrent has.</param>
+    /// <param name="already">Their handshake, and anything that came with it.</param>
+    /// <param name="ct">Cancellation.</param>
+    public static async Task<PeerConnection?> IntroducedAsync(
+        Stream wire,
+        byte[] infoHash,
+        int pieces,
+        ReadOnlyMemory<byte> already,
+        CancellationToken ct)
+    {
+        if (already.Length < Handshake.Length)
+        {
+            // The rest of it is still on the wire. A peer that sent half a
+            // handshake and stopped is one that hung up, which is most of them.
+            byte[] rest = new byte[Handshake.Length - already.Length];
+
+            try
+            {
+                await wire.ReadExactlyAsync(rest, ct).ConfigureAwait(false);
+            }
+            catch (Exception hungUp) when (hungUp is EndOfStreamException or IOException)
+            {
+                return null;
+            }
+
+            already = (byte[])[.. already.Span, .. rest];
+        }
+
+        if (Handshake.Read(already.Span[..Handshake.Length]) is not PeerHandshake introduction
+            || !Handshake.IsFor(introduction, infoHash))
+        {
+            return null;
+        }
+
+        return new(new HeadStart(wire, already[Handshake.Length..]), introduction, pieces);
+    }
+
     public void Dispose()
     {
         wire.Dispose();

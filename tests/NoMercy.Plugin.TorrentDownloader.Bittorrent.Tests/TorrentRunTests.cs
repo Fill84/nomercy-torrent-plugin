@@ -205,6 +205,45 @@ public class TorrentRunTests : IDisposable
             again.Progress().BytesDone);
     }
 
+    /// <remarks>
+    /// The numbers a page draws come off the run itself, and a torrent nobody
+    /// knows the size of has none of them. Nought bytes of nought is not
+    /// nought per cent: it is a size nobody knows, and dividing by it prints
+    /// something that is not a number.
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentWithNoMetadataReportsNoSizeRatherThanNought()
+    {
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler());
+
+        await run.OnceAsync(CancellationToken.None);
+
+        RunProgress progress = run.Progress();
+
+        Assert.False(progress.HasMetadata);
+        Assert.Null(progress.BytesTotal);
+        Assert.Null(progress.Name);
+        Assert.Equal(0, progress.DownloadRateBytesPerSecond);
+    }
+
+    /// <remarks>
+    /// Read a second time in the same instant — a page redrawing on a push
+    /// while the cadence is polling — the rate is the one last measured rather
+    /// than a division by nought.
+    /// </remarks>
+    [Fact]
+    public async Task ReadingTheProgressTwiceOverDoesNotMakeANumberThatIsNotOne()
+    {
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler(), torrent);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.Equal(run.Progress().DownloadRateBytesPerSecond, run.Progress().DownloadRateBytesPerSecond);
+        Assert.Equal(0, run.Progress().DownloadRateBytesPerSecond);
+    }
+
     /// <summary>A resume file claiming the first pieces, over the files really on disk.</summary>
     private ResumeData Claimed(TorrentMetadata torrent, int verified)
     {

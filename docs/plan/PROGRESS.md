@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S5-14` · The engine drives the session** — steps 1 to 3 done and pushed, step 4 next.
+**Slice `S5-14` · The engine drives the session** — steps 1 to 3 and 6 done and pushed, and the rates with them. The engine still holds a record rather than a run.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -15,9 +15,11 @@ costs that peer. `IPeerDialler` is the seam the sockets sit behind, so all of it
 network. The metadata exchange runs: a peer is asked under the id *it* chose, the whole is checked against
 the info hash before any of it is believed, and what comes out is a torrent with its file list and
 the magnet's own trackers. The disk is opened as soon as anything knows what the torrent is, and a restart
-starts from what the resume file says was verified. **Step 4 is next** — the real status and rates
-through the port. Then pause and resume, a socket tracker transport, an accept loop for peers
-dialling in, and the two-instance acceptance through `ITorrentEngine`.
+starts from what the resume file says was verified. Rates are measured between the last two readings
+rather than averaged over the transfer, and there are real sockets under the trackers and the dial.
+**What is next is the join**: `BittorrentEngine` holding a `TorrentRun` per torrent instead of a
+record, so `StatusAsync`, `FilesAsync`, `PauseAsync` and `ResumeAsync` answer from something that is
+really running. Then the accept loop for peers dialling in, and the two-instance acceptance.
 
 **Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three after
 `S5-14`.
