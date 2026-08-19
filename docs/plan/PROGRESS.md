@@ -4,12 +4,34 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S8-03` is done.** **Next: `S8-04` Hardening**, which is the last slice before the release
-and whose five tests are all about cadences that now exist.
+**Slice `S8-04` · Hardening** — four of its six steps done and pushed. **Blocked on a crash, and the
+crash is the most important thing in this file.**
 
-After that, `S8-05` is the release itself and needs the owner: a deploy with the server stopped, and
-one real cycle watched end to end. `S7-01` anime naming is the only other thing outstanding, and it
-was deferred on 18 August.
+**A real cycle run in-process crashes the host.** `ExecuteAsync(JobNames.Search)` or
+`ExecuteAsync(JobNames.Feed)` on a configured plugin — folders set, grants provided — kills the
+process outright. Not an exception: the test host dies and `dotnet test` reports "Test host process
+crashed" with no stack. It reproduces every time, in a test that does nothing but tick a cadence.
+
+What has been ruled out, each by a probe that passed on its own:
+
+- Constructing the `Chain` — browser, install, hidden stages, tabs, solver, HTTP client.
+- Constructing and starting `BittorrentEngine`, including its accept loop.
+- Disposing the plugin, or not disposing it: it crashes either way.
+- The hub push, which `LiveSnapshot` already wraps in a catch, and which the fake never throws from.
+
+So it is somewhere in `TorrentDownloaderPlugin.ChainAsync` after the engine is started and the chain
+is built — `PrepareAsync`, or the first pass of the harvest or search chain — and it is common to
+both cadences. The same chain runs fine inside `tools/SourceHealth`, which is a console application
+that builds it the same way, so whatever it is depends on the plugin's own path rather than on the
+chain itself.
+
+**Two tests for `S8-04` are written and are not in the suite, because they abort the whole run.**
+They are the ones that exercise this: a cycle stopped on purpose is not reported as a fault, and a
+cycle that cannot even prepare says so rather than vanishing. Put them back the moment the crash is
+fixed — they are the acceptance for it.
+
+Nothing has been deployed, so this has never reached the server. It would take the media server down
+with it, so **it comes before everything else, including the release**.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -497,6 +519,16 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   writing a broken reader's nought down would set the bar at nought and the rule would never fire for
   that source again. Found by a mutation surviving, because the first test used a source with no row
   count at all and never exercised the rule.
+- `S8-04` (part) The deploy script shipped **no `sources.json`**. It is built beside the assembly on
+  purpose — **C1**, the catalogue is read from the assembly's own folder — and the deploy list did
+  not have it, so every deploy left the plugin reading yesterday's sources or, on a fresh install,
+  none at all: seventeen sources become nothing, and it asks nobody anything while looking perfectly
+  healthy. The list is now checked against the projects the solution really builds, which is the
+  fault it already had once with the protocol assembly. The script also refuses to copy anything
+  while the server is still running, rather than leaving the hash check at the end to explain it one
+  file at a time. `OneAtATime` is **F3** with a name and three tests. And a cycle that throws is
+  journaled rather than swallowed: a run started from the button is a task nobody awaits, so an
+  exception there went nowhere at all.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its

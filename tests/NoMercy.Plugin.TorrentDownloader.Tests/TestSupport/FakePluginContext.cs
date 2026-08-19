@@ -52,7 +52,17 @@ public sealed class FakePluginContext : IPluginContext
     public HttpClient HttpClient => throw NotProvided(nameof(HttpClient));
     public IPluginLibraryQuery Library => throw NotProvided(nameof(Library));
     public IPluginLibraryWriter? LibraryWriter => null;
-    public IPluginGrants Grants => throw NotProvided(nameof(Grants));
+    /// <summary>
+    /// What the server has agreed to, when a test provides it.
+    /// </summary>
+    /// <remarks>
+    /// Null by default, like everything else the plugin has not needed: a test
+    /// that reaches for grants without meaning to gets a failure naming them
+    /// rather than a quiet yes it would then be judged against.
+    /// </remarks>
+    public FakeGrants? Permits { get; init; }
+
+    public IPluginGrants Grants => Permits ?? throw NotProvided(nameof(Grants));
 
     public Task PublishAsync<T>(string name, T payload, CancellationToken ct = default)
     {

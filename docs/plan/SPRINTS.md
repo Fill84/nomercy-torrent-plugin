@@ -1002,14 +1002,24 @@ pushed on its own.
 
 ## S8-04 · Hardening
 
-1. Test (**F1, F2**): a run started with an already-cancelled token still runs; the endpoint answers
-   before the work is done.
-2. Test (**F3**): a tick arriving while its own cadence runs is dropped and logged.
-3. Test: Stop cancels the cycle and leaves transfers running.
-4. Test: a restart mid-cycle resumes without re-harvesting and without double-grabbing.
-5. Test: shutdown waits briefly for a manual run and does not report it as a fault.
-6. `scripts/deploy-to-server.ps1` — stopped-server check, base64 over ssh, hash verification of every
-   file including `sources.json`.
+**Step 0, and it did not exist when this slice was written: a real cycle run in-process crashes the
+host.** `ExecuteAsync` for the search or the feed cadence, on a configured plugin, kills the process.
+`PROGRESS.md` § Current has what has been ruled out. Steps 5 and the second half of 2 are written and
+cannot be run until it is fixed. Nothing else in this slice matters beside it.
+
+1. **Done** in `S8-02` (**F1, F2**): a run started with an already-cancelled token still runs and the
+   endpoint answers at once.
+2. **Part done** (**F3**): `OneAtATime` is the guard, with tests for one at a time, for opening again
+   afterwards, and for exactly one of many arriving together getting in. What is left is the test
+   that a tick arriving during a real cycle is dropped and logged, which needs a cycle that runs.
+3. **Done.** Stop cancels the cycle and leaves the transfers alone.
+4. **Done.** A restart mid-cycle does not grab again what it has grabbed, and does not re-harvest
+   what is already in the pool.
+5. **Written and not runnable**: a cycle stopped on purpose is not a fault, and a cycle that cannot
+   even prepare says so rather than vanishing. Both crash the host, which is the fault above.
+6. **Done.** `scripts/deploy-to-server.ps1` refuses while the server is running, still sends base64
+   over ssh, verifies every file's hash, and now ships `sources.json` — which it never had. The file
+   list is checked against the projects the solution really builds.
 
 ## S8-05 · Release 0.4.0
 

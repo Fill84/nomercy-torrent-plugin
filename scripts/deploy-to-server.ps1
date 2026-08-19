@@ -43,7 +43,13 @@ $files = @(
     # altogether — no error, no entry, nothing to tell the owner why.
     "$project.Bittorrent.dll",
     "$project.deps.json",
-    'plugin.json'
+    'plugin.json',
+
+    # The catalogue, and it is not optional. C1: it is read from the assembly's
+    # own folder, so a deploy that ships every assembly and not this leaves the
+    # plugin reading yesterday's sources - or none at all on a fresh install -
+    # while looking perfectly healthy and asking nobody anything.
+    'sources.json'
 )
 
 if ($Build) {
@@ -57,6 +63,23 @@ if ($Build) {
 }
 
 if (-not (Test-Path $out)) { throw "nothing built at $out - run with -Build" }
+
+# Asked before anything is copied rather than worked out from the wreckage
+# afterwards. A loaded plugin's assembly is held open, so the copy fails, the
+# old build stays, and the hash check at the end is left to explain it one file
+# at a time. Refusing up front says the one thing the owner has to do.
+$running = ssh -o BatchMode=yes $Server 'tasklist 2>/dev/null | grep -i "NoMercy" || pgrep -fl "NoMercy" || true'
+if ($LASTEXITCODE -ne 0) { throw "cannot reach $Server over ssh" }
+
+if ($running -and ($running -join '') -match 'NoMercy') {
+    throw @"
+The server on $Server is still running, so this would copy nothing and say it worked.
+
+  $($running -join "`n  ")
+
+Stop it, run this again, and start it afterwards.
+"@
+}
 
 Write-Host "deploying to $Server…"
 

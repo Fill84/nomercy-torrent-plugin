@@ -42,7 +42,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     /// <summary>The running cycle's own stopping token, or null when none runs.</summary>
     private CancellationTokenSource? _cycle;
-    private int _running;
+
+    /// <summary>The guard that keeps two cycles from running together.</summary>
+    private readonly OneAtATime _running = new();
     private int _unconfigured;
     private int _overlapping;
     private int _announced;
@@ -368,8 +370,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private async Task CycleAsync(CancellationToken ct, EpisodeKey? only = null)
     {
-        if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
+        if (!_running.TryEnter())
         {
+            // Dropped, not queued: a tick that arrives during a cycle is one
+            // the cycle is already doing the work of.
             SayOnce(ref _overlapping, "A cycle is already running, so this one was not started.");
 
             return;
@@ -385,13 +389,23 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (OperationCanceledException)
         {
-            // Stopped on purpose. Not a fault, and the page says when the cycle
-            // last ran either way.
+            // Stopped on purpose — the owner pressed Stop, or the server is
+            // going away. Not a fault, and the page says when the cycle last
+            // ran either way.
+        }
+        catch (Exception wrong)
+        {
+            // Said, not swallowed. A run started from the button is a task
+            // nobody awaits, so an exception here would go nowhere at all and
+            // the page would show a cycle that began, ended, and explained
+            // nothing.
+            _journal.Failed(ActivityStage.Decide, "the search cycle", wrong.Message);
+            _context?.Logger.LogError(wrong, "The search cycle stopped: {Reason}", wrong.Message);
         }
         finally
         {
             _cycle = null;
-            Interlocked.Exchange(ref _running, 0);
+            _running.Leave();
         }
     }
 
@@ -407,7 +421,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <returns>Whether one was started, or false when one was already running.</returns>
     public bool StartRun()
     {
-        if (_running > 0)
+        if (_running.Busy)
         {
             return false;
         }
@@ -470,7 +484,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // case where the work still has to start.
         IReadOnlyList<TrackedEpisode> tracked = await Tracked(Lifetime);
 
-        if (!tracked.Any(one => one.Key == episode) || _running > 0)
+        if (!tracked.Any(one => one.Key == episode) || _running.Busy)
         {
             return false;
         }
@@ -930,7 +944,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private CycleStatus CurrentCycle()
     {
-        return new(_running > 0, _lastCycleAt, null);
+        return new(_running.Busy, _lastCycleAt, null);
     }
 
     public void Dispose()
