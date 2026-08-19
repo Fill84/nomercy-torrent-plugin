@@ -331,6 +331,166 @@ public sealed class GrabRepository(Database database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>
+    /// A download the owner cancelled: forgotten, and its episodes put back.
+    /// </summary>
+    /// <remarks>
+    /// Both, or the episode is lost — one left marked as grabbed with nothing
+    /// downloading is one nothing will ever look for again. Nothing is
+    /// blacklisted: the owner said no to this download, not to this release for
+    /// ever, and refusing it on their behalf tomorrow is a decision they did
+    /// not make.
+    /// </remarks>
+    /// <returns>Whether there was a grab to cancel.</returns>
+    public async Task<bool> CancelledAsync(string infoHash, DateTimeOffset at, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
+
+        string hash = infoHash.ToUpperInvariant();
+        List<EpisodeKey> covered = [];
+        string? release = null;
+
+        await using (SqliteCommand reading = connection.CreateCommand())
+        {
+            reading.Transaction = transaction;
+            reading.CommandText = "SELECT covers, release_title FROM grabs WHERE info_hash = $hash;";
+            reading.Parameters.AddWithValue("$hash", hash);
+
+            await using SqliteDataReader reader = await reading.ExecuteReaderAsync(ct);
+
+            while (await reader.ReadAsync(ct))
+            {
+                covered.AddRange(Covered(reader.GetString(0)));
+                release ??= reader.GetString(1);
+            }
+        }
+
+        if (release is null)
+        {
+            return false;
+        }
+
+        await using (SqliteCommand forgetting = connection.CreateCommand())
+        {
+            forgetting.Transaction = transaction;
+
+            // Deleted rather than marked: a cancelled grab is one that never
+            // happened as far as every page is concerned, and a row left behind
+            // would keep it on the Downloads page for ever.
+            forgetting.CommandText = "DELETE FROM grabs WHERE info_hash = $hash;";
+            forgetting.Parameters.AddWithValue("$hash", hash);
+
+            await forgetting.ExecuteNonQueryAsync(ct);
+        }
+
+        foreach (EpisodeKey episode in covered)
+        {
+            await using SqliteCommand missing = connection.CreateCommand();
+
+            missing.Transaction = transaction;
+
+            // B2: a download the owner cancelled is not an attempt the episode
+            // spent, so the attempt count is left alone.
+            missing.CommandText =
+                """
+                UPDATE episodes SET state = $state
+                WHERE show_id = $show AND season = $season AND episode = $episode AND state <> 'notaired';
+                """;
+            missing.Parameters.AddWithValue("$state", EpisodeStates.Missing);
+            missing.Parameters.AddWithValue("$show", episode.ShowId);
+            missing.Parameters.AddWithValue("$season", episode.Season);
+            missing.Parameters.AddWithValue("$episode", episode.Number);
+
+            await missing.ExecuteNonQueryAsync(ct);
+        }
+
+        await using (SqliteCommand said = connection.CreateCommand())
+        {
+            said.Transaction = transaction;
+            said.CommandText =
+                """
+                INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+                VALUES ($at, 'failed', $show, $season, $episode, NULL, $release, NULL, $detail);
+                """;
+
+            EpisodeKey first = covered.Count > 0 ? covered[0] : new(0, 0, 0);
+
+            said.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
+            said.Parameters.AddWithValue("$show", first.ShowId);
+            said.Parameters.AddWithValue("$season", first.Season);
+            said.Parameters.AddWithValue("$episode", first.Number);
+            said.Parameters.AddWithValue("$release", release);
+            said.Parameters.AddWithValue("$detail", "cancelled by hand");
+
+            await said.ExecuteNonQueryAsync(ct);
+        }
+
+        await transaction.CommitAsync(ct);
+
+        return true;
+    }
+
+    /// <summary>Why one release was refused for one episode, or null when none was.</summary>
+    /// <remarks>
+    /// The newest refusal, because the profile can change between cycles and
+    /// what the owner is overruling is the reason they were shown.
+    /// </remarks>
+    public async Task<string?> RefusalAsync(EpisodeKey episode, string title, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT detail FROM history
+            WHERE event = 'skipped' AND show_id = $show AND season = $season AND episode = $episode
+              AND release_title = $title
+            ORDER BY id DESC LIMIT 1;
+            """;
+
+        command.Parameters.AddWithValue("$show", episode.ShowId);
+        command.Parameters.AddWithValue("$season", episode.Season);
+        command.Parameters.AddWithValue("$episode", episode.Number);
+        command.Parameters.AddWithValue("$title", title);
+
+        object? detail = await command.ExecuteScalarAsync(ct);
+
+        return detail is string reason ? reason : null;
+    }
+
+    /// <summary>Records that the owner overruled a refusal, and what it had been.</summary>
+    /// <remarks>
+    /// Naming the original reason is the whole of it. A line saying only
+    /// "allowed" has the History page contradicting the Skipped page it came
+    /// from, with nothing to say which of the two is right.
+    /// </remarks>
+    public async Task AllowedAsync(
+        EpisodeKey episode,
+        string releaseTitle,
+        string refusedFor,
+        DateTimeOffset at,
+        CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+            VALUES ($at, 'allowed', $show, $season, $episode, NULL, $release, NULL, $detail);
+            """;
+
+        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$show", episode.ShowId);
+        command.Parameters.AddWithValue("$season", episode.Season);
+        command.Parameters.AddWithValue("$episode", episode.Number);
+        command.Parameters.AddWithValue("$release", releaseTitle);
+        command.Parameters.AddWithValue("$detail", $"allowed by hand, having been refused: {refusedFor}");
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     /// <summary>Every refusal, newest first, as the Skipped page reads them.</summary>
     public async Task<IReadOnlyList<SkippedRelease>> SkippedAsync(CancellationToken ct)
     {

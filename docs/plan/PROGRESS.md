@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S5-14` · The engine drives the session** — done. **Next: `S8-02` part three, the remaining actions.**
+**Slice `S8-02` part three · The remaining actions** — all but `SearchNow` and the Downloads page's own buttons done and pushed. `S5-14` is done.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -47,9 +47,10 @@ have been corrected to say so.
 - **Part two is done.** Sprint 6 is joined up: the search cycle hands over through the grab rather
   than straight to the client, writes down what it decided, and the transfers cadence recovers,
   stages, dispatches and blacklists what failed. The plugin owns and starts the torrent client.
-- **Part three is next** — `RunNow`, `StopRun`, `SearchNow`, `PauseDownload`, `ResumeDownload`,
-  `CancelDownload`, `AddTorrent` and `AllowRelease`, each an endpoint and a control on its page.
-  Run and Stop still answer "not-ready".
+- **Part three is nearly done.** `RunNow`, `StopRun`, `PauseDownload`, `ResumeDownload`,
+  `CancelDownload`, `AddTorrent` and `AllowRelease` are endpoints that really do what they say, each
+  with a test that fails when the rule is deleted. What is left is `SearchNow`, and the controls on
+  the Downloads page: the endpoints exist and only the Skipped page carries a button so far.
 
 **Read before starting part three: `S5-14` is the slice that makes any of this download anything.**
 `BittorrentEngine` — the only implementation of `ITorrentEngine`, and the one the plugin uses —

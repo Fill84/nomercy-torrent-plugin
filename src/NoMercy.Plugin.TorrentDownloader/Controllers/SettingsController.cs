@@ -65,26 +65,36 @@ public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginC
     }
 
     /// <summary>
-    /// Starts a cycle — once there is one to start.
+    /// Starts a full cycle in the background.
     /// </summary>
     /// <remarks>
-    /// It says so rather than answering "ok" to having done nothing. An
-    /// endpoint that accepts a request it cannot carry out is worse than one
-    /// that refuses: the page shows a cycle beginning, nothing happens, and
-    /// there is nothing anywhere saying why.
+    /// <strong>F1.</strong> The request's own cancellation token is taken and
+    /// deliberately not used: 0.3.4 awaited the cycle inside the request, so a
+    /// browser tab closed after half an hour threw away twenty-nine minutes of
+    /// work. This answers that a cycle has begun, not that it has finished.
     /// </remarks>
     [HttpPost("run")]
-    public IActionResult Run()
+    public IActionResult Run(CancellationToken ct)
     {
-        return Status(false, "not-ready", NotWired);
+        _ = ct;
+
+        return plugin.StartRun()
+            ? Status(true, "started")
+            : Status(false, "already-running", "A cycle is already running.");
     }
 
+    /// <summary>
+    /// Cancels the running cycle.
+    /// </summary>
+    /// <remarks>
+    /// Transfers already handed to the torrent client keep going: stopping a
+    /// search is not stopping a download.
+    /// </remarks>
     [HttpPost("stop")]
     public IActionResult Stop()
     {
-        return Status(false, "not-ready", NotWired);
+        return plugin.StopRun()
+            ? Status(true, "stopping")
+            : Status(false, "idle", "Nothing is running, so there is nothing to stop.");
     }
-
-    internal const string NotWired =
-        "Nothing runs a cycle yet, so there is nothing to start or stop.";
 }

@@ -39,8 +39,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <summary>What the last search cycle decided, for the pages that say so.</summary>
     private CycleReport? _lastCycle;
     private DateTimeOffset? _lastCycleAt;
+
+    /// <summary>The running cycle's own stopping token, or null when none runs.</summary>
+    private CancellationTokenSource? _cycle;
     private int _running;
     private int _unconfigured;
+    private int _overlapping;
     private int _announced;
     private bool _disposed;
 
@@ -241,7 +245,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 break;
 
             case JobNames.Search:
-                await SearchAsync(work.Token);
+                await CycleAsync(work.Token);
                 break;
 
             case JobNames.Transfers:
@@ -315,8 +319,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         IReadOnlyList<TrackedEpisode> tracked = await Tracked(ct);
         GrabRepository grabs = await GrabsAsync(ct);
 
-        Interlocked.Increment(ref _running);
-
         try
         {
             _lastCycle = await chain.Search(settings).RunAsync(
@@ -337,7 +339,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         finally
         {
-            Interlocked.Decrement(ref _running);
             _lastCycleAt = DateTimeOffset.UtcNow;
         }
 
@@ -345,6 +346,249 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // the client has been handed something, and the pages that say what
         // happened read the store rather than anything held in memory.
         await CycleRecord.WriteAsync(_lastCycle, tracked, grabs, DateTimeOffset.UtcNow, ct);
+    }
+
+    /// <summary>
+    /// One cycle, and never two at once.
+    /// </summary>
+    /// <remarks>
+    /// The cadence and the Run button both come through here. Two cycles
+    /// running together would ask every site twice and could grab the same
+    /// release for one episode twice over, because what one has decided is
+    /// state the other cannot see.
+    /// </remarks>
+    private async Task CycleAsync(CancellationToken ct)
+    {
+        if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
+        {
+            SayOnce(ref _overlapping, "A cycle is already running, so this one was not started.");
+
+            return;
+        }
+
+        using CancellationTokenSource cycle = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        _cycle = cycle;
+
+        try
+        {
+            await SearchAsync(cycle.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Stopped on purpose. Not a fault, and the page says when the cycle
+            // last ran either way.
+        }
+        finally
+        {
+            _cycle = null;
+            Interlocked.Exchange(ref _running, 0);
+        }
+    }
+
+    /// <summary>
+    /// Starts a full cycle in the background, and answers at once.
+    /// </summary>
+    /// <remarks>
+    /// <strong>F1.</strong> 0.3.4 awaited the cycle inside the HTTP request, so
+    /// it ran on the caller's cancellation token — a browser tab closed after
+    /// half an hour threw away twenty-nine minutes of work. The cycle is
+    /// started on the plugin's own lifetime and the request only asks for it.
+    /// </remarks>
+    /// <returns>Whether one was started, or false when one was already running.</returns>
+    public bool StartRun()
+    {
+        if (_running > 0)
+        {
+            return false;
+        }
+
+        // Never the caller's token, and never awaited: the endpoint answers
+        // that a cycle has begun, not that it has finished.
+        _ = Task.Run(() => CycleAsync(Lifetime), CancellationToken.None);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Cancels the running cycle, leaving the transfers alone.
+    /// </summary>
+    /// <remarks>
+    /// Stopping a search is not stopping a download: what has already been
+    /// handed to the torrent client keeps going, which is what the owner
+    /// expects and what docs/08-ui.md says.
+    /// </remarks>
+    /// <returns>Whether there was one to stop.</returns>
+    public bool StopRun()
+    {
+        CancellationTokenSource? cycle = _cycle;
+
+        if (cycle is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            cycle.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // It finished between the read and the cancel, which is a race a
+            // button really runs.
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>Pauses one transfer, keeping its pieces.</summary>
+    /// <returns>Whether the client is holding it at all.</returns>
+    public async Task<bool> PauseDownloadAsync(string infoHash, CancellationToken ct)
+    {
+        if (await ClientAsync(ct) is not BittorrentEngine engine || !await HoldsAsync(engine, infoHash, ct))
+        {
+            return false;
+        }
+
+        await engine.PauseAsync(infoHash, ct);
+        await (await GrabsAsync(ct)).StateAsync(infoHash, GrabState.Paused, ct);
+
+        return true;
+    }
+
+    /// <summary>Starts a paused transfer again, from what it has already.</summary>
+    public async Task<bool> ResumeDownloadAsync(string infoHash, CancellationToken ct)
+    {
+        if (await ClientAsync(ct) is not BittorrentEngine engine || !await HoldsAsync(engine, infoHash, ct))
+        {
+            return false;
+        }
+
+        await engine.ResumeAsync(infoHash, ct);
+        await (await GrabsAsync(ct)).StateAsync(infoHash, GrabState.Downloading, ct);
+
+        return true;
+    }
+
+    /// <summary>
+    /// Stops a transfer, forgets it, and puts its episodes back to missing.
+    /// </summary>
+    /// <remarks>
+    /// The files go with it. The owner asked for this download to stop, and
+    /// leaving half a file in the incomplete folder is disk nobody will ever
+    /// account for.
+    /// </remarks>
+    public async Task<bool> CancelDownloadAsync(string infoHash, CancellationToken ct)
+    {
+        if (!await (await GrabsAsync(ct)).CancelledAsync(infoHash, DateTimeOffset.UtcNow, ct))
+        {
+            return false;
+        }
+
+        if (await ClientAsync(ct) is BittorrentEngine engine)
+        {
+            await engine.RemoveAsync(infoHash, deleteFiles: true, ct);
+        }
+
+        _journal.Failed(ActivityStage.Download, infoHash, "cancelled by hand");
+
+        return true;
+    }
+
+    /// <summary>
+    /// Takes on a torrent the owner found themselves.
+    /// </summary>
+    /// <remarks>
+    /// Written down like any other grab, so the Downloads page shows it and the
+    /// transfers cadence stages it when it finishes. It answers for no episode
+    /// yet: what it turns out to be is the staging stage's business, and the
+    /// dispatch says which file it could not place.
+    /// </remarks>
+    /// <returns>The hash it was taken on as, or why it was refused.</returns>
+    public async Task<(string? InfoHash, string? Refusal)> AddTorrentAsync(string source, CancellationToken ct)
+    {
+        if (await ConfiguredAsync(ct) is not Settings settings)
+        {
+            return (null, "No folders are configured, so there is nowhere to put a download.");
+        }
+
+        BittorrentEngine engine = await EngineAsync(settings, ct);
+
+        try
+        {
+            TorrentHandle taken = await engine.AddAsync(
+                new(source, [], settings.IncompleteFolder, null),
+                ct);
+
+            await (await GrabsAsync(ct)).RecordAsync(
+                new(0, 0, 0),
+                string.Empty,
+                taken.Name ?? taken.InfoHash,
+                "by hand",
+                taken.InfoHash,
+                source,
+
+                // No episode. One added by hand answers for whatever it turns
+                // out to hold, and saying it covers an episode nobody chose
+                // would put that episode back to missing if it failed.
+                [],
+                DateTimeOffset.UtcNow,
+                ct);
+
+            return (taken.InfoHash, null);
+        }
+        catch (Exception refused) when (refused is not OperationCanceledException)
+        {
+            return (null, refused.Message);
+        }
+    }
+
+    /// <summary>
+    /// Grabs a release the profile or the blacklist had refused.
+    /// </summary>
+    /// <remarks>
+    /// Only one that really was refused. Allowing something nothing ever
+    /// refused would write a history line saying a decision was overruled that
+    /// was never made.
+    /// </remarks>
+    public async Task<bool> AllowReleaseAsync(EpisodeKey episode, string title, CancellationToken ct)
+    {
+        GrabRepository grabs = await GrabsAsync(ct);
+
+        if (await grabs.RefusalAsync(episode, title, ct) is not string refusedFor)
+        {
+            return false;
+        }
+
+        await grabs.AllowedAsync(episode, title, refusedFor, DateTimeOffset.UtcNow, ct);
+
+        // Looked for by name on the next cycle rather than grabbed from here:
+        // what was refused was a name, and the copy of it worth taking is
+        // whatever the indexers are serving now.
+        await (await EpisodesAsync(ct)).RecordSearchAsync(episode, DateTimeOffset.MinValue, ct);
+
+        _journal.Finished(ActivityStage.Decide, title, $"allowed by hand, having been refused: {refusedFor}");
+
+        return true;
+    }
+
+    /// <summary>The torrent client, when there is one to reach.</summary>
+    private async Task<BittorrentEngine?> ClientAsync(CancellationToken ct)
+    {
+        return await ConfiguredAsync(ct) is Settings settings ? await EngineAsync(settings, ct) : null;
+    }
+
+    /// <summary>Whether the client really has this torrent.</summary>
+    /// <remarks>
+    /// Asked before anything is said to have happened. A page that showed a
+    /// torrent pausing when nothing paused is one nobody can trust about
+    /// anything else either.
+    /// </remarks>
+    private static async Task<bool> HoldsAsync(BittorrentEngine engine, string infoHash, CancellationToken ct)
+    {
+        return (await engine.StatusAsync(ct))
+            .Any(one => string.Equals(one.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>What the last cycle decided about each episode it looked at.</summary>

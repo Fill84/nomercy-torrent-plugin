@@ -58,24 +58,70 @@ public class SettingsControllerTests
     }
 
     /// <remarks>
-    /// Not "ok". An endpoint that accepts a request it cannot carry out is
-    /// worse than one that refuses: the page shows a cycle beginning, nothing
-    /// happens, and nothing anywhere says why.
+    /// <para>
+    /// <strong>F1.</strong> 0.3.4 awaited the cycle inside the HTTP request, so
+    /// it ran on the caller's cancellation token: a browser tab closed after
+    /// half an hour threw away twenty-nine minutes of work. The cycle belongs
+    /// to the plugin and the request only starts it.
+    /// </para>
+    /// <para>
+    /// Proved with a token that was cancelled before the request was even made.
+    /// The cycle still runs, and the line it writes when there is nothing
+    /// configured is what says it got that far.
+    /// </para>
     /// </remarks>
-    [Theory]
-    [InlineData("run")]
-    [InlineData("stop")]
-    public void RunAndStopSayThatNothingRunsYet(string which)
+    [Fact]
+    public async Task RunStartsACycleThatDoesNotBelongToTheCaller()
+    {
+        FakePluginContext context = new();
+        using TorrentDownloaderPlugin plugin = new();
+
+        plugin.Initialize(context);
+
+        using CancellationTokenSource gone = new();
+
+        await gone.CancelAsync();
+
+        SettingsController controller = new(plugin);
+
+        OkObjectResult result = Assert.IsType<OkObjectResult>(controller.Run(gone.Token));
+        PluginStatusResponse<bool> response = Assert.IsType<PluginStatusResponse<bool>>(result.Value);
+
+        Assert.Equal("started", response.Status);
+        Assert.True(response.Data);
+
+        await Until(() => context.Log.Lines.Any(line => line.Contains("No folders", StringComparison.Ordinal)));
+    }
+
+    /// <remarks>
+    /// Stopping what is not running says so rather than answering "ok". An
+    /// endpoint that accepts a request it did not carry out has the page show
+    /// something that did not happen.
+    /// </remarks>
+    [Fact]
+    public void StoppingWhenNothingIsRunningSaysSo()
     {
         SettingsController controller = new(Initialised());
 
-        OkObjectResult result = Assert.IsType<OkObjectResult>(
-            which == "run" ? controller.Run() : controller.Stop());
+        OkObjectResult result = Assert.IsType<OkObjectResult>(controller.Stop());
         PluginStatusResponse<bool> response = Assert.IsType<PluginStatusResponse<bool>>(result.Value);
 
-        Assert.Equal("not-ready", response.Status);
+        Assert.Equal("idle", response.Status);
         Assert.False(response.Data);
         Assert.Contains("nothing", response.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Waits for something the plugin does on its own.</summary>
+    private static async Task Until(Func<bool> what)
+    {
+        using CancellationTokenSource giving = new(TimeSpan.FromSeconds(20));
+
+        while (!what())
+        {
+            giving.Token.ThrowIfCancellationRequested();
+
+            await Task.Delay(TimeSpan.FromMilliseconds(10), giving.Token);
+        }
     }
 
     private static TorrentDownloaderPlugin Initialised()

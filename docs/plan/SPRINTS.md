@@ -970,15 +970,22 @@ pushed on its own.
 
 **Part three — the actions.**
 
-8. Test: `RunNow` starts a cycle and answers before it is done; `StopRun` cancels it.
+8. **Done.** `RunNow` starts a cycle on the plugin's own lifetime and answers at once — proved with a
+   request token cancelled before the request was made (**F1**) — and two at once are one.
+   `StopRun` cancels the running cycle and says so when there is none.
 9. Test: `SearchNow` searches one episode immediately and the journal shows it.
-10. Test: `PauseDownload` and `ResumeDownload` reach the engine and the page reflects the state.
-11. Test: `CancelDownload` stops it, removes it and returns the episode to missing.
-12. Test: `AddTorrent` accepts a magnet and a `.torrent` URL, and a bad one is refused with the
-    reason.
-13. Test: `AllowRelease` grabs a release the profile had refused and records an `allowed` history
-    entry naming the original reason.
-14. Implement.
+10. **Done.** `PauseDownload` and `ResumeDownload` reach the engine and move the grab's state, and a
+    hash this client is not holding is refused by name rather than answered "ok".
+11. **Done.** `CancelDownload` stops it, deletes its files, forgets the grab and returns every
+    episode it answered for to missing — and does **not** blacklist it: the owner said no to this
+    download, not to this release for ever.
+12. **Done.** `AddTorrent` takes a magnet or a `.torrent`, writes it down like any other grab so the
+    transfers cadence stages it, and refuses anything else with the reason and the source named.
+13. **Done.** `AllowRelease` records an `allowed` history entry naming what it had been refused for,
+    and clears the episode's last-search time so the next cycle looks again. Allowing something
+    nothing ever refused is refused itself.
+14. What is left: `SearchNow`, and the controls themselves on the Downloads page — the endpoints are
+    there and only the Skipped page carries its button.
 
 ## S8-03 · Health automation
 
