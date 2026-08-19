@@ -1,99 +1,94 @@
-# Copies this plugin into the server's own plugin folder.
+# SPDX-License-Identifier: MIT
 #
-# Stop the server first. A loaded plugin's assembly is held open, so the copy
-# fails and the old build stays behind — which looks exactly like a deploy that
-# worked and changed nothing. Every file's hash is verified afterwards for that
-# reason: this script would rather say it failed than let a stale build be
-# mistaken for a new one.
+# Copies a built plugin onto a running NoMercy server over ssh.
 #
-# The folder is the one docs/01-plugin.md names:
-#   %LOCALAPPDATA%\NoMercy\plugins\NoMercy.Plugin.TorrentDownloader\
-
+#   scripts\deploy-to-server.ps1
+#   scripts\deploy-to-server.ps1 -Build
+#   scripts\deploy-to-server.ps1 -Server other-host
+#
+# THE SERVER MUST BE STOPPED FIRST. A loaded plugin's assembly is held open by
+# the host, so the copy fails and the old build stays in place - which looks
+# exactly like a deploy that worked and changed nothing. Every file's hash is
+# compared afterwards, because that is the only way to tell those two apart.
+#
+# Files travel as base64 through ssh rather than with scp: scp against this host
+# fails where a plain ssh session works.
 [CmdletBinding()]
 param(
-    # Build first. Without it, whatever was last published is what goes.
-    [switch]$Build,
-
-    # Where the server keeps its plugins, if it is not the documented place.
-    [string]$Destination = (Join-Path $env:LOCALAPPDATA 'NoMercy\plugins\NoMercy.Plugin.TorrentDownloader')
+    [string] $Server = $(if ($env:SERVER) { $env:SERVER } else { 'beast-unit' }),
+    [string] $Configuration = 'Release',
+    [string] $Framework = 'net10.0',
+    [switch] $Build
 )
 
 $ErrorActionPreference = 'Stop'
 
 $root = Split-Path -Parent $PSScriptRoot
-$project = Join-Path $root 'src\NoMercy.Plugin.TorrentDownloader'
-$staging = Join-Path ([System.IO.Path]::GetTempPath()) ("nomercy-deploy-" + [guid]::NewGuid().ToString('n').Substring(0, 8))
+$project = 'NoMercy.Plugin.TorrentDownloader'
+$out = Join-Path $root "src\$project\bin\$Configuration\$Framework"
+
+# Expanded on the far side, not here: it is that machine's profile.
+$remoteDir = "`$LOCALAPPDATA/NoMercy/plugins/$project"
+
+# The manifest travels with the assembly on purpose: the two carry the version
+# independently, and updating one without the other leaves every server
+# reporting a version it is not running.
+$files = @(
+    "$project.dll",
+    "$project.Core.dll",
+
+    # The protocol assembly. It arrived with 0.4.0 and this list did not
+    # grow with it, so a deploy shipped an entry assembly referencing a dll
+    # that was not there and the plugin vanished from the server's list
+    # altogether — no error, no entry, nothing to tell the owner why.
+    "$project.Bittorrent.dll",
+    "$project.deps.json",
+    'plugin.json'
+)
 
 if ($Build) {
-    Write-Host "Publishing $project"
+    $dotnet = 'dotnet'
+    $candidate = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
+    if (Test-Path $candidate) { $dotnet = $candidate }
 
-    & dotnet publish $project -c Release -o $staging --nologo | Out-Null
-
-    if ($LASTEXITCODE -ne 0) {
-        throw "The build failed. Nothing was copied."
-    }
-}
-else {
-    $published = Join-Path $project 'bin\Release\net10.0\publish'
-
-    if (-not (Test-Path $published)) {
-        throw "There is nothing published at $published. Run with -Build."
-    }
-
-    $staging = $published
+    Write-Host "building $Configuration…"
+    & $dotnet build (Join-Path $root "src\$project\$project.csproj") -c $Configuration --nologo
+    if ($LASTEXITCODE -ne 0) { throw 'build failed' }
 }
 
-# The plugin's own assemblies and the two files it reads at startup. Nothing
-# else: the server brings its own abstractions, and shipping a second copy of
-# them is how a plugin ends up loading types the host will not accept.
-$wanted = @('NoMercy.Plugin.TorrentDownloader*.dll', 'plugin.json', 'sources.json')
-$files = $wanted | ForEach-Object { Get-ChildItem -Path $staging -Filter $_ -File -ErrorAction SilentlyContinue }
+if (-not (Test-Path $out)) { throw "nothing built at $out - run with -Build" }
 
-if (-not $files) {
-    throw "Nothing to deploy was found in $staging."
-}
-
-New-Item -ItemType Directory -Force -Path $Destination | Out-Null
-
-$copied = @()
-$failed = @()
+Write-Host "deploying to $Server…"
 
 foreach ($file in $files) {
-    $target = Join-Path $Destination $file.Name
+    $path = Join-Path $out $file
+    if (-not (Test-Path $path)) { Write-Host "  skip $file (not built)"; continue }
 
-    try {
-        Copy-Item -Path $file.FullName -Destination $target -Force
+    $localSum = (Get-FileHash $path -Algorithm MD5).Hash.ToLowerInvariant()
+    $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($path))
+    $temp = Join-Path ([IO.Path]::GetTempPath()) 'nm-deploy.b64'
+    [IO.File]::WriteAllText($temp, $b64)
 
-        $before = (Get-FileHash -Path $file.FullName -Algorithm SHA256).Hash
-        $after = (Get-FileHash -Path $target -Algorithm SHA256).Hash
+    Get-Content -Raw $temp | ssh -o BatchMode=yes $Server 'cat > /tmp/nm-deploy.b64'
+    Remove-Item $temp -Force
 
-        if ($before -ne $after) {
-            $failed += "$($file.Name): copied, but the hash does not match"
-        }
-        else {
-            $copied += $file.Name
-        }
+    # tr first, because PowerShell terminates a pipe into a native command with
+    # CRLF and GNU base64 rejects the CR outright - "base64: invalid input",
+    # with an empty hash that reads exactly like a file the server still holds
+    # open. The bash script redirects a file into ssh instead and never grows
+    # the extra byte; stripping here means one remote command serves both.
+    $remote = ssh -o BatchMode=yes $Server "tr -d '\r' < /tmp/nm-deploy.b64 | base64 -d > `"$remoteDir/$file`" && md5sum `"$remoteDir/$file`""
+    $remoteSum = ($remote -join '') -replace '[\\*]', '' -split ' ' | Select-Object -First 1
+
+    # The hashes are the whole point. A busy file leaves the old bytes in place
+    # and the copy still looks like it succeeded, so comparing is the only way
+    # to know a deploy actually happened.
+    if ($localSum -ne $remoteSum) {
+        Write-Error "FAILED $file`n  local  $localSum`n  remote $remoteSum`n  Is the server still running? A loaded plugin's dll cannot be replaced."
     }
-    catch {
-        # Almost always the server still running and holding the assembly open.
-        $failed += "$($file.Name): $($_.Exception.Message)"
-    }
+
+    Write-Host "  ok $file  $localSum"
 }
 
-Write-Host ""
-Write-Host "Deployed to $Destination"
-
-foreach ($name in $copied) {
-    Write-Host "  ok   $name"
-}
-
-foreach ($problem in $failed) {
-    Write-Host "  FAIL $problem"
-}
-
-if ($failed.Count -gt 0) {
-    throw "$($failed.Count) file(s) did not deploy. Is the server still running?"
-}
-
-Write-Host ""
-Write-Host "$($copied.Count) files verified. Start the server."
+Write-Host ''
+Write-Host 'done - start the server again.'
