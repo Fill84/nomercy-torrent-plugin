@@ -103,50 +103,92 @@ public sealed class BittorrentEngine(
         }
     }
 
-    public Task<TorrentHandle> AddAsync(TorrentRequest request, CancellationToken ct)
+    public async Task<TorrentHandle> AddAsync(TorrentRequest request, CancellationToken ct)
     {
-        Magnet? magnet = Magnet.Parse(request.Source);
-
-        if (magnet is null)
+        if (Magnet.Parse(request.Source) is Magnet magnet)
         {
-            // A .torrent address is in the port's documentation and nothing in
-            // this plugin produces one: every copy the find stage chooses has a
-            // hash, and a hash is a magnet. It is refused by name rather than
-            // half-supported.
-            throw new NotSupportedException(
-                $"'{request.Source}' is not a magnet, and this client takes nothing else yet.");
+            return Take(magnet.InfoHash, magnet.DisplayName, magnet.Trackers, null, request);
         }
 
+        // A .torrent, which the search chain never produces — every copy it
+        // chooses carries a hash, and a hash is a magnet — but which the owner
+        // hands over by name from a site that offers nothing else, and which is
+        // how one instance of this client seeds to another.
+        TorrentMetadata torrent = await TorrentAsync(request.Source, ct).ConfigureAwait(false);
+
+        return Take(torrent.InfoHash, torrent.Name, torrent.Trackers, torrent, request);
+    }
+
+    /// <summary>
+    /// Reads a <c>.torrent</c> off the disk or off an address.
+    /// </summary>
+    /// <remarks>
+    /// Refused by name when it is neither. "The source is not supported" leaves
+    /// the owner looking at a page with no idea which of the things they pasted
+    /// was wrong.
+    /// </remarks>
+    private async Task<TorrentMetadata> TorrentAsync(string source, CancellationToken ct)
+    {
+        try
+        {
+            if (Uri.TryCreate(source, UriKind.Absolute, out Uri? address)
+                && address.Scheme is "http" or "https")
+            {
+                return TorrentMetadata.Read(await transport.GetAsync(address, ct).ConfigureAwait(false));
+            }
+
+            if (File.Exists(source))
+            {
+                return TorrentMetadata.Read(await File.ReadAllBytesAsync(source, ct).ConfigureAwait(false));
+            }
+        }
+        catch (Exception unreadable) when (unreadable is not OperationCanceledException)
+        {
+            throw new NotSupportedException($"'{source}' could not be read as a torrent: {unreadable.Message}");
+        }
+
+        throw new NotSupportedException($"'{source}' is neither a magnet nor a torrent this client can read.");
+    }
+
+    /// <summary>Takes on one torrent, however it was named.</summary>
+    private TorrentHandle Take(
+        string infoHash,
+        string? name,
+        IReadOnlyList<string> trackers,
+        TorrentMetadata? torrent,
+        TorrentRequest request)
+    {
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
 
-            if (_torrents.TryGetValue(magnet.InfoHash, out Held? already))
+            if (_torrents.TryGetValue(infoHash, out Held? already))
             {
                 // The same torrent from a second source is one torrent with
                 // more trackers, which is the whole reason every indexer is
                 // asked.
-                already.Run.Add(request.Trackers.Union(magnet.Trackers, StringComparer.OrdinalIgnoreCase));
+                already.Run.Add(request.Trackers.Union(trackers, StringComparer.OrdinalIgnoreCase));
 
-                return Task.FromResult(new TorrentHandle(magnet.InfoHash, already.Run.Torrent?.Name ?? magnet.DisplayName));
+                return new(infoHash, already.Run.Torrent?.Name ?? name);
             }
 
             TorrentRun run = new(
-                Convert.FromHexString(magnet.InfoHash),
+                Convert.FromHexString(infoHash),
 
                 // Everything anybody named for it, without duplicates.
-                [.. magnet.Trackers.Union(request.Trackers, StringComparer.OrdinalIgnoreCase)],
+                [.. trackers.Union(request.Trackers, StringComparer.OrdinalIgnoreCase)],
                 request.DownloadFolder,
                 new TrackerSet(transport, _time),
                 dialler,
                 _peerId,
                 _sockets?.Port ?? listenPort,
                 _time,
-                resume: resume);
+                torrent,
+                resume);
 
-            Held held = new(run, magnet.DisplayName, _time.GetUtcNow());
+            Held held = new(run, name, _time.GetUtcNow());
 
-            _torrents[magnet.InfoHash] = held;
+            _torrents[infoHash] = held;
 
             // Discarded on purpose: the loop stops on the token and cannot
             // fault, because everything inside it is caught. Holding the task
@@ -154,7 +196,7 @@ public sealed class BittorrentEngine(
             // shutdown that waited on an announce would wait on a socket.
             _ = AnnouncingAsync(held, _stopping.Token);
 
-            return Task.FromResult(new TorrentHandle(magnet.InfoHash, magnet.DisplayName));
+            return new(infoHash, name);
         }
     }
 

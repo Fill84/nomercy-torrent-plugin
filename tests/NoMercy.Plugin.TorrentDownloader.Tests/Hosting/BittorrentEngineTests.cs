@@ -13,7 +13,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Hosting;
 /// The torrent client's shell: its lifetime, its port, and what it says about
 /// a torrent it has taken on.
 /// </summary>
-public class BittorrentEngineTests
+public class BittorrentEngineTests : IDisposable
 {
     /// <remarks>
     /// Started once and stopped once, whatever ticks in between. The client
@@ -263,23 +263,57 @@ public class BittorrentEngineTests
     }
 
     /// <remarks>
-    /// Anything that is not a magnet is refused by name. The port's
-    /// documentation allows the address of a <c>.torrent</c> as well, and
-    /// nothing in this plugin produces one — every copy the find stage chooses
-    /// carries a hash, and a hash is a magnet. Half-supporting it would be a
-    /// path nothing exercises until the day it matters.
+    /// Anything that is neither a magnet nor a torrent is refused by name. The
+    /// name is the whole of it: "the source is not supported" leaves the owner
+    /// looking at a page with no idea which of the things they pasted was
+    /// wrong.
     /// </remarks>
     [Fact]
-    public async Task ASourceThatIsNotAMagnetIsRefusedByName()
+    public async Task ASourceThatIsNeitherAMagnetNorATorrentIsRefusedByName()
     {
         using BittorrentEngine engine = Started();
 
         NotSupportedException refused = await Assert.ThrowsAsync<NotSupportedException>(
             () => engine.AddAsync(
-                Request with { Source = "https://example.test/thing.torrent" },
+                Request with { Source = "ftp://example.test/thing.bin" },
                 CancellationToken.None));
 
-        Assert.Contains("thing.torrent", refused.Message, StringComparison.Ordinal);
+        Assert.Contains("thing.bin", refused.Message, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// A <c>.torrent</c> is taken on with everything already known: its name,
+    /// its size and its files, without a peer having been asked for anything.
+    /// docs/08-ui.md requires it — <c>AddTorrent</c> takes a magnet or a
+    /// <c>.torrent</c> — and it is also what lets one instance of this client
+    /// seed to another.
+    /// </para>
+    /// <para>
+    /// A file rather than an address, because that is what an owner has when
+    /// they have downloaded one from a site that offers nothing else.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentFileIsTakenOnWithItsMetadataAlreadyKnown()
+    {
+        using BittorrentEngine engine = Started();
+
+        string file = Path.Combine(_folder, "archive.torrent");
+
+        Directory.CreateDirectory(_folder);
+        File.WriteAllBytes(file, Fixture("archive-multifile.torrent"));
+
+        TorrentHandle handle = await engine.AddAsync(
+            Request with { Source = file, DownloadFolder = _folder },
+            CancellationToken.None);
+
+        TorrentStatus status = Assert.Single(await engine.StatusAsync(CancellationToken.None));
+
+        Assert.NotEqual(TorrentState.FetchingMetadata, status.State);
+        Assert.Equal(198588270, status.BytesTotal);
+        Assert.NotNull(status.Name);
+        Assert.NotEmpty(await engine.FilesAsync(handle.InfoHash, CancellationToken.None));
     }
 
     /// <summary>
@@ -407,6 +441,33 @@ public class BittorrentEngineTests
         clock.Advance(TimeSpan.FromHours(9));
 
         Assert.Equal(TorrentState.Paused, (await engine.StatusAsync(CancellationToken.None))[0].State);
+    }
+
+    private readonly string _folder = Path.Combine(
+        Path.GetTempPath(),
+        "nomercy-engine-" + Guid.NewGuid().ToString("n")[..8]);
+
+    public void Dispose()
+    {
+        GC.SuppressFinalize(this);
+
+        if (Directory.Exists(_folder))
+        {
+            Directory.Delete(_folder, recursive: true);
+        }
+    }
+
+    private static byte[] Fixture(string name)
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+
+        while (directory is not null
+               && !File.Exists(Path.Combine(directory.FullName, "NoMercy.Plugin.TorrentDownloader.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return File.ReadAllBytes(Path.Combine(directory!.FullName, "tests", "fixtures", name));
     }
 
     private static BittorrentEngine Started()

@@ -839,8 +839,12 @@ which is why `S5-13` reads as done.
    and are told apart from the first byte, a peer asking for a torrent this client is not holding is
    dropped, and each arrival is welcomed on its own so a peer that dials and then says nothing does
    not hold the door. Proved over the loopback, dialled by this client's own dialler.
-8. Test: the whole of it through `ITorrentEngine` against a second instance of this client seeding a
-   fixture torrent — the same acceptance as `S5-13`, one layer up.
+8. **Done.** The whole of it through `ITorrentEngine`: one engine seeds a fixture torrent from
+   finished files and a resume that says so, another is given the same torrent, an empty folder and a
+   tracker that names the first, and it announces, dials, handshakes, asks and writes on its own. The
+   bytes on disk are the bytes that were seeded. `AddAsync` takes a `.torrent` as well as a magnet
+   now, which `docs/08-ui.md` requires for `AddTorrent` and which is what lets one instance seed to
+   another.
 9. **Done.** `BittorrentEngine` holds one `TorrentRun` per torrent rather than a record, announces
    for each at the interval its trackers asked for, and the plugin gives it the real sockets. What
    remains of this slice is the accept loop and the acceptance run.

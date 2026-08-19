@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S5-14` · The engine drives the session** — everything but the acceptance run done and pushed.
+**Slice `S5-14` · The engine drives the session** — done. **Next: `S8-02` part three, the remaining actions.**
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -21,11 +21,18 @@ per torrent, announces for each at the interval its trackers asked for, and the 
 socket transport and a socket dialler — so `StatusAsync`, `FilesAsync`, `PauseAsync` and
 `ResumeAsync` answer from something that is really running.
 
-A peer that dials in is taken up now as well, encrypted or in the clear.
+A peer that dials in is taken up as well, encrypted or in the clear.
 
-**What is left of `S5-14` is the acceptance itself**: the whole of it through `ITorrentEngine`, one
-instance of this client downloading a fixture torrent from another. Every part is wired and proved on
-its own; until that run has been seen to pass, "the plugin downloads" is a claim and not a fact.
+**The acceptance has been seen to pass.** One engine seeds a fixture torrent from finished files and
+a resume file that says so; another is given the same torrent, an empty folder and a tracker that
+names the first, and announces, dials, handshakes, asks and writes entirely on its own. The bytes on
+disk are the bytes that were seeded, and the hashes they were checked against were taken before
+either engine existed. Deleting the seeded files makes it fail with one peer connected and nothing
+arriving, which is what says the test measures a real transfer.
+
+**This client downloads.** What has not been proved is a *public* swarm: nothing on this network maps
+a port, so no peer outside can dial in, and that is settled by deploying to `beast-unit` and watching
+a real magnet.
 
 **Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three after
 `S5-14`.
@@ -131,7 +138,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-11` Rate limits, choking and seeding
 - [x] `S5-12` Resume, recovery, stalls, pause and ports
 - [x] `S5-13` The client, joined up
-- [ ] `S5-14` The engine drives the session
+- [x] `S5-14` The engine drives the session
 
 ### Sprint 6 — Grab, staging, dispatch
 - [x] `S6-01` The grab
@@ -451,6 +458,18 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   encoder stopped every download in flight from being looked at. `DiskSpace` matches the volume
   against the ones this machine really has — handed a UNC path, `DriveInfo` answers with the free
   space of the current drive, which is the one answer that fills a disk.
+- `S5-14` **This client downloads, through the port.** `BittorrentEngine` — the only implementation
+  the plugin calls — parsed a magnet, wrote down the hash and stopped, for a whole sprint, and
+  everything above it was correct against a client that never finished anything. It now holds a
+  `TorrentRun` per torrent: announcing to every tracker at the interval those trackers asked for,
+  dialling the peers they name once each, fetching the metadata under the id that peer chose,
+  checking the whole against the info hash before believing any of it, opening the disk, starting
+  from what the resume file says was verified, and answering whoever dials in — encrypted or in the
+  clear, told apart from the first byte. Rates are measured between the last two readings and never
+  averaged over the transfer. The acceptance is two engines over a real socket: the bytes that land
+  are the bytes that were seeded. Three faults were found on the way and are under **Decisions**: the
+  resume file could never be believed, the ephemeral port was never safe, and the client had nothing
+  behind its listening socket. `S8-02` part three is next.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its
