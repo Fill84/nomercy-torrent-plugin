@@ -17,6 +17,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 public static class QueueView
 {
     public const string LookingTableId = "looking";
+
+    /// <summary>The action that looks for one episode straight away.</summary>
+    public const string SearchAction = "SearchNow";
     public const string GivenUpTableId = "givenup";
     public const string WaitingTableId = "waiting";
 
@@ -63,9 +66,32 @@ public static class QueueView
                         // Never searched is not the same as searched long ago,
                         // and nought would be a date.
                         ["last"] = episode.LastSearchAt?.ToString("u") ?? "never",
-                    })),
+                    },
+
+                    // The row is the control: looking for one episode now is a
+                    // decision about that row, and the attempts beside it are
+                    // what an owner reads before taking it.
+                    Look(episode))),
             ],
             "Nothing is being looked for.");
+    }
+
+    /// <summary>Looking for one episode now, outside the cadence.</summary>
+    /// <remarks>
+    /// The button an owner presses when something has just aired and they do
+    /// not want to wait six hours for the next pass.
+    /// </remarks>
+    private static PluginActionIntent Look(TrackedEpisode episode)
+    {
+        return PluginActionIntent.CallPlugin(
+            SearchAction,
+            new Dictionary<string, object?>
+            {
+                ["showId"] = episode.Key.ShowId,
+                ["season"] = episode.Key.Season,
+                ["episode"] = episode.Key.Number,
+            },
+            PluginActionTransport.Rest);
     }
 
     private static PluginComponent GivenUp(IEnumerable<TrackedEpisode> episodes)

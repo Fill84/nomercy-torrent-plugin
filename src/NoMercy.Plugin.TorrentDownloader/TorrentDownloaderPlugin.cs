@@ -309,7 +309,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <c>S6-01</c>, and a decision the plugin cannot yet act on is not a fact
     /// about an episode.
     /// </remarks>
-    private async Task SearchAsync(CancellationToken ct)
+    private async Task SearchAsync(CancellationToken ct, EpisodeKey? only = null)
     {
         if (await ChainAsync(ct) is not (Chain chain, Settings settings))
         {
@@ -317,6 +317,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
 
         IReadOnlyList<TrackedEpisode> tracked = await Tracked(ct);
+
+        if (only is EpisodeKey wanted)
+        {
+            // One episode, and the whole chain for it. Narrowed here rather
+            // than inside the cycle so that everything the cycle decides — what
+            // a pack settles, what was refused — is decided the same way it is
+            // on a full pass.
+            tracked = [.. tracked.Where(one => one.Key == wanted)];
+        }
         GrabRepository grabs = await GrabsAsync(ct);
 
         try
@@ -357,7 +366,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// release for one episode twice over, because what one has decided is
     /// state the other cannot see.
     /// </remarks>
-    private async Task CycleAsync(CancellationToken ct)
+    private async Task CycleAsync(CancellationToken ct, EpisodeKey? only = null)
     {
         if (Interlocked.CompareExchange(ref _running, 1, 0) != 0)
         {
@@ -372,7 +381,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         try
         {
-            await SearchAsync(cycle.Token);
+            await SearchAsync(cycle.Token, only);
         }
         catch (OperationCanceledException)
         {
@@ -438,6 +447,35 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // button really runs.
             return false;
         }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Looks for one episode now, outside the cadence.
+    /// </summary>
+    /// <remarks>
+    /// The button an owner presses when something has just aired and they do
+    /// not want to wait six hours. It answers at once and runs on the plugin's
+    /// own lifetime, for the same reason <see cref="StartRun"/> does — and it
+    /// refuses an episode this plugin is not tracking rather than claiming to
+    /// search for one it has never heard of.
+    /// </remarks>
+    /// <returns>Whether a search was started.</returns>
+    public async Task<bool> StartSearchAsync(EpisodeKey episode)
+    {
+        // On the plugin's own lifetime, including the look-up. Whether this
+        // episode is worth searching for is part of starting the work, not part
+        // of answering the caller — and a caller who has gone is exactly the
+        // case where the work still has to start.
+        IReadOnlyList<TrackedEpisode> tracked = await Tracked(Lifetime);
+
+        if (!tracked.Any(one => one.Key == episode) || _running > 0)
+        {
+            return false;
+        }
+
+        _ = Task.Run(() => CycleAsync(Lifetime, episode), CancellationToken.None);
 
         return true;
     }

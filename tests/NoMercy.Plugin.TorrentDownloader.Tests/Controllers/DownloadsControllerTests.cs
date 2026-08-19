@@ -198,6 +198,65 @@ public class DownloadsControllerTests : IDisposable
         Assert.False(response.Data);
     }
 
+    /// <remarks>
+    /// <para>
+    /// Searching one episode now is the button an owner presses when they can
+    /// see something has just aired and do not want to wait six hours for the
+    /// cadence. It answers at once and the search runs on the plugin's own
+    /// lifetime, for the same reason <c>RunNow</c> does (**F1**).
+    /// </para>
+    /// <para>
+    /// An episode this plugin is not tracking is refused rather than answered
+    /// "started": a page that showed a search beginning for something it has
+    /// never heard of is one nobody can trust about the rest of the queue.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SearchingAnEpisodeThisPluginIsNotTrackingSaysSo()
+    {
+        using TorrentDownloaderPlugin plugin = Initialised(out FakePluginContext context);
+
+        await Configure(plugin);
+
+        DownloadsController controller = new(plugin);
+
+        OkObjectResult result = Assert.IsType<OkObjectResult>(
+            await controller.Search(new(41, 3, 6), CancellationToken.None));
+        PluginStatusResponse<bool> response = Assert.IsType<PluginStatusResponse<bool>>(result.Value);
+
+        Assert.Equal("unknown", response.Status);
+        Assert.False(response.Data);
+        Assert.Contains("S03E06", response.Message!, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// One it is tracking is started, and the request's own cancellation has
+    /// nothing to do with it: the search belongs to the plugin.
+    /// </remarks>
+    [Fact]
+    public async Task SearchingAnEpisodeItIsTrackingStartsAndDoesNotBelongToTheCaller()
+    {
+        using TorrentDownloaderPlugin plugin = Initialised(out FakePluginContext context);
+
+        await Configure(plugin);
+        await (await plugin.EpisodesAsync(CancellationToken.None)).ReplaceAsync(
+            [
+                new(Episode, "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Missing),
+            ],
+            CancellationToken.None);
+
+        using CancellationTokenSource gone = new();
+
+        await gone.CancelAsync();
+
+        DownloadsController controller = new(plugin);
+
+        OkObjectResult result = Assert.IsType<OkObjectResult>(
+            await controller.Search(new(41, 3, 6), gone.Token));
+
+        Assert.Equal("started", Assert.IsType<PluginStatusResponse<bool>>(result.Value).Status);
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);

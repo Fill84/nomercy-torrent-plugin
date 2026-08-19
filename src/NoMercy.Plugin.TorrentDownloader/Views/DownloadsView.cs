@@ -25,6 +25,18 @@ public static class DownloadsView
 {
     public const string TableId = "downloads";
 
+    /// <summary>Pausing a transfer, keeping its pieces.</summary>
+    public const string PauseAction = "PauseDownload";
+
+    /// <summary>Starting a paused one again.</summary>
+    public const string ResumeAction = "ResumeDownload";
+
+    /// <summary>Stopping it, forgetting it, and putting its episodes back.</summary>
+    public const string CancelAction = "CancelDownload";
+
+    /// <summary>Taking on a torrent the owner found themselves.</summary>
+    public const string AddAction = "AddTorrent";
+
     public static PluginView Render(IReadOnlyList<DownloadRow> rows)
     {
         return new()
@@ -34,8 +46,76 @@ public static class DownloadsView
             [
                 PluginViews.Text("downloads-heading", "Downloads", "title"),
                 Table(rows),
+
+                // The controls sit under the table rather than in it: a table
+                // cell holds a value and not a button, so a row can carry one
+                // action and these are three. Each strip names its release, or
+                // an owner with four downloads cannot tell which Cancel is
+                // which.
+                PluginViews.List("downloads-controls", [.. rows.Select(Controls)]),
+                Add(),
             ],
         };
+    }
+
+    /// <summary>The three things an owner can do to one download.</summary>
+    private static PluginComponent Controls(DownloadRow row)
+    {
+        bool paused = row.Transfer?.State == TorrentState.Paused;
+
+        return PluginViews.Row(
+            $"downloads-controls-{row.Grab.InfoHash}",
+            PluginViews.Text($"downloads-controls-{row.Grab.InfoHash}-name", row.Grab.ReleaseTitle),
+            PluginViews.Button(
+                $"downloads-pause-{row.Grab.InfoHash}",
+                paused ? "Resume" : "Pause",
+                PluginActionIntent.CallPlugin(
+                    paused ? ResumeAction : PauseAction,
+                    new Dictionary<string, object?> { ["infoHash"] = row.Grab.InfoHash },
+                    PluginActionTransport.Rest)),
+            PluginViews.Button(
+                $"downloads-cancel-{row.Grab.InfoHash}",
+                "Cancel",
+                PluginActionIntent.CallPlugin(
+                    CancelAction,
+                    new Dictionary<string, object?> { ["infoHash"] = row.Grab.InfoHash },
+                    PluginActionTransport.Rest,
+
+                    // Confirmed, because it deletes what has been downloaded so
+                    // far. The contract carries the confirmation so that every
+                    // client asks the same question rather than each one
+                    // deciding for itself.
+                    new PluginConfirmation
+                    {
+                        Title = "Cancel this download?",
+                        Message =
+                            $"{row.Grab.ReleaseTitle} will be stopped, its part-downloaded files deleted, "
+                            + "and its episodes looked for again.",
+                        ConfirmLabel = "Cancel the download",
+                        CancelLabel = "Leave it running",
+                        Destructive = true,
+                    })));
+    }
+
+    /// <summary>Adding a torrent by hand.</summary>
+    /// <remarks>
+    /// A magnet or a <c>.torrent</c>, which is what an owner has when they have
+    /// found something the search chain did not. It runs through staging and
+    /// the encode dispatch like any other download.
+    /// </remarks>
+    private static PluginComponent Add()
+    {
+        return PluginViews.Form(
+            "downloads-add",
+            "Add",
+            PluginActionIntent.CallPlugin(AddAction, null, PluginActionTransport.Rest),
+            new PluginFormField
+            {
+                Name = "source",
+                Label = "Magnet or .torrent",
+                Type = PluginFormFieldType.Text,
+                Placeholder = "magnet:?xt=urn:btih:…",
+            });
     }
 
     private static PluginComponent Table(IReadOnlyList<DownloadRow> rows)

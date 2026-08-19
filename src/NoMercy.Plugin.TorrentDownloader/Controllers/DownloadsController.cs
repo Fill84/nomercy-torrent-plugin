@@ -8,6 +8,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 /// <param name="Source">A magnet, or a <c>.torrent</c> by address or by path.</param>
 public sealed record AddTorrentRequest(string Source);
 
+/// <summary>One episode to look for now.</summary>
+/// <param name="ShowId">Which show.</param>
+/// <param name="Season">Which season.</param>
+/// <param name="Episode">Which episode.</param>
+public sealed record SearchNowRequest(int ShowId, int Season, int Episode);
+
 /// <summary>One release the owner is overruling a refusal for.</summary>
 /// <param name="ShowId">Which show.</param>
 /// <param name="Season">Which season.</param>
@@ -31,6 +37,26 @@ public sealed record AllowReleaseRequest(int ShowId, int Season, int Episode, st
 /// </remarks>
 public sealed class DownloadsController(TorrentDownloaderPlugin plugin) : PluginControllerBase
 {
+    /// <summary>
+    /// Looks for one episode now, outside the cadence.
+    /// </summary>
+    /// <remarks>
+    /// <strong>F1.</strong> The request's own token is taken and deliberately
+    /// not used: the search belongs to the plugin, and a page closed while it
+    /// runs must not throw it away.
+    /// </remarks>
+    [HttpPost("queue/search")]
+    public async Task<IActionResult> Search([FromBody] SearchNowRequest request, CancellationToken ct)
+    {
+        EpisodeKey episode = new(request.ShowId, request.Season, request.Episode);
+
+        _ = ct;
+
+        return await plugin.StartSearchAsync(episode)
+            ? Status(true, "started")
+            : Status(false, "unknown", $"Nothing is waiting for {episode}, or a cycle is already running.");
+    }
+
     [HttpPost("downloads/{infoHash}/pause")]
     public async Task<IActionResult> Pause(string infoHash, CancellationToken ct)
     {

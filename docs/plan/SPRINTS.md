@@ -973,7 +973,9 @@ pushed on its own.
 8. **Done.** `RunNow` starts a cycle on the plugin's own lifetime and answers at once — proved with a
    request token cancelled before the request was made (**F1**) — and two at once are one.
    `StopRun` cancels the running cycle and says so when there is none.
-9. Test: `SearchNow` searches one episode immediately and the journal shows it.
+9. **Done.** `SearchNow` looks for one episode immediately, on the plugin's own lifetime, and refuses
+   an episode this plugin is not tracking rather than claiming to search for one it has never heard
+   of. The narrowing happens before the cycle, so a pack still settles what it settles.
 10. **Done.** `PauseDownload` and `ResumeDownload` reach the engine and move the grab's state, and a
     hash this client is not holding is refused by name rather than answered "ok".
 11. **Done.** `CancelDownload` stops it, deletes its files, forgets the grab and returns every
@@ -984,8 +986,10 @@ pushed on its own.
 13. **Done.** `AllowRelease` records an `allowed` history entry naming what it had been refused for,
     and clears the episode's last-search time so the next cycle looks again. Allowing something
     nothing ever refused is refused itself.
-14. What is left: `SearchNow`, and the controls themselves on the Downloads page — the endpoints are
-    there and only the Skipped page carries its button.
+14. **Done.** Every action is a control as well as an endpoint, and a test says so: the Queue's rows
+    search, the Skipped page's rows allow, Downloads carries a pause-or-resume button and a
+    confirmed Cancel per download and a form to add one by hand. Where each sits, and why, is now in
+    `docs/08-ui.md`, which had said only that a control must exist.
 
 ## S8-03 · Health automation
 
