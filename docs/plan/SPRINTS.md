@@ -796,6 +796,34 @@ magnet needs a peer in a public swarm to accept a connection from this machine, 
 nothing on this network maps a port, so nobody can dial in. Deploying to `beast-unit`, where the
 port may be reachable, is what settles the rest.
 
+## S5-14 · The engine drives the session
+
+**Read first:** `docs/06-torrent-client.md` § Lifecycle, and `TorrentSession` itself.
+
+`S5-13` proved `TorrentSession` downloads a whole torrent from another instance of this client over a
+real socket. What it did not do is join that session to `BittorrentEngine`, which is the class behind
+`ITorrentEngine` and the only one the plugin ever calls. `AddAsync` parses the magnet, records the
+hash and the trackers, and stops: nothing announces, nothing dials, no metadata is fetched, no disk
+is opened and no byte is ever written. `StatusAsync` reports the bookkeeping, `FilesAsync` answers
+with nothing at all, and `PauseAsync` and `ResumeAsync` move a field.
+
+So the client cannot download, and every part built on top of it — the grab, the transfers cadence,
+the Downloads page, the pause and cancel actions — is correct against a client that never finishes
+anything. **This is the slice that makes the plugin work**, and no slice was ever written for it,
+which is why `S5-13` reads as done.
+
+1. Test: adding a magnet announces to every tracker it carries and dials the peers they name.
+2. Test: a peer that completes the handshake is asked for metadata, and the torrent moves from
+   `FetchingMetadata` to `Downloading` when it arrives, with its file list.
+3. Test: the disk is opened under the download folder, pieces are verified before they are written,
+   and the bitfield and the resume file follow.
+4. Test: `StatusAsync` reports real progress, rates, peers and seeds while it runs, and `FilesAsync`
+   answers with the metadata's own file list.
+5. Test: `PauseAsync` stops the peers and keeps the verified pieces; `ResumeAsync` picks up from them.
+6. Test: the whole of it through `ITorrentEngine` against a second instance of this client seeding a
+   fixture torrent — the same acceptance as `S5-13`, one layer up.
+7. Implement.
+
 ---
 
 # Sprint 6 — Grab, staging, dispatch

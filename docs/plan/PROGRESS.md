@@ -4,22 +4,33 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Sprint 5 — BitTorrent**
-**Sprint 6 — Grab, staging, dispatch**
-**Sprint 8 — Finish**
-**Slice `S8-01` · The remaining pages** — not started.
+**Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three next.
 
-**`S8-01` is done as a set of pages.** The Settings page says when the port could not be mapped, the
-Skipped page carries every refusal with its reason and the control to allow it, and the Sources page
-says per source what it last answered, how long it took, its refusal in the site's own words and when
-it is next askable. What none of them are yet is **reachable**: the plugin's route table still has
-four routes, and Downloads, History, Skipped and Sources are not among them. That wiring is `S8-02`'s,
-along with the transfers cadence that makes Sprint 6 run at all.
+`S8-02` turned out to be three things and the plan named only the third. Its steps in `SPRINTS.md`
+have been corrected to say so.
 
-Specification: `docs/plan/SPRINTS.md`, section `S8-01`. **The owner chose Sprint 8 before Sprint 7**
-(18 August 2026): the parts of Sprint 6 are all built and tested on their own and nothing calls them,
-so the wiring in `S8-02` is what makes any of it real. Anime naming (`S7-01`) follows afterwards; its
-Nyaa fixtures are already captured, so it will start with the grammar rather than with the network.
+- **Part one is done.** Downloads, History, Skipped and Sources are on the route table and served
+  from the store. `source_reports` had been in the schema since the first migration with nothing
+  writing to it; every ask now writes down what the site answered, from the harvest as well as from
+  find, and when a source is next askable comes from the gate's current interval.
+- **Part two is done.** Sprint 6 is joined up: the search cycle hands over through the grab rather
+  than straight to the client, writes down what it decided, and the transfers cadence recovers,
+  stages, dispatches and blacklists what failed. The plugin owns and starts the torrent client.
+- **Part three is next** — `RunNow`, `StopRun`, `SearchNow`, `PauseDownload`, `ResumeDownload`,
+  `CancelDownload`, `AddTorrent` and `AllowRelease`, each an endpoint and a control on its page.
+  Run and Stop still answer "not-ready".
+
+**Read before starting part three: `S5-14` is the slice that makes any of this download anything.**
+`BittorrentEngine` — the only implementation of `ITorrentEngine`, and the one the plugin uses —
+records a magnet and stops. Nothing announces, dials, fetches metadata or writes a byte. `S5-13`
+proved `TorrentSession` works between two instances of this client, and no slice was ever written to
+join it to the engine, which is why `S5-13` reads as done. Part three's pause, resume, cancel and
+add-by-hand all move bookkeeping and nothing else until `S5-14` is done, so which of the two comes
+first is the owner's call.
+
+Specification: `docs/plan/SPRINTS.md`, sections `S8-02` and `S5-14`. **The owner chose Sprint 8
+before Sprint 7** (18 August 2026). Anime naming (`S7-01`) follows afterwards; its Nyaa fixtures are
+already captured, so it will start with the grammar rather than with the network.
 
 ## Blocked
 
@@ -96,6 +107,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S5-11` Rate limits, choking and seeding
 - [x] `S5-12` Resume, recovery, stalls, pause and ports
 - [x] `S5-13` The client, joined up
+- [ ] `S5-14` The engine drives the session
 
 ### Sprint 6 — Grab, staging, dispatch
 - [x] `S6-01` The grab
@@ -391,6 +403,30 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought gets no percentage either — dividing by it prints something that is not a number. History
   carries the reason on every kind of line, since "skipped" and "failed" without one are exactly the
   entries the page is opened for.
+- `S8-01` The Settings page says in plain words when neither UPnP nor NAT-PMP would map the port and
+  which numbers need forwarding by hand, with every refusal the router gave. The Skipped page carries
+  every refusal with the reason it was refused for and the control to overrule it; the Sources page
+  says per source when it was last asked, how many rows it answered with, how long it took, its
+  refusal in the site's own words and when it is next askable. All three render and none of them was
+  on a route, which is where `S8-02` starts.
+- `S8-02` (part one) The four pages are reachable. History reads every column rather than the two its
+  first caller wanted, so a line says when and about which episode as well as why. A refusal is
+  written to the history as it is refused, because the Skipped page is opened the morning after and a
+  list held for the cycle would be gone by then. `source_reports` had been in the schema since the
+  first migration and nothing had ever written a row to it: every ask now writes down what the site
+  answered, from the harvest as well as from find, or a feed would read as never asked however often
+  it ran. Next-askable is the gate's **current** interval, which a refusal has widened. The allow
+  control on the Skipped page was passing "Allow" where the transport goes.
+- `S8-02` (part two) Sprint 6 joined up. The search cycle hands over through `Grab` — the room check
+  it went round — and writes down what it decided: the hash, the magnet a lost torrent is re-added
+  from, and every episode a pack answers for. It reads the real blacklist now. The transfers cadence
+  is the loop the plan had no slice for: re-add what the client lost, stop what the plugin has no
+  record of and keep its files, stage what finished and ask for its encode, and blacklist what the
+  client gave up on while returning its episodes to missing. **F4** is the third of those. Nothing in
+  the tick throws out of itself: it once unwound the whole cadence, so one type mismatch in the
+  encoder stopped every download in flight from being looked at. `DiskSpace` matches the volume
+  against the ones this machine really has — handed a UNC path, `DriveInfo` answers with the free
+  space of the current drive, which is the one answer that fills a disk.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its
@@ -431,11 +467,25 @@ and note it here.
   MSBuild sees nothing to do — the suite then fails on code that is already correct. Three failures
   in this sprint were that and nothing else. The scripts now set the modification time on restore;
   when in doubt, `rm -rf bin obj` for that project and run again.
-- **One full-suite run during `S5-07` failed seven tests and would not reproduce.** It came straight
-  after an eighteen-mutation sweep; five later runs, including the same format-build-test chain, were
-  green, and no trx was kept, so there are no names to work from. It is written down rather than
-  waved away: if it happens again, run with `--logger "trx"` first and the names will say whether it
-  is the stale-assembly fault above or something to do with sockets after that many back-to-back runs.
+- **The intermittent full-suite failure was real, and it is fixed** (19 August 2026). It was written
+  down during `S5-07` as a run that would not reproduce. Run with `--logger "trx"` it named itself at
+  once: every failure was in `ListenSockets`, and the message read "Port 0 is one this machine will
+  not allow". UDP picks an ephemeral number and TCP has to have that same one, and the number UDP is
+  given is not always one TCP can have — **measured at one attempt in seventy-five** here, some
+  already in use and some refused outright. Windows reserves whole ranges, so a run of eight
+  consecutive attempts was refused on 50379 to 50387: retrying inside a block that wide never escapes
+  it. The two protocols now **take turns choosing**, eight attempts, and whichever one picks is never
+  handed a number out of its own reserved range. A port the owner named is still asked for once and
+  refused by its number. The exception named the number that was asked for rather than the one that
+  failed, so a request for any port reported "Port 0", which is the one thing nobody can act on.
+- **`BittorrentEngine` does not download, and no slice was ever written for the part that would**
+  (19 August 2026). It parses a magnet, records the hash and the trackers, and stops: nothing
+  announces to a tracker, dials a peer, fetches metadata, opens a disk or writes a byte, and
+  `FilesAsync` answers with nothing at all. `S5-13` proved `TorrentSession` downloads a whole torrent
+  from a second instance of this client over a real socket, and that is true — but the session is
+  never joined to the engine, and the engine is the only thing the plugin ever calls. It is now
+  `S5-14`. Everything built on top of the port is correct against a client that never finishes
+  anything, which is why nothing noticed.
 - **A bitfield is high bit first**: the top bit of the first byte is piece nought, which is the
   opposite of what a bit index usually means. A client that got it backwards would ask every peer for
   what they do not have and refuse what they do.
