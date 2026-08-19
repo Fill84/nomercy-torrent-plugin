@@ -812,17 +812,25 @@ the Downloads page, the pause and cancel actions — is correct against a client
 anything. **This is the slice that makes the plugin work**, and no slice was ever written for it,
 which is why `S5-13` reads as done.
 
-1. Test: adding a magnet announces to every tracker it carries and dials the peers they name.
+1. **Done.** Test: adding a magnet announces to every tracker it carries and dials the peers they
+   name, once each however many trackers name the same one, and a tracker that will not answer costs
+   that tracker alone. `TorrentRun` in the Bittorrent assembly, with `IPeerDialler` as the seam the
+   sockets sit behind.
 2. Test: a peer that completes the handshake is asked for metadata, and the torrent moves from
-   `FetchingMetadata` to `Downloading` when it arrives, with its file list.
+   `FetchingMetadata` to `Downloading` when it arrives, with its file list. Until this is done a
+   magnet is still a hash and nothing else, so nothing downloads.
 3. Test: the disk is opened under the download folder, pieces are verified before they are written,
    and the bitfield and the resume file follow.
 4. Test: `StatusAsync` reports real progress, rates, peers and seeds while it runs, and `FilesAsync`
-   answers with the metadata's own file list.
+   answers with the metadata's own file list. Rates are measured between polls, never averaged over
+   the whole transfer.
 5. Test: `PauseAsync` stops the peers and keeps the verified pieces; `ResumeAsync` picks up from them.
-6. Test: the whole of it through `ITorrentEngine` against a second instance of this client seeding a
+6. A real `ITrackerTransport` over sockets — an HTTP GET and a datagram, both of them integration
+   tests. Everything that decides anything is already in `TrackerSet`.
+7. An accept loop on the listening socket, so a peer that dials in is taken up.
+8. Test: the whole of it through `ITorrentEngine` against a second instance of this client seeding a
    fixture torrent — the same acceptance as `S5-13`, one layer up.
-7. Implement.
+9. Implement, and have `BittorrentEngine` hold one `TorrentRun` per torrent rather than a record.
 
 ---
 

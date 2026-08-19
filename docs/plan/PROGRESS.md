@@ -4,7 +4,20 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three next.
+**Slice `S5-14` · The engine drives the session** — step 1 done and pushed, step 2 next.
+
+The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
+part three, because the actions move bookkeeping until the client can download.
+
+`TorrentRun` is the loop Sprint 5 never had: it announces to every tracker a magnet carries, dials
+the peers they name once each, and holds each conversation on its own so one peer that misbehaves
+costs that peer. `IPeerDialler` is the seam the sockets sit behind, so all of it is judged without a
+network. **Step 2 is the one that matters next** — the metadata exchange, without which a magnet is
+a hash and nothing else and nothing downloads. Then the disk, the real status, pause and resume, a
+socket transport, an accept loop, and the two-instance acceptance.
+
+**Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three after
+`S5-14`.
 
 `S8-02` turned out to be three things and the plan named only the third. Its steps in `SPRINTS.md`
 have been corrected to say so.
