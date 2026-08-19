@@ -162,6 +162,27 @@ public sealed class TorrentRun : IDisposable
     public bool Paused { get; private set; }
 
     /// <summary>
+    /// How long to leave it before announcing again, until a tracker has said.
+    /// </summary>
+    /// <remarks>
+    /// Thirty minutes is what a tracker that publishes no interval is treated
+    /// as asking for. It is the shipped default and nothing else: every tracker
+    /// this client has ever been captured answering does publish one.
+    /// </remarks>
+    public static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(30);
+
+    /// <summary>
+    /// When to announce again, as the trackers themselves asked.
+    /// </summary>
+    /// <remarks>
+    /// docs/06-torrent-client.md: announce at the tracker's own interval. The
+    /// shortest interval anybody asked for, raised to the longest floor anybody
+    /// set — a floor is what earns a ban when it is breached, so it wins over
+    /// another tracker's wish to be asked sooner.
+    /// </remarks>
+    public TimeSpan Interval { get; private set; } = DefaultInterval;
+
+    /// <summary>
     /// Completes when the metadata has arrived and hashed right.
     /// </summary>
     /// <remarks>
@@ -244,6 +265,8 @@ public sealed class TorrentRun : IDisposable
         IReadOnlyList<TrackerResult> answers = await _trackerSet
             .AnnounceAsync(_trackers, Request(), ct)
             .ConfigureAwait(false);
+
+        Told(answers);
 
         List<PeerAddress> fresh = [];
 
@@ -337,6 +360,38 @@ public sealed class TorrentRun : IDisposable
             _session = null;
             _disk = null;
         }
+    }
+
+    /// <summary>
+    /// Takes the trackers' word for when to come back.
+    /// </summary>
+    /// <remarks>
+    /// The shortest interval anybody asked for, raised to the longest floor
+    /// anybody set. Breaching a floor is what earns a ban, so it wins over
+    /// another tracker's wish to be asked sooner; and a tracker that refused
+    /// asked for nothing, so it has no say in either.
+    /// </remarks>
+    private void Told(IReadOnlyList<TrackerResult> answers)
+    {
+        AnnounceResponse[] said = [.. answers.Select(one => one.Response).OfType<AnnounceResponse>()];
+
+        if (said.Length == 0)
+        {
+            return;
+        }
+
+        TimeSpan wanted = said
+            .Select(one => one.Interval)
+            .Where(one => one > TimeSpan.Zero)
+            .DefaultIfEmpty(DefaultInterval)
+            .Min();
+
+        TimeSpan floor = said
+            .Select(one => one.MinInterval ?? TimeSpan.Zero)
+            .DefaultIfEmpty(TimeSpan.Zero)
+            .Max();
+
+        Interval = wanted > floor ? wanted : floor;
     }
 
     /// <summary>What this client tells a tracker about itself.</summary>

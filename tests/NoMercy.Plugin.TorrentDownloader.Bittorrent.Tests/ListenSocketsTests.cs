@@ -36,17 +36,18 @@ public class ListenSocketsTests
 
     /// <remarks>
     /// <para>
-    /// Asking for any port must never fail. UDP chooses the number and TCP has
-    /// to have that same one, and the number UDP is given is not always one TCP
-    /// can have: measured on this machine, one attempt in seventy-five was
-    /// refused, some already in use and some refused outright. Without a retry
-    /// that is a client which fails to start once in every eight or so
-    /// restarts, for no reason the owner could ever find.
+    /// Asking for any port must never fail, and letting the operating system
+    /// choose is what made it fail. Its dynamic range is 49152 to 65535 and
+    /// 1460 of those ports are reserved for Hyper-V and WSL in fifteen blocks a
+    /// hundred wide — with the TCP set and the UDP set not the same, so a
+    /// number handed out for one is refused for the other. The pool walks
+    /// forward, so once it is inside a block every attempt fails together: five
+    /// of these tests went down at once on 59435 to 59451.
     /// </para>
     /// <para>
-    /// Three hundred, because at one in seventy-five a run of that length
-    /// catches it about ninety-eight times in a hundred. Fewer would be a test
-    /// that passes against the fault it was written for.
+    /// Three hundred, taken one after another, because that is what walks the
+    /// pool far enough to meet a block. Fewer would be a test that passes
+    /// against the fault it was written for.
     /// </para>
     /// </remarks>
     [Fact]

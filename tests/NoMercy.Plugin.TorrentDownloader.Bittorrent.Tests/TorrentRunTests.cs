@@ -244,6 +244,48 @@ public class TorrentRunTests : IDisposable
         Assert.Equal(0, run.Progress().DownloadRateBytesPerSecond);
     }
 
+    /// <remarks>
+    /// <para>
+    /// docs/06-torrent-client.md: announce at the tracker's own interval. The
+    /// captured answer asks for twenty-seven minutes and says not to come back
+    /// inside thirteen, and a client that announced on a schedule of its own
+    /// would be banned by the trackers it most wants.
+    /// </para>
+    /// <para>
+    /// Before any tracker has answered there is no interval to honour, and the
+    /// answer is the shipped default rather than nought — which would be an
+    /// announce as fast as the loop could turn.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheNextAnnounceIsWhenTheTrackersSaidAndNotWhenThisClientPleases()
+    {
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler());
+
+        Assert.Equal(TorrentRun.DefaultInterval, run.Interval);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.Equal(TimeSpan.FromSeconds(1642), run.Interval);
+    }
+
+    /// <remarks>
+    /// A tracker's minimum is a floor and never a suggestion: announcing inside
+    /// it is what earns a ban. When one tracker wants longer between asks than
+    /// another wants between announces, the longer wins.
+    /// </remarks>
+    [Fact]
+    public async Task NoTrackersFloorIsBreachedByAnothersInterval()
+    {
+        AnsweringTrackers trackers = new() { MinimumSeconds = 3600 };
+
+        using TorrentRun run = Run(trackers, new RecordingDialler());
+
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.Equal(TimeSpan.FromSeconds(3600), run.Interval);
+    }
+
     /// <summary>A resume file claiming the first pieces, over the files really on disk.</summary>
     private ResumeData Claimed(TorrentMetadata torrent, int verified)
     {
@@ -318,6 +360,15 @@ public class TorrentRunTests : IDisposable
         private readonly Lock _lock = new();
         private readonly List<string> _asked = [];
 
+        /// <summary>
+        /// A floor of its own, when a test wants one.
+        /// </summary>
+        /// <remarks>
+        /// Nought means the captured answer's own, which is eight hundred and
+        /// twenty-one seconds.
+        /// </remarks>
+        public int MinimumSeconds { get; init; }
+
         /// <summary>Every tracker address that was really fetched.</summary>
         public IReadOnlyList<string> Asked
         {
@@ -344,9 +395,32 @@ public class TorrentRunTests : IDisposable
                 _asked.Add(tracker);
             }
 
-            return _refused.Contains(tracker)
-                ? throw new HttpRequestException("nothing answered")
-                : Task.FromResult(Fixture("tracker-http-announce.bin"));
+            if (_refused.Contains(tracker))
+            {
+                throw new HttpRequestException("nothing answered");
+            }
+
+            byte[] answer = Fixture("tracker-http-announce.bin");
+
+            // The captured answer with its floor rewritten, so the rule about
+            // whose floor wins is judged against a real tracker response rather
+            // than one written here.
+            return Task.FromResult(MinimumSeconds == 0
+                ? answer
+                : Rewritten(answer, MinimumSeconds));
+        }
+
+        /// <summary>The same answer with a different <c>min interval</c>.</summary>
+        private static byte[] Rewritten(byte[] answer, int seconds)
+        {
+            BencodeDictionary root = (BencodeDictionary)Bencode.Read(answer).Root;
+
+            return Bencode.Write(new BencodeDictionary(
+            [
+                .. root.Entries.Where(entry =>
+                    !"min interval"u8.SequenceEqual(entry.Key) && !"min_interval"u8.SequenceEqual(entry.Key)),
+                new("min interval"u8.ToArray(), new BencodeInteger(seconds)),
+            ]));
         }
 
         public Task<byte[]> ExchangeAsync(string host, int port, byte[] datagram, TimeSpan patience, CancellationToken ct)
