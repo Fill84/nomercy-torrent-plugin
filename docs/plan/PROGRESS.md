@@ -4,93 +4,13 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S8-04` · Hardening** — four of its six steps done and pushed. **Blocked on a crash, and the
-crash is the most important thing in this file.**
+**Slice `S8-04` is done.** **Next: `S8-05` Release 0.4.0**, which needs the owner — a deploy with
+the server stopped, and one real cycle watched end to end. `S7-01` anime naming is the only other
+outstanding work and was deferred on 18 August.
 
-**A real cycle run in-process crashes the host.** `ExecuteAsync(JobNames.Search)` or
-`ExecuteAsync(JobNames.Feed)` on a configured plugin — folders set, grants provided — kills the
-process outright. Not an exception: the test host dies and `dotnet test` reports "Test host process
-crashed" with no stack. It reproduces every time, in a test that does nothing but tick a cadence.
-
-What has been ruled out, each by a probe that passed on its own:
-
-- Constructing the `Chain` — browser, install, hidden stages, tabs, solver, HTTP client.
-- Constructing and starting `BittorrentEngine`, including its accept loop.
-- Disposing the plugin, or not disposing it: it crashes either way.
-- The hub push, which `LiveSnapshot` already wraps in a catch, and which the fake never throws from.
-
-So it is somewhere in `TorrentDownloaderPlugin.ChainAsync` after the engine is started and the chain
-is built — `PrepareAsync`, or the first pass of the harvest or search chain — and it is common to
-both cadences. The same chain runs fine inside `tools/SourceHealth`, which is a console application
-that builds it the same way, so whatever it is depends on the plugin's own path rather than on the
-chain itself.
-
-**Two tests for `S8-04` are written and are not in the suite, because they abort the whole run.**
-They are the ones that exercise this: a cycle stopped on purpose is not reported as a fault, and a
-cycle that cannot even prepare says so rather than vanishing. Put them back the moment the crash is
-fixed — they are the acceptance for it.
-
-Nothing has been deployed, so this has never reached the server. It would take the media server down
-with it, so **it comes before everything else, including the release**.
-
-The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
-part three, because the actions move bookkeeping until the client can download.
-
-`TorrentRun` is the loop Sprint 5 never had: it announces to every tracker a magnet carries, dials
-the peers they name once each, and holds each conversation on its own so one peer that misbehaves
-costs that peer. `IPeerDialler` is the seam the sockets sit behind, so all of it is judged without a
-network. The metadata exchange runs: a peer is asked under the id *it* chose, the whole is checked against
-the info hash before any of it is believed, and what comes out is a torrent with its file list and
-the magnet's own trackers. The disk is opened as soon as anything knows what the torrent is, and a restart
-starts from what the resume file says was verified. Rates are measured between the last two readings
-rather than averaged over the transfer. **The join is done**: `BittorrentEngine` holds a `TorrentRun`
-per torrent, announces for each at the interval its trackers asked for, and the plugin gives it a
-socket transport and a socket dialler — so `StatusAsync`, `FilesAsync`, `PauseAsync` and
-`ResumeAsync` answer from something that is really running.
-
-A peer that dials in is taken up as well, encrypted or in the clear.
-
-**The acceptance has been seen to pass.** One engine seeds a fixture torrent from finished files and
-a resume file that says so; another is given the same torrent, an empty folder and a tracker that
-names the first, and announces, dials, handshakes, asks and writes entirely on its own. The bytes on
-disk are the bytes that were seeded, and the hashes they were checked against were taken before
-either engine existed. Deleting the seeded files makes it fail with one peer connected and nothing
-arriving, which is what says the test measures a real transfer.
-
-**This client downloads.** What has not been proved is a *public* swarm: nothing on this network maps
-a port, so no peer outside can dial in, and that is settled by deploying to `beast-unit` and watching
-a real magnet.
-
-**Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three after
-`S5-14`.
-
-`S8-02` turned out to be three things and the plan named only the third. Its steps in `SPRINTS.md`
-have been corrected to say so.
-
-- **Part one is done.** Downloads, History, Skipped and Sources are on the route table and served
-  from the store. `source_reports` had been in the schema since the first migration with nothing
-  writing to it; every ask now writes down what the site answered, from the harvest as well as from
-  find, and when a source is next askable comes from the gate's current interval.
-- **Part two is done.** Sprint 6 is joined up: the search cycle hands over through the grab rather
-  than straight to the client, writes down what it decided, and the transfers cadence recovers,
-  stages, dispatches and blacklists what failed. The plugin owns and starts the torrent client.
-- **Part three is done.** All eight actions are endpoints that really do what they say, each with a
-  test that fails when the rule is deleted, and each is a control on the page `docs/08-ui.md` names.
-  Where the controls sit follows from the component set — a table cell holds a value and not a
-  button — and that reasoning is now written into `docs/08-ui.md`, which had said only that a
-  control must exist.
-
-**Read before starting part three: `S5-14` is the slice that makes any of this download anything.**
-`BittorrentEngine` — the only implementation of `ITorrentEngine`, and the one the plugin uses —
-records a magnet and stops. Nothing announces, dials, fetches metadata or writes a byte. `S5-13`
-proved `TorrentSession` works between two instances of this client, and no slice was ever written to
-join it to the engine, which is why `S5-13` reads as done. Part three's pause, resume, cancel and
-add-by-hand all move bookkeeping and nothing else until `S5-14` is done, so which of the two comes
-first is the owner's call.
-
-Specification: `docs/plan/SPRINTS.md`, sections `S8-02` and `S5-14`. **The owner chose Sprint 8
-before Sprint 7** (18 August 2026). Anime naming (`S7-01`) follows afterwards; its Nyaa fixtures are
-already captured, so it will start with the grammar rather than with the network.
+The crash recorded here yesterday was not a crash. It was a **deadlock**, and it is fixed. See
+**Decisions**: the plugin waited on itself on the first cadence tick after every restart, silently,
+for as long as the server was up.
 
 ## Blocked
 
@@ -184,7 +104,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S8-01` The remaining pages
 - [x] `S8-02` The remaining actions
 - [x] `S8-03` Health automation
-- [ ] `S8-04` Hardening
+- [x] `S8-04` Hardening
 - [ ] `S8-05` Release 0.4.0
 
 ## Log
@@ -588,6 +508,22 @@ and note it here.
   asked for once and refused by its number. The exception named the number that was asked for rather
   than the one that failed, so a request for any port reported "Port 0", which is the one thing
   nobody can act on.
+- **The plugin deadlocked on the first cadence tick after every restart** (19 August 2026).
+  `ChainAsync` held the migration semaphore and then asked for the database to build the name pool —
+  and migrating takes that same semaphore. `SemaphoreSlim` is not reentrant, so the plugin waited on
+  itself. For ever. There is no exception and no log line: the tick simply never returns, and because
+  no cadence may overlap itself, that cadence never runs again for as long as the server is up. A
+  plugin that has quietly stopped looks exactly like one with nothing to do.
+  **It had been there since the chain existed** and no test ever built one: every test that ticked a
+  cadence used an unconfigured plugin, which returns before the chain. The ledger added in `S8-02`
+  made it a second time over, which is what finally made somebody look.
+  Everything the database is needed for is now asked for **before** the lock is taken. The regression
+  test races the tick against a clock rather than awaiting it, because a test for a deadlock that
+  deadlocks is a suite that never finishes.
+  It also cost an hour of chasing the wrong thing: `dotnet test` reports a hung host as
+  "Test host process crashed", and a `timeout` around it turns a hang into what reads exactly like a
+  crash. **A crash with no stack and no exception is a hang until proved otherwise** — the host's own
+  `--diag` log, five minutes of idle polling, is what said so.
 - **Resume could never be believed, and every restart verified the whole torrent** (19 August 2026).
   The resume file records a modification time in whole seconds — deliberately, because that is the
   same number on any machine it is moved to — and `Trust` compared it to the live one exactly. A real

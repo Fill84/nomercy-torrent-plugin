@@ -1,3 +1,5 @@
+using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
@@ -107,6 +109,114 @@ public class HardeningTests : IDisposable
         // And the names it harvested are still known.
         Assert.NotEmpty(await new NamePoolRepository(new Database(_folder))
             .ForAsync(["silos03e06"], CancellationToken.None));
+    }
+
+    /// <remarks>
+    /// A shutdown is not a fault. The cycle stops because the plugin is going
+    /// away, and a journal that recorded that as a failure would have the owner
+    /// reading an error every time they restarted the server — which is how a
+    /// real one comes to be ignored.
+    /// </remarks>
+    [Fact]
+    public async Task ACycleStoppedOnPurposeIsNotReportedAsAFault()
+    {
+        using TorrentDownloaderPlugin plugin = Initialised(new FakeGrants());
+
+        await Configure(plugin);
+
+        // Already gone, which is what the plugin's own lifetime looks like to a
+        // cycle once the server has asked it to shut down.
+        using CancellationTokenSource stopped = new();
+
+        await stopped.CancelAsync();
+
+        await plugin.ExecuteAsync(JobNames.Search, stopped.Token);
+
+        Assert.DoesNotContain(
+            plugin.Journal.Snapshot().History,
+            entry => entry.Outcome == ActivityOutcome.Failed);
+    }
+
+    /// <remarks>
+    /// A cycle that cannot even prepare has to say so. It is started from a
+    /// button and nobody awaits it, so an exception would go nowhere at all —
+    /// the page would show a cycle that began, ended, and explained nothing,
+    /// which is the sentence this whole plugin exists to stop printing.
+    /// </remarks>
+    [Fact]
+    public async Task ACycleThatCannotEvenPrepareSaysSoRatherThanVanishing()
+    {
+        // No grants at all, which is a host that will not say what this plugin
+        // may reach. Through the cadence, which is awaited: the same catch
+        // serves the button, and there nobody is waiting to be told.
+        using TorrentDownloaderPlugin plugin = Initialised();
+
+        await Configure(plugin);
+        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+
+        ActivityEvent said = Assert.Single(
+            plugin.Journal.Snapshot().History,
+            entry => entry.Outcome == ActivityOutcome.Failed);
+
+        Assert.Contains("Grants", said.Detail!, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The first cadence tick after a restart has to finish. It did not: the
+    /// chain was built while the migration semaphore was held, and building it
+    /// asks for the database — which takes the same semaphore to migrate.
+    /// <c>SemaphoreSlim</c> is not reentrant, so the plugin waited on itself,
+    /// for ever.
+    /// </para>
+    /// <para>
+    /// And silently. There is no exception and no log line: the tick simply
+    /// never returns, and because no cadence may overlap itself, that one never
+    /// runs again for as long as the server is up. A plugin that has quietly
+    /// stopped looks exactly like one with nothing to do.
+    /// </para>
+    /// <para>
+    /// Every source is switched off so the tick asks nobody anything — what is
+    /// being proved is that it comes back at all. It is raced against a clock
+    /// rather than awaited, because a test for a deadlock that deadlocks is a
+    /// suite that never finishes.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheFirstCadenceTickAfterARestartFinishes()
+    {
+        using TorrentDownloaderPlugin plugin = Initialised(new FakeGrants());
+
+        Settings settings = new()
+        {
+            IncompleteFolder = Path.Combine(_folder, "incomplete"),
+            IntakeFolder = Path.Combine(_folder, "intake"),
+        };
+
+        foreach (string source in Shipped())
+        {
+            settings.DisabledDefaultSources.Add(source);
+        }
+
+        await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+
+        Task tick = plugin.ExecuteAsync(JobNames.Feed, CancellationToken.None);
+
+        Assert.Same(tick, await Task.WhenAny(tick, Task.Delay(TimeSpan.FromSeconds(30))));
+
+        await tick;
+    }
+
+    /// <summary>Every shipped source, by name, read from the catalogue that ships.</summary>
+    private static IEnumerable<string> Shipped()
+    {
+        return System.Text.Json.JsonDocument
+            .Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources.json")))
+            .RootElement
+            .GetProperty("sources")
+            .EnumerateArray()
+            .Select(one => one.GetProperty("name").GetString()!)
+            .ToArray();
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";

@@ -669,6 +669,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         BittorrentEngine engine = await EngineAsync(settings, ct);
 
+        // Everything that touches the database is asked for **before** the lock
+        // is taken. Migrating takes this same semaphore, and SemaphoreSlim is
+        // not reentrant: asking for the database while holding it is the plugin
+        // waiting on itself, for ever, on the first tick after a restart. There
+        // is no exception and no log line — the tick simply never returns, and
+        // because no cadence may overlap itself that one never runs again for
+        // as long as the server is up.
+        Database database = await DatabaseAsync(ct);
+        SourceLedgerRepository ledger = await LedgerAsync(ct);
+
         await _migrating.WaitAsync(ct);
 
         try
@@ -676,10 +686,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             _chain ??= new(
                 Context,
                 _journal,
-                new NamePoolRepository(await DatabaseAsync(ct)),
+                new NamePoolRepository(database),
                 Shipped(),
                 engine: engine,
-                ledger: await LedgerAsync(ct));
+                ledger: ledger);
         }
         finally
         {
