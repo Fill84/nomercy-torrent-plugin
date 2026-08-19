@@ -241,6 +241,44 @@ public sealed class TorrentRun : IDisposable
     /// <summary>Every file in it, or nothing while the metadata has not arrived.</summary>
     public IReadOnlyList<TorrentFileEntry> Files => Torrent?.Files ?? [];
 
+    /// <summary>Every tracker known for it.</summary>
+    public IReadOnlyList<string> Trackers
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _trackers];
+            }
+        }
+    }
+
+    /// <summary>Where its bytes land.</summary>
+    public string Folder() => _folder;
+
+    /// <summary>
+    /// Takes on more trackers for the same torrent.
+    /// </summary>
+    /// <remarks>
+    /// The same torrent from a second site is one torrent with more trackers,
+    /// and more trackers is a faster download — which is the whole reason every
+    /// indexer is asked. Without duplicates, or it would announce twice to the
+    /// same host every interval.
+    /// </remarks>
+    public void Add(IEnumerable<string> more)
+    {
+        lock (_lock)
+        {
+            foreach (string tracker in more)
+            {
+                if (!_trackers.Contains(tracker, StringComparer.OrdinalIgnoreCase))
+                {
+                    _trackers.Add(tracker);
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// One pass: announce, and dial whoever is new.
     /// </summary>

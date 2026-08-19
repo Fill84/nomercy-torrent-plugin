@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
@@ -30,6 +31,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private LiveSnapshot? _live;
     private Chain? _chain;
     private BittorrentEngine? _engine;
+    private HttpClient? _trackerHttp;
     private Transfers? _transfers;
     private SourceLedgerRepository? _ledger;
     private IReadOnlyList<SourceDefinition>? _shipped;
@@ -434,11 +436,23 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             if (_engine is null)
             {
+                // The trackers get an HttpClient of their own, not the one the
+                // sites use: that one carries a browser's user agent because
+                // half the indexers challenge anything else, and a tracker has
+                // no such quarrel.
+                _trackerHttp ??= new();
+
                 _engine = new(
                     settings.Client.ListenPort,
                     TimeSpan.FromMinutes(settings.Client.MetadataTimeoutMinutes),
                     _journal,
-                    Context.Logger);
+                    Context.Logger,
+                    new SocketTrackerTransport(_trackerHttp),
+                    new SocketPeerDialler(),
+                    resume: new ResumeKeeper(
+                        settings.IncompleteFolder,
+                        TimeSpan.FromSeconds(settings.Client.ResumeIntervalSeconds),
+                        TimeProvider.System));
 
                 _engine.Start();
             }
@@ -655,6 +669,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // the port mapping: a plugin the server believes is gone must not still
         // be answering peers.
         _engine?.Dispose();
+        _trackerHttp?.Dispose();
 
         // Before the token source goes: the chain owns a browser and a desktop,
         // and a Chrome that outlives the plugin is one nobody can see to close.

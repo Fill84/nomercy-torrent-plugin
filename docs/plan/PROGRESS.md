@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S5-14` · The engine drives the session** — steps 1 to 3 and 6 done and pushed, with the rates, the peer id and the announce interval. The engine still holds a record rather than a run.
+**Slice `S5-14` · The engine drives the session** — all but the accept loop and the acceptance run done and pushed.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -16,10 +16,14 @@ network. The metadata exchange runs: a peer is asked under the id *it* chose, th
 the info hash before any of it is believed, and what comes out is a torrent with its file list and
 the magnet's own trackers. The disk is opened as soon as anything knows what the torrent is, and a restart
 starts from what the resume file says was verified. Rates are measured between the last two readings
-rather than averaged over the transfer, and there are real sockets under the trackers and the dial.
-**What is next is the join**: `BittorrentEngine` holding a `TorrentRun` per torrent instead of a
-record, so `StatusAsync`, `FilesAsync`, `PauseAsync` and `ResumeAsync` answer from something that is
-really running. Then the accept loop for peers dialling in, and the two-instance acceptance.
+rather than averaged over the transfer. **The join is done**: `BittorrentEngine` holds a `TorrentRun`
+per torrent, announces for each at the interval its trackers asked for, and the plugin gives it a
+socket transport and a socket dialler — so `StatusAsync`, `FilesAsync`, `PauseAsync` and
+`ResumeAsync` answer from something that is really running.
+
+**What is left of `S5-14`** is the accept loop, so a peer dialling in is taken up, and the acceptance
+itself: the whole of it through `ITorrentEngine` against a second instance of this client seeding a
+fixture torrent. Until that has been seen to pass, "the plugin downloads" is a claim and not a fact.
 
 **Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three after
 `S5-14`.

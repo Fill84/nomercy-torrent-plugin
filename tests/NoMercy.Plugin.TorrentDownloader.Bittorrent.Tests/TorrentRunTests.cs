@@ -286,6 +286,62 @@ public class TorrentRunTests : IDisposable
         Assert.Equal(TimeSpan.FromSeconds(3600), run.Interval);
     }
 
+    /// <remarks>
+    /// Pause keeps the pieces. A client that threw the bitfield away when the
+    /// owner pressed pause would verify the whole torrent again on resume —
+    /// minutes of the server doing nothing else for a six-gigabyte file, and
+    /// from the page it would look exactly like starting over.
+    /// </remarks>
+    [Fact]
+    public async Task PauseKeepsTheVerifiedPiecesAndResumeContinuesFromThem()
+    {
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+        ResumeKeeper keeper = new(_folder, TimeSpan.Zero, TimeProvider.System);
+
+        using (TorrentRun first = Run(new AnsweringTrackers(), new RecordingDialler(), torrent, keeper))
+        {
+            await first.OnceAsync(CancellationToken.None);
+        }
+
+        keeper.Stop([Claimed(torrent, verified: 10)]);
+
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler(), torrent, keeper);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        long verified = Enumerable.Range(0, 10).Sum(torrent.LengthOfPiece);
+
+        Assert.Equal(verified, run.Progress().BytesDone);
+
+        run.Pause();
+
+        Assert.True(run.Paused);
+        Assert.Equal(verified, run.Progress().BytesDone);
+
+        run.Resume();
+
+        Assert.False(run.Paused);
+        Assert.Equal(verified, run.Progress().BytesDone);
+    }
+
+    /// <remarks>
+    /// A paused run dials nobody. One that kept announcing and answering peers
+    /// while the owner had stopped it is not paused, whatever the page says.
+    /// </remarks>
+    [Fact]
+    public async Task APausedRunAnnouncesToNobody()
+    {
+        AnsweringTrackers trackers = new();
+
+        using TorrentRun run = Run(trackers, new RecordingDialler());
+
+        run.Pause();
+
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.Empty(trackers.Asked);
+    }
+
     /// <summary>A resume file claiming the first pieces, over the files really on disk.</summary>
     private ResumeData Claimed(TorrentMetadata torrent, int verified)
     {

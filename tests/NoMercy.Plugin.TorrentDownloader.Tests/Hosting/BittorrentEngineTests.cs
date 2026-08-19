@@ -25,7 +25,7 @@ public class BittorrentEngineTests
     {
         // Nought, so the operating system picks the number: what matters is
         // that four ticks leave one port and not four.
-        using BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger());
+        using BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
 
@@ -48,7 +48,7 @@ public class BittorrentEngineTests
     [Fact]
     public void DisposingItTwiceIsSafe()
     {
-        BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger());
+        BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
         engine.Dispose();
@@ -70,7 +70,13 @@ public class BittorrentEngineTests
 
         ActivityJournal journal = new();
 
-        using BittorrentEngine engine = new(port, Timeout, journal, new CapturingLogger());
+        using BittorrentEngine engine = new(
+            port,
+            Timeout,
+            journal,
+            new CapturingLogger(),
+            new SilentTrackers(),
+            new NoPeers());
 
         engine.Start();
 
@@ -111,6 +117,31 @@ public class BittorrentEngineTests
         // No file list at all until the metadata arrives: inventing one from
         // the name is how the wrong file gets staged.
         Assert.Empty(await engine.FilesAsync(handle.InfoHash, CancellationToken.None));
+    }
+
+    /// <remarks>
+    /// A magnet taken on is a torrent this client is really working on, not a
+    /// row in a list. For a whole sprint <c>AddAsync</c> recorded the hash and
+    /// stopped: nothing announced, nothing dialled, and every page above it was
+    /// correct about a client that would never finish anything.
+    /// </remarks>
+    [Fact]
+    public async Task AMagnetTakenOnIsAnnouncedToItsTrackers()
+    {
+        SilentTrackers trackers = new();
+
+        using BittorrentEngine engine = new(
+            0,
+            Timeout,
+            new ActivityJournal(),
+            new CapturingLogger(),
+            trackers,
+            new NoPeers());
+
+        engine.Start();
+
+        await engine.AddAsync(Request, CancellationToken.None);
+        await trackers.Asked.WaitAsync(TimeSpan.FromSeconds(10));
     }
 
     /// <remarks>
@@ -190,42 +221,6 @@ public class BittorrentEngineTests
         Assert.Contains("thing.torrent", refused.Message, StringComparison.Ordinal);
     }
 
-    /// <remarks>
-    /// Pause keeps the pieces. A client that threw the bitfield away when the
-    /// owner pressed pause would verify the whole torrent again on resume —
-    /// minutes of the server doing nothing else for a six-gigabyte file, and
-    /// from the page it would look exactly like starting over.
-    /// </remarks>
-    [Fact]
-    public async Task PauseKeepsTheVerifiedPiecesAndResumeContinuesFromThem()
-    {
-        using BittorrentEngine engine = Started();
-
-        TorrentHandle handle = await engine.AddAsync(Request, CancellationToken.None);
-
-        Bitfield verified = new(100);
-
-        verified.Set(0);
-        verified.Set(1);
-        verified.Set(99);
-
-        engine.Verified(handle.InfoHash, verified);
-
-        await engine.PauseAsync(handle.InfoHash, CancellationToken.None);
-
-        Assert.Equal(TorrentState.Paused, (await engine.StatusAsync(CancellationToken.None))[0].State);
-        Assert.Equal(3, engine.VerifiedPieces(handle.InfoHash)!.Count);
-
-        await engine.ResumeAsync(handle.InfoHash, CancellationToken.None);
-
-        Bitfield after = engine.VerifiedPieces(handle.InfoHash)!;
-
-        Assert.Equal(3, after.Count);
-        Assert.True(after.Has(0));
-        Assert.True(after.Has(99));
-        Assert.False(after.Has(2));
-    }
-
     /// <summary>
     /// <c>MetadataTimeoutMinutes</c>' own default, five minutes. The tests that
     /// are not about the clock never reach it.
@@ -256,7 +251,7 @@ public class BittorrentEngineTests
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
         ActivityJournal journal = new(clock);
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), journal, new CapturingLogger(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -285,7 +280,7 @@ public class BittorrentEngineTests
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
         ActivityJournal journal = new(clock);
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), journal, new CapturingLogger(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -313,7 +308,7 @@ public class BittorrentEngineTests
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), new ActivityJournal(clock), new CapturingLogger(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -340,7 +335,7 @@ public class BittorrentEngineTests
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), new ActivityJournal(clock), new CapturingLogger(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -355,7 +350,7 @@ public class BittorrentEngineTests
 
     private static BittorrentEngine Started()
     {
-        BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger());
+        BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
 
