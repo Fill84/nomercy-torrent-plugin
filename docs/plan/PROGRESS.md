@@ -4,7 +4,12 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S8-02` is done.** **Next: `S8-03` Health automation**, or `S7-01` anime naming — the owner's call, since Sprint 8 was taken before Sprint 7 and only the finishing slices are left of it.
+**Slice `S8-03` is done.** **Next: `S8-04` Hardening**, which is the last slice before the release
+and whose five tests are all about cadences that now exist.
+
+After that, `S8-05` is the release itself and needs the owner: a deploy with the server stopped, and
+one real cycle watched end to end. `S7-01` anime naming is the only other thing outstanding, and it
+was deferred on 18 August.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -156,7 +161,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 8 — Finish
 - [x] `S8-01` The remaining pages
 - [x] `S8-02` The remaining actions
-- [ ] `S8-03` Health automation
+- [x] `S8-03` Health automation
 - [ ] `S8-04` Hardening
 - [ ] `S8-05` Release 0.4.0
 
@@ -472,6 +477,26 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   are the bytes that were seeded. Three faults were found on the way and are under **Decisions**: the
   resume file could never be believed, the ephemeral port was never safe, and the client had nothing
   behind its listening socket. `S8-02` part three is next.
+- `S8-02` **Every action does what it says, and every one is a control as well as an endpoint.** Run
+  and Stop had answered "not-ready" since `S0-05`. The cycle runs on the plugin's own lifetime and
+  the endpoint answers that one has begun — **F1**, proved with a request token cancelled before the
+  request was made — and two cycles at once are one. Pause, resume and cancel reach the client, and a
+  hash it is not holding is refused by name. Cancel does three things or the episode is lost, and
+  does **not** blacklist: the owner said no to this download, not to this release for ever. A torrent
+  added by hand is written down like any other grab and answers for no episode. `AllowRelease`
+  records what the release had been refused for, and allowing something nothing refused is refused
+  itself. Where each control sits follows from the component set — a table cell holds a value and not
+  a button — and that reasoning went into `docs/08-ui.md`, which had said only that a control must
+  exist.
+- `S8-03` **A check that cannot fail is one nobody acts on**, so the health tool exits non-zero when
+  anything is flagged. It also keeps `health/baseline.json`, and a source answering with **fewer rows
+  than last time** is flagged though it answered: nought rows off a page covered in releases is a
+  broken reader and says so loudly, and three rows where there were forty is the same fault with the
+  volume turned down. Judged against the last run, never a figure written down by hand — what a
+  search returns depends on the term and the day. Only what really answered goes into the baseline:
+  writing a broken reader's nought down would set the bar at nought and the rule would never fire for
+  that source again. Found by a mutation surviving, because the first test used a source with no row
+  count at all and never exercised the rule.
 - `S5-12` Resume is a **cache and is treated as one**: a file whose size or modification time has
   changed takes every piece covering it back to unverified, including the pieces it shares with the
   file either side — asserted against the real Archive torrent, where the largest file shares its

@@ -187,6 +187,142 @@ public class SourceHealthTests
     /// failed on. A source that returned nothing gets no file and says so in
     /// words: an empty file would read as a site that answered with nothing.
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// A reader that has stopped seeing <em>some</em> of a page is the fault
+    /// this rule is for. Nought rows is already a broken reader and says so
+    /// loudly; three rows where there were forty last week is a site that
+    /// changed half its markup, and every condition before this one calls that
+    /// "answering".
+    /// </para>
+    /// <para>
+    /// Against the last run and not against a number written here: what a
+    /// search really returns depends on the term and the day, and a figure
+    /// chosen by hand would be wrong for every source but the one it was
+    /// measured on.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ASourceAnsweringWithFewerRowsThanLastTimeIsFlagged()
+    {
+        HealthBaseline was = new(new Dictionary<string, int> { ["1337x"] = 40 });
+
+        SourceHealthCheck fewer = HealthBaseline.Judge(Answered("1337x", rows: 3), was);
+
+        Assert.True(fewer.Flagged);
+        Assert.Equal(SourceCondition.FewerRows, fewer.Condition);
+
+        // Both numbers, or the owner cannot tell a site that dropped two rows
+        // from one that dropped every row but three.
+        Assert.Contains("3", fewer.Detail, StringComparison.Ordinal);
+        Assert.Contains("40", fewer.Detail, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// The same count, or more, is the ordinary case and is left alone. A rule
+    /// that flagged a steady source would be one nobody reads the output of.
+    /// </remarks>
+    [Theory]
+    [InlineData(40)]
+    [InlineData(41)]
+    public void ASourceAnsweringWithAsManyRowsOrMoreIsLeftAlone(int rows)
+    {
+        HealthBaseline was = new(new Dictionary<string, int> { ["1337x"] = 40 });
+
+        Assert.False(HealthBaseline.Judge(Answered("1337x", rows), was).Flagged);
+    }
+
+    /// <remarks>
+    /// A source with no baseline has nothing to be fewer than. The first run
+    /// after a source is added would otherwise flag it for having no history.
+    /// </remarks>
+    [Fact]
+    public void ASourceNobodyHasABaselineForIsNotFlaggedForIt()
+    {
+        Assert.False(HealthBaseline.Judge(Answered("brand-new", rows: 1), new(new Dictionary<string, int>())).Flagged);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// Only what answered is written down. A source that was rate-limited
+    /// answered no rows at all, and a broken reader answered nought off a page
+    /// covered in releases — and nought is a number.
+    /// </para>
+    /// <para>
+    /// Writing that down would set the baseline to nought, and every run after
+    /// it would find nought rows to be no fewer than last time. The rule would
+    /// then never fire again for the one source it had just caught.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void OnlyWhatAnsweredIsWrittenIntoTheNextBaseline()
+    {
+        HealthBaseline next = HealthBaseline.Of(
+        [
+            Answered("1337x", rows: 40),
+            Refused("TorrentBay"),
+            Broken("EZTV"),
+        ]);
+
+        Assert.Equal(40, next.Rows["1337x"]);
+        Assert.DoesNotContain("TorrentBay", next.Rows.Keys);
+        Assert.DoesNotContain("EZTV", next.Rows.Keys);
+    }
+
+    /// <remarks>
+    /// It is run by a person and by whatever they wire it into. An exit code of
+    /// nought with a report full of broken readers is a check that cannot fail,
+    /// and a check that cannot fail is one nobody acts on.
+    /// </remarks>
+    [Fact]
+    public void TheToolFailsWhenAnythingIsBrokenAndPassesWhenNothingIs()
+    {
+        Assert.Equal(0, HealthBaseline.ExitCode([Answered("1337x", rows: 40)]));
+        Assert.Equal(1, HealthBaseline.ExitCode([Answered("1337x", rows: 40), Refused("TorrentBay")]));
+    }
+
+    /// <summary>A source that answered with this many rows.</summary>
+    private static SourceHealthCheck Answered(string name, int rows)
+    {
+        return new(
+            new(name, "site", $"https://{name}.example/search/{{query}}"),
+            SourceCondition.Answering,
+            $"https://{name}.example/search/silo",
+            rows,
+            rows,
+            Retried: false,
+            Page: "<html></html>",
+            $"{rows} rows");
+    }
+
+    /// <summary>One whose page is covered in releases and whose reader saw none.</summary>
+    private static SourceHealthCheck Broken(string name)
+    {
+        return new(
+            new(name, "site", $"https://{name}.example/search/{{query}}"),
+            SourceCondition.BrokenReader,
+            $"https://{name}.example/search/silo",
+            Rows: 0,
+            Releases: 30,
+            Retried: false,
+            Page: "<html>lots of releases</html>",
+            "nought rows off a page covered in releases");
+    }
+
+    /// <summary>One that was asked twice and refused both times.</summary>
+    private static SourceHealthCheck Refused(string name)
+    {
+        return new(
+            new(name, "site", $"https://{name}.example/search/{{query}}"),
+            SourceCondition.RateLimited,
+            $"https://{name}.example/search/silo",
+            Rows: null,
+            Releases: null,
+            Retried: true,
+            Page: null,
+            "refused twice");
+    }
+
     [Fact]
     public async Task TheReportWritesEachSourcesOwnPageAndSaysSoWhenThereIsNone()
     {

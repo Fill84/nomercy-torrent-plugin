@@ -44,6 +44,14 @@ public enum SourceCondition
     /// offer and not a broken reader either — there is no reader.
     /// </summary>
     NoReader,
+
+    /// <summary>
+    /// It answered, the reader read it, and it saw fewer rows than last time.
+    /// The quiet half of a broken reader: nought rows says so loudly, and three
+    /// where there were forty says nothing at all without something to compare
+    /// against.
+    /// </summary>
+    FewerRows,
 }
 
 /// <summary>

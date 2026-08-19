@@ -94,11 +94,17 @@ internal static class Program
 
         browser.Dispose();
 
-        string path = HealthReport.Write(
-            checks,
-            Path.Combine(repository, "health"),
-            term,
-            DateTimeOffset.UtcNow);
+        string folder = Path.Combine(repository, "health");
+
+        // Judged against the last run before anything is written, or the
+        // baseline this run produces would be the thing it is compared with.
+        HealthBaseline was = HealthBaseline.Read(folder);
+
+        checks = [.. checks.Select(one => HealthBaseline.Judge(one, was))];
+
+        string path = HealthReport.Write(checks, folder, term, DateTimeOffset.UtcNow);
+
+        HealthBaseline.Of(checks).Write(folder);
 
         logger.LogInformation(
             "{Answering} of {Total} answering. Written to {Path}.",
@@ -106,7 +112,9 @@ internal static class Program
             checks.Count,
             path);
 
-        return 0;
+        // Non-zero when anything is flagged. A check that cannot fail is one
+        // nobody acts on.
+        return HealthBaseline.ExitCode(checks);
     }
 
     private static string RepositoryRoot()

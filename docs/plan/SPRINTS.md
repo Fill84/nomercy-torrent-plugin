@@ -993,9 +993,12 @@ pushed on its own.
 
 ## S8-03 · Health automation
 
-1. `tools/SourceHealth` gains a baseline file and the "fewer rows than last time" rule.
-2. It exits non-zero when anything is broken.
-3. README documents handing the report and the captured page over for repair.
+1. **Done.** `health/baseline.json` records what each source answered with, and a source answering
+   with fewer rows than last time is flagged though it answered. Only what really answered is written
+   down: a broken reader's nought would set the bar at nought and the rule would never fire again.
+2. **Done.** It exits non-zero when anything is flagged.
+3. **Done.** The README says to hand the report and the page over together, why the page has a shelf
+   life of about a day, and how to read a source flagged once against one flagged every run.
 
 ## S8-04 · Hardening
 

@@ -80,8 +80,24 @@ dotnet run --project tools/SourceHealth
 ```
 
 Walks every source through the real chain and writes `health/report.md` plus the page each source
-returned. Hand both over when something is flagged: a reader is repaired from the page, and fetching
-the address again later gets a different page.
+returned.
+
+**It exits non-zero when anything is flagged**, so it can be wired into whatever runs it. A check
+that cannot fail is a check nobody acts on.
+
+**Hand the report and the page over together when something is flagged.** A reader is repaired from
+the page it failed on, and fetching the address again later gets a different page — usually one that
+works, which is how a fault of this kind survives being reported. The page is written beside the
+report for exactly that reason: it is the evidence, and it has a shelf life of about a day.
+
+It also writes `health/baseline.json`, which is what each source answered with last time. A source
+that answers with **fewer rows than last time** is flagged even though it answered: nought rows off a
+page covered in releases is a broken reader and says so loudly, and three rows where there were forty
+is the same fault with the volume turned down. Judged against the last run rather than a number
+written down here, because what a search returns depends on the term and the day.
+
+A source flagged this way once and never again was a real change and the new count is now the
+baseline. One flagged every run is a reader that needs looking at — with its page.
 
 ## Deploying
 
