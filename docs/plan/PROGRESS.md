@@ -9,9 +9,11 @@ Read this first, update it last. Nothing else decides what happens next.
 **Sprint 8 — Finish**
 **Slice `S8-01` · The remaining pages** — not started.
 
-**Part of it is done**: the Settings page now says when the port could not be mapped and that TCP and
-UDP `ListenPort` need forwarding by hand, with the router's own refusals under it. What is left of
-`S8-01` is the Skipped and Sources pages.
+**Two of the three parts are done**: the Settings page says when the port could not be mapped and
+that TCP and UDP `ListenPort` need forwarding by hand, and the **Skipped page** renders every refusal
+with the reason it was refused for and the control to allow it anyway. What is left of `S8-01` is the
+**Sources page** — per source: what it last answered, how long it took, its refusal in its own words,
+and when it is next askable.
 
 Specification: `docs/plan/SPRINTS.md`, section `S8-01`. **The owner chose Sprint 8 before Sprint 7**
 (18 August 2026): the parts of Sprint 6 are all built and tested on their own and nothing calls them,
