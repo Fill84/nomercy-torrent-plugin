@@ -343,6 +343,30 @@ public sealed class TorrentRun : IDisposable
         }
     }
 
+    /// <summary>
+    /// Takes on a peer that dialled in rather than being dialled.
+    /// </summary>
+    /// <remarks>
+    /// It is a peer like any other from here on. A paused run refuses it: a
+    /// torrent the owner stopped that went on answering peers is not stopped,
+    /// whatever the page says.
+    /// </remarks>
+    public void Take(PeerConnection peer, CancellationToken ct)
+    {
+        lock (_lock)
+        {
+            if (Paused || _disposed)
+            {
+                peer.Dispose();
+
+                return;
+            }
+
+            _peers.Add(peer);
+            _conversations.Add(ConverseAsync(peer, ct));
+        }
+    }
+
     /// <summary>Stops dialling and drops every connection, keeping the pieces.</summary>
     /// <remarks>
     /// The verified pieces and the disk stay exactly as they are: that is what

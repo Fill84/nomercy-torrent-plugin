@@ -145,6 +145,67 @@ public class BittorrentEngineTests
     }
 
     /// <remarks>
+    /// <para>
+    /// A peer that dials in is taken up. Every connection this client had ever
+    /// made it made itself, so it seeded to nobody who found it and never met
+    /// the half of a swarm behind a router of its own — and the listening
+    /// socket it binds on startup had nothing behind it.
+    /// </para>
+    /// <para>
+    /// Over the loopback, dialled by this client's own dialler, which is as
+    /// close to a real peer as a test on this machine can get.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APeerThatDialsInIsTakenUp()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+
+        using BittorrentEngine engine = new(
+            0,
+            Timeout,
+            new ActivityJournal(),
+            new CapturingLogger(),
+            new SilentTrackers(),
+            new NoPeers());
+
+        engine.Start();
+
+        TorrentHandle handle = await engine.AddAsync(Request, stopping.Token);
+
+        PeerConnection? dialled = await new SocketPeerDialler(TimeSpan.FromSeconds(20)).DialAsync(
+            new(System.Net.IPAddress.Loopback, engine.Port!.Value),
+            Convert.FromHexString(handle.InfoHash),
+            PeerIdentity.New(),
+            pieces: 0,
+            stopping.Token);
+
+        Assert.NotNull(dialled);
+
+        using (dialled)
+        {
+            await Until(
+                async () => (await engine.StatusAsync(stopping.Token))[0].Peers == 1,
+                stopping.Token);
+        }
+    }
+
+    /// <summary>Waits for something the accept loop does on its own thread.</summary>
+    /// <remarks>
+    /// Polled rather than slept on: a fixed wait is either a test that fails on
+    /// a busy machine or one that costs a second every run.
+    /// </remarks>
+    private static async Task Until(Func<Task<bool>> what, CancellationToken ct)
+    {
+        while (!await what())
+        {
+            ct.ThrowIfCancellationRequested();
+
+            await Task.Delay(TimeSpan.FromMilliseconds(20), ct);
+        }
+    }
+
+    /// <remarks>
     /// Paused is its own state and stays that way until something resumes it.
     /// </remarks>
     [Fact]

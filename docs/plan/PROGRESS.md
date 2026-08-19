@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S5-14` · The engine drives the session** — all but the accept loop and the acceptance run done and pushed.
+**Slice `S5-14` · The engine drives the session** — everything but the acceptance run done and pushed.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -21,9 +21,11 @@ per torrent, announces for each at the interval its trackers asked for, and the 
 socket transport and a socket dialler — so `StatusAsync`, `FilesAsync`, `PauseAsync` and
 `ResumeAsync` answer from something that is really running.
 
-**What is left of `S5-14`** is the accept loop, so a peer dialling in is taken up, and the acceptance
-itself: the whole of it through `ITorrentEngine` against a second instance of this client seeding a
-fixture torrent. Until that has been seen to pass, "the plugin downloads" is a claim and not a fact.
+A peer that dials in is taken up now as well, encrypted or in the clear.
+
+**What is left of `S5-14` is the acceptance itself**: the whole of it through `ITorrentEngine`, one
+instance of this client downloading a fixture torrent from another. Every part is wired and proved on
+its own; until that run has been seen to pass, "the plugin downloads" is a claim and not a fact.
 
 **Slice `S8-02` · The remaining actions** — parts one and two done and pushed, part three after
 `S5-14`.

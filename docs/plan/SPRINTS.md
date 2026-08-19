@@ -835,7 +835,10 @@ which is why `S5-13` reads as done.
    times out naming itself, one that is not there says so at once rather than waiting out the
    patience, and a peer that is not there is a peer that will not talk rather than an exception.
    The dial is encrypted first and in the clear when the peer will not have it.
-7. An accept loop on the listening socket, so a peer that dials in is taken up.
+7. **Done.** An accept loop on the listening socket. Plaintext and encrypted arrive on the same port
+   and are told apart from the first byte, a peer asking for a torrent this client is not holding is
+   dropped, and each arrival is welcomed on its own so a peer that dials and then says nothing does
+   not hold the door. Proved over the loopback, dialled by this client's own dialler.
 8. Test: the whole of it through `ITorrentEngine` against a second instance of this client seeding a
    fixture torrent — the same acceptance as `S5-13`, one layer up.
 9. **Done.** `BittorrentEngine` holds one `TorrentRun` per torrent rather than a record, announces

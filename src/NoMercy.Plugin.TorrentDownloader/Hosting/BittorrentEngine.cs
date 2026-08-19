@@ -1,3 +1,5 @@
+using System.Net.Sockets;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
@@ -39,6 +41,7 @@ public sealed class BittorrentEngine(
     private readonly TimeProvider _time = time ?? TimeProvider.System;
     private readonly byte[] _peerId = PeerIdentity.New();
     private readonly CancellationTokenSource _stopping = new();
+    private readonly RandomNumberGenerator _random = RandomNumberGenerator.Create();
     private ListenSockets? _sockets;
     private bool _started;
     private bool _disposed;
@@ -81,6 +84,11 @@ public sealed class BittorrentEngine(
                 _sockets = ListenSockets.Bind(listenPort);
 
                 logger.LogInformation("The torrent client is listening on port {Port}.", _sockets.Port);
+
+                // Somebody has to be at the door. A client that only dials out
+                // never seeds to a peer that found it and never meets the half
+                // of a swarm that is behind a router of its own.
+                _ = AcceptingAsync(_sockets.Tcp, _stopping.Token);
             }
             catch (PortInUseException refused)
             {
@@ -324,6 +332,95 @@ public sealed class BittorrentEngine(
             {
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// Answers everybody who dials in, for as long as the client is up.
+    /// </summary>
+    /// <remarks>
+    /// Each arrival is welcomed on its own and the loop goes straight back to
+    /// the door. A client that introduced one peer before accepting the next
+    /// would be held up by every peer that dialled and then said nothing, which
+    /// is a great many of them.
+    /// </remarks>
+    private async Task AcceptingAsync(Socket listening, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            Socket arrived;
+
+            try
+            {
+                arrived = await listening.AcceptAsync(ct).ConfigureAwait(false);
+            }
+            catch (Exception closed) when (closed is not OperationCanceledException)
+            {
+                // The socket has gone, which is a client shutting down. There
+                // is nothing left to accept on.
+                return;
+            }
+
+            _ = WelcomeAsync(arrived, ct);
+        }
+    }
+
+    /// <summary>Introduces one arrival and hands it to the torrent it came for.</summary>
+    /// <remarks>
+    /// A peer asking for a torrent this client is not holding is dropped, and
+    /// so is one that hung up mid-handshake. Neither is a fault: a listening
+    /// socket meets both every day.
+    /// </remarks>
+    private async Task WelcomeAsync(Socket arrived, CancellationToken ct)
+    {
+        NetworkStream wire = new(arrived, ownsSocket: true);
+
+        try
+        {
+            PeerArrival? arrival = await PeerWelcome
+                .AcceptAsync(wire, Holding(), _peerId, _random, ct)
+                .ConfigureAwait(false);
+
+            if (arrival is null)
+            {
+                await wire.DisposeAsync().ConfigureAwait(false);
+
+                return;
+            }
+
+            string hash = Convert.ToHexString(arrival.InfoHash);
+            Held? held;
+
+            lock (_lock)
+            {
+                _torrents.TryGetValue(hash, out held);
+            }
+
+            if (held is null)
+            {
+                // Removed between the handshake and here, which is a race a
+                // listening socket really runs.
+                await wire.DisposeAsync().ConfigureAwait(false);
+
+                return;
+            }
+
+            held.Run.Take(
+                new PeerConnection(arrival.Wire, arrival.Introduction, held.Run.Torrent?.PieceCount ?? 0),
+                ct);
+        }
+        catch (Exception gone) when (gone is not OperationCanceledException)
+        {
+            await wire.DisposeAsync().ConfigureAwait(false);
+        }
+    }
+
+    /// <summary>Every info hash this client is holding, as the welcome wants them.</summary>
+    private IReadOnlyCollection<byte[]> Holding()
+    {
+        lock (_lock)
+        {
+            return [.. _torrents.Keys.Select(Convert.FromHexString)];
         }
     }
 
