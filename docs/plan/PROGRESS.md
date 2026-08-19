@@ -9,11 +9,12 @@ Read this first, update it last. Nothing else decides what happens next.
 **Sprint 8 — Finish**
 **Slice `S8-01` · The remaining pages** — not started.
 
-**Two of the three parts are done**: the Settings page says when the port could not be mapped and
-that TCP and UDP `ListenPort` need forwarding by hand, and the **Skipped page** renders every refusal
-with the reason it was refused for and the control to allow it anyway. What is left of `S8-01` is the
-**Sources page** — per source: what it last answered, how long it took, its refusal in its own words,
-and when it is next askable.
+**`S8-01` is done as a set of pages.** The Settings page says when the port could not be mapped, the
+Skipped page carries every refusal with its reason and the control to allow it, and the Sources page
+says per source what it last answered, how long it took, its refusal in the site's own words and when
+it is next askable. What none of them are yet is **reachable**: the plugin's route table still has
+four routes, and Downloads, History, Skipped and Sources are not among them. That wiring is `S8-02`'s,
+along with the transfers cadence that makes Sprint 6 run at all.
 
 Specification: `docs/plan/SPRINTS.md`, section `S8-01`. **The owner chose Sprint 8 before Sprint 7**
 (18 August 2026): the parts of Sprint 6 are all built and tested on their own and nothing calls them,
@@ -108,7 +109,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [ ] `S7-03` Anime end to end
 
 ### Sprint 8 — Finish
-- [ ] `S8-01` The remaining pages
+- [x] `S8-01` The remaining pages
 - [ ] `S8-02` The remaining actions
 - [ ] `S8-03` Health automation
 - [ ] `S8-04` Hardening
