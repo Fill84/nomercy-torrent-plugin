@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S5-14` · The engine drives the session** — steps 1 to 3 and 6 done and pushed, and the rates with them. The engine still holds a record rather than a run.
+**Slice `S5-14` · The engine drives the session** — steps 1 to 3 and 6 done and pushed, with the rates, the peer id and the announce interval. The engine still holds a record rather than a run.
 
 The owner said carry on (19 August 2026) with the recommendation that `S5-14` comes before `S8-02`
 part three, because the actions move bookkeeping until the client can download.
@@ -492,10 +492,18 @@ and note it here.
   given is not always one TCP can have — **measured at one attempt in seventy-five** here, some
   already in use and some refused outright. Windows reserves whole ranges, so a run of eight
   consecutive attempts was refused on 50379 to 50387: retrying inside a block that wide never escapes
-  it. The two protocols now **take turns choosing**, eight attempts, and whichever one picks is never
-  handed a number out of its own reserved range. A port the owner named is still asked for once and
-  refused by its number. The exception named the number that was asked for rather than the one that
-  failed, so a request for any port reported "Port 0", which is the one thing nobody can act on.
+  it. Making the two protocols take turns choosing was the first fix and it was not enough: five tests
+  went down together on 59435 to 59451 the same day. **The machine was then asked what it reserves**
+  — `netsh interface ipv4 show excludedportrange` — and the answer settles it. The dynamic range is
+  49152 to 65535; 1460 of those ports are excluded in fifteen blocks a hundred wide; the TCP set and
+  the UDP set are **not the same**, which is exactly why a number handed out for one is refused for
+  the other; and **nothing below 49152 is excluded at all**. The pool walks forward, so once it is
+  inside a block every consecutive attempt fails together. A request for any port now **draws its own
+  number between 20000 and 48000**, eight independent draws, and never asks the operating system to
+  choose — which makes the behaviour better and not only quieter. A port the owner named is still
+  asked for once and refused by its number. The exception named the number that was asked for rather
+  than the one that failed, so a request for any port reported "Port 0", which is the one thing
+  nobody can act on.
 - **Resume could never be believed, and every restart verified the whole torrent** (19 August 2026).
   The resume file records a modification time in whole seconds — deliberately, because that is the
   same number on any machine it is moved to — and `Trust` compared it to the live one exactly. A real
