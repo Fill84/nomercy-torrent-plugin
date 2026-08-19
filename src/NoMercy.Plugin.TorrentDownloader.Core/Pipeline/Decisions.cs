@@ -172,19 +172,35 @@ public sealed class Decisions
         // the gaps this cycle knows about — which is the only list anything
         // here has. An episode of that season that is not missing needs
         // nothing, and one the library gains tomorrow is tomorrow's business.
-        _settled.Add(episode.Key);
-
-        if (name.IsPack
-            && name.Season is int season
-            && _gaps.TryGetValue((episode.Key.ShowId, season), out List<EpisodeKey>? covered))
+        foreach (EpisodeKey key in CoveredBy(episode, name))
         {
-            foreach (EpisodeKey key in covered)
-            {
-                _settled.Add(key);
-            }
+            _settled.Add(key);
         }
 
         return decision;
+    }
+
+    /// <summary>
+    /// Every gap one release answers for.
+    /// </summary>
+    /// <remarks>
+    /// The episode it was found for, and the season's other gaps when it is a
+    /// pack — the gaps this cycle knows about, which is the only list anything
+    /// here has. An episode of that season that is not missing needs nothing,
+    /// and one the library gains tomorrow is tomorrow's business.
+    /// </remarks>
+    public IReadOnlyList<EpisodeKey> CoveredBy(TrackedEpisode episode, ReleaseName name)
+    {
+        List<EpisodeKey> covered = [episode.Key];
+
+        if (name.IsPack
+            && name.Season is int season
+            && _gaps.TryGetValue((episode.Key.ShowId, season), out List<EpisodeKey>? gaps))
+        {
+            covered.AddRange(gaps.Where(key => key != episode.Key));
+        }
+
+        return covered;
     }
 
     private Verdict Refuse(EpisodeKey episode, string title, string? source, Verdict verdict)

@@ -1,7 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
-using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
@@ -23,7 +22,31 @@ public sealed record EpisodeOutcome(
     string? Source,
     int? Seeders,
     bool HandedOver,
-    string Detail);
+    string Detail)
+{
+    /// <summary>What the client calls it, when it took it.</summary>
+    public string? InfoHash { get; init; }
+
+    /// <summary>
+    /// What it was taken from.
+    /// </summary>
+    /// <remarks>
+    /// Kept after the client has it, so a torrent the client has forgotten is
+    /// re-added rather than searched for and downloaded all over again.
+    /// </remarks>
+    public string? Magnet { get; init; }
+
+    /// <summary>
+    /// Every gap this release answers for: one for an ordinary release, the
+    /// season's remaining gaps for a pack.
+    /// </summary>
+    /// <remarks>
+    /// It travels with the grab because a pack that fails has to put all of
+    /// them back to missing at once, and nothing downstream can work out which
+    /// they were.
+    /// </remarks>
+    public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
+}
 
 /// <summary>
 /// What one cycle is allowed to do, and with what.
@@ -40,7 +63,16 @@ public sealed record CycleOptions(
     Profile Profile,
     IReadOnlySet<string> Blacklisted,
     bool DryRun,
-    string IncompleteFolder);
+    string IncompleteFolder)
+{
+    /// <summary>The owner's own tracker list, added to every grab.</summary>
+    /// <remarks>
+    /// It ships empty and that is the owner's decision: only the trackers a
+    /// source's own magnet supplied travel with a grab, so nothing announces
+    /// what is being downloaded to a host the owner never agreed to.
+    /// </remarks>
+    public IReadOnlyList<string> DefaultTrackers { get; init; } = [];
+}
 
 /// <summary>Everything one cycle decided.</summary>
 /// <param name="Outcomes">One per episode looked at, in the order they were looked at.</param>
@@ -67,7 +99,7 @@ public sealed class SearchCycle(
     NameResolve names,
     Find find,
     IActivityJournal journal,
-    ITorrentEngine? engine = null)
+    Grab? grab = null)
 {
     /// <param name="missing">The gaps to look at, in whatever order they arrive.</param>
     /// <param name="options">What the owner will accept, and what to do with what is found.</param>
@@ -170,7 +202,7 @@ public sealed class SearchCycle(
 
                 journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}");
 
-                return await GrabAsync(episode, chosen, options, ct);
+                return await GrabAsync(episode, chosen, decisions.CoveredBy(episode, name), options, ct);
             }
 
             journal.Finished(ActivityStage.Decide, subject, "nobody is serving an acceptable copy");
@@ -194,6 +226,7 @@ public sealed class SearchCycle(
     private async Task<EpisodeOutcome> GrabAsync(
         TrackedEpisode episode,
         ReleaseCopy chosen,
+        IReadOnlyList<EpisodeKey> covers,
         CycleOptions options,
         CancellationToken ct)
     {
@@ -219,11 +252,11 @@ public sealed class SearchCycle(
                 "would take it — dry run is on");
         }
 
-        if (engine is null)
+        if (grab is null)
         {
             // Said plainly rather than left looking like a decision nobody
-            // made. Sprint 5 writes the client; until it exists this plugin
-            // decides and hands nothing over.
+            // made. A plugin with no torrent client decides and hands nothing
+            // over, and the page says exactly that.
             return new(
                 episode.Key,
                 chosen.Title,
@@ -235,9 +268,24 @@ public sealed class SearchCycle(
 
         journal.Started(ActivityStage.Grab, subject, chosen.Title);
 
-        TorrentHandle taken = await engine.AddAsync(
-            new(chosen.Magnet, chosen.Trackers, options.IncompleteFolder, chosen.SizeBytes),
-            ct);
+        // Through the grab, never straight to the client: it is what checks
+        // there is room first, and a torrent that fills the disk takes the
+        // media server with it — the same disk holds the library and the
+        // database.
+        Grabbed taken = await grab.TakeAsync(chosen, options.IncompleteFolder, options.DefaultTrackers, ct);
+
+        if (taken.Result != GrabResult.Taken)
+        {
+            // B2: a client that would not take a magnet is not the episode's
+            // fault, so this costs it no search attempt.
+            return new(
+                episode.Key,
+                chosen.Title,
+                chosen.Source,
+                chosen.Seeders,
+                false,
+                taken.Reason ?? "the client would not take it and gave no reason");
+        }
 
         journal.Finished(ActivityStage.Grab, subject, $"{chosen.Title} from {chosen.Source}");
 
@@ -247,6 +295,11 @@ public sealed class SearchCycle(
             chosen.Source,
             chosen.Seeders,
             true,
-            $"taken from {chosen.Source}, {taken.InfoHash}");
+            $"taken from {chosen.Source}, {taken.InfoHash}")
+        {
+            InfoHash = taken.InfoHash,
+            Magnet = chosen.Magnet,
+            Covers = covers,
+        };
     }
 }

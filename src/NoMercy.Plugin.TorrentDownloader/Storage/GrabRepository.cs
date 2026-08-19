@@ -94,7 +94,7 @@ public sealed class GrabRepository(Database database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed');
             """;
 
@@ -108,7 +108,10 @@ public sealed class GrabRepository(Database database)
                 reader.GetString(0),
                 reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
                 reader.GetString(2),
-                Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState state) ? state : GrabState.Grabbed));
+                Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState state) ? state : GrabState.Grabbed)
+            {
+                Covers = Covered(reader.GetString(4)),
+            });
         }
 
         return open;
@@ -268,6 +271,24 @@ public sealed class GrabRepository(Database database)
         command.Parameters.AddWithValue("$detail", $"encode dispatched to library {library}");
 
         await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Every episode a grab answers for, as the column holds them.</summary>
+    private static IReadOnlyList<EpisodeKey> Covered(string json)
+    {
+        List<EpisodeKey> covered = [];
+
+        foreach (int[] one in JsonSerializer.Deserialize<int[][]>(json) ?? [])
+        {
+            // Three, or it is not an episode. A row written by something that
+            // did not agree about the shape is not one to guess at.
+            if (one.Length == 3)
+            {
+                covered.Add(new(one[0], one[1], one[2]));
+            }
+        }
+
+        return covered;
     }
 
     /// <summary>

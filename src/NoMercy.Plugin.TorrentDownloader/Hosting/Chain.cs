@@ -177,7 +177,12 @@ public sealed class Chain : IAsyncDisposable
             new NameResolve(catalogue, fetch, _readers, _pool, _journal, TimeProvider.System),
             new Find(catalogue, fetch, _readers, _journal, _ledger),
             _journal,
-            _engine);
+
+            // Through the grab, which checks there is room before anything is
+            // handed over. A cycle that reached the client directly went round
+            // that check, and a torrent that fills the disk takes the media
+            // server with it.
+            _engine is null ? null : new Grab(_engine, new DiskSpace(), _journal));
     }
 
     public async ValueTask DisposeAsync()

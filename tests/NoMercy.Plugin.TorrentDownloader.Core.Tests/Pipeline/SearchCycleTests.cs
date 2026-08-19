@@ -250,6 +250,61 @@ public class SearchCycleTests
         Assert.All(report.Skipped, skipped => Assert.NotEqual(string.Empty, skipped.Reason));
     }
 
+    /// <remarks>
+    /// The store has to be able to find the torrent again after a restart and
+    /// to know which episodes to put back if it fails, and neither is anywhere
+    /// in "taken from Nyaa". A season pack that fails puts back every gap it
+    /// answered for, which is the whole reason the coverage travels with it.
+    /// </remarks>
+    [Fact]
+    public async Task AGrabCarriesTheHashTheMagnetAndEveryEpisodeItAnswersFor()
+    {
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("nyaa-diacritic.xml"));
+
+        CycleReport report = await Cycle(fetch, new(), sources: WithNyaa).RunAsync(
+            [Pokemon(1), Pokemon(2), Pokemon(3)],
+            new(new() { MaximumResolution = "1080p", EnglishOnly = false, SeasonPackThreshold = 3 }, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        EpisodeOutcome taken = Assert.Single(report.Outcomes, outcome => outcome.HandedOver);
+
+        Assert.NotNull(taken.InfoHash);
+        Assert.StartsWith("magnet:?", taken.Magnet!, StringComparison.Ordinal);
+
+        // All three gaps, because it is a pack and the season had three.
+        Assert.Equal(3, taken.Covers.Count);
+        Assert.Contains(Pokemon(2).Key, taken.Covers);
+    }
+
+    /// <remarks>
+    /// The room check is in <c>Grab</c> and the cycle went round it, straight to
+    /// the client. A torrent that fills the disk takes the media server with it,
+    /// since the same disk holds the library and the database — so the cycle has
+    /// to hand over through the thing that checks, not beside it.
+    /// </remarks>
+    [Fact]
+    public async Task ACycleWithNoRoomLeftHandsNothingOverAndSaysBothNumbers()
+    {
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await Cycle(Answering(), engine, free: 1024).RunAsync(
+            [Silo(6)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        Assert.Empty(engine.Taken);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.False(outcome.HandedOver);
+
+        // Both numbers, because "not enough space" tells the owner nothing they
+        // can act on and these two say exactly what to clear.
+        Assert.Contains("needs", outcome.Detail, StringComparison.Ordinal);
+        Assert.Contains("free", outcome.Detail, StringComparison.Ordinal);
+    }
+
     /// <summary>Where a download would land, if anything were downloading.</summary>
     private const string Folder = @"C:\downloads";
 
@@ -294,7 +349,8 @@ public class SearchCycleTests
         FakeFetch fetch,
         FakeTorrentEngine? engine,
         ActivityJournal? journal = null,
-        SourceDefinition[]? sources = null)
+        SourceDefinition[]? sources = null,
+        long? free = null)
     {
         SourceCatalogue catalogue = SourceCatalogue.Build(sources ?? Sources, [], []);
         ActivityJournal writing = journal ?? new ActivityJournal();
@@ -304,7 +360,19 @@ public class SearchCycleTests
             new(catalogue, fetch, readers, new FakePool(), writing, TimeProvider.System),
             new(catalogue, fetch, readers, writing),
             writing,
-            engine);
+
+            // Through the grab, which is what checks there is room. A cycle that
+            // called the client directly went round that check.
+            engine is null ? null : new Grab(engine, new EndlessDisk(free), writing));
+    }
+
+    /// <summary>A disk with as much room as the test says, or as much as anyone could want.</summary>
+    private sealed class EndlessDisk(long? free) : IStorageSpace
+    {
+        public long? FreeBytes(string folder)
+        {
+            return free ?? long.MaxValue;
+        }
     }
 
     /// <summary>A gap in the season the captured pack covers.</summary>

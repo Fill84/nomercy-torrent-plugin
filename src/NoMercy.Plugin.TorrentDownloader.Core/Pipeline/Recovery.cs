@@ -1,3 +1,4 @@
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
@@ -29,7 +30,16 @@ public enum GrabState
 /// </param>
 /// <param name="ReleaseTitle">What it is called, for the journal.</param>
 /// <param name="State">Where the store thinks it is.</param>
-public sealed record StoredDownload(string InfoHash, string Magnet, string ReleaseTitle, GrabState State);
+public sealed record StoredDownload(string InfoHash, string Magnet, string ReleaseTitle, GrabState State)
+{
+    /// <summary>Every episode this grab answers for.</summary>
+    /// <remarks>
+    /// One for an ordinary release, several for a season pack. It is what
+    /// staging matches files against and what a failure puts back to missing,
+    /// and neither can be worked out from anything else the store holds.
+    /// </remarks>
+    public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
+}
 
 /// <summary>
 /// What has to happen to make the client and the store agree again.

@@ -29,6 +29,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private SettingsStore? _settings;
     private LiveSnapshot? _live;
     private Chain? _chain;
+    private BittorrentEngine? _engine;
+    private Transfers? _transfers;
     private SourceLedgerRepository? _ledger;
     private IReadOnlyList<SourceDefinition>? _shipped;
 
@@ -240,12 +242,45 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 await SearchAsync(work.Token);
                 break;
 
-            // Transfers arrive in S6-02 and maintenance in S8-04; both need
-            // something this build does not have yet — a torrent client and a
-            // library refresh on a cadence.
+            case JobNames.Transfers:
+                await TransfersAsync(work.Token);
+                break;
+
+            // Maintenance is S8-04's: a library refresh on a cadence, which
+            // nothing yet drives.
             default:
                 break;
         }
+    }
+
+    /// <summary>
+    /// One pass over everything the torrent client is holding.
+    /// </summary>
+    /// <remarks>
+    /// The fastest cadence, because a completion nobody notices is an episode
+    /// nobody gets. It runs on a plugin that has folders and does nothing at
+    /// all on one that does not: there is nowhere to stage to, so noticing a
+    /// completion could only end in a file thrown away.
+    /// </remarks>
+    private async Task TransfersAsync(CancellationToken ct)
+    {
+        if (await ConfiguredAsync(ct) is not Settings settings)
+        {
+            return;
+        }
+
+        BittorrentEngine engine = await EngineAsync(settings, ct);
+
+        _transfers ??= new(
+            engine,
+            await GrabsAsync(ct),
+            new HostLibrary(Context.Library),
+            new Stager(_journal, Context.Logger),
+            new EncodeDispatch(Context.Services, _journal, Context.Logger),
+            _journal,
+            Context.Logger);
+
+        await _transfers.TickAsync(settings.IncompleteFolder, settings.IntakeFolder, ct);
     }
 
     /// <summary>Reads every feed into the name pool.</summary>
@@ -276,6 +311,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
 
         IReadOnlyList<TrackedEpisode> tracked = await Tracked(ct);
+        GrabRepository grabs = await GrabsAsync(ct);
 
         Interlocked.Increment(ref _running);
 
@@ -285,12 +321,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 tracked,
                 new(
                     settings.Profile,
-                    // The blacklist is S6-02's, written when a download fails.
-                    // Nothing has ever written to it yet, and an empty set says
-                    // exactly that.
-                    Blacklist.None,
+
+                    // The hashes a download has already failed on. Without it
+                    // the next cycle chooses the same release and fails the
+                    // same way, for as long as the plugin runs.
+                    await grabs.BlacklistedAsync(ct),
                     settings.DryRun,
-                    settings.IncompleteFolder),
+                    settings.IncompleteFolder)
+                {
+                    DefaultTrackers = settings.Client.DefaultTrackers,
+                },
                 ct);
         }
         finally
@@ -298,6 +338,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             Interlocked.Decrement(ref _running);
             _lastCycleAt = DateTimeOffset.UtcNow;
         }
+
+        // After the cycle rather than during it: a grab is written down once
+        // the client has been handed something, and the pages that say what
+        // happened read the store rather than anything held in memory.
+        await CycleRecord.WriteAsync(_lastCycle, tracked, grabs, DateTimeOffset.UtcNow, ct);
     }
 
     /// <summary>What the last cycle decided about each episode it looked at.</summary>
@@ -319,28 +364,23 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private async Task<(Chain Chain, Settings Settings)?> ChainAsync(CancellationToken ct)
     {
-        Settings settings = await Settings.LoadAsync(ct);
-
-        if (settings.IncompleteFolder.Length == 0 || settings.IntakeFolder.Length == 0)
+        if (await ConfiguredAsync(ct) is not Settings settings)
         {
-            // A plugin nobody has configured does nothing at all, and says so
-            // once. It has nowhere to put a download, so searching for one
-            // would spend every site's patience on a file that could only be
-            // thrown away — and the owner would see activity and no results.
-            SayOnce(ref _unconfigured, "No folders are configured, so nothing is searched for. Set them in Settings.");
-
             return null;
         }
+
+        BittorrentEngine engine = await EngineAsync(settings, ct);
 
         await _migrating.WaitAsync(ct);
 
         try
         {
             _chain ??= new(
-                _context ?? throw new InvalidOperationException("The plugin has not been initialised."),
+                Context,
                 _journal,
                 new NamePoolRepository(await DatabaseAsync(ct)),
                 Shipped(),
+                engine: engine,
                 ledger: await LedgerAsync(ct));
         }
         finally
@@ -352,6 +392,68 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         return (_chain, settings);
     }
+
+    /// <summary>
+    /// The settings, when the plugin has enough of them to do anything.
+    /// </summary>
+    /// <remarks>
+    /// A plugin nobody has configured does nothing at all, and says so once. It
+    /// has nowhere to put a download, so searching for one would spend every
+    /// site's patience on a file that could only be thrown away — and the owner
+    /// would see activity and no results.
+    /// </remarks>
+    private async Task<Settings?> ConfiguredAsync(CancellationToken ct)
+    {
+        Settings settings = await Settings.LoadAsync(ct);
+
+        if (settings.IncompleteFolder.Length != 0 && settings.IntakeFolder.Length != 0)
+        {
+            return settings;
+        }
+
+        SayOnce(ref _unconfigured, "No folders are configured, so nothing is searched for. Set them in Settings.");
+
+        return null;
+    }
+
+    /// <summary>
+    /// The torrent client, started once.
+    /// </summary>
+    /// <remarks>
+    /// One for the process, whatever ticks in between: the client owns sockets
+    /// and a port mapping, and a second would bind a port the first already has
+    /// and report it as somebody else's. Behind the same semaphore as the
+    /// migration, because two cadences can tick at once on a plugin that has
+    /// only just loaded.
+    /// </remarks>
+    private async Task<BittorrentEngine> EngineAsync(Settings settings, CancellationToken ct)
+    {
+        await _migrating.WaitAsync(ct);
+
+        try
+        {
+            if (_engine is null)
+            {
+                _engine = new(
+                    settings.Client.ListenPort,
+                    TimeSpan.FromMinutes(settings.Client.MetadataTimeoutMinutes),
+                    _journal,
+                    Context.Logger);
+
+                _engine.Start();
+            }
+
+            return _engine;
+        }
+        finally
+        {
+            _migrating.Release();
+        }
+    }
+
+    /// <summary>The host, or a failure that says the plugin was never initialised.</summary>
+    private IPluginContext Context => _context
+        ?? throw new InvalidOperationException("The plugin has not been initialised.");
 
     public async Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
     {
@@ -413,7 +515,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         Dictionary<string, TorrentStatus> byHash = new(StringComparer.OrdinalIgnoreCase);
 
-        foreach (TorrentStatus status in await TransfersAsync(ct))
+        foreach (TorrentStatus status in await RunningAsync(ct))
         {
             byHash[status.InfoHash] = status;
         }
@@ -514,11 +616,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// such: a grab with no transfer beside it says the client has not taken it
     /// up rather than drawing a torrent stuck at nought per cent.
     /// </remarks>
-    private Task<IReadOnlyList<TorrentStatus>> TransfersAsync(CancellationToken ct)
+    private Task<IReadOnlyList<TorrentStatus>> RunningAsync(CancellationToken ct)
     {
-        _ = ct;
-
-        return Task.FromResult<IReadOnlyList<TorrentStatus>>([]);
+        return _engine is null
+            ? Task.FromResult<IReadOnlyList<TorrentStatus>>([])
+            : _engine.StatusAsync(ct);
     }
 
     /// <summary>
@@ -548,6 +650,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         _disposed = true;
         _lifetime.Cancel();
+
+        // Before the chain, because the client holds the listening sockets and
+        // the port mapping: a plugin the server believes is gone must not still
+        // be answering peers.
+        _engine?.Dispose();
 
         // Before the token source goes: the chain owns a browser and a desktop,
         // and a Chrome that outlives the plugin is one nobody can see to close.
