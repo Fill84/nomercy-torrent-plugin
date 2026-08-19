@@ -79,29 +79,87 @@ public sealed class ListenSockets : IDisposable
     public int Port { get; }
 
     /// <summary>
+    /// How many numbers are tried when the caller wants any port.
+    /// </summary>
+    /// <remarks>
+    /// Eight, alternating which protocol chooses. Measured here: with UDP
+    /// choosing every time, eight consecutive attempts were all refused on
+    /// ports 50379 to 50387 — a Windows reserved range that the UDP ephemeral
+    /// pool was walking through at the time. Retrying inside a block that wide
+    /// never escapes it; changing which protocol picks does, because the one
+    /// that picks is never handed a number out of its own reserved range.
+    /// </remarks>
+    private const int Attempts = 8;
+
+    /// <summary>
     /// Binds <paramref name="port"/> for both, or says who has it.
     /// </summary>
+    /// <remarks>
+    /// Nought is asked for several times over; a number the owner chose is
+    /// asked for once. Another ephemeral number is as good as the first, so
+    /// trying again is free — but a number the owner chose has no substitute,
+    /// and quietly listening on a different one would be a port they forwarded
+    /// by hand with nothing behind it.
+    /// </remarks>
     /// <exception cref="PortInUseException">Something else is on that port.</exception>
     public static ListenSockets Bind(int port)
     {
-        // UDP first, and that order is not arbitrary. Windows reserves whole
-        // ranges of ports for Hyper-V and WSL and refuses them for UDP while
-        // handing the same numbers out for TCP, so asking TCP to choose gives a
-        // number UDP often cannot have. Asking UDP to choose gives one both can.
+        PortInUseException? refused = null;
+
+        for (int attempt = 0; attempt < (port == 0 ? Attempts : 1); attempt++)
+        {
+            try
+            {
+                // Turn and turn about. Windows reserves whole ranges of ports,
+                // separately for each protocol, and a range excluded for TCP is
+                // one the UDP ephemeral pool walks straight through — so eight
+                // tries with UDP always choosing fail together. Whichever
+                // protocol picks is never given a number from its own excluded
+                // range, so alternating escapes a block that retrying cannot.
+                return Once(port, udpChooses: attempt % 2 == 0);
+            }
+            catch (PortInUseException taken)
+            {
+                refused = taken;
+            }
+        }
+
+        throw refused!;
+    }
+
+    /// <summary>One attempt, with one of the two picking the number.</summary>
+    /// <param name="port">The number wanted, or nought for whichever is free.</param>
+    /// <param name="udpChooses">
+    /// Which protocol binds first and so decides the number. UDP for a port the
+    /// owner named, always: Windows refuses reserved ranges for UDP while
+    /// handing the same numbers out for TCP, so a TCP bind that succeeded would
+    /// say the port is ours when it is not.
+    /// </param>
+    private static ListenSockets Once(int port, bool udpChooses)
+    {
         Socket udp = new(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp);
-        Socket? tcp = null;
+        Socket tcp = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+        Socket chooser = udpChooses ? udp : tcp;
+        Socket follower = udpChooses ? tcp : udp;
+
+        // The number that really failed, which for a request for any port is
+        // not the number that was asked for. "Port 0 is already in use" is a
+        // sentence nobody can act on, and naming the number is the whole reason
+        // this exception exists.
+        int wanted = port;
 
         try
         {
-            udp.Bind(new IPEndPoint(IPAddress.Any, port));
+            chooser.Bind(new IPEndPoint(IPAddress.Any, port));
 
-            // The number UDP really got: port 0 means "anything free", and the
-            // two have to agree or a peer told one number would announce on
+            // The number it really got: port nought means "anything free", and
+            // the two have to agree or a peer told one number would announce on
             // another.
-            int bound = ((IPEndPoint)udp.LocalEndPoint!).Port;
+            int bound = ((IPEndPoint)chooser.LocalEndPoint!).Port;
 
-            tcp = new(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-            tcp.Bind(new IPEndPoint(IPAddress.Any, bound));
+            wanted = bound;
+
+            follower.Bind(new IPEndPoint(IPAddress.Any, bound));
             tcp.Listen(backlog: 64);
 
             return new(tcp, udp, bound);
@@ -111,14 +169,14 @@ public sealed class ListenSockets : IDisposable
             // Nothing half-bound is handed back: whichever of the two succeeded
             // is closed here, or the next attempt on the same port fails
             // against this process itself.
-            tcp?.Dispose();
+            tcp.Dispose();
             udp.Dispose();
 
-            throw new PortInUseException(port, cause);
+            throw new PortInUseException(wanted, cause);
         }
         catch
         {
-            tcp?.Dispose();
+            tcp.Dispose();
             udp.Dispose();
 
             throw;

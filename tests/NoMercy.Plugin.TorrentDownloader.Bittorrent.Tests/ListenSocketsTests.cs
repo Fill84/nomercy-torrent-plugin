@@ -35,8 +35,36 @@ public class ListenSocketsTests
     }
 
     /// <remarks>
+    /// <para>
+    /// Asking for any port must never fail. UDP chooses the number and TCP has
+    /// to have that same one, and the number UDP is given is not always one TCP
+    /// can have: measured on this machine, one attempt in seventy-five was
+    /// refused, some already in use and some refused outright. Without a retry
+    /// that is a client which fails to start once in every eight or so
+    /// restarts, for no reason the owner could ever find.
+    /// </para>
+    /// <para>
+    /// Three hundred, because at one in seventy-five a run of that length
+    /// catches it about ninety-eight times in a hundred. Fewer would be a test
+    /// that passes against the fault it was written for.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AskingForAnyPortNeverFails()
+    {
+        for (int attempt = 0; attempt < 300; attempt++)
+        {
+            using ListenSockets sockets = ListenSockets.Bind(0);
+
+            Assert.NotEqual(0, sockets.Port);
+        }
+    }
+
+    /// <remarks>
     /// A port something else has is refused by its number, because the number
-    /// is the only part the owner can do anything about.
+    /// is the only part the owner can do anything about. It is asked for once
+    /// and not retried: the owner chose that number and has to be told it
+    /// cannot be had, rather than being quietly given a different one.
     /// </remarks>
     [Fact]
     public void APortSomethingElseHasIsRefusedByItsNumber()
