@@ -939,9 +939,17 @@ own reason. Deleting the guard breaks no test. The next capture run should look 
 
 ## S7-03 · Anime end to end
 
-1. Test: a seeded anime library with a Nyaa fixture produces a decision for a missing episode.
-2. Test: the Shows page shows the media type per show.
-3. Implement, and run a real dry run over an anime library.
+1. **Done.** A seeded anime library, through the derivation and the whole chain, to a decision for
+   the one missing episode — against the captured Nyaa page. It is the join `S1-03` and `S3-03` never
+   had: one builds the absolute number from the library's own episode list and the other asks the
+   pool under it, and nothing said whether the number the library produces is the number a release is
+   really posted under. An absolute out by one fails the test, which is what it is for: a fansub row
+   carries no season tag at all, so a wrong number finds nothing while every page still reads as
+   though the plugin were working.
+2. **Done in `S1-04`.** The Shows page has a Type column and a test that reads *anime* off it.
+3. **Waiting on the owner.** A real dry run over the real anime library needs 0.4.0 on `beast-unit`,
+   and a deploy needs the server stopped. It is in `PROGRESS.md` § Blocked with the other acceptance
+   runs.
 
 ---
 

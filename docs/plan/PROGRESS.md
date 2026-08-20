@@ -4,7 +4,13 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S7-02` is done.** **Next: `S7-03` Anime end to end**, and then `S8-05`.
+**Sprint 7 is done, and every slice but one is finished.** The only thing left is **`S8-05` Release
+0.4.0**, and it is the owner's: a deploy with the server stopped, then one real cycle watched end to
+end, then a tag when they ask for it.
+
+Nothing else can be built without the server. What is written and waiting for it is in **Blocked** —
+four acceptance runs now, including anime's dry run and the one thing `S5-14` could not prove, that a
+real magnet finds peers in a public swarm.
 
 `S8-05` Release 0.4.0 is the only thing that needs the owner: a deploy with the server stopped, and
 one real cycle watched end to end. Everything before it is finished.
@@ -26,6 +32,10 @@ Two things wait on the owner without blocking anything:
   real captured pages, but "the dashboard shows what it would take for every missing episode" needs
   0.4.0 on `beast-unit` and a stopped server. It runs with no torrent client and says so per episode,
   which is exactly what dry run shows; say when, and it can be deployed and watched.
+- **Sprint 7's acceptance: a real dry run over the real anime library.** The chain decides for an
+  anime episode against a captured Nyaa page and the absolute number is derived from the library
+  itself, but "it works over the owner's own anime library" needs 0.4.0 on `beast-unit`. Dry run
+  hands nothing to the client, so it is the safest of the four to watch first.
 - **Sprint 1's acceptance against the real library.** `HandCountedLibraryTests` proves the chain
   against a library counted by hand, but "the Shows page matches *the* library" needs 0.4.0 on
   `beast-unit`, and a deploy needs the server stopped. Say when, and it can be checked against the
@@ -99,7 +109,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 7 — Anime
 - [x] `S7-01` Anime naming
 - [x] `S7-02` Dual-form search
-- [ ] `S7-03` Anime end to end
+- [x] `S7-03` Anime end to end
 
 ### Sprint 8 — Finish
 - [x] `S8-01` The remaining pages
@@ -440,6 +450,15 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   writing a broken reader's nought down would set the bar at nought and the rule would never fire for
   that source again. Found by a mutation surviving, because the first test used a source with no row
   count at all and never exercised the rule.
+- `S7-03` **The join `S1-03` and `S3-03` never had.** One builds an episode's absolute number from
+  the library's own episode list; the other asks the name pool under that number. Both were proved on
+  their own and nothing ever said whether the number the library produces is the number a release is
+  really posted under — which is the whole of anime support: a fansub row carries no season tag at
+  all, so a number out by one finds nothing at all while every page still reads as though the plugin
+  were working. A seeded anime library now runs through the derivation and the whole chain to a
+  decision against the captured Nyaa page, and an absolute out by one fails it. The Shows page's
+  media type was already done in `S1-04`. The real dry run over the real anime library is the
+  owner's.
 - `S7-02` **A source can say which libraries it is worth asking about.** `docs/05-sources.md` had
   scoped Nyaa to *indexer (anime)* since Sprint 2 and nothing in the catalogue could express it, so
   every television search asked it — a paced request per episode spent on a site carrying almost no
