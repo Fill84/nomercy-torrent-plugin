@@ -1,3 +1,5 @@
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+
 namespace NoMercy.Plugin.TorrentDownloader.Core.Sources;
 
 /// <summary>How a search term is written into an address.</summary>
@@ -73,8 +75,35 @@ public sealed record SourceDefinition(
     bool Enabled = true,
     string? Note = null)
 {
+    /// <summary>
+    /// Which libraries this source is worth asking about, or none at all for
+    /// every library.
+    /// </summary>
+    /// <remarks>
+    /// docs/05-sources.md scopes Nyaa to <em>indexer (anime)</em>. Empty means
+    /// everywhere and not nowhere: saying nothing has to mean every library, or
+    /// adding this field would have switched off every source that had not been
+    /// given one.
+    /// </remarks>
+    public IReadOnlyList<string> Libraries { get; init; } = [];
+
     /// <summary>What this source can answer.</summary>
     public SourceRole Role => SourceRoles.For(Kind, SearchUrl is not null);
+
+    /// <summary>Whether it is worth asking about this library.</summary>
+    /// <remarks>
+    /// A source that names no library is asked about all of them. One that
+    /// names some is asked about those and no others: a television search that
+    /// asked an anime-only site spends a paced request per episode on a site
+    /// that carries almost none, and that request is taken from the sources
+    /// that would have answered.
+    /// </remarks>
+    public bool Serves(LibraryKind kind)
+    {
+        return Libraries.Count == 0
+               || (LibraryKinds.Of(kind) is string named
+                   && Libraries.Contains(named, StringComparer.OrdinalIgnoreCase));
+    }
 
     /// <summary>Whether it can be asked a question at all.</summary>
     public bool CanSearch => SearchUrl is not null || Url.Contains("{query}", StringComparison.Ordinal);

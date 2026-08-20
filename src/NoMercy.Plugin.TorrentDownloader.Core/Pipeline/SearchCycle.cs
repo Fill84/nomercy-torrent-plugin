@@ -189,7 +189,7 @@ public sealed class SearchCycle(
             {
                 ReleaseName name = ReleaseName.Parse(title);
 
-                IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(title, ct);
+                IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(title, episode.Kind, ct);
 
                 Decision decision = decisions.Choose(episode, name, copies);
 

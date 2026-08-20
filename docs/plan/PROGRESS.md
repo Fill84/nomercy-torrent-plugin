@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S7-01` is done.** **Next: `S7-02` Dual-form search**, then `S7-03`, and then `S8-05`.
+**Slice `S7-02` is done.** **Next: `S7-03` Anime end to end**, and then `S8-05`.
 
 `S8-05` Release 0.4.0 is the only thing that needs the owner: a deploy with the server stopped, and
 one real cycle watched end to end. Everything before it is finished.
@@ -98,7 +98,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 7 — Anime
 - [x] `S7-01` Anime naming
-- [ ] `S7-02` Dual-form search
+- [x] `S7-02` Dual-form search
 - [ ] `S7-03` Anime end to end
 
 ### Sprint 8 — Finish
@@ -440,6 +440,15 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   writing a broken reader's nought down would set the bar at nought and the rule would never fire for
   that source again. Found by a mutation surviving, because the first test used a source with no row
   count at all and never exercised the rule.
+- `S7-02` **A source can say which libraries it is worth asking about.** `docs/05-sources.md` had
+  scoped Nyaa to *indexer (anime)* since Sprint 2 and nothing in the catalogue could express it, so
+  every television search asked it — a paced request per episode spent on a site carrying almost no
+  television, taken from the sources that would have answered. A source that names no library is
+  asked about all of them, so the field switches nothing off by omission. The other half of the
+  slice, "ranked first for an anime show", was a **conflict between two specs**: the table gave Nyaa
+  priority 30 and The Pirate Bay 45. The catalogue is the thing that was wrong — for anime Nyaa is
+  often the only site with the release — so it is 50 now and `docs/05-sources.md` says why. Steps 1
+  and 3 of this slice were already done in `S3-03` and `S4-01`.
 - `S7-01` **Most of this slice had already been done by `S3-01`**, which parsed every name on every
   captured page and took five more captures when the anime cases turned out to be on none of the old
   ones. What was actually missing was one word: `Complete` was implemented as a pack marker and had

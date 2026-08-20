@@ -33,9 +33,16 @@ public sealed class Find(
     /// The gate is the only thing that slows any of it down, and it does that
     /// per host.
     /// </remarks>
-    public async Task<IReadOnlyList<ReleaseCopy>> SearchAsync(string releaseName, CancellationToken ct)
+    public async Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
+        string releaseName,
+        LibraryKind kind,
+        CancellationToken ct)
     {
-        SourceDefinition[] indexers = [.. catalogue.For(SourceRole.Indexer)];
+        // Only the indexers worth asking about this library. An anime-only site
+        // asked about a television show spends a paced request on a site that
+        // carries almost no television, and that request is taken from the ones
+        // that would have answered.
+        SourceDefinition[] indexers = [.. catalogue.For(SourceRole.Indexer).Where(one => one.Serves(kind))];
 
         ReleaseCopy[][] answers = await Task.WhenAll(
             indexers.Select(indexer => AskAsync(indexer, releaseName, ct)));

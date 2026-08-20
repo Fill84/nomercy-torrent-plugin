@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -229,4 +230,38 @@ public class CatalogueTests
         Assert.Empty(waiting);
         Assert.Empty(grants.Requested);
     }
+    /// <remarks>
+    /// <para>
+    /// docs/05-sources.md scopes Nyaa to <em>indexer (anime)</em>. Every other
+    /// indexer names no library and is therefore for all of them, which is what
+    /// keeps the field from switching anything off by omission.
+    /// </para>
+    /// <para>
+    /// And it outranks them for the library it is scoped to. For anime it is
+    /// often the only source that has the release at all, so when two sites
+    /// serve the same copy to the same number of peers it is the one to take it
+    /// from — which is what the priority column decides.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheAnimeIndexerIsScopedToAnimeAndOutranksTheGeneralOnes()
+    {
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(new CapturingLogger()).Load();
+        SourceDefinition nyaa = shipped.Single(one => one.Name == "Nyaa");
+
+        Assert.Equal([LibraryKinds.Anime], nyaa.Libraries);
+
+        SourceDefinition[] general =
+        [
+            .. shipped.Where(one => one.Role == SourceRole.Indexer && one.Libraries.Count == 0),
+        ];
+
+        Assert.NotEmpty(general);
+        Assert.All(
+            general,
+            one => Assert.True(
+                nyaa.Priority > one.Priority,
+                $"{one.Name} at {one.Priority} outranks the anime indexer at {nyaa.Priority}."));
+    }
+
 }

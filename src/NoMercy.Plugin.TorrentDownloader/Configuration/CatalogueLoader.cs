@@ -99,7 +99,10 @@ public sealed class CatalogueLoader(ILogger logger)
             entry.Priority,
             entry.MinimumIntervalSeconds,
             entry.Enabled,
-            entry.Note);
+            entry.Note)
+        {
+            Libraries = entry.Libraries ?? [],
+        };
     }
 
     private sealed class CatalogueFile
@@ -129,6 +132,9 @@ public sealed class CatalogueLoader(ILogger logger)
         public int Priority { get; init; }
 
         public int MinimumIntervalSeconds { get; init; } = 15;
+
+        /// <summary>Which libraries it is worth asking, or nothing for all of them.</summary>
+        public List<string>? Libraries { get; init; }
 
         /// <summary>On unless the file says otherwise, so a new entry works.</summary>
         public bool Enabled { get; init; } = true;

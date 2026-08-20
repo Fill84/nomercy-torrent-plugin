@@ -31,7 +31,7 @@ public class FindTests
         FakeFetch fetch = new();
         fetch.AnswersAnything(Capture.Fixture("limetorrents.html"));
 
-        await Finding(fetch).SearchAsync("Silo.S03E06.1080p.WEB.H264-CAKES", CancellationToken.None);
+        await Finding(fetch).SearchAsync("Silo.S03E06.1080p.WEB.H264-CAKES", LibraryKind.Television, CancellationToken.None);
 
         Assert.NotEmpty(fetch.Asked);
 
@@ -59,7 +59,7 @@ public class FindTests
         fetch.Answers(Address("TorrentFunk"), Capture.Fixture("torrentfunk.html"), TimeSpan.FromSeconds(3));
         fetch.Answers(Address("TorrentDownloads"), Capture.Fixture("torrentdownloads.html"), TimeSpan.FromSeconds(1));
 
-        Task run = Finding(fetch, clock).SearchAsync(Name, CancellationToken.None);
+        Task run = Finding(fetch, clock).SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
 
         await Task.WhenAny(fetch.AllInFlight, Task.Delay(TimeSpan.FromSeconds(10)));
 
@@ -225,7 +225,7 @@ public class FindTests
         fetch.Answers(Address("LimeTorrents"), Capture.Fixture("limetorrents.html"));
         fetch.Answers(Address("TorrentDownloads"), Capture.Fixture("torrentdownloads.html"));
 
-        IReadOnlyList<ReleaseCopy> copies = await Finding(fetch).SearchAsync(Name, CancellationToken.None);
+        IReadOnlyList<ReleaseCopy> copies = await Finding(fetch).SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
 
         // Both sites answered, and the ranking is the decider's own.
         Assert.Contains(copies, copy => copy.Source == "LimeTorrents");
@@ -263,7 +263,7 @@ public class FindTests
         ActivityJournal journal = new();
 
         IReadOnlyList<ReleaseCopy> copies = await Finding(fetch, journal: journal)
-            .SearchAsync(Name, CancellationToken.None);
+            .SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
 
         Assert.NotEmpty(copies);
         Assert.DoesNotContain(copies, copy => copy.Source == "TorrentFunk");
@@ -293,7 +293,7 @@ public class FindTests
         fetch.Fails(Address("TorrentFunk"), FetchOutcome.RateLimited, "429 Too Many Requests");
         fetch.Fails(Address("TorrentDownloads"), FetchOutcome.Refused, "403 Forbidden");
 
-        await Finding(fetch, ledger: ledger).SearchAsync(Name, CancellationToken.None);
+        await Finding(fetch, ledger: ledger).SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
 
         SourceAnswer answered = ledger.Answers.Single(one => one.Name == "LimeTorrents");
 
@@ -307,6 +307,47 @@ public class FindTests
         Assert.Equal(0, refused.Rows);
         Assert.Contains("429", refused.Refusal!, StringComparison.Ordinal);
     }
+
+    /// <remarks>
+    /// <para>
+    /// docs/05-sources.md scopes Nyaa to <em>indexer (anime)</em>, and nothing
+    /// in the catalogue could say so until now. A television search that asked
+    /// it spends a request per episode on a site carrying almost no television
+    /// at all — and every one of those requests is paced, so it is taken from
+    /// the sources that would have answered.
+    /// </para>
+    /// <para>
+    /// A source that names no library is for all of them. Saying nothing has to
+    /// mean everywhere, or adding the field would silently switch off every
+    /// source that had not been given one.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(LibraryKind.Television, false)]
+    [InlineData(LibraryKind.Anime, true)]
+    public async Task ASourceIsAskedOnlyAboutTheLibrariesItNames(LibraryKind kind, bool asked)
+    {
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("nyaa.xml"));
+
+        await Finding(fetch, sources: [.. Indexers, AnimeOnly]).SearchAsync(Name, kind, CancellationToken.None);
+
+        Assert.Equal(
+            asked,
+            fetch.Asked.Any(address => address.Host.Contains("nyaa", StringComparison.OrdinalIgnoreCase)));
+
+        // The general indexers are asked either way: they name no library, so
+        // they are for all of them.
+        Assert.Contains(fetch.Asked, address => address.Host.Contains("limetorrents", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>An indexer scoped to anime, as the shipped catalogue scopes Nyaa.</summary>
+    private static readonly SourceDefinition AnimeOnly =
+        new("Nyaa", "torrent-rss", "https://nyaa.si/?page=rss&q={query}")
+        {
+            Priority = 45,
+            Libraries = [LibraryKinds.Anime],
+        };
 
     private const string Name = "Silo.S03E06.1080p.WEB.H264-CAKES";
 
@@ -340,12 +381,13 @@ public class FindTests
         FakeFetch fetch,
         TimeProvider? clock = null,
         ActivityJournal? journal = null,
-        ISourceLedger? ledger = null)
+        ISourceLedger? ledger = null,
+        IReadOnlyList<SourceDefinition>? sources = null)
     {
         _ = clock;
 
         return new(
-            SourceCatalogue.Build(Indexers, [], []),
+            SourceCatalogue.Build(sources ?? Indexers, [], []),
             fetch,
             Readers.Shipped(),
             journal ?? new ActivityJournal(),

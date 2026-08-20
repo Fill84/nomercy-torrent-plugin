@@ -926,11 +926,16 @@ own reason. Deleting the guard breaks no test. The next capture run should look 
 
 ## S7-02 · Dual-form search
 
-1. Test: an episode from an `anime` library is searched under `S02E13` **and** `- 137`, pooled and
-   judged together.
-2. Test: Nyaa is ranked first for an anime show and not asked for a television one.
-3. Test: an absolute-numbered release maps to the right (season, episode).
-4. Implement.
+1. **Done in `S3-03`.** The pool is asked under the seasonal key and the absolute key, and the name
+   databases are asked under the bare title as well — an absolute-numbered release carries no season
+   tag at all, so `Show S01` finds none of them.
+2. **Done here.** A source may name the libraries it is worth asking about; one that names none is
+   asked about all of them, so the field switches nothing off by omission. Nyaa names `anime`, and a
+   television search does not ask it. "Ranked first" is the priority column: it is 50, above every
+   general indexer, and `docs/05-sources.md` now says why.
+3. **Done in `S4-01`.** `ReleaseFilter` matches an absolute-numbered release against the episode's
+   own absolute, a batch range included.
+4. Nothing else to implement.
 
 ## S7-03 · Anime end to end
 

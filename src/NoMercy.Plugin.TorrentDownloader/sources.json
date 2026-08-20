@@ -145,7 +145,8 @@
       "name": "Nyaa",
       "kind": "torrent-rss",
       "url": "https://nyaa.si/?page=rss&q={query}",
-      "priority": 30,
+      "libraries": [ "anime" ],
+      "priority": 50,
       "minimumIntervalSeconds": 15,
       "note": "An indexer in XML; every item links a real torrent. For anime it is often the only source that has the release, and it is asked with both the seasonal and the absolute form."
     },

@@ -49,4 +49,24 @@ public static class LibraryKinds
         kind = default;
         return false;
     }
+
+    /// <summary>
+    /// What this kind is called where a person writes it down.
+    /// </summary>
+    /// <remarks>
+    /// The other direction, for the catalogue: <c>sources.json</c> is written
+    /// by hand and scopes a source with the same words the server types its
+    /// libraries with, so both directions have to agree on them. Null for a
+    /// kind with no name rather than a guess — a source scoped to a library
+    /// nothing is should match nothing.
+    /// </remarks>
+    public static string? Of(LibraryKind kind)
+    {
+        return kind switch
+        {
+            LibraryKind.Television => Television,
+            LibraryKind.Anime => Anime,
+            _ => null,
+        };
+    }
 }

@@ -36,7 +36,7 @@ and the presence of `searchUrl`, and nothing else guesses.
 | Torrentz2 | `site` | `torrentz2` | words | no | 25 | 15s | indexer |
 | TorrentDownloads | `site` | `torrentdownloads` | words | no | 25 | 15s | indexer |
 | TorrentFunk | `site` | `torrentfunk` | **slug** | no | 25 | 15s | indexer |
-| Nyaa | `torrent-rss` | — | words | no | 30 | 15s | indexer (anime) |
+| Nyaa | `torrent-rss` | — | words | no | **50** | 15s | indexer, **anime libraries only** |
 | YTS | `yts` | — | words | no | 20 | 15s | films — **off** |
 
 ```
@@ -147,6 +147,17 @@ Rate-limits hard under a burst.
 
 **Nyaa** — an indexer in XML; every item links a real torrent. For anime it is often the only source
 that has the release, and it is asked with both the seasonal and the absolute form.
+
+It is the one source with a **library scope**: `"libraries": [ "anime" ]` in `sources.json`. A source
+that names no library is asked about all of them, so the field switches nothing off by omission. A
+television search does not ask Nyaa at all — a paced request per episode spent on a site carrying
+almost no television is a request taken from the sources that would have answered.
+
+Its priority is **above every general indexer**, which is what "ranked first for an anime show"
+means: for anime it is often the only site with the release, so when two sites serve the same copy to
+the same number of peers it is the one to take it from. That is why it is 50 and The Pirate Bay, the
+highest of the general ones, is 45. For television the number never comes up, because it is not
+asked.
 
 **srrDB / srrDB search** — name databases. `api.srrdb.com/v1/search/{query}` answers JSON with
 `resultsCount` and `results[].release`. A show with no scene releases honestly answers zero; that is
