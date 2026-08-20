@@ -206,11 +206,7 @@ public class TransfersTests : IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
-        if (Directory.Exists(_root))
-        {
-            Directory.Delete(_root, recursive: true);
-        }
+        TemporaryFolder.Forget(_root);
     }
 }

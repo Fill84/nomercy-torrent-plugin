@@ -342,6 +342,26 @@ public class ReleaseNameTests
     }
 
     /// <remarks>
+    /// <para>
+    /// The other word a batch is written with. A tilde range says what it
+    /// covers and this does not — it is one name for a whole programme — but it
+    /// is a pack all the same, and a client that read it as one episode would
+    /// take a saga and file it as episode nothing.
+    /// </para>
+    /// <para>
+    /// Both rows are really on the captured page, which is the point: nobody
+    /// writes a fansub batch the way a document would.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("[ColdFusion] Pokemon (English Dub) Complete Ash Ketchum Saga & Bonus")]
+    [InlineData("[javieracdc] Pokemon Complete Music Collection (Gen 1-9) [FLAC]")]
+    public void TheWordCompleteMakesAPackJustAsBatchDoes(string name)
+    {
+        Assert.True(ReleaseName.Parse(Real("nyaa-diacritic.xml", "torrent-rss", name)).IsPack);
+    }
+
+    /// <remarks>
     /// <strong>H3.</strong> A diacritic is a letter. 0.3.4 tokenised it into
     /// fragments and the show it belonged to was never matched again.
     /// </remarks>

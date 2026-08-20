@@ -307,11 +307,7 @@ public class DownloadsControllerTests : IDisposable
     public void Dispose()
     {
         GC.SuppressFinalize(this);
-        Microsoft.Data.Sqlite.SqliteConnection.ClearAllPools();
 
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
+        TemporaryFolder.Forget(_folder);
     }
 }

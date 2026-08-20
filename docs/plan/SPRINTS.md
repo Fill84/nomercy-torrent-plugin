@@ -905,11 +905,24 @@ in the queue.
 
 ## S7-01 · Anime naming
 
-1. Fixtures: real Nyaa pages and fansub release names.
-2. Tests for the anime grammar rows, including `v2` superseding `v1`, a title containing a dash, and
-   `[Group]` extraction.
-3. Test: a batch (`01~12`, `Complete`) is recognised as a pack.
-4. Implement.
+**Most of this was done in `S3-01` and the plan never noticed.** That slice parsed every name on
+every captured page, and when the field table's anime cases turned out to be on none of the old
+captures it took five more — absolute numbering, `v2`, a batch, a diacritic and a show called
+*Greek*. So the grammar, the fixtures and their tests already existed by Sprint 3. What was left is
+below.
+
+1. **Done in `S3-01`.** Five Nyaa captures with real fansub names.
+2. **Done in `S3-01`.** `v2` superseding `v1`, `[Group]` from the leading bracket, a title with a
+   dash in it (*Mairimashita! Iruma-kun*), `EP1173` with no separator, and absolute numbering.
+3. **Done here.** `01 ~ 12` was tested; the other word a batch is written with, `Complete`, was
+   implemented and had no test at all. It has one now, over the two rows that really carry it.
+4. Nothing to implement: the parser already read all of it.
+
+**One rule has no capture to test it against**, and it is written down rather than faked: the pack
+word only counts when nothing says which single episode it is, or a programme called *The Complete
+History of Anything* would be a pack of a season it never mentions. No captured row anywhere carries
+a single episode **and** a pack word — every one that has both has a range, which is a pack for its
+own reason. Deleting the guard breaks no test. The next capture run should look for such a row.
 
 ## S7-02 · Dual-form search
 

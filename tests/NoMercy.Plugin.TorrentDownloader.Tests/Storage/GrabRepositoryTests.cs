@@ -1,7 +1,7 @@
-using Microsoft.Data.Sqlite;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
+using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Storage;
@@ -188,12 +188,8 @@ public class GrabRepositoryTests : IDisposable
     {
         // The pool holds the file open, so it cannot be deleted until every
         // connection this test made is really gone.
-        SqliteConnection.ClearAllPools();
 
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
+        TemporaryFolder.Forget(_folder);
 
         GC.SuppressFinalize(this);
     }

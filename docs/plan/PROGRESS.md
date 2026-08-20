@@ -4,9 +4,10 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Slice `S8-04` is done.** **Next: `S8-05` Release 0.4.0**, which needs the owner — a deploy with
-the server stopped, and one real cycle watched end to end. `S7-01` anime naming is the only other
-outstanding work and was deferred on 18 August.
+**Slice `S7-01` is done.** **Next: `S7-02` Dual-form search**, then `S7-03`, and then `S8-05`.
+
+`S8-05` Release 0.4.0 is the only thing that needs the owner: a deploy with the server stopped, and
+one real cycle watched end to end. Everything before it is finished.
 
 The crash recorded here yesterday was not a crash. It was a **deadlock**, and it is fixed. See
 **Decisions**: the plugin waited on itself on the first cadence tick after every restart, silently,
@@ -96,7 +97,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S6-04` Downloads page and history
 
 ### Sprint 7 — Anime
-- [ ] `S7-01` Anime naming
+- [x] `S7-01` Anime naming
 - [ ] `S7-02` Dual-form search
 - [ ] `S7-03` Anime end to end
 
@@ -439,6 +440,22 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   writing a broken reader's nought down would set the bar at nought and the rule would never fire for
   that source again. Found by a mutation surviving, because the first test used a source with no row
   count at all and never exercised the rule.
+- `S7-01` **Most of this slice had already been done by `S3-01`**, which parsed every name on every
+  captured page and took five more captures when the anime cases turned out to be on none of the old
+  ones. What was actually missing was one word: `Complete` was implemented as a pack marker and had
+  no test, so deleting it broke nothing. It has one now, over the two rows on the Nyaa capture that
+  really carry it. One rule still has no capture to test it against and is written down rather than
+  faked — the pack word only counts when nothing says which single episode it is, and no captured
+  row anywhere has both a single episode and a pack word.
+- `S7-01` **Two flakes of my own making, found by running the suite four times rather than once.**
+  `SqliteConnection.ClearAllPools()` is process-wide and I had spread it across four more test
+  classes in `S8-02` and `S8-04`; xunit runs classes in parallel, so one class clearing the pools
+  disposed a connection another was reading from, and it surfaced as
+  `ObjectDisposedException: SQLitePCL.sqlite3` in a storage test that had nothing to do with it.
+  Nothing clears pools now: a temporary folder that will not delete is left alone, which is what a
+  temporary folder is for. And a hardening test asserted its failure was the **only** one in the
+  journal, so it failed whenever another test held the listen port — asserted by name now, not by
+  count. **A suite is judged over several runs, not one.**
 - `S8-04` (part) The deploy script shipped **no `sources.json`**. It is built beside the assembly on
   purpose — **C1**, the catalogue is read from the assembly's own folder — and the deploy list did
   not have it, so every deploy left the plugin reading yesterday's sources or, on a fresh install,

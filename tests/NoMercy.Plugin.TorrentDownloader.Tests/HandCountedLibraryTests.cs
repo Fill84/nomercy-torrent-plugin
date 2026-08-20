@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
@@ -117,11 +116,7 @@ public class HandCountedLibraryTests : IDisposable
 
     public void Dispose()
     {
-        SqliteConnection.ClearAllPools();
 
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
+        TemporaryFolder.Forget(_folder);
     }
 }

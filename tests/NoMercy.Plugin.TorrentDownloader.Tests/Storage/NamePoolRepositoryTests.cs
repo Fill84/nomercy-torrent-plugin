@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Storage;
+using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Storage;
@@ -30,12 +31,8 @@ public class NamePoolRepositoryTests : IAsyncLifetime
 
     public Task DisposeAsync()
     {
-        SqliteConnection.ClearAllPools();
 
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
+        TemporaryFolder.Forget(_folder);
 
         return Task.CompletedTask;
     }
