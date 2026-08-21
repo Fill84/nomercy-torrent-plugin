@@ -43,21 +43,24 @@ if (-not (Test-Path $out)) { throw "nothing built at $out - run with -Build" }
 # afterwards. A loaded plugin's assembly is held open, so the copy fails, the
 # old build stays, and the hash check at the end is left to explain it one file
 # at a time. Refusing up front says the one thing the owner has to do.
-$running = ssh -o BatchMode=yes $Server 'tasklist 2>/dev/null | grep -i "NoMercy" || pgrep -fl "NoMercy" 2>/dev/null || true'
+# The media server by name, not every process with NoMercy in it. The launcher
+# runs alongside it and holds nothing: it starts the server when asked and does
+# not bring it back on its own - watched staying up for half an hour with the
+# server stopped. Refusing while it ran meant asking the owner to stop something
+# that was never in the way.
+$running = ssh -o BatchMode=yes $Server 'tasklist 2>/dev/null | grep -i "NoMercyMediaServer" || pgrep -fl "NoMercyMediaServer" 2>/dev/null || true'
 if ($LASTEXITCODE -ne 0) { throw "cannot reach $Server over ssh" }
 
-if ($running -and ($running -join '') -match 'NoMercy') {
+if ($running -and ($running -join '') -match 'NoMercyMediaServer') {
     throw @"
 The server on $Server is still running, so this would copy nothing and say it worked.
 
   $($running -join "`n  ")
 
-Stop NoMercyLauncher as well if it is listed. The launcher starts the media
-server a few seconds after itself, so stopping the server on its own leaves
-the launcher to bring it straight back - which looks exactly like a stop that
-did not take.
+A loaded plugin's assembly is held open by the server, so every copy would
+fail and the old build would stay exactly where it is.
 
-Stop them, run this again, and start the launcher afterwards.
+Stop it, run this again, and start it afterwards. The launcher can stay up.
 "@
 }
 
