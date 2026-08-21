@@ -59,11 +59,20 @@ public sealed class ClientLimits
     /// Trackers attached to every grab, on top of the ones a source supplied.
     /// </summary>
     /// <remarks>
-    /// Empty, and it stays empty until somebody chooses. docs/04-domain.md says
-    /// "a shipped list" and no document anywhere says which trackers are in it;
-    /// picking some would have this plugin announcing what the owner is
-    /// downloading to hosts the owner never agreed to. That is the owner's
-    /// decision, not this file's.
+    /// <para>
+    /// Empty to begin with and never typed in: the owner decided on
+    /// 20 August 2026 that it is <em>learned</em>. Every tracker this plugin
+    /// comes across — on a magnet, on a listing, on a torrent it is holding —
+    /// is kept here without duplicates and travels with every grab afterwards.
+    /// More trackers is a faster download, and the swarm one release was posted
+    /// to is usually the swarm the next one is in.
+    /// </para>
+    /// <para>
+    /// What may be kept is <see cref="TrackerBook"/>'s rule, and the one thing
+    /// it never keeps is an address carrying a passkey: this list goes out with
+    /// every grab, so the owner's own private tracker must never find its way
+    /// into it.
+    /// </para>
     /// </remarks>
     public List<string> DefaultTrackers { get; set; } = [];
 }

@@ -4,12 +4,13 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Everything that can be built without the server is built.** `S8-05`'s first two steps are done —
-the README, and the version in all three places that carry it — and its remaining three are the
-owner's: stop the server, deploy, start it, watch one real cycle, and tag when they ask.
+**`v0.4.0` is tagged and everything that can be built without the server is built.** The tag names
+the commit the owner asked for it on, and it has never run on a server — steps 3 and 4 of `S8-05`,
+the deploy and one real cycle watched end to end, are still to come. If they would rather the tag
+named the commit that passed those, say so and it moves.
 
-**Nothing is left to write.** What waits in **Blocked** is five things to watch, not to build, and
-they are all one deploy away.
+**Nothing is left to write.** What waits is five things to *watch*, all one deploy away: stop the
+server, `scripts/deploy-to-server.ps1 -Build`, start it again.
 
 `S8-05` Release 0.4.0 is the only thing that needs the owner: a deploy with the server stopped, and
 one real cycle watched end to end. Everything before it is finished.
@@ -41,10 +42,8 @@ Two things wait on the owner without blocking anything:
   ~25 shows and ~42 missing episodes recorded under **Facts**.
 
 
-- **Which trackers ship in `DefaultTrackers`.** The specs said "a shipped list" and never said which.
-  It ships empty; a grab attaches only the trackers its source supplied. `S5-04` and `S6-01` are the
-  slices that want it filled, so there is time. It is the owner's call because it decides which hosts
-  learn what this server is downloading.
+**Both of the owner's outstanding decisions are made.** Trackers are learned (see **Decisions**), and
+`v0.4.0` is tagged.
 
 ## Slices
 
@@ -449,6 +448,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   writing a broken reader's nought down would set the bar at nought and the rule would never fire for
   that source again. Found by a mutation surviving, because the first test used a source with no row
   count at all and never exercised the rule.
+- `S8-05` **Trackers are learned and `v0.4.0` is tagged.** The default list is no longer something
+  nobody chose: every tracker the plugin comes across is kept, deduplicated, and attached to every
+  grab. The one address it will never keep is one carrying a passkey — this list goes out with every
+  grab, so the owner's own private tracker must never enter it, and the rule refuses the *shape* of a
+  secret rather than looking for the word, which is what makes it hold for a key nobody has thought
+  of yet.
 - `S8-05` (part) **The compiled assembly said 1.0.0 for the whole of 0.4.0's development.** The
   manifest and `PluginIdentity` both said 0.4.0 and a test held those two together; the third copy
   was left to the compiler and nothing looked at it. It matters at exactly one moment, and it is the
@@ -625,11 +630,22 @@ and note it here.
   the way in and on the way to a query, so matching is exact; a mutation removing the collation
   survived every test, because nothing this code writes could ever need it. The normalisation is the
   rule, it is tested, and the collation is gone.
-- **`DefaultTrackers` ships empty, and that is the owner's decision** (18 August 2026). Only the
-  trackers a source's own magnet supplied travel with a grab, so nothing announces what is being
-  downloaded to a host the owner never agreed to. It costs speed on a public torrent with few
-  trackers, and that is the trade the owner chose. The setting is still there for anyone who wants to
-  fill it in.
+- **`DefaultTrackers` is learned, not chosen** (owner, 20 August 2026 — this replaces the decision of
+  18 August, which was to ship it empty and attach only what a source's own magnet supplied). Every
+  tracker the plugin comes across is kept without duplicates and travels with every grab: more
+  trackers is a faster download, and the swarm one release was posted to is usually the swarm the
+  next one is in.
+  **A passkey is never kept.** A private tracker's announce address carries the owner's own key, and
+  this list goes out with every grab — so learning one would hand their credentials to every public
+  swarm they download from and print them on the Settings page. Anything with a query string or user
+  information is refused, because that is where a key lives and no public tracker needs either, and
+  so is anything on a host they configured as a private tracker.
+  **Nothing is learned yet in practice, and that is a fact about the captures rather than the code.**
+  No shipped listing publishes a magnet — all nine captured carry the row's own page instead — so
+  trackers appear only once a chosen copy has been followed to its page. The one captured detail page
+  that does publish a magnet with trackers belongs to a source whose rows this profile refuses, so no
+  test drives the collection end to end; `TrackerBook` carries all the judgement and is tested twelve
+  ways. The next capture run should take a detail page for a source the profile accepts.
 - **A port that cannot be mapped must tell the owner to forward it by hand** (owner, 18 August 2026):
   try UPnP, then NAT-PMP, and when both fail say plainly that TCP and UDP 51413 need forwarding to
   this machine. `PortMapping` already tries both and keeps every refusal; what is missing is

@@ -56,6 +56,26 @@ Horizons: The Series* and *Pokemon (2023)* — so insisting on the accent refuse
 the show that was asked for. A letter is anything a language calls one, so a title written in
 Japanese survives being normalised.
 
+
+### Trackers are learned, not chosen
+
+The owner's decision, 20 August 2026. `DefaultTrackers` starts empty and nobody types into it: every
+tracker the plugin comes across is kept — on a magnet, on a listing, on a torrent it is holding —
+with no duplicates, and the whole list travels with every grab afterwards. More trackers is a faster
+download, and the swarm one release was posted to is usually the swarm the next one is in.
+
+Kept in the order they were first met, so the settings file does not churn, and only what could
+actually be announced to: HTTP, HTTPS or UDP, by BEP 3 and BEP 15. A magnet's tracker field carries
+whatever was written into it.
+
+**One thing is never kept, and it is not a preference.** A private tracker's announce address carries
+the owner's own passkey. This list goes out with every grab, so learning one would hand their
+credentials to every public swarm they download from — and print them on the Settings page. Anything
+with a query string or with user information before the host is refused, because that is where a
+passkey lives and no public tracker needs either. So is anything on a host the owner configured as a
+private tracker, whatever the address looks like: their tracker belongs to the torrents it issued and
+to nothing else.
+
 ## The profile: where each rule applies
 
 | Rule | On the **name** | On the **copy** |
@@ -121,7 +141,7 @@ settled by a pack earlier in the same cycle is not asked about again.
 | `SeasonPackThreshold` | 3 | gaps needed before a pack is worth its bytes |
 | `MaxSearchAttempts` | 3 | before an episode goes `Unavailable` |
 | `MaxConcurrentDownloads` | 5 | |
-| `DefaultTrackers` | **empty — none chosen** | attached to every grab |
+| `DefaultTrackers` | **empty, then learned** | every tracker the plugin comes across, no duplicates, attached to every grab |
 | `Indexers` | empty | the owner's own — see `docs/05-sources.md` |
 | `PrivateTrackers` | empty | the owner's own |
 | `DisabledDefaultSources` | empty | shipped sources the owner switched off |

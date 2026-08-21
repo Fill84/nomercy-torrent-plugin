@@ -77,7 +77,20 @@ public sealed record CycleOptions(
 /// <summary>Everything one cycle decided.</summary>
 /// <param name="Outcomes">One per episode looked at, in the order they were looked at.</param>
 /// <param name="Skipped">Every release refused, with its reason, for the Skipped page.</param>
-public sealed record CycleReport(IReadOnlyList<EpisodeOutcome> Outcomes, IReadOnlyList<SkippedRelease> Skipped);
+public sealed record CycleReport(IReadOnlyList<EpisodeOutcome> Outcomes, IReadOnlyList<SkippedRelease> Skipped)
+{
+    /// <summary>
+    /// Every tracker this cycle came across, on any copy of anything.
+    /// </summary>
+    /// <remarks>
+    /// From every copy and not only the ones taken: the owner's decision of
+    /// 20 August 2026 is that the default list is everything the plugin meets,
+    /// and a tracker on a release that was refused is serving the same swarm as
+    /// the one that was taken. What is safe to keep is
+    /// <see cref="TrackerBook"/>'s business, not this record's.
+    /// </remarks>
+    public IReadOnlyList<string> Trackers { get; init; } = [];
+}
 
 /// <summary>
 /// The whole chain for one pass: names, search, decision, grab.
@@ -122,6 +135,10 @@ public sealed class SearchCycle(
 
         List<EpisodeOutcome> outcomes = [];
 
+        // Every tracker anything published this cycle. Kept in the order they
+        // were met so the owner's settings do not churn.
+        List<string> trackers = [];
+
         // One episode at a time, because the decisions of each are part of the
         // state of the next: a pack taken for season three settles the rest of
         // season three, and running them together would have two of them grab
@@ -135,10 +152,11 @@ public sealed class SearchCycle(
                 byEpisode.GetValueOrDefault(episode.Key, []),
                 decisions,
                 options,
+                trackers,
                 ct));
         }
 
-        return new(outcomes, decisions.Skipped);
+        return new(outcomes, decisions.Skipped) { Trackers = trackers };
     }
 
     private async Task<EpisodeOutcome> LookAsync(
@@ -146,6 +164,7 @@ public sealed class SearchCycle(
         IReadOnlyList<string> candidates,
         Decisions decisions,
         CycleOptions options,
+        List<string> trackers,
         CancellationToken ct)
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
@@ -191,6 +210,10 @@ public sealed class SearchCycle(
 
                 IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(title, episode.Kind, ct);
 
+                // Every copy, taken or not: a tracker on a release the profile
+                // refused is serving the same swarm as the one it accepted.
+                trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
+
                 Decision decision = decisions.Choose(episode, name, copies);
 
                 if (decision.Chosen is null)
@@ -199,6 +222,12 @@ public sealed class SearchCycle(
                 }
 
                 ReleaseCopy chosen = await find.FollowAsync(decision.Chosen, ct);
+
+                // And the copy that was followed. No shipped listing publishes
+                // a magnet — every one of the nine captured carries the row's
+                // own page instead — so a torrent's trackers are not known
+                // until its page has been read.
+                trackers.AddRange(chosen.Trackers);
 
                 journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}");
 

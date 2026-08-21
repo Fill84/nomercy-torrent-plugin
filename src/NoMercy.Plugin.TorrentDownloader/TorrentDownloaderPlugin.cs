@@ -357,6 +357,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // the client has been handed something, and the pages that say what
         // happened read the store rather than anything held in memory.
         await CycleRecord.WriteAsync(_lastCycle, tracked, grabs, DateTimeOffset.UtcNow, ct);
+
+        await KeepTrackersAsync(settings, _lastCycle.Trackers, ct);
     }
 
     /// <summary>
@@ -641,6 +643,54 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     {
         return (await engine.StatusAsync(ct))
             .Any(one => string.Equals(one.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Keeps every tracker the cycle came across, for every grab after it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The owner's decision, 20 August 2026: the default list is everything
+    /// this plugin meets rather than something anybody types in. More trackers
+    /// is a faster download, and the swarm one release was posted to is usually
+    /// the swarm the next one is in.
+    /// </para>
+    /// <para>
+    /// Saved only when it really grew. The settings go through the host's own
+    /// store and a save that wrote the same list back every cycle would be a
+    /// write every six hours saying nothing.
+    /// </para>
+    /// </remarks>
+    public async Task KeepTrackersAsync(Settings settings, IReadOnlyList<string> seen, CancellationToken ct)
+    {
+        if (seen.Count == 0)
+        {
+            return;
+        }
+
+        IReadOnlyList<string> kept = TrackerBook.Learn(
+            settings.Client.DefaultTrackers,
+            seen,
+
+            // Never the owner's own. A private tracker's announce address
+            // carries their passkey, and this list travels with every grab.
+            [.. settings.PrivateTrackers.Select(one => one.Host)]);
+
+        if (kept.Count == settings.Client.DefaultTrackers.Count)
+        {
+            return;
+        }
+
+        settings.Client.DefaultTrackers = [.. kept];
+
+        SaveResult saved = await Settings.SaveAsync(settings, ct);
+
+        if (!saved.Saved)
+        {
+            _context?.Logger.LogWarning(
+                "The trackers this cycle found could not be kept: {Reasons}",
+                string.Join(" ", saved.Errors));
+        }
     }
 
     /// <summary>What the last cycle decided about each episode it looked at.</summary>
