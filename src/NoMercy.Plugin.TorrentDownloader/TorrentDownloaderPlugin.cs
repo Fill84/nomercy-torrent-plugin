@@ -254,8 +254,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 await TransfersAsync(work.Token);
                 break;
 
-            // Maintenance is S8-04's: a library refresh on a cadence, which
-            // nothing yet drives.
+            case JobNames.Maintenance:
+                await RefreshAsync(work.Token);
+                break;
+
             default:
                 break;
         }
@@ -313,6 +315,17 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private async Task SearchAsync(CancellationToken ct, EpisodeKey? only = null)
     {
+        // The library first, and before the chain: what the plugin should be
+        // looking for is derived from the library every time and never
+        // remembered as a fact. A cycle that read the store alone would decide
+        // about whatever was true when somebody last refreshed it — and on a
+        // fresh install, about nothing at all.
+        //
+        // Ahead of the chain because reading a library needs none of it, and a
+        // plugin that cannot build a chain should still have pages that say
+        // what is missing.
+        await RefreshAsync(ct);
+
         if (await ChainAsync(ct) is not (Chain chain, Settings settings))
         {
             return;
@@ -691,6 +704,44 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 "The trackers this cycle found could not be kept: {Reasons}",
                 string.Join(" ", saved.Errors));
         }
+    }
+
+    /// <summary>
+    /// Reads the library and writes down every episode that should have a file
+    /// and has not.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The whole rule is in <see cref="MissingRefresh"/>: every show in every
+    /// television and anime library, every episode without a file, missing once
+    /// it has aired. It derives and returns; the repository is what compares
+    /// that against what is stored and keeps the plugin's own bookkeeping —
+    /// attempts, last search — for the rows that survive.
+    /// </para>
+    /// <para>
+    /// Both halves existed and neither had a caller. The maintenance cadence
+    /// was a <c>default: break;</c>, so on a real server every page said every
+    /// episode of every show was on disk over a library with nearly two
+    /// thousand that were not.
+    /// </para>
+    /// </remarks>
+    private async Task RefreshAsync(CancellationToken ct)
+    {
+        if (await ConfiguredAsync(ct) is not Settings settings)
+        {
+            return;
+        }
+
+        await RefreshAsync(settings, ct);
+    }
+
+    private async Task RefreshAsync(Settings settings, CancellationToken ct)
+    {
+        MissingRefresh refresh = new(new HostLibrary(Context.Library), TimeProvider.System);
+
+        IReadOnlyList<TrackedEpisode> derived = await refresh.DeriveAsync(settings.Profile, ct);
+
+        await (await EpisodesAsync(ct)).ReplaceAsync(derived, ct);
     }
 
     /// <summary>What the last cycle decided about each episode it looked at.</summary>

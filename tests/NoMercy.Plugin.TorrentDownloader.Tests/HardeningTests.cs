@@ -236,7 +236,16 @@ public class HardeningTests : IDisposable
     {
         TorrentDownloaderPlugin plugin = new();
 
-        plugin.Initialize(new FakePluginContext { DataFolderPath = _folder, Permits = grants });
+        // A library, because every cycle now reads one before it decides
+        // anything. An empty one is enough: what these tests are about is what
+        // happens after that, and a context with none fails first with a
+        // complaint about the fake rather than the fault under test.
+        plugin.Initialize(new FakePluginContext
+        {
+            DataFolderPath = _folder,
+            Permits = grants,
+            Shelves = new(),
+        });
 
         return plugin;
     }

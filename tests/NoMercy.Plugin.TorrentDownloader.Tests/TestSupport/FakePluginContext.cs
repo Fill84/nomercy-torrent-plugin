@@ -50,7 +50,10 @@ public sealed class FakePluginContext : IPluginContext
     public IEventBus EventBus => throw NotProvided(nameof(EventBus));
     public IServiceProvider Services => throw NotProvided(nameof(Services));
     public HttpClient HttpClient => throw NotProvided(nameof(HttpClient));
-    public IPluginLibraryQuery Library => throw NotProvided(nameof(Library));
+    /// <summary>The server's library, when a test provides one.</summary>
+    public FakeLibraryQuery? Shelves { get; init; }
+
+    public IPluginLibraryQuery Library => Shelves ?? throw NotProvided(nameof(Library));
     public IPluginLibraryWriter? LibraryWriter => null;
     /// <summary>
     /// What the server has agreed to, when a test provides it.
