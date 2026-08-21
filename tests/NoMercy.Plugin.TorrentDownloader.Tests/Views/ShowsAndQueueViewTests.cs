@@ -172,14 +172,14 @@ public class ShowsAndQueueViewTests : IDisposable
 
     private static IReadOnlyList<string> RowsOf(PluginView page, string tableId)
     {
-        // The first cell of every body row, which is the episode's name. The
-        // header row is the one whose id ends "-head".
+        // The episode cell of every row. A row's cells are its props, read
+        // under the column's key, which is how the client reads a table.
         return
         [
             .. Rendered.All(page)
-                .Where(component => component.Id.StartsWith($"{tableId}-", StringComparison.Ordinal)
-                                    && component.Id.EndsWith("-episode-value", StringComparison.Ordinal))
-                .Select(component => component.Props.GetValueOrDefault("text")?.ToString() ?? string.Empty),
+                .Where(component => component.Id.StartsWith($"{tableId}-", StringComparison.Ordinal))
+                .Select(component => component.Props.GetValueOrDefault("episode")?.ToString())
+                .OfType<string>(),
         ];
     }
 

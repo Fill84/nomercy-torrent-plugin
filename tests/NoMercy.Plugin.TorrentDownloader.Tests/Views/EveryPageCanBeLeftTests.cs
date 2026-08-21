@@ -70,7 +70,7 @@ public class EveryPageCanBeLeftTests
         {
             PluginComponent link = Rendered.ById(page, $"nav-{route.Name}");
 
-            Assert.Equal(route.Label, link.Props.GetValueOrDefault("ariaLabel"));
+            Assert.Equal(route.Label, link.Props.GetValueOrDefault("label"));
         }
     }
 

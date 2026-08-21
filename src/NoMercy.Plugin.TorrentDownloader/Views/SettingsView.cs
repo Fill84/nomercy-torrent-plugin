@@ -51,7 +51,7 @@ public static class SettingsView
             Components =
             [
                 .. problems.Select((string problem, int index) =>
-                    PluginViews.Text($"problem-{index}", problem, "caption")),
+                    Ui.Text($"problem-{index}", problem, "caption")),
                 .. Port(settings, mapping),
                 Folders(settings),
                 CadenceSection(settings.Cadences),
@@ -88,7 +88,7 @@ public static class SettingsView
             yield break;
         }
 
-        yield return PluginViews.Text(
+        yield return Ui.Text(
             "port-mapping",
             $"The router would not open port {settings.Client.ListenPort}. "
             + $"Forward TCP and UDP {settings.Client.ListenPort} to this machine by hand, "
@@ -97,7 +97,7 @@ public static class SettingsView
 
         if (mapping.Reason is string refused)
         {
-            yield return PluginViews.Text("port-mapping-reason", refused, "caption");
+            yield return Ui.Text("port-mapping-reason", refused, "caption");
         }
     }
 
@@ -331,7 +331,7 @@ public static class SettingsView
     /// </remarks>
     private static PluginComponent Section(string id, params PluginFormField[] fields)
     {
-        return Forms.Section(
+        return Ui.Form(
             id,
             "Save",
             PluginActionIntent.CallPlugin(SaveAction, null, PluginActionTransport.Rest),
@@ -340,7 +340,7 @@ public static class SettingsView
 
     private static PluginComponent Indexers(Settings settings, HashSet<string> present)
     {
-        return PluginViews.Detail(
+        return Ui.Detail(
             "indexers",
             "Own indexers",
             settings.Indexers.Count == 0 ? "None added." : null,
@@ -348,7 +348,7 @@ public static class SettingsView
             [
                 .. settings.Indexers.SelectMany(indexer => (PluginComponent[])
                 [
-                    PluginViews.Text($"indexer-{indexer.Id}", $"{indexer.Name} — {indexer.Address}"),
+                    Ui.Text($"indexer-{indexer.Id}", $"{indexer.Name} — {indexer.Address}"),
                     Secret($"indexer-{indexer.Id}-key", "API key", present.Contains(SettingsStore.IndexerApiKey(indexer.Id))),
                 ]),
             ]);
@@ -356,7 +356,7 @@ public static class SettingsView
 
     private static PluginComponent Trackers(Settings settings, HashSet<string> present)
     {
-        return PluginViews.Detail(
+        return Ui.Detail(
             "trackers",
             "Private trackers",
             settings.PrivateTrackers.Count == 0 ? "None added." : null,
@@ -367,7 +367,7 @@ public static class SettingsView
                     // The template, which carries {passkey} where the secret
                     // goes, so the address is showable and the secret is not in
                     // it to show.
-                    PluginViews.Text($"tracker-{tracker.Id}", $"{tracker.Host} — {Or(tracker.AnnounceTemplate, "no announce URL")}"),
+                    Ui.Text($"tracker-{tracker.Id}", $"{tracker.Host} — {Or(tracker.AnnounceTemplate, "no announce URL")}"),
                     Secret($"tracker-{tracker.Id}-passkey", "Passkey", present.Contains(SettingsStore.TrackerPasskey(tracker.Id))),
                 ]),
             ]);
@@ -382,19 +382,19 @@ public static class SettingsView
     /// </remarks>
     private static PluginComponent Running(Settings settings)
     {
-        return PluginViews.Detail(
+        return Ui.Detail(
             "run",
             "Run",
             settings.DryRun
                 ? "Dry run is on: a cycle decides for every episode and hands nothing to the torrent client."
                 : "A cycle looks for every missing episode and downloads what it settles on.",
             null,
-            PluginViews.Button(
+            Ui.Button(
                 "run-run",
                 "Run now",
                 PluginActionIntent.CallPlugin(RunAction, null, PluginActionTransport.Rest),
                 variant: "primary"),
-            PluginViews.Button(
+            Ui.Button(
                 "run-stop",
                 "Stop",
                 PluginActionIntent.CallPlugin(StopAction, null, PluginActionTransport.Rest)));
@@ -403,7 +403,7 @@ public static class SettingsView
     /// <summary>Whether a secret is stored — never which one, and never what.</summary>
     private static PluginComponent Secret(string id, string label, bool isSet)
     {
-        return PluginViews.Text(id, $"{label}: {(isSet ? "set" : "not set")}", "caption");
+        return Ui.Text(id, $"{label}: {(isSet ? "set" : "not set")}", "caption");
     }
 
     private static string Rate(string what, long bytesPerSecond)

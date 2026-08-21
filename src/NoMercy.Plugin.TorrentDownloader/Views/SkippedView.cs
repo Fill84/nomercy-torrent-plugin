@@ -39,12 +39,12 @@ public static class SkippedView
             Layout = PluginLayout.ListDetail,
             Components =
             [
-                PluginViews.Text("skipped-heading", "Skipped", "title"),
-                PluginViews.Text(
+                Ui.Text("skipped-heading", "Skipped", "title"),
+                Ui.Text(
                     "skipped-secondary",
                     "Releases the profile or the blacklist refused. Allowing one grabs it as it is.",
                     "caption"),
-                PluginViews.Table(
+                Ui.Table(
                     TableId,
                     [
                         new() { Key = "episode", Label = "Episode" },
@@ -53,7 +53,7 @@ public static class SkippedView
                         new() { Key = "reason", Label = "Why it was refused" },
                     ],
                     [
-                        .. skipped.Select((SkippedRelease one, int index) => PluginViews.Row(
+                        .. skipped.Select((SkippedRelease one, int index) => Ui.Row(
                             $"{TableId}-{index}",
                             new Dictionary<string, object?>
                             {

@@ -36,19 +36,19 @@ public static class DashboardView
 
     private static PluginComponent StatusBar(CycleStatus cycle, DateTimeOffset now)
     {
-        return PluginViews.Row(
+        return Ui.Row(
             "status",
-            PluginViews.Badge(
+            Ui.Badge(
                 "status-state",
                 cycle.Running ? "Running" : "Idle",
                 cycle.Running ? PluginBadgeVariant.Info : PluginBadgeVariant.Neutral),
-            PluginViews.Text("status-last", LastRan(cycle.LastRanAt, now)),
-            PluginViews.Text("status-next", NextDue(cycle.NextDueAt, now)),
+            Ui.Text("status-last", LastRan(cycle.LastRanAt, now)),
+            Ui.Text("status-next", NextDue(cycle.NextDueAt, now)),
 
             // docs/08-ui.md § Actions puts RunNow on the Dashboard as well as
             // on Settings. The dashboard is where an owner watches, so it is
             // where they reach for it when nothing is happening.
-            PluginViews.Button(
+            Ui.Button(
                 "status-run",
                 cycle.Running ? "Stop" : "Run now",
                 PluginActionIntent.CallPlugin(
@@ -62,7 +62,7 @@ public static class DashboardView
     {
         List<PluginComponent> rows =
         [
-            .. activity.InFlight.Select((ActivityEvent work, int index) => PluginViews.Row(
+            .. activity.InFlight.Select((ActivityEvent work, int index) => Ui.Row(
                 $"{NowTableId}-{index}",
                 new Dictionary<string, object?>
                 {
@@ -74,7 +74,7 @@ public static class DashboardView
                 })),
         ];
 
-        return PluginViews.Table(
+        return Ui.Table(
             NowTableId,
             [
                 new() { Key = "subject", Label = "Episode" },

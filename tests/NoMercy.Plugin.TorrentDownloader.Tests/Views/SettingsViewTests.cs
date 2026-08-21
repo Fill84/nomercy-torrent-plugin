@@ -72,16 +72,14 @@ public class SettingsViewTests
 
         PluginComponent form = Rendered.ById(view, section);
 
-        Assert.Equal(PluginComponentType.Form, form.Component);
+        Assert.Equal(Ui.FormComponent, form.Component);
 
-        // On the button, never on the card. A card carrying an action is drawn
-        // as a button around its own fields, and then clicking into a box
-        // submits the form.
-        Assert.Null(form.Action);
+        // The client draws a real form for this component: it walks the fields
+        // prop to make the inputs, collects them when its own button is
+        // pressed, and posts them under the action carried here.
         Assert.Equal(
             "settings/edit",
-            Assert.IsType<PluginActionIntent>(Rendered.ById(view, $"{section}-submit").Action)
-                .Payload["method"]);
+            Assert.IsType<PluginActionIntent>(form.Action).Payload["method"]);
 
         Assert.Contains(field, Rendered.EveryValue(view).OfType<string>());
     }
@@ -136,7 +134,7 @@ public class SettingsViewTests
 
         PluginComponent control = Rendered.ById(view, id);
 
-        Assert.Equal(PluginComponentType.Button, control.Component);
+        Assert.Equal(Ui.ButtonComponent, control.Component);
         Assert.Equal(route, Assert.IsType<PluginActionIntent>(control.Action).Payload["method"]);
     }
 

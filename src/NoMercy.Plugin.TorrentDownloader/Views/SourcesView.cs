@@ -53,12 +53,12 @@ public static class SourcesView
             Layout = PluginLayout.ListDetail,
             Components =
             [
-                PluginViews.Text("sources-heading", "Sources", "title"),
-                PluginViews.Text(
+                Ui.Text("sources-heading", "Sources", "title"),
+                Ui.Text(
                     "sources-secondary",
                     "What each site last answered. A refusal is in the site's own words.",
                     "caption"),
-                PluginViews.Table(
+                Ui.Table(
                     TableId,
                     [
                         new() { Key = "source", Label = "Source" },
@@ -69,7 +69,7 @@ public static class SourcesView
                         new() { Key = "next", Label = "Askable again" },
                     ],
                     [
-                        .. sources.Select(source => PluginViews.Row(
+                        .. sources.Select(source => Ui.Row(
                             $"{TableId}-{source.Name}",
                             new Dictionary<string, object?>
                             {

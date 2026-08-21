@@ -1,3 +1,4 @@
+using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
@@ -117,15 +118,47 @@ public static class Rendered
 
     private static void Collect(PluginComponent component, List<string> found)
     {
-        // Everything a person is shown or a reader announces: the drawable
-        // leaf's text, a caption's helper text, and the names a control carries.
-        // Not "value" — that is what a person types, and a page is judged on
-        // what it says.
-        foreach (string key in (string[])["text", "helperText", "labelText", "label", "ariaLabel", "placeholder"])
+        // Everything a person is shown or a reader announces: the words a text
+        // node carries, the title and the line under it, a table's empty
+        // message, and the names a control carries.
+        //
+        // "value" is on this list because the client's own text component is
+        // where a page's words live — it draws props.value. What a person types
+        // is a form field, and those are read by EveryValue rather than here.
+        foreach (string key in (string[])
+                 [
+                     "value", "text", "title", "description", "message", "emptyMessage",
+                     "helperText", "labelText", "label", "ariaLabel", "placeholder", "submitLabel",
+                 ])
         {
             if (component.Props.TryGetValue(key, out object? value) && value is string word)
             {
                 found.Add(word);
+            }
+        }
+
+        // A form's field labels are drawn beside the boxes, so they are words
+        // on the page like any other. Their values are not: what a person typed
+        // is read by EveryValue, which is what looks for a secret that escaped.
+        if (component.Props.GetValueOrDefault("fields") is IEnumerable<PluginFormField> fields)
+        {
+            foreach (PluginFormField field in fields)
+            {
+                found.Add(field.Label);
+            }
+        }
+
+        // A table row is its cells: the client reads each one straight off the
+        // props under the column's key, so every value on a row is something a
+        // person is shown and none of the keys is known in advance.
+        if (component.Component == Ui.RowComponent)
+        {
+            foreach (object? cell in component.Props.Values)
+            {
+                if (cell is not null and not IDictionary<string, object?>)
+                {
+                    found.Add(cell.ToString() ?? string.Empty);
+                }
             }
         }
 

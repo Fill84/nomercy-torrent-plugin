@@ -59,10 +59,10 @@ public static class Pages
     /// <summary>A way to every page, with the one being read marked.</summary>
     private static PluginComponent Navigation(string route)
     {
-        return PluginViews.Row(
+        return Ui.Row(
             "nav",
             [
-                .. Routes.Routes.Select(one => PluginViews.Button(
+                .. Routes.Routes.Select(one => Ui.Button(
                     $"nav-{one.Name}",
                     one.Label ?? one.Name,
                     PluginActionIntent.Navigate(one.Path),

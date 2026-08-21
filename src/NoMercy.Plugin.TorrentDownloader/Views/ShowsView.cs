@@ -22,7 +22,7 @@ public static class ShowsView
             Layout = PluginLayout.ListDetail,
             Components =
             [
-                PluginViews.Table(
+                Ui.Table(
                     TableId,
                     [
                         new() { Key = "show", Label = "Show" },
@@ -32,7 +32,7 @@ public static class ShowsView
                         new() { Key = "givenup", Label = "Given up for now" },
                     ],
                     [
-                        .. shows.Select(show => PluginViews.Row(
+                        .. shows.Select(show => Ui.Row(
                             $"{TableId}-{show.ShowId}",
                             new Dictionary<string, object?>
                             {

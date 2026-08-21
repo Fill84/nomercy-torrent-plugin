@@ -34,13 +34,13 @@ public static class QueueView
             Layout = PluginLayout.ListDetail,
             Components =
             [
-                PluginViews.Text("looking-heading", "Looking", "title"),
+                Ui.Text("looking-heading", "Looking", "title"),
                 Looking(QueueOrder.Order(tracked)),
 
-                PluginViews.Text("givenup-heading", "Given up for now", "title"),
+                Ui.Text("givenup-heading", "Given up for now", "title"),
                 GivenUp(tracked.Where(episode => episode.State == EpisodeState.Unavailable)),
 
-                PluginViews.Text("waiting-heading", "Waiting to air", "title"),
+                Ui.Text("waiting-heading", "Waiting to air", "title"),
                 Waiting(tracked.Where(episode => episode.State == EpisodeState.NotAired)),
             ],
         };
@@ -53,7 +53,7 @@ public static class QueueView
     /// </remarks>
     private static PluginComponent Looking(IReadOnlyList<TrackedEpisode> ordered)
     {
-        return PluginViews.Table(
+        return Ui.Table(
             LookingTableId,
             [
                 new() { Key = "episode", Label = "Episode" },
@@ -61,7 +61,7 @@ public static class QueueView
                 new() { Key = "last", Label = "Last tried" },
             ],
             [
-                .. ordered.Select(episode => PluginViews.Row(
+                .. ordered.Select(episode => Ui.Row(
                     $"{LookingTableId}-{Id(episode)}",
                     new Dictionary<string, object?>
                     {
@@ -100,14 +100,14 @@ public static class QueueView
 
     private static PluginComponent GivenUp(IEnumerable<TrackedEpisode> episodes)
     {
-        return PluginViews.Table(
+        return Ui.Table(
             GivenUpTableId,
             [
                 new() { Key = "episode", Label = "Episode" },
                 new() { Key = "attempts", Label = "Attempts" },
             ],
             [
-                .. episodes.Select(episode => PluginViews.Row(
+                .. episodes.Select(episode => Ui.Row(
                     $"{GivenUpTableId}-{Id(episode)}",
                     new Dictionary<string, object?>
                     {
@@ -122,7 +122,7 @@ public static class QueueView
 
     private static PluginComponent Waiting(IEnumerable<TrackedEpisode> episodes)
     {
-        return PluginViews.Table(
+        return Ui.Table(
             WaitingTableId,
             [
                 new() { Key = "episode", Label = "Episode" },
@@ -134,7 +134,7 @@ public static class QueueView
                     .ThenBy(episode => episode.Key.ShowId)
                     .ThenBy(episode => episode.Key.Season)
                     .ThenBy(episode => episode.Key.Number)
-                    .Select(episode => PluginViews.Row(
+                    .Select(episode => Ui.Row(
                         $"{WaitingTableId}-{Id(episode)}",
                         new Dictionary<string, object?>
                         {

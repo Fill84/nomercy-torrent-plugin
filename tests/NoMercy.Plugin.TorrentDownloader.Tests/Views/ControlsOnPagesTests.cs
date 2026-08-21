@@ -75,11 +75,9 @@ public class ControlsOnPagesTests
 
         PluginComponent form = Rendered.ById(page, "downloads-add");
 
-        Assert.Equal(PluginComponentType.Form, form.Component);
+        Assert.Equal(Ui.FormComponent, form.Component);
 
-        // The action is on the button inside, not on the card: a card that
-        // carries one is drawn as a button around the box it holds.
-        Assert.Equal("downloads", Called(Rendered.ById(page, "downloads-add-submit")));
+        Assert.Equal("downloads", Called(form));
         // Somewhere to paste it. A form with no field is a button by another
         // name, and the owner would have nothing to type the magnet into.
         Assert.Contains("source", string.Join(" ", Rendered.EveryValue(page)), StringComparison.Ordinal);

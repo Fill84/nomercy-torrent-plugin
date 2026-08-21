@@ -49,7 +49,7 @@ public static class DownloadsView
             Layout = PluginLayout.ListDetail,
             Components =
             [
-                PluginViews.Text("downloads-heading", "Downloads", "title"),
+                Ui.Text("downloads-heading", "Downloads", "title"),
                 Table(rows),
 
                 // The controls sit under the table rather than in it: a table
@@ -57,7 +57,7 @@ public static class DownloadsView
                 // action and these are three. Each strip names its release, or
                 // an owner with four downloads cannot tell which Cancel is
                 // which.
-                PluginViews.List("downloads-controls", [.. rows.Select(Controls)]),
+                Ui.List("downloads-controls", [.. rows.Select(Controls)]),
                 Add(),
             ],
         };
@@ -68,10 +68,10 @@ public static class DownloadsView
     {
         bool paused = row.Transfer?.State == TorrentState.Paused;
 
-        return PluginViews.Row(
+        return Ui.Row(
             $"downloads-controls-{row.Grab.InfoHash}",
-            PluginViews.Text($"downloads-controls-{row.Grab.InfoHash}-name", row.Grab.ReleaseTitle),
-            PluginViews.Button(
+            Ui.Text($"downloads-controls-{row.Grab.InfoHash}-name", row.Grab.ReleaseTitle),
+            Ui.Button(
                 $"downloads-pause-{row.Grab.InfoHash}",
                 paused ? "Resume" : "Pause",
                 PluginActionIntent.CallPlugin(
@@ -80,7 +80,7 @@ public static class DownloadsView
                     paused ? ResumeAction(row.Grab.InfoHash) : PauseAction(row.Grab.InfoHash),
                     null,
                     PluginActionTransport.Rest)),
-            PluginViews.Button(
+            Ui.Button(
                 $"downloads-cancel-{row.Grab.InfoHash}",
                 "Cancel",
                 PluginActionIntent.CallPlugin(
@@ -112,7 +112,7 @@ public static class DownloadsView
     /// </remarks>
     private static PluginComponent Add()
     {
-        return Forms.Section(
+        return Ui.Form(
             "downloads-add",
             "Add",
             PluginActionIntent.CallPlugin(AddAction, null, PluginActionTransport.Rest),
@@ -127,7 +127,7 @@ public static class DownloadsView
 
     private static PluginComponent Table(IReadOnlyList<DownloadRow> rows)
     {
-        return PluginViews.Table(
+        return Ui.Table(
             TableId,
             [
                 new() { Key = "release", Label = "Release" },
@@ -140,7 +140,7 @@ public static class DownloadsView
                 new() { Key = "destination", Label = "Destination" },
             ],
             [
-                .. rows.Select(row => PluginViews.Row(
+                .. rows.Select(row => Ui.Row(
                     $"{TableId}-{row.Grab.InfoHash}",
                     new Dictionary<string, object?>
                     {
@@ -249,8 +249,8 @@ public static class HistoryView
             Layout = PluginLayout.ListDetail,
             Components =
             [
-                PluginViews.Text("history-heading", "History", "title"),
-                PluginViews.Table(
+                Ui.Text("history-heading", "History", "title"),
+                Ui.Table(
                     TableId,
                     [
                         new() { Key = "at", Label = "When" },
@@ -259,7 +259,7 @@ public static class HistoryView
                         new() { Key = "detail", Label = "Why" },
                     ],
                     [
-                        .. lines.Select((HistoryLine line, int index) => PluginViews.Row(
+                        .. lines.Select((HistoryLine line, int index) => Ui.Row(
                             $"{TableId}-{index}",
                             new Dictionary<string, object?>
                             {

@@ -97,7 +97,7 @@ public class DashboardViewTests
             new([], [], Now),
             new(false, Now.AddMinutes(-14), Now.AddHours(6)));
 
-        Assert.Equal(PluginComponentType.Table, Rendered.ById(view, DashboardView.NowTableId).Component);
+        Assert.Equal(Ui.TableComponent, Rendered.ById(view, DashboardView.NowTableId).Component);
     }
 
     /// <remarks>
