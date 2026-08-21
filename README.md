@@ -102,12 +102,24 @@ baseline. One flagged every run is a reader that needs looking at — with its p
 ## Deploying
 
 **Stop the server first.** A loaded plugin's assembly is held open, so the copy fails and the old
-build stays — which looks exactly like a deploy that worked and changed nothing. The script verifies
-every file's hash afterwards.
+build stays — which looks exactly like a deploy that worked and changed nothing.
 
 ```
 scripts/deploy-to-server.ps1 -Build
 ```
+
+The script refuses to copy anything while the server is still running, rather than leaving the hash
+check at the end to explain it one file at a time. Files travel as base64 over ssh, and every one has
+its hash compared afterwards — that comparison is the only thing that can tell a deploy that worked
+from a deploy that quietly did nothing.
+
+It ships the three assemblies, `plugin.json`, the `.deps.json` and **`sources.json`**. That last one
+is the catalogue and the plugin reads it from beside its own assembly, so a deploy without it leaves
+seventeen sources reading as none at all. A test holds the file list against the projects the
+solution really builds, because this list has gone stale before and cost a release.
+
+Afterwards, `0.4.0` is what the log line says when the plugin wakes: the manifest, the code and the
+compiled file all carry the version and a test holds the three together.
 
 ## Licence
 

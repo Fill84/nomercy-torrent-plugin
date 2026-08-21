@@ -4,13 +4,12 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Sprint 7 is done, and every slice but one is finished.** The only thing left is **`S8-05` Release
-0.4.0**, and it is the owner's: a deploy with the server stopped, then one real cycle watched end to
-end, then a tag when they ask for it.
+**Everything that can be built without the server is built.** `S8-05`'s first two steps are done —
+the README, and the version in all three places that carry it — and its remaining three are the
+owner's: stop the server, deploy, start it, watch one real cycle, and tag when they ask.
 
-Nothing else can be built without the server. What is written and waiting for it is in **Blocked** —
-four acceptance runs now, including anime's dry run and the one thing `S5-14` could not prove, that a
-real magnet finds peers in a public swarm.
+**Nothing is left to write.** What waits in **Blocked** is five things to watch, not to build, and
+they are all one deploy away.
 
 `S8-05` Release 0.4.0 is the only thing that needs the owner: a deploy with the server stopped, and
 one real cycle watched end to end. Everything before it is finished.
@@ -450,6 +449,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   writing a broken reader's nought down would set the bar at nought and the rule would never fire for
   that source again. Found by a mutation surviving, because the first test used a source with no row
   count at all and never exercised the rule.
+- `S8-05` (part) **The compiled assembly said 1.0.0 for the whole of 0.4.0's development.** The
+  manifest and `PluginIdentity` both said 0.4.0 and a test held those two together; the third copy
+  was left to the compiler and nothing looked at it. It matters at exactly one moment, and it is the
+  one nobody can afford to get wrong: a deploy onto a server that was not stopped fails and leaves
+  the old build in place, which looks exactly like a deploy that worked, and somebody checking the
+  file's version to tell the two apart would have been reading a number that never changed. The
+  version is set once in `Directory.Build.props` now and the test holds all three.
 - `S7-03` **The join `S1-03` and `S3-03` never had.** One builds an episode's absolute number from
   the library's own episode list; the other asks the name pool under that number. Both were proved on
   their own and nothing ever said whether the number the library produces is the number a release is

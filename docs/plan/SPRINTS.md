@@ -1049,10 +1049,14 @@ rather than awaiting it.
 
 ## S8-05 · Release 0.4.0
 
-1. README: what it does, how to build, how to deploy, how to read the health report.
-2. Version bump in the places that carry it, with the test that they agree.
-3. Deploy (owner stops the server, we deploy, owner starts it).
-4. **Prove one real cycle**: a missing episode found, downloaded, staged, and an encode queued, with
+1. **Done.** The README says what it does, how to build, how to deploy — including that the script
+   now refuses while the server is running, and that it ships `sources.json` — and how to read the
+   health report, which `S8-03` wrote.
+2. **Done.** Three things carry the version: the manifest, `PluginIdentity`, and the compiled file.
+   The third was the compiler's default of 1.0.0 for the whole of 0.4.0's development. It is set once
+   in `Directory.Build.props` now, and a test holds all three together.
+3. **Waiting on the owner.** They stop the server, we deploy, they start it.
+4. **Waiting on the deploy.** A missing episode found, downloaded, staged, and an encode queued, with
    the log and the dashboard as evidence.
 5. Tag `v0.4.0` **only when the owner asks**. Publishing a release is the owner's call; every step
    before it is pushed as it lands.

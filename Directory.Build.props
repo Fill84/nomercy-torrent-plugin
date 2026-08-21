@@ -40,6 +40,20 @@
       moves, this moves with it and the script says so.
     -->
     <NoMercyContractVersion>0.1.404</NoMercyContractVersion>
+
+    <!--
+      The version, in the one place every project shares it. PluginIdentity and
+      plugin.json carry it too and a test holds all three together: three
+      copies of one number is how a server comes to report a version it is not
+      running.
+
+      Left to the compiler this was 1.0.0 for the whole of 0.4.0's development,
+      which matters at exactly one moment — a deploy onto a server that was not
+      stopped fails and leaves the old build in place, and that looks exactly
+      like a deploy that worked. Somebody checking the file's version to tell
+      the two apart would have been reading a number that never changed.
+    -->
+    <Version>0.4.0</Version>
   </PropertyGroup>
 
 </Project>

@@ -39,6 +39,35 @@ public class ManifestTests
     }
 
     /// <remarks>
+    /// <para>
+    /// And so is the assembly's. Three things carry this version — the
+    /// manifest, <see cref="PluginIdentity"/> and the compiled file — and the
+    /// third was left at the compiler's default of 1.0.0 for the whole of
+    /// 0.4.0's development.
+    /// </para>
+    /// <para>
+    /// It matters at exactly one moment, and it is the moment nobody can afford
+    /// to get wrong: a deploy onto a server that was not stopped fails and
+    /// leaves the old build in place, which looks exactly like a deploy that
+    /// worked. Somebody checking the file's version to tell those two apart
+    /// would be reading a number that never changes.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheAssemblysVersionIsThePluginsVersionToo()
+    {
+        Version? compiled = typeof(PluginIdentity).Assembly.GetName().Version;
+
+        Assert.NotNull(compiled);
+
+        // Compared on the three parts that are written down. The fourth is the
+        // revision, which nothing here sets and the compiler fills with nought.
+        Assert.Equal(PluginIdentity.Version.Major, compiled!.Major);
+        Assert.Equal(PluginIdentity.Version.Minor, compiled.Minor);
+        Assert.Equal(PluginIdentity.Version.Build, compiled.Build);
+    }
+
+    /// <remarks>
     /// The id is 0.3.4's, unchanged. It is this plugin's identity on every
     /// server that already has it, and the data folder, the grants and the
     /// settings all hang off it — a new id would install a second plugin beside
