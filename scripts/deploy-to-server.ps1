@@ -27,9 +27,6 @@ $root = Split-Path -Parent $PSScriptRoot
 $project = 'NoMercy.Plugin.TorrentDownloader'
 $out = Join-Path $root "src\$project\bin\$Configuration\$Framework"
 
-# Expanded on the far side, not here: it is that machine's profile.
-$remoteDir = "`$LOCALAPPDATA/NoMercy/plugins/$project"
-
 # The manifest travels with the assembly on purpose: the two carry the version
 # independently, and updating one without the other leaves every server
 # reporting a version it is not running.
@@ -68,7 +65,7 @@ if (-not (Test-Path $out)) { throw "nothing built at $out - run with -Build" }
 # afterwards. A loaded plugin's assembly is held open, so the copy fails, the
 # old build stays, and the hash check at the end is left to explain it one file
 # at a time. Refusing up front says the one thing the owner has to do.
-$running = ssh -o BatchMode=yes $Server 'tasklist 2>/dev/null | grep -i "NoMercy" || pgrep -fl "NoMercy" || true'
+$running = ssh -o BatchMode=yes $Server 'tasklist 2>/dev/null | grep -i "NoMercy" || pgrep -fl "NoMercy" 2>/dev/null || true'
 if ($LASTEXITCODE -ne 0) { throw "cannot reach $Server over ssh" }
 
 if ($running -and ($running -join '') -match 'NoMercy') {
@@ -80,6 +77,20 @@ The server on $Server is still running, so this would copy nothing and say it wo
 Stop it, run this again, and start it afterwards.
 "@
 }
+
+# Asked for rather than built here: it is that machine's profile. Through
+# cygpath because $LOCALAPPDATA is a Windows path with backslashes, and a
+# redirect into one of those fails with "No such file or directory" - which
+# reads exactly like the folder being missing, and sends whoever is deploying
+# looking for the wrong fault.
+$remoteDir = (ssh -o BatchMode=yes $Server 'cygpath -u "$LOCALAPPDATA"').Trim() + "/NoMercy/plugins/$project"
+if (-not $remoteDir.StartsWith('/')) { throw "cannot work out where plugins live on $Server" }
+
+# A server that has never had this plugin has no folder for it, and every copy
+# below fails one at a time saying nothing about why. Nobody deploying a first
+# install should have to make the directory by hand.
+ssh -o BatchMode=yes $Server "mkdir -p '$remoteDir'"
+if ($LASTEXITCODE -ne 0) { throw "cannot create $remoteDir on $Server" }
 
 Write-Host "deploying to $Server…"
 

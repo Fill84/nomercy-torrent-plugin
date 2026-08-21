@@ -4,16 +4,18 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**`v0.4.0` is tagged and everything that can be built without the server is built.** The tag names
-the commit the owner asked for it on, and it has never run on a server — steps 3 and 4 of `S8-05`,
-the deploy and one real cycle watched end to end, are still to come. If they would rather the tag
-named the commit that passed those, say so and it moves.
+**0.4.0 is on `beast-unit`, and it has never been loaded.** The owner stopped the media server on
+21 August 2026 and all six files were copied with every hash matching. This was a first install: the
+plugin had no folder on that machine and the deploy script never made one, so no fresh server could
+ever have been deployed to — see **Decisions**.
 
-**Nothing is left to write.** What waits is five things to *watch*, all one deploy away: stop the
-server, `scripts/deploy-to-server.ps1 -Build`, start it again.
+**What comes next is the owner starting the server, and then watching.** Nothing here goes further
+alone. The first thing to look at is whether the plugin appears in the server's list at all, because
+that is the one thing no test on this machine can prove: every test of the host contract runs
+against types written from `docs/09-host-contract.md` rather than against the host.
 
-`S8-05` Release 0.4.0 is the only thing that needs the owner: a deploy with the server stopped, and
-one real cycle watched end to end. Everything before it is finished.
+`S8-05` step 3 is done. Step 4 — a missing episode found, downloaded, staged and an encode queued,
+with the log and the dashboard as evidence — is the last thing in the plan.
 
 The crash recorded here yesterday was not a crash. It was a **deadlock**, and it is fixed. See
 **Decisions**: the plugin waited on itself on the first cadence tick after every restart, silently,
@@ -21,24 +23,21 @@ for as long as the server was up.
 
 ## Blocked
 
-**The acceptance run is ready to go and needs the server stopped.** The owner asked for it on
-18 August 2026. The sequence is: owner stops the media server, says so; `scripts/deploy-to-server.ps1
--Build` runs; owner starts it again; the dashboard is watched over the real library for Sprints 1, 4
-and 6. Nothing else is waiting.
-
-Two things wait on the owner without blocking anything:
+**Deployed 21 August 2026; waiting on the server being started.** The owner stopped it, 0.4.0 went
+over with every hash matching, and the four runs below can all be watched as soon as it is up again.
+None of them needs a deploy any more — only the server.
 
 - **Sprint 4's acceptance on the real library.** The chain decides end to end and is proven against
-  real captured pages, but "the dashboard shows what it would take for every missing episode" needs
-  0.4.0 on `beast-unit` and a stopped server. It runs with no torrent client and says so per episode,
+  real captured pages, but "the dashboard shows what it would take for every missing episode" needs the server
+  started with 0.4.0 on it, which is now the only thing missing. It runs with no torrent client and says so per episode,
   which is exactly what dry run shows; say when, and it can be deployed and watched.
 - **Sprint 7's acceptance: a real dry run over the real anime library.** The chain decides for an
   anime episode against a captured Nyaa page and the absolute number is derived from the library
-  itself, but "it works over the owner's own anime library" needs 0.4.0 on `beast-unit`. Dry run
+  itself, but "it works over the owner's own anime library" needs the server started. Dry run
   hands nothing to the client, so it is the safest of the four to watch first.
 - **Sprint 1's acceptance against the real library.** `HandCountedLibraryTests` proves the chain
-  against a library counted by hand, but "the Shows page matches *the* library" needs 0.4.0 on
-  `beast-unit`, and a deploy needs the server stopped. Say when, and it can be checked against the
+  against a library counted by hand, but "the Shows page matches *the* library" needs the
+  server started. Say when, and it can be checked against the
   ~25 shows and ~42 missing episodes recorded under **Facts**.
 
 
@@ -448,6 +447,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   writing a broken reader's nought down would set the bar at nought and the rule would never fire for
   that source again. Found by a mutation surviving, because the first test used a source with no row
   count at all and never exercised the rule.
+- `S8-05` **0.4.0 is on the server, and a first install could never have worked.** The owner stopped
+  the media server; all six files went over with every hash matching. The plugin had no folder on
+  that machine and the script never made one, so every copy failed one at a time with "No such file
+  or directory" — which reads exactly like a path being wrong. The script now asks the far side
+  where plugins live and makes the folder before it copies anything.
 - `S8-05` **Trackers are learned and `v0.4.0` is tagged.** The default list is no longer something
   nobody chose: every tracker the plugin comes across is kept, deduplicated, and attached to every
   grab. The one address it will never keep is one carrying a passkey — this list goes out with every
@@ -630,6 +634,12 @@ and note it here.
   the way in and on the way to a query, so matching is exact; a mutation removing the collation
   survived every test, because nothing this code writes could ever need it. The normalisation is the
   rule, it is tested, and the collation is gone.
+- **The deploy script builds the remote path on the far side, not here** (21 August 2026). It used to
+  send `$LOCALAPPDATA` through unexpanded and glue POSIX separators onto it, which on a Windows host
+  gives `C:\Users\...\Local/NoMercy/plugins/...` — a mixture no redirect can be trusted with. It now
+  asks the server for `cygpath -u "$LOCALAPPDATA"` once and uses the answer, and it makes the plugin
+  folder before copying. Both faults only show on a server that has never had this plugin, which is
+  why the whole of 0.4.0's development never met them.
 - **`DefaultTrackers` is learned, not chosen** (owner, 20 August 2026 — this replaces the decision of
   18 August, which was to ship it empty and attach only what a source's own magnet supplied). Every
   tracker the plugin comes across is kept without duplicates and travels with every grab: more

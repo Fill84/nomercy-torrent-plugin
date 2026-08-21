@@ -1055,8 +1055,12 @@ rather than awaiting it.
 2. **Done.** Three things carry the version: the manifest, `PluginIdentity`, and the compiled file.
    The third was the compiler's default of 1.0.0 for the whole of 0.4.0's development. It is set once
    in `Directory.Build.props` now, and a test holds all three together.
-3. **Waiting on the owner.** They stop the server, we deploy, they start it.
+3. **Done.** Deployed to `beast-unit` on 21 August 2026 with the server stopped, every hash matching.
+   It was a first install and it exposed two faults in the script itself: the remote path was built
+   here out of an unexpanded `$LOCALAPPDATA`, and the plugin folder was never created. Both are
+   fixed; neither could show on a server that already had the plugin.
 4. **Waiting on the deploy.** A missing episode found, downloaded, staged, and an encode queued, with
    the log and the dashboard as evidence.
-5. Tag `v0.4.0` **only when the owner asks**. Publishing a release is the owner's call; every step
-   before it is pushed as it lands.
+5. **Done.** The owner asked on 20 August 2026 and `v0.4.0` is tagged and pushed. It names a commit
+   that had not then run on a server; if the owner would rather it named the one that passes step 4,
+   it moves.
