@@ -17,7 +17,7 @@ public class SettingsControllerTests
     [Fact]
     public async Task TheEndpointRefusesWhatTheStoreRefuses()
     {
-        SettingsController controller = new(Initialised());
+        SettingsController controller = For(Initialised());
 
         Settings settings = Writable();
         settings.Cadences.Feed = "nonsense";
@@ -40,7 +40,7 @@ public class SettingsControllerTests
     public async Task ASecretCanBeSetAndTheSettingsResponseOnlyNamesIt()
     {
         TorrentDownloaderPlugin plugin = Initialised();
-        SettingsController controller = new(plugin);
+        SettingsController controller = For(plugin);
 
         await controller.SetSecret(
             new(SettingsStore.IndexerApiKey("own-1"), "hunter2"),
@@ -82,7 +82,7 @@ public class SettingsControllerTests
 
         await gone.CancelAsync();
 
-        SettingsController controller = new(plugin);
+        SettingsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(controller.Run(gone.Token));
         PluginStatusResponse<bool> response = Assert.IsType<PluginStatusResponse<bool>>(result.Value);
@@ -101,7 +101,7 @@ public class SettingsControllerTests
     [Fact]
     public void StoppingWhenNothingIsRunningSaysSo()
     {
-        SettingsController controller = new(Initialised());
+        SettingsController controller = For(Initialised());
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(controller.Stop());
         PluginStatusResponse<bool> response = Assert.IsType<PluginStatusResponse<bool>>(result.Value);
@@ -134,7 +134,7 @@ public class SettingsControllerTests
     public async Task ThePageCanChangeOneSettingWithoutSendingTheRest()
     {
         TorrentDownloaderPlugin plugin = Initialised();
-        SettingsController controller = new(plugin);
+        SettingsController controller = For(plugin);
 
         await controller.Save(Writable(), CancellationToken.None);
 
@@ -162,7 +162,7 @@ public class SettingsControllerTests
     [Fact]
     public async Task AnEditTheStoreRefusesIsRefusedWithItsReason()
     {
-        SettingsController controller = new(Initialised());
+        SettingsController controller = For(Initialised());
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Edit(
@@ -183,7 +183,7 @@ public class SettingsControllerTests
     [Fact]
     public async Task AFieldThatIsNotASettingIsRefusedByName()
     {
-        SettingsController controller = new(Initialised());
+        SettingsController controller = For(Initialised());
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Edit(
@@ -195,6 +195,15 @@ public class SettingsControllerTests
 
         Assert.Equal("refused", response.Status);
         Assert.Contains("client.listenPortt", response.Message ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// The controller as the host builds one: from the server's container, on a
+    /// request, on the route that says which plugin was asked for.
+    /// </summary>
+    private static SettingsController For(TorrentDownloaderPlugin plugin)
+    {
+        return new SettingsController(new LoadedPlugins(plugin)).On(plugin.Id);
     }
 
     private static TorrentDownloaderPlugin Initialised()

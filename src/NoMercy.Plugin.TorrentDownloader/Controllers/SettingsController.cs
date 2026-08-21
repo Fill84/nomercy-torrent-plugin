@@ -2,6 +2,7 @@ using System.Globalization;
 
 using Microsoft.AspNetCore.Mvc;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugins.Abstractions;
 using NoMercy.Plugins.Mvc;
 
 namespace NoMercy.Plugin.TorrentDownloader.Controllers;
@@ -21,11 +22,31 @@ public sealed record SecretRequest(string Key, string Value);
 /// The settings endpoints. The page and these are two ways into one save, so
 /// neither of them validates: <see cref="SettingsStore"/> does, once.
 /// </summary>
-public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginControllerBase
+/// <remarks>
+/// <para>
+/// <see cref="IPluginManager"/>, never the plugin itself. ASP.NET Core builds
+/// this controller per request out of the <em>server's</em> container, and
+/// nothing this plugin defines is in it: the loader creates the plugin, it is
+/// registered as no service, and <c>IPluginServiceRegistrator</c> runs in a
+/// discovery pass before any plugin has a context, so it has nothing live to
+/// give. Asking for the plugin by constructor made every request to every
+/// endpoint here fail with a 500 before reaching a line of this code.
+/// </para>
+/// </remarks>
+public sealed class SettingsController(IPluginManager plugins) : PluginControllerBase
 {
+    /// <summary>The running plugin, or nothing when it is not loaded.</summary>
+    private TorrentDownloaderPlugin? Live =>
+        plugins.GetPluginInstance(PluginId) as TorrentDownloaderPlugin;
+
     [HttpGet("settings")]
     public async Task<IActionResult> Get(CancellationToken ct)
     {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
+
         return Data(new SettingsResponse(
             await plugin.Settings.LoadAsync(ct),
             await plugin.Settings.SecretsSetAsync(ct)));
@@ -34,6 +55,11 @@ public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginC
     [HttpPost("settings")]
     public async Task<IActionResult> Save([FromBody] Settings settings, CancellationToken ct)
     {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
+
         SaveResult result = await plugin.Settings.SaveAsync(settings, ct);
 
         // Not a 4xx: a refused save is an answer the page renders beside the
@@ -65,6 +91,11 @@ public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginC
         [FromBody] Dictionary<string, object?> fields,
         CancellationToken ct)
     {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
+
         Settings settings = await plugin.Settings.LoadAsync(ct);
 
         IReadOnlyList<string> refused = SettingsEdit.Apply(
@@ -114,6 +145,11 @@ public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginC
     [HttpPost("settings/secrets")]
     public async Task<IActionResult> SetSecret([FromBody] SecretRequest request, CancellationToken ct)
     {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
+
         await plugin.Settings.SetSecretAsync(request.Key, request.Value, ct);
 
         return Status(request.Key, "ok");
@@ -122,6 +158,11 @@ public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginC
     [HttpDelete("settings/secrets/{key}")]
     public async Task<IActionResult> ForgetSecret(string key, CancellationToken ct)
     {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
+
         await plugin.Settings.ForgetSecretAsync(key, ct);
 
         return Status(key, "ok");
@@ -141,6 +182,11 @@ public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginC
     {
         _ = ct;
 
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
+
         return plugin.StartRun()
             ? Status(true, "started")
             : Status(false, "already-running", "A cycle is already running.");
@@ -156,6 +202,11 @@ public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginC
     [HttpPost("stop")]
     public IActionResult Stop()
     {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
+
         return plugin.StopRun()
             ? Status(true, "stopping")
             : Status(false, "idle", "Nothing is running, so there is nothing to stop.");

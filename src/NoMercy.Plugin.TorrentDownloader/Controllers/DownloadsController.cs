@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugins.Abstractions;
 using NoMercy.Plugins.Mvc;
 
 namespace NoMercy.Plugin.TorrentDownloader.Controllers;
@@ -35,8 +36,23 @@ public sealed record AllowReleaseRequest(int ShowId, int Season, int Episode, st
 /// answers "ok" to having done nothing — an endpoint that did would leave the
 /// owner pressing it again and the page showing something that never happened.
 /// </remarks>
-public sealed class DownloadsController(TorrentDownloaderPlugin plugin) : PluginControllerBase
+/// <remarks>
+/// <para>
+/// <see cref="IPluginManager"/>, never the plugin itself. ASP.NET Core builds
+/// this controller per request out of the <em>server's</em> container, and
+/// nothing this plugin defines is in it: the loader creates the plugin, it is
+/// registered as no service, and <c>IPluginServiceRegistrator</c> runs in a
+/// discovery pass before any plugin has a context, so it has nothing live to
+/// give. Asking for the plugin by constructor made every request to every
+/// endpoint here fail with a 500 before reaching a line of this code.
+/// </para>
+/// </remarks>
+public sealed class DownloadsController(IPluginManager plugins) : PluginControllerBase
 {
+    /// <summary>The running plugin, or nothing when it is not loaded.</summary>
+    private TorrentDownloaderPlugin? Live =>
+        plugins.GetPluginInstance(PluginId) as TorrentDownloaderPlugin;
+
     /// <summary>
     /// Looks for one episode now, outside the cadence.
     /// </summary>
@@ -48,6 +64,11 @@ public sealed class DownloadsController(TorrentDownloaderPlugin plugin) : Plugin
     [HttpPost("queue/search")]
     public async Task<IActionResult> Search([FromBody] SearchNowRequest request, CancellationToken ct)
     {
+
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
         EpisodeKey episode = new(request.ShowId, request.Season, request.Episode);
 
         _ = ct;
@@ -60,6 +81,11 @@ public sealed class DownloadsController(TorrentDownloaderPlugin plugin) : Plugin
     [HttpPost("downloads/{infoHash}/pause")]
     public async Task<IActionResult> Pause(string infoHash, CancellationToken ct)
     {
+
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
         return await plugin.PauseDownloadAsync(infoHash, ct)
             ? Status(true, "paused")
             : Unknown(infoHash);
@@ -68,6 +94,11 @@ public sealed class DownloadsController(TorrentDownloaderPlugin plugin) : Plugin
     [HttpPost("downloads/{infoHash}/resume")]
     public async Task<IActionResult> Resume(string infoHash, CancellationToken ct)
     {
+
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
         return await plugin.ResumeDownloadAsync(infoHash, ct)
             ? Status(true, "resumed")
             : Unknown(infoHash);
@@ -85,6 +116,11 @@ public sealed class DownloadsController(TorrentDownloaderPlugin plugin) : Plugin
     [HttpPost("downloads/{infoHash}/cancel")]
     public async Task<IActionResult> Cancel(string infoHash, CancellationToken ct)
     {
+
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
         return await plugin.CancelDownloadAsync(infoHash, ct)
             ? Status(true, "cancelled")
             : Unknown(infoHash);
@@ -101,6 +137,11 @@ public sealed class DownloadsController(TorrentDownloaderPlugin plugin) : Plugin
     [HttpPost("downloads")]
     public async Task<IActionResult> Add([FromBody] AddTorrentRequest request, CancellationToken ct)
     {
+
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
         (string? InfoHash, string? Refusal) added = await plugin.AddTorrentAsync(request.Source, ct);
 
         // In the client's own words. "Could not add torrent" tells the owner
@@ -123,6 +164,11 @@ public sealed class DownloadsController(TorrentDownloaderPlugin plugin) : Plugin
     [HttpPost("skipped/allow")]
     public async Task<IActionResult> Allow([FromBody] AllowReleaseRequest request, CancellationToken ct)
     {
+
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound();
+        }
         bool allowed = await plugin.AllowReleaseAsync(
             new EpisodeKey(request.ShowId, request.Season, request.Episode),
             request.Title,

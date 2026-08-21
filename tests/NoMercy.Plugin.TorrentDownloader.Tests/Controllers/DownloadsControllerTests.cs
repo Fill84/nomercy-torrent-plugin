@@ -39,7 +39,7 @@ public class DownloadsControllerTests : IDisposable
         await Configure(plugin);
         await Grabbed(plugin);
 
-        DownloadsController controller = new(plugin);
+        DownloadsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Cancel(Hash, CancellationToken.None));
@@ -72,7 +72,7 @@ public class DownloadsControllerTests : IDisposable
 
         await Configure(plugin);
 
-        DownloadsController controller = new(plugin);
+        DownloadsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Pause(Hash, CancellationToken.None));
@@ -96,7 +96,7 @@ public class DownloadsControllerTests : IDisposable
 
         await Configure(plugin);
 
-        DownloadsController controller = new(plugin);
+        DownloadsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Add(new("ftp://example.test/thing.bin"), CancellationToken.None));
@@ -119,7 +119,7 @@ public class DownloadsControllerTests : IDisposable
 
         await Configure(plugin);
 
-        DownloadsController controller = new(plugin);
+        DownloadsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Add(new($"magnet:?xt=urn:btih:{Hash}&dn=Silo+S03E06"), CancellationToken.None));
@@ -157,7 +157,7 @@ public class DownloadsControllerTests : IDisposable
             DateTimeOffset.UtcNow,
             CancellationToken.None);
 
-        DownloadsController controller = new(plugin);
+        DownloadsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Allow(
@@ -186,7 +186,7 @@ public class DownloadsControllerTests : IDisposable
 
         await Configure(plugin);
 
-        DownloadsController controller = new(plugin);
+        DownloadsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Allow(
@@ -218,7 +218,7 @@ public class DownloadsControllerTests : IDisposable
 
         await Configure(plugin);
 
-        DownloadsController controller = new(plugin);
+        DownloadsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Search(new(41, 3, 6), CancellationToken.None));
@@ -249,7 +249,7 @@ public class DownloadsControllerTests : IDisposable
 
         await gone.CancelAsync();
 
-        DownloadsController controller = new(plugin);
+        DownloadsController controller = For(plugin);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Search(new(41, 3, 6), gone.Token));
@@ -310,4 +310,13 @@ public class DownloadsControllerTests : IDisposable
 
         TemporaryFolder.Forget(_folder);
     }
+    /// <summary>
+    /// The controller as the host builds one: from the server's container, on a
+    /// request, on the route that says which plugin was asked for.
+    /// </summary>
+    private static DownloadsController For(TorrentDownloaderPlugin plugin)
+    {
+        return new DownloadsController(new LoadedPlugins(plugin)).On(plugin.Id);
+    }
+
 }
