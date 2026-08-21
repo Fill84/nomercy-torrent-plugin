@@ -85,6 +85,16 @@ public static class Rendered
             case string text:
                 found.Add(text);
                 return;
+            // A form's fields are carried whole rather than as nested
+            // components, and they are exactly where a secret would end up if
+            // one ever escaped into a page. Left to the default below, each one
+            // read as its own type name and this helper saw nothing at all.
+            case PluginFormField field:
+                Unpack(field.Name, found);
+                Unpack(field.Label, found);
+                Unpack(field.Placeholder, found);
+                Unpack(field.Value, found);
+                return;
             case IDictionary<string, object?> nested:
                 foreach (object? inner in nested.Values)
                 {
