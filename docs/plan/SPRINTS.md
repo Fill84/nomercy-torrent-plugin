@@ -1055,10 +1055,12 @@ rather than awaiting it.
 2. **Done.** Three things carry the version: the manifest, `PluginIdentity`, and the compiled file.
    The third was the compiler's default of 1.0.0 for the whole of 0.4.0's development. It is set once
    in `Directory.Build.props` now, and a test holds all three together.
-3. **Done.** Deployed to `beast-unit` on 21 August 2026 with the server stopped, every hash matching.
-   It was a first install and it exposed two faults in the script itself: the remote path was built
-   here out of an unexpanded `$LOCALAPPDATA`, and the plugin folder was never created. Both are
-   fixed; neither could show on a server that already had the plugin.
+3. **Deployed once, corrected, waiting on a second stop.** The first install on 21 August 2026 went
+   over with every hash matching and the plugin still could not load: a class library does not copy
+   its packages into its output, so twelve assemblies were named and three were there. Three faults
+   in all, none of which could show on a server that already had the plugin — the remote path built
+   here out of an unexpanded `$LOCALAPPDATA`, the plugin folder never created, and the dependencies
+   never built. All three are fixed and the script no longer keeps a list of filenames.
 4. **Waiting on the deploy.** A missing episode found, downloaded, staged, and an encode queued, with
    the log and the dashboard as evidence.
 5. **Done.** The owner asked on 20 August 2026 and `v0.4.0` is tagged and pushed. It names a commit

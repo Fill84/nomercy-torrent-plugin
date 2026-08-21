@@ -1,3 +1,6 @@
+using System.Runtime.InteropServices;
+using System.Text.Json;
+
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests;
@@ -7,84 +10,162 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The file list has gone stale once already and it cost a release: the
-/// protocol assembly arrived with 0.4.0, the list did not grow with it, and the
-/// deploy shipped an entry assembly referencing a dll that was not there. The
-/// plugin vanished from the server's list altogether — no error, no entry,
-/// nothing anywhere to say why.
+/// This used to read the deploy script and check that a hand-written list of
+/// filenames contained the ones it knew about. That list was itself the fault,
+/// three times over, and the tests passed through every one of them: they
+/// proved the list said what it said.
 /// </para>
 /// <para>
-/// So the list is checked against what the build really produces rather than
-/// against a copy of itself. A project added tomorrow and forgotten fails here,
-/// which is the only place it can fail before the owner finds out from a server
-/// that has stopped listing the plugin.
+/// The last time cost a deploy. The plugin is a class library, and a class
+/// library's build does not copy the packages it depends on into its output —
+/// so the folder held three assemblies while the manifest beside it named
+/// twelve. The host resolves a plugin's dependencies from beside the plugin,
+/// found none of them, and <c>PluginLoader</c>'s
+/// <c>ReflectionTypeLoadException</c> path reports the failure and returns
+/// <em>without registering the plugin at all</em>. It was simply absent from
+/// the server's list, with nothing anywhere to say why.
+/// </para>
+/// <para>
+/// So what is checked now is the thing that has to be true: everything the
+/// manifest says this plugin needs is sitting beside it when the build is
+/// finished. The deploy script ships whatever the build produced and no longer
+/// keeps a list to go stale.
 /// </para>
 /// </remarks>
 public class DeployScriptTests
 {
+    /// <remarks>
+    /// Deleting <c>EnableDynamicLoading</c> from the plugin's project file
+    /// fails this, which is the only place it can fail before a server does.
+    /// </remarks>
     [Fact]
-    public void EveryAssemblyThisSolutionBuildsIsInTheDeployList()
+    public void EveryAssemblyTheDependencyFileNamesIsBesideThePlugin()
     {
-        string script = Script();
+        string output = Output();
+
+        foreach (string assembly in RuntimeAssemblies())
+        {
+            Assert.True(
+                File.Exists(Path.Combine(output, assembly)),
+                $"{assembly} is named in the plugin's .deps.json and is not beside the plugin. "
+                + "The host resolves dependencies from the plugin's own folder, so this one "
+                + "cannot be found and the plugin does not load at all.");
+        }
+    }
+
+    /// <remarks>
+    /// The store is SQLite and SQLite is native code, which arrives under
+    /// <c>runtimes/</c> rather than beside the assembly. Managed assemblies
+    /// present and this missing opens a database by throwing.
+    /// </remarks>
+    [Fact]
+    public void TheNativeCodeTheStoreNeedsIsBesideThePluginToo()
+    {
+        string rid = RuntimeInformation.RuntimeIdentifier;
+        string native = Path.Combine(Output(), "runtimes", rid, "native");
+
+        Assert.True(
+            Directory.Exists(native),
+            $"No native code for {rid} under runtimes/. SQLite is native and the store cannot open without it.");
+
+        Assert.NotEmpty(Directory.EnumerateFiles(native, "*e_sqlite3*"));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The catalogue is read from the assembly's own folder — that is
+    /// <strong>C1</strong>. A build that leaves it behind gives a plugin
+    /// reading yesterday's sources, or none at all on a fresh install, while
+    /// looking perfectly healthy and asking nobody anything.
+    /// </para>
+    /// <para>
+    /// The manifest is there for its own reason: it carries the version
+    /// independently of the assembly, and one without the other leaves a server
+    /// reporting a version it is not running.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("sources.json")]
+    [InlineData("plugin.json")]
+    public void EveryFileTheAssemblyReadsFromItsOwnFolderIsBesideIt(string file)
+    {
+        Assert.True(
+            File.Exists(Path.Combine(Output(), file)),
+            $"{file} is read from the assembly's own folder and the build did not put one there.");
+    }
+
+    /// <remarks>
+    /// Every project this solution builds ends up beside the entry assembly.
+    /// One added tomorrow and forgotten fails here rather than on a server.
+    /// </remarks>
+    [Fact]
+    public void EveryAssemblyThisSolutionBuildsIsBesideThePlugin()
+    {
+        string output = Output();
 
         foreach (string project in Directory
                      .EnumerateDirectories(Path.Combine(Root(), "src"))
                      .Select(Path.GetFileName)
                      .OfType<string>())
         {
-            // Written as "$project.Core.dll" and the like, so the entry
-            // assembly's own name is the part that varies.
-            string entry = "NoMercy.Plugin.TorrentDownloader";
-            string file = project == entry ? "$project.dll" : $"$project{project[entry.Length..]}.dll";
-
-            Assert.Contains(file, script, StringComparison.Ordinal);
-        }
-    }
-
-    /// <remarks>
-    /// <para>
-    /// The catalogue is read from the assembly's own folder — that is
-    /// <strong>C1</strong>, and the whole reason it is copied beside the dll.
-    /// A deploy that shipped every assembly and not the catalogue leaves the
-    /// plugin reading yesterday's sources, or none at all on a fresh install,
-    /// and it asks nobody anything while looking perfectly healthy.
-    /// </para>
-    /// <para>
-    /// The manifest travels for its own reason: it carries the version
-    /// independently of the assembly, and updating one without the other leaves
-    /// every server reporting a version it is not running.
-    /// </para>
-    /// </remarks>
-    [Theory]
-    [InlineData("sources.json")]
-    [InlineData("plugin.json")]
-    [InlineData("$project.deps.json")]
-    public void EveryFileTheAssemblyNeedsBesideItIsInTheDeployList(string file)
-    {
-        Assert.Contains(file, Script(), StringComparison.Ordinal);
-    }
-
-    /// <remarks>
-    /// Everything the deploy list names is something the build really produces.
-    /// A file listed and never built is skipped in silence, so the list would go
-    /// on claiming to ship something that has not existed for a release.
-    /// </remarks>
-    [Fact]
-    public void TheDeployListNamesNothingTheBuildDoesNotProduce()
-    {
-        string plugin = Path.Combine(Root(), "src", "NoMercy.Plugin.TorrentDownloader");
-
-        foreach (string file in (string[])["sources.json", "plugin.json"])
-        {
             Assert.True(
-                File.Exists(Path.Combine(plugin, file)),
-                $"The deploy list ships {file} and the project does not have one.");
+                File.Exists(Path.Combine(output, $"{project}.dll")),
+                $"{project} is part of this solution and its assembly is not beside the plugin.");
         }
     }
 
-    private static string Script()
+    /// <summary>Everything the plugin's dependency file expects to load at runtime.</summary>
+    private static IEnumerable<string> RuntimeAssemblies()
     {
-        return File.ReadAllText(Path.Combine(Root(), "scripts", "deploy-to-server.ps1"));
+        string deps = Path.Combine(Output(), "NoMercy.Plugin.TorrentDownloader.deps.json");
+
+        Assert.True(File.Exists(deps), $"no dependency file at {deps}");
+
+        using JsonDocument document = JsonDocument.Parse(File.ReadAllText(deps));
+
+        foreach (JsonProperty target in document.RootElement.GetProperty("targets").EnumerateObject())
+        {
+            foreach (JsonProperty library in target.Value.EnumerateObject())
+            {
+                if (!library.Value.TryGetProperty("runtime", out JsonElement runtime))
+                {
+                    continue;
+                }
+
+                foreach (JsonProperty assembly in runtime.EnumerateObject())
+                {
+                    // Written as the path inside the package - lib/net10.0/X.dll -
+                    // and it lands beside the plugin under its own name.
+                    yield return Path.GetFileName(assembly.Name);
+                }
+            }
+
+            // One target framework, and reading the second would only repeat it.
+            yield break;
+        }
+    }
+
+    /// <summary>Where the plugin project's own build went.</summary>
+    /// <remarks>
+    /// The plugin's output, never this test's. A test project is an executable
+    /// and copies every package it references into its own folder whatever the
+    /// plugin project does, so asking here would pass happily with the one
+    /// setting missing that makes the plugin loadable.
+    /// </remarks>
+    private static string Output()
+    {
+        DirectoryInfo self = new(AppContext.BaseDirectory);
+        string framework = self.Name;
+        string configuration = self.Parent?.Name
+            ?? throw new InvalidOperationException("cannot tell Debug from Release above the test assembly");
+
+        return Path.Combine(
+            Root(),
+            "src",
+            "NoMercy.Plugin.TorrentDownloader",
+            "bin",
+            configuration,
+            framework);
     }
 
     private static string Root()

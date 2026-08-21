@@ -27,28 +27,6 @@ $root = Split-Path -Parent $PSScriptRoot
 $project = 'NoMercy.Plugin.TorrentDownloader'
 $out = Join-Path $root "src\$project\bin\$Configuration\$Framework"
 
-# The manifest travels with the assembly on purpose: the two carry the version
-# independently, and updating one without the other leaves every server
-# reporting a version it is not running.
-$files = @(
-    "$project.dll",
-    "$project.Core.dll",
-
-    # The protocol assembly. It arrived with 0.4.0 and this list did not
-    # grow with it, so a deploy shipped an entry assembly referencing a dll
-    # that was not there and the plugin vanished from the server's list
-    # altogether — no error, no entry, nothing to tell the owner why.
-    "$project.Bittorrent.dll",
-    "$project.deps.json",
-    'plugin.json',
-
-    # The catalogue, and it is not optional. C1: it is read from the assembly's
-    # own folder, so a deploy that ships every assembly and not this leaves the
-    # plugin reading yesterday's sources - or none at all on a fresh install -
-    # while looking perfectly healthy and asking nobody anything.
-    'sources.json'
-)
-
 if ($Build) {
     $dotnet = 'dotnet'
     $candidate = Join-Path $env:USERPROFILE '.dotnet\dotnet.exe'
@@ -92,11 +70,62 @@ if (-not $remoteDir.StartsWith('/')) { throw "cannot work out where plugins live
 ssh -o BatchMode=yes $Server "mkdir -p '$remoteDir'"
 if ($LASTEXITCODE -ne 0) { throw "cannot create $remoteDir on $Server" }
 
-Write-Host "deploying to $Server…"
+# Which platform's native code that machine needs. Asked rather than assumed,
+# because this script is also how a Linux server gets its copy.
+$uname = (ssh -o BatchMode=yes $Server 'uname -sm').Trim()
+$rid = switch -Regex ($uname) {
+    '^(MINGW|MSYS|CYGWIN).*(x86_64|amd64)' { 'win-x64'; break }
+    '^(MINGW|MSYS|CYGWIN).*(aarch64|arm64)' { 'win-arm64'; break }
+    '^Linux.*(x86_64|amd64)' { 'linux-x64'; break }
+    '^Linux.*(aarch64|arm64)' { 'linux-arm64'; break }
+    '^Darwin.*(arm64)' { 'osx-arm64'; break }
+    '^Darwin.*(x86_64)' { 'osx-x64'; break }
+    default { throw "cannot tell what platform $Server is from '$uname'" }
+}
+Write-Host "$Server is $rid"
 
-foreach ($file in $files) {
-    $path = Join-Path $out $file
-    if (-not (Test-Path $path)) { Write-Host "  skip $file (not built)"; continue }
+# Every file the build produced, worked out here rather than written down.
+#
+# A hand-kept list drifted three times. It missed the protocol assembly, so a
+# deploy shipped an entry assembly referencing a dll that was not there. It
+# missed sources.json, so the plugin read no catalogue at all on a fresh
+# install. And it named six files while the manifest named twelve assemblies,
+# which is how 0.4.0 reached a server unable to load: the host resolves a
+# plugin's dependencies from beside the plugin, found none of them, and
+# PluginLoader's ReflectionTypeLoadException path reports the fault and returns
+# without registering anything - so the plugin is absent from the server's list
+# with nothing at all to say why.
+#
+# Symbols and documentation stay behind: nothing at runtime reads them.
+$carry = Get-ChildItem -File $out |
+    Where-Object { $_.Extension -notin '.pdb', '.xml' } |
+    ForEach-Object { $_.Name }
+
+# Native code ships for the one machine being deployed to. The package carries
+# SQLite built for twenty platforms and all of them together are 33MB of the
+# 41MB output, every byte of it travelling base64 through ssh. The resolver
+# only ever looks under the running platform's own identifier.
+$nativeDir = Join-Path $out "runtimes\$rid\native"
+if (Test-Path $nativeDir) {
+    $carry += Get-ChildItem -File $nativeDir | ForEach-Object { "runtimes/$rid/native/$($_.Name)" }
+} else {
+    Write-Host "  note: no native code for $rid - nothing under runtimes\$rid\native"
+}
+
+# One call rather than one per file, and before anything is copied: a redirect
+# into a directory that is not there fails per file saying only "No such file
+# or directory".
+$dirs = $carry | ForEach-Object { Split-Path -Parent $_ } | Where-Object { $_ } |
+    ForEach-Object { ($_ -replace '\\', '/') } | Sort-Object -Unique
+foreach ($dir in $dirs) {
+    ssh -o BatchMode=yes $Server "mkdir -p '$remoteDir/$dir'"
+    if ($LASTEXITCODE -ne 0) { throw "cannot create $remoteDir/$dir on $Server" }
+}
+
+Write-Host "deploying $($carry.Count) files to $Server…"
+
+foreach ($file in $carry) {
+    $path = Join-Path $out ($file -replace '/', '\')
 
     $localSum = (Get-FileHash $path -Algorithm MD5).Hash.ToLowerInvariant()
     $b64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($path))

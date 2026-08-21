@@ -4,18 +4,25 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.4.0 is on `beast-unit`, and it has never been loaded.** The owner stopped the media server on
-21 August 2026 and all six files were copied with every hash matching. This was a first install: the
-plugin had no folder on that machine and the deploy script never made one, so no fresh server could
-ever have been deployed to — see **Decisions**.
+**0.4.0 went onto `beast-unit` on 21 August 2026 and could not load. The cause is found and fixed;
+it needs the server stopped once more.**
 
-**What comes next is the owner starting the server, and then watching.** Nothing here goes further
-alone. The first thing to look at is whether the plugin appears in the server's list at all, because
-that is the one thing no test on this machine can prove: every test of the host contract runs
-against types written from `docs/09-host-contract.md` rather than against the host.
+The plugin was absent from the server's list entirely. It was never a fault in the plugin's code:
+this is a class library, and a class library's build does not copy the packages it depends on into
+its output. The folder held three assemblies while the manifest beside it named twelve, so the host
+could not resolve one of them, and `PluginLoader`'s `ReflectionTypeLoadException` path reports the
+failure and returns **without registering the plugin** — absent from the list, with nothing to say
+why. See **Decisions**.
 
-`S8-05` step 3 is done. Step 4 — a missing episode found, downloaded, staged and an encode queued,
-with the log and the dashboard as evidence — is the last thing in the plan.
+**Waiting on the owner to stop the media server again.** Then
+`scripts/deploy-to-server.ps1 -Build`, and start it. The first thing to look at is still whether the
+plugin appears in the list at all — that is the one thing no test here can prove, because every test
+of the host contract runs against types written from `docs/09-host-contract.md` rather than against
+the host.
+
+`S8-05` step 3 is done once more and is only proved by the server. Step 4 — a missing episode found,
+downloaded, staged and an encode queued, with the log and the dashboard as evidence — is the last
+thing in the plan.
 
 The crash recorded here yesterday was not a crash. It was a **deadlock**, and it is fixed. See
 **Decisions**: the plugin waited on itself on the first cadence tick after every restart, silently,
@@ -23,9 +30,9 @@ for as long as the server was up.
 
 ## Blocked
 
-**Deployed 21 August 2026; waiting on the server being started.** The owner stopped it, 0.4.0 went
-over with every hash matching, and the four runs below can all be watched as soon as it is up again.
-None of them needs a deploy any more — only the server.
+**Waiting on one more stop of the media server.** The first deploy went over with every hash matching
+and the plugin still could not load; the cause is found and fixed, and the four runs below can be
+watched once the corrected build is on the server and it is started again.
 
 - **Sprint 4's acceptance on the real library.** The chain decides end to end and is proven against
   real captured pages, but "the dashboard shows what it would take for every missing episode" needs the server
@@ -447,6 +454,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   writing a broken reader's nought down would set the bar at nought and the rule would never fire for
   that source again. Found by a mutation surviving, because the first test used a source with no row
   count at all and never exercised the rule.
+- `S8-05` **The plugin could not load, and the reason was never in its code.** A class library's
+  build does not copy the packages it depends on into its output, so the deployed folder held three
+  assemblies against a manifest naming twelve. The host resolves a plugin's dependencies from beside
+  the plugin, found none, and reported a `ReflectionTypeLoadException` — down a path that returns
+  without registering the plugin, so it was absent from the server's list with nothing to say why.
+  `EnableDynamicLoading` fixes it. The deploy script now ships whatever the build produced rather
+  than a list of names, and the tests that guarded that list were replaced: they asserted the list
+  said what it said, and the list was the fault every time.
 - `S8-05` **0.4.0 is on the server, and a first install could never have worked.** The owner stopped
   the media server; all six files went over with every hash matching. The plugin had no folder on
   that machine and the script never made one, so every copy failed one at a time with "No such file
@@ -634,6 +649,16 @@ and note it here.
   the way in and on the way to a query, so matching is exact; a mutation removing the collation
   survived every test, because nothing this code writes could ever need it. The normalisation is the
   rule, it is tested, and the collation is gone.
+- **The plugin's dependencies ship with it, and the deploy is derived rather than listed**
+  (21 August 2026). `EnableDynamicLoading` makes the class library copy its packages into its own
+  output, which is what a plugin loaded out of its own folder needs; without it the host's resolver
+  finds nothing beside the assembly. The script ships everything the build produced, minus symbols
+  and documentation, plus native code for the one platform being deployed to — SQLite ships built
+  for twenty and they are 33MB of a 41MB output, all of it travelling base64 through ssh.
+  **What this cost is worth recording.** Three tests covered the old hand-written file list and all
+  three passed through every one of its faults, because what they asserted was that the list
+  contained the names it contained. `docs/10-known-failures.md` § H is about exactly this shape of
+  test and it was written here anyway.
 - **The deploy script builds the remote path on the far side, not here** (21 August 2026). It used to
   send `$LOCALAPPDATA` through unexpanded and glue POSIX separators onto it, which on a Windows host
   gives `C:\Users\...\Local/NoMercy/plugins/...` — a mixture no redirect can be trusted with. It now
