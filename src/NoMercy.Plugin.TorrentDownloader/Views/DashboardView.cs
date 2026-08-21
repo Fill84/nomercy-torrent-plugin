@@ -43,7 +43,19 @@ public static class DashboardView
                 cycle.Running ? "Running" : "Idle",
                 cycle.Running ? PluginBadgeVariant.Info : PluginBadgeVariant.Neutral),
             PluginViews.Text("status-last", LastRan(cycle.LastRanAt, now)),
-            PluginViews.Text("status-next", NextDue(cycle.NextDueAt, now)));
+            PluginViews.Text("status-next", NextDue(cycle.NextDueAt, now)),
+
+            // docs/08-ui.md § Actions puts RunNow on the Dashboard as well as
+            // on Settings. The dashboard is where an owner watches, so it is
+            // where they reach for it when nothing is happening.
+            PluginViews.Button(
+                "status-run",
+                cycle.Running ? "Stop" : "Run now",
+                PluginActionIntent.CallPlugin(
+                    cycle.Running ? SettingsView.StopAction : SettingsView.RunAction,
+                    null,
+                    PluginActionTransport.Rest),
+                variant: cycle.Running ? null : "primary"));
     }
 
     private static PluginComponent NowTable(ActivitySnapshot activity)

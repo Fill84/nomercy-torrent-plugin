@@ -19,7 +19,11 @@ public static class QueueView
     public const string LookingTableId = "looking";
 
     /// <summary>The action that looks for one episode straight away.</summary>
-    public const string SearchAction = "SearchNow";
+    // A control's "method" is the path the client posts to:
+    // plugins/{id}/{method}, straight through. Naming the action instead of the
+    // route gave every button on every page a URL this plugin does not serve,
+    // and nothing anyone pressed did anything at all.
+    public const string SearchAction = "queue/search";
     public const string GivenUpTableId = "givenup";
     public const string WaitingTableId = "waiting";
 

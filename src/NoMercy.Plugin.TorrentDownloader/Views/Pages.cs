@@ -32,6 +32,65 @@ public static class Pages
     public const string SourcesRoute = "/sources";
 
     /// <summary>
+    /// The same page with the plugin's own navigation above it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The server mounts two of these eight — the dashboard beside the
+    /// libraries, settings under the settings list — and the other six were
+    /// reachable by typing an address and by nothing else. A page nobody can
+    /// leave is barely a page at all, and one nobody can arrive at is none.
+    /// </para>
+    /// <para>
+    /// Wrapped here, once, rather than added to each view. Eight views each
+    /// remembering to carry it is eight chances to forget, and the one that
+    /// forgot would be a dead end nothing else could tell you about.
+    /// </para>
+    /// </remarks>
+    public static PluginView WithNavigation(PluginView page, string route)
+    {
+        return new()
+        {
+            Layout = page.Layout,
+            Components = [Navigation(route), .. page.Components ?? []],
+        };
+    }
+
+    /// <summary>A way to every page, with the one being read marked.</summary>
+    private static PluginComponent Navigation(string route)
+    {
+        return PluginViews.Row(
+            "nav",
+            [
+                .. Routes.Routes.Select(one => PluginViews.Button(
+                    $"nav-{one.Name}",
+                    one.Label ?? one.Name,
+                    PluginActionIntent.Navigate(one.Path),
+
+                    // The page being read is marked rather than left out. A
+                    // link that disappears on arrival moves every other link
+                    // along by one, so the row is never twice in the same
+                    // place and nothing can be found by where it sits.
+                    variant: Same(one.Path, route) ? "primary" : "ghost")),
+            ]);
+    }
+
+    /// <summary>
+    /// Whether two routes are the same page.
+    /// </summary>
+    /// <remarks>
+    /// A trailing slash is the difference between what the server asks for and
+    /// what the table declares, and it is not a difference to the reader.
+    /// </remarks>
+    private static bool Same(string path, string route)
+    {
+        return string.Equals(
+            path.TrimEnd('/'),
+            route.TrimEnd('/'),
+            StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// The pages this plugin serves, declared rather than matched inside the
     /// view.
     /// </summary>

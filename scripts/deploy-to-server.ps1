@@ -52,7 +52,12 @@ The server on $Server is still running, so this would copy nothing and say it wo
 
   $($running -join "`n  ")
 
-Stop it, run this again, and start it afterwards.
+Stop NoMercyLauncher as well if it is listed. The launcher starts the media
+server a few seconds after itself, so stopping the server on its own leaves
+the launcher to bring it straight back - which looks exactly like a stop that
+did not take.
+
+Stop them, run this again, and start the launcher afterwards.
 "@
 }
 

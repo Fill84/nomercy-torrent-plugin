@@ -126,10 +126,14 @@ public class PagesReachableTests
         Assert.Contains("Silo.S03E06.720p.WEB.H264-CAKES", page, StringComparison.Ordinal);
         Assert.Contains("720p is below the 1080p rung", page, StringComparison.Ordinal);
 
+        // The one control on the page, past the plugin's own navigation: every
+        // page carries a way to every other, and those are navigations rather
+        // than calls into the plugin.
         PluginActionIntent allow = Assert.Single(
-            Rendered.All(view).Select(component => component.Action).OfType<PluginActionIntent>());
+            Rendered.All(view).Select(component => component.Action).OfType<PluginActionIntent>(),
+            action => action.Type == PluginActionType.CallPlugin);
 
-        Assert.Equal(SkippedView.AllowAction, allow.Payload["method"]);
+        Assert.Equal("skipped/allow", allow.Payload["method"]);
 
         // The transport is how the action reaches the plugin, and this one has
         // an answer, so it goes over REST.

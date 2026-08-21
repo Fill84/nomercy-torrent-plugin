@@ -24,18 +24,21 @@ public class ControlsOnPagesTests
     /// owner guessing which applied.
     /// </remarks>
     [Theory]
-    [InlineData(TorrentState.Downloading, DownloadsView.PauseAction, "Pause")]
-    [InlineData(TorrentState.Paused, DownloadsView.ResumeAction, "Resume")]
+    [InlineData(TorrentState.Downloading, "pause", "Pause")]
+    [InlineData(TorrentState.Paused, "resume", "Resume")]
     public void TheDownloadsPageOffersPauseOrResumeAsTheTorrentStands(
         TorrentState state,
-        string action,
+        string verb,
         string label)
     {
         PluginView page = DownloadsView.Render([Row(state)]);
 
         PluginComponent button = Rendered.ById(page, $"downloads-pause-{Hash}");
 
-        Assert.Equal(action, Called(button));
+        // The path the client posts to, spelled out. Asserting the constant
+        // against itself is what let every one of these name a route that does
+        // not exist.
+        Assert.Equal($"downloads/{Hash}/{verb}", Called(button));
         Assert.Contains(label, string.Join(" ", Rendered.Words(page)), StringComparison.Ordinal);
     }
 
@@ -52,7 +55,7 @@ public class ControlsOnPagesTests
 
         PluginComponent button = Rendered.ById(page, $"downloads-cancel-{Hash}");
 
-        Assert.Equal(DownloadsView.CancelAction, Called(button));
+        Assert.Equal($"downloads/{Hash}/cancel", Called(button));
 
         PluginConfirmation confirm = Assert.IsType<PluginConfirmation>(button.Action!.Confirm);
 
@@ -73,7 +76,7 @@ public class ControlsOnPagesTests
         PluginComponent form = Rendered.ById(page, "downloads-add");
 
         Assert.Equal(PluginComponentType.Form, form.Component);
-        Assert.Equal(DownloadsView.AddAction, Called(form));
+        Assert.Equal("downloads", Called(form));
         // Somewhere to paste it. A form with no field is a button by another
         // name, and the owner would have nothing to type the magnet into.
         Assert.Contains("source", string.Join(" ", Rendered.EveryValue(page)), StringComparison.Ordinal);
@@ -96,7 +99,7 @@ public class ControlsOnPagesTests
             one => one.Id.StartsWith($"{QueueView.LookingTableId}-", StringComparison.Ordinal)
                    && one.Action is not null);
 
-        Assert.Equal(QueueView.SearchAction, Called(row));
+        Assert.Equal("queue/search", Called(row));
 
         // The episode travels with it. A control that named the action and not
         // which row it was on would search for whatever the server felt like.

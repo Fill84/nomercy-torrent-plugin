@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using Microsoft.AspNetCore.Mvc;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugins.Mvc;
@@ -41,6 +43,67 @@ public sealed class SettingsController(TorrentDownloaderPlugin plugin) : PluginC
             result,
             result.Saved ? "ok" : "refused",
             result.Saved ? null : string.Join(" ", result.Errors));
+    }
+
+    /// <summary>
+    /// Applies what the Settings page posted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A form posts flat names and values and nothing else, so this takes them
+    /// as they arrive and <see cref="SettingsEdit"/> puts each where it
+    /// belongs. Only what was named is touched: the page saves one section at a
+    /// time and the sections it did not send must survive the save.
+    /// </para>
+    /// <para>
+    /// Like <see cref="Save"/> it does not validate — the store does, once —
+    /// and a refusal is an answer the page renders, not an error status.
+    /// </para>
+    /// </remarks>
+    [HttpPost("settings/edit")]
+    public async Task<IActionResult> Edit(
+        [FromBody] Dictionary<string, object?> fields,
+        CancellationToken ct)
+    {
+        Settings settings = await plugin.Settings.LoadAsync(ct);
+
+        IReadOnlyList<string> refused = SettingsEdit.Apply(
+            settings,
+            fields.ToDictionary(field => field.Key, field => Text(field.Value), StringComparer.Ordinal));
+
+        if (refused.Count > 0)
+        {
+            // Nothing is saved when anything was refused. Saving the fields
+            // that landed would leave the owner looking at a page where some of
+            // what they typed took and some did not, with no way to tell which.
+            return Status(new SaveResult(false, refused, []), "refused", string.Join(" ", refused));
+        }
+
+        SaveResult result = await plugin.Settings.SaveAsync(settings, ct);
+
+        return Status(
+            result,
+            result.Saved ? "ok" : "refused",
+            result.Saved ? null : string.Join(" ", result.Errors));
+    }
+
+    /// <summary>
+    /// A posted value as the text it stands for.
+    /// </summary>
+    /// <remarks>
+    /// JSON carries a number as a number and a tick as a boolean, and the
+    /// culture is pinned because a rate typed as 1.5 must not arrive as 15 on a
+    /// machine that writes it 1,5.
+    /// </remarks>
+    private static string? Text(object? value)
+    {
+        return value switch
+        {
+            null => null,
+            bool flag => flag ? "true" : "false",
+            IFormattable number => number.ToString(null, CultureInfo.InvariantCulture),
+            _ => value.ToString(),
+        };
     }
 
     /// <summary>

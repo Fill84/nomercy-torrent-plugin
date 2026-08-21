@@ -1,3 +1,5 @@
+using System.Globalization;
+
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
@@ -17,6 +19,18 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 public static class SettingsView
 {
     public const string FormId = "settings";
+
+    // A control's "method" is the path the client posts to:
+    // plugins/{id}/{method}, straight through.
+
+    /// <summary>Starting a cycle now.</summary>
+    public const string RunAction = "run";
+
+    /// <summary>Cancelling the running one.</summary>
+    public const string StopAction = "stop";
+
+    /// <summary>Saving whatever section of the page was filled in.</summary>
+    public const string SaveAction = "settings/edit";
 
     /// <summary>
     /// The page. <c>secretsSet</c> is the keys the secret store holds — names
@@ -42,10 +56,10 @@ public static class SettingsView
                 Folders(settings),
                 CadenceSection(settings.Cadences),
                 Quality(settings.Profile),
-                Client(settings.Client),
+                Client(settings.Client, settings.DryRun),
                 Indexers(settings, present),
                 Trackers(settings, present),
-                NotWiredYet(settings),
+                Running(settings),
             ],
         };
     }
@@ -87,85 +101,241 @@ public static class SettingsView
         }
     }
 
+    /// <remarks>
+    /// Nothing downloads until both of these are set, so this is the first
+    /// section on the page and it is the one that must be fillable.
+    /// </remarks>
     private static PluginComponent Folders(Settings settings)
     {
-        return PluginViews.Detail(
+        return Section(
             "folders",
-            "Folders",
-            "Where downloads land, and where finished video is staged for the encoder.",
-            null,
-            PluginViews.Text("folders-incomplete", $"Incomplete: {Or(settings.IncompleteFolder, "not chosen")}"),
-            PluginViews.Text("folders-intake", $"Intake: {Or(settings.IntakeFolder, "not chosen")}"));
+            new PluginFormField
+            {
+                Name = "incompleteFolder",
+                Label = "Incomplete folder — where a download lands while it runs",
+                Value = settings.IncompleteFolder,
+                Placeholder = @"D:\torrents\incomplete",
+            },
+            new PluginFormField
+            {
+                Name = "intakeFolder",
+                Label = "Intake folder — where finished video is staged for the encoder",
+                Value = settings.IntakeFolder,
+                Placeholder = @"D:\torrents\intake",
+            });
     }
 
     private static PluginComponent CadenceSection(Cadences cadences)
     {
-        return PluginViews.Detail(
+        return Section(
             "cadences",
-            "Cadences",
-            // The owner is told, because the alternative is that they change a
-            // cron, watch the old one keep firing, and conclude the setting
-            // does not work. The server registers cadences once, when the
-            // plugin loads.
-            "A changed cadence takes effect when the server restarts, not before.",
-            null,
-            [
-                .. cadences.All().Select((cadence, index) =>
-                    PluginViews.Text($"cadence-{index}", $"{cadence.Name}: {cadence.Expression}")),
-            ]);
+            new PluginFormField
+            {
+                Name = "cadences.transfers",
+                // Said on every one of them, because the alternative is that
+                // the owner changes a cron, watches the old one keep firing,
+                // and concludes the setting does not work. The server registers
+                // cadences once, when the plugin loads.
+                Label = "Transfers — takes effect on the next server restart",
+                Value = cadences.Transfers,
+            },
+            new PluginFormField
+            {
+                Name = "cadences.feed",
+                Label = "Feed — takes effect on the next server restart",
+                Value = cadences.Feed,
+            },
+            new PluginFormField
+            {
+                Name = "cadences.search",
+                Label = "Search — takes effect on the next server restart",
+                Value = cadences.Search,
+            },
+            new PluginFormField
+            {
+                Name = "cadences.maintenance",
+                Label = "Maintenance — takes effect on the next server restart",
+                Value = cadences.Maintenance,
+            });
     }
 
     private static PluginComponent Quality(Profile profile)
     {
-        return PluginViews.Detail(
+        return Section(
             "quality",
-            "Quality",
-            null,
-            null,
-            PluginViews.Text("quality-resolution", $"Maximum resolution: {profile.MaximumResolution}"),
-            PluginViews.Text("quality-codec", $"Codec: {profile.Codec}"),
-            PluginViews.Text(
-                "quality-codec-tag",
-                profile.CodecTagRequired
-                    ? "An untagged release is refused."
-                    : "Untagged releases are accepted, because no codec is wanted."),
-            PluginViews.Text("quality-seeders", $"Minimum seeders: {profile.MinimumSeeders}"),
-            PluginViews.Text(
-                "quality-packs",
-                profile.AllowSeasonPacks
-                    ? $"Season packs from {profile.SeasonPackThreshold} gaps."
-                    : "Season packs are never taken."),
-            PluginViews.Text("quality-english", profile.EnglishOnly ? "English only." : "Any language."),
-            PluginViews.Text("quality-specials", profile.IncludeSpecials ? "Specials included." : "Specials skipped."),
-            PluginViews.Text("quality-attempts", $"Maximum search attempts: {profile.MaxSearchAttempts}"),
-            PluginViews.Text(
-                "quality-exclude",
-                $"Forbidden terms: {Or(string.Join(", ", profile.ExcludeTerms), "none")}"));
+            new PluginFormField
+            {
+                Name = "profile.maximumResolution",
+                Label = "Maximum resolution",
+                Value = profile.MaximumResolution,
+            },
+            new PluginFormField
+            {
+                Name = "profile.codec",
+                Label = "Codec",
+                Value = profile.Codec,
+            },
+            new PluginFormField
+            {
+                Name = "profile.requireCodecTag",
+                Label = "Refuse a release that does not say which codec it is",
+                Type = PluginFormFieldType.Toggle,
+                Value = profile.RequireCodecTag,
+            },
+            new PluginFormField
+            {
+                Name = "profile.minimumSeeders",
+                Label = "Minimum seeders",
+                Type = PluginFormFieldType.Number,
+                Value = profile.MinimumSeeders,
+            },
+            new PluginFormField
+            {
+                Name = "profile.allowSeasonPacks",
+                Label = "Take season packs",
+                Type = PluginFormFieldType.Toggle,
+                Value = profile.AllowSeasonPacks,
+            },
+            new PluginFormField
+            {
+                Name = "profile.seasonPackThreshold",
+                Label = "Gaps before a season pack is worth it",
+                Type = PluginFormFieldType.Number,
+                Value = profile.SeasonPackThreshold,
+            },
+            new PluginFormField
+            {
+                Name = "profile.englishOnly",
+                Label = "English only",
+                Type = PluginFormFieldType.Toggle,
+                Value = profile.EnglishOnly,
+            },
+            new PluginFormField
+            {
+                Name = "profile.includeSpecials",
+                Label = "Include specials",
+                Type = PluginFormFieldType.Toggle,
+                Value = profile.IncludeSpecials,
+            },
+            new PluginFormField
+            {
+                Name = "profile.maxSearchAttempts",
+                Label = "Give up on an episode after this many searches",
+                Type = PluginFormFieldType.Number,
+                Value = profile.MaxSearchAttempts,
+            },
+            new PluginFormField
+            {
+                Name = "profile.excludeTerms",
+                Label = "Forbidden terms, separated by commas",
+                Value = string.Join(", ", profile.ExcludeTerms),
+                Placeholder = "HDCAM, CAM, TS",
+            });
     }
 
-    private static PluginComponent Client(ClientLimits limits)
+    private static PluginComponent Client(ClientLimits limits, bool dryRun)
     {
-        return PluginViews.Detail(
+        return Section(
             "client",
-            "Torrent client",
-            null,
-            null,
-            PluginViews.Text("client-port", $"Listen port: {limits.ListenPort} (TCP and UDP)"),
-            PluginViews.Text("client-mapping", limits.PortMapping ? "Port mapping on." : "Port mapping off."),
-            PluginViews.Text("client-down", Rate("Maximum download", limits.MaxDownloadRate)),
-            PluginViews.Text("client-up", Rate("Maximum upload", limits.MaxUploadRate)),
-            PluginViews.Text("client-seed", $"Seed to {limits.SeedRatio} or {limits.SeedHours} h, whichever comes first."),
-            PluginViews.Text("client-stall", $"A stall is {limits.StallMinutes} min with no progress and no peers."),
-            PluginViews.Text("client-metadata", $"Metadata timeout: {limits.MetadataTimeoutMinutes} min"),
-            PluginViews.Text("client-concurrent", $"At most {limits.MaxConcurrentDownloads} downloads at once."),
-            PluginViews.Text("client-encryption", $"Encryption: {limits.Encryption}"),
-            PluginViews.Text(
-                "client-trackers",
-                // Not "0 trackers": none has been chosen, which is a different
-                // thing from a list that is empty by preference.
-                limits.DefaultTrackers.Count == 0
-                    ? "Default trackers: none chosen."
-                    : $"Default trackers: {limits.DefaultTrackers.Count}"));
+            new PluginFormField
+            {
+                Name = "client.listenPort",
+                Label = "Listen port (TCP and UDP)",
+                Type = PluginFormFieldType.Number,
+                Value = limits.ListenPort,
+            },
+            new PluginFormField
+            {
+                Name = "client.portMapping",
+                Label = "Ask the router to open it",
+                Type = PluginFormFieldType.Toggle,
+                Value = limits.PortMapping,
+            },
+            new PluginFormField
+            {
+                Name = "client.maxDownloadRate",
+                Label = "Maximum download, bytes per second — 0 is unlimited",
+                Type = PluginFormFieldType.Number,
+                Value = limits.MaxDownloadRate,
+            },
+            new PluginFormField
+            {
+                Name = "client.maxUploadRate",
+                Label = "Maximum upload, bytes per second — 0 is unlimited",
+                Type = PluginFormFieldType.Number,
+                Value = limits.MaxUploadRate,
+            },
+            new PluginFormField
+            {
+                Name = "client.seedRatio",
+                Label = "Seed until this ratio",
+                Value = limits.SeedRatio.ToString(CultureInfo.InvariantCulture),
+            },
+            new PluginFormField
+            {
+                Name = "client.seedHours",
+                Label = "or this many hours, whichever comes first",
+                Type = PluginFormFieldType.Number,
+                Value = limits.SeedHours,
+            },
+            new PluginFormField
+            {
+                Name = "client.stallMinutes",
+                Label = "Minutes with no progress and no peers before it counts as stalled",
+                Type = PluginFormFieldType.Number,
+                Value = limits.StallMinutes,
+            },
+            new PluginFormField
+            {
+                Name = "client.metadataTimeoutMinutes",
+                Label = "Minutes to wait for a magnet's metadata",
+                Type = PluginFormFieldType.Number,
+                Value = limits.MetadataTimeoutMinutes,
+            },
+            new PluginFormField
+            {
+                Name = "client.maxConcurrentDownloads",
+                Label = "Downloads at once",
+                Type = PluginFormFieldType.Number,
+                Value = limits.MaxConcurrentDownloads,
+            },
+            new PluginFormField
+            {
+                Name = "client.encryption",
+                Label = "Encryption",
+                Type = PluginFormFieldType.Select,
+                Value = limits.Encryption.ToString(),
+                Options =
+                [
+                    .. Enum.GetNames<EncryptionPolicy>()
+                        .Select(name => new PluginFormOption { Label = name, Value = name }),
+                ],
+            },
+            new PluginFormField
+            {
+                Name = "dryRun",
+                Label = "Dry run — decide everything, download nothing",
+                Type = PluginFormFieldType.Toggle,
+                Value = dryRun,
+            });
+    }
+
+    /// <summary>
+    /// One section of the page: its fields, and the button that saves them.
+    /// </summary>
+    /// <remarks>
+    /// A form per section rather than one for the whole page, because a form
+    /// posts only the fields it holds and the applier changes only what it is
+    /// sent. Saving the folders leaves the quality profile exactly as it was,
+    /// which is what lets a page be saved a piece at a time.
+    /// </remarks>
+    private static PluginComponent Section(string id, params PluginFormField[] fields)
+    {
+        return PluginViews.Form(
+            id,
+            "Save",
+            PluginActionIntent.CallPlugin(SaveAction, null, PluginActionTransport.Rest),
+            fields);
     }
 
     private static PluginComponent Indexers(Settings settings, HashSet<string> present)
@@ -203,19 +373,31 @@ public static class SettingsView
             ]);
     }
 
-    private static PluginComponent NotWiredYet(Settings settings)
+    /// <summary>Starting a cycle, and stopping one.</summary>
+    /// <remarks>
+    /// These were text until 21 August 2026, saying they did nothing because at
+    /// the time nothing was behind them. Sprint 8 built the pipeline and no
+    /// slice came back to turn them into controls, so the plugin had no way at
+    /// all to be asked to do something.
+    /// </remarks>
+    private static PluginComponent Running(Settings settings)
     {
         return PluginViews.Detail(
             "run",
             "Run",
-            // A control that answers with silence is indistinguishable from one
-            // that started a cycle which then found nothing, and the owner
-            // would wait for a result that was never coming.
-            "Run, Stop and dry run do nothing yet: there is no pipeline behind them to start or stop.",
+            settings.DryRun
+                ? "Dry run is on: a cycle decides for every episode and hands nothing to the torrent client."
+                : "A cycle looks for every missing episode and downloads what it settles on.",
             null,
-            PluginViews.Text("run-run", "Run"),
-            PluginViews.Text("run-stop", "Stop"),
-            PluginViews.Text("run-dry", settings.DryRun ? "Dry run: on" : "Dry run: off"));
+            PluginViews.Button(
+                "run-run",
+                "Run now",
+                PluginActionIntent.CallPlugin(RunAction, null, PluginActionTransport.Rest),
+                variant: "primary"),
+            PluginViews.Button(
+                "run-stop",
+                "Stop",
+                PluginActionIntent.CallPlugin(StopAction, null, PluginActionTransport.Rest)));
     }
 
     /// <summary>Whether a secret is stored — never which one, and never what.</summary>

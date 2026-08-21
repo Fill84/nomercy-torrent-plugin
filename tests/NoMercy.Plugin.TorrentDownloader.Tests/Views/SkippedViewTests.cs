@@ -66,7 +66,7 @@ public class SkippedViewTests
         // the action's name and everything it needs to act on this one release.
         string intent = JsonSerializer.Serialize(row.Action);
 
-        Assert.Contains(SkippedView.AllowAction, intent, StringComparison.Ordinal);
+        Assert.Contains("skipped/allow", intent, StringComparison.Ordinal);
         Assert.Contains("Silo S03E06 720p WEB", intent, StringComparison.Ordinal);
         Assert.Contains("42", intent, StringComparison.Ordinal);
     }

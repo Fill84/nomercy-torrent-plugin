@@ -827,6 +827,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     public async Task<PluginView> GetViewAsync(PluginViewRequest request, CancellationToken ct)
     {
+        // Every page carries the plugin's own navigation, put on here rather
+        // than by each view: six of the eight are mounted nowhere in the
+        // server's navigation and were reachable only by typing an address.
+        return Pages.WithNavigation(await PageAsync(request, ct), request.Route);
+    }
+
+    private async Task<PluginView> PageAsync(PluginViewRequest request, CancellationToken ct)
+    {
         // Rendered per request from the current state, never from a tree held
         // between requests: a cached page goes stale silently, and the page
         // most worth trusting is the one saying what is happening now.

@@ -55,22 +55,97 @@ public class SettingsViewTests
     }
 
     /// <remarks>
-    /// A control that does nothing has to say so. A Run button that answers
-    /// with silence is indistinguishable from one that started a cycle which
-    /// then found nothing, and the owner would wait for a result that was never
-    /// coming.
+    /// Every section of the page is something the owner can change. Until
+    /// 21 August 2026 the whole page was text: it printed the settings and gave
+    /// no way at all to set one, so a folder never chosen could never be
+    /// chosen and the plugin had nowhere to download to.
     /// </remarks>
-    [Fact]
-    public void RunStopAndDryRunSayThatTheyDoNothingYet()
+    [Theory]
+    [InlineData("folders", "incompleteFolder")]
+    [InlineData("folders", "intakeFolder")]
+    [InlineData("cadences", "cadences.search")]
+    [InlineData("quality", "profile.maximumResolution")]
+    [InlineData("client", "client.listenPort")]
+    public void EverySectionIsAFormTheOwnerCanChange(string section, string field)
     {
         PluginView view = SettingsView.Render(new(), [], []);
 
-        string page = string.Join(" ", Rendered.Words(view));
+        PluginComponent form = Rendered.ById(view, section);
 
-        Assert.Contains("Run", page, StringComparison.Ordinal);
-        Assert.Contains("Stop", page, StringComparison.Ordinal);
-        Assert.Contains("Dry run", page, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("nothing", page, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(PluginComponentType.Form, form.Component);
+        Assert.Equal(
+            "settings/edit",
+            Assert.IsType<PluginActionIntent>(form.Action).Payload["method"]);
+
+        Assert.Contains(field, Rendered.EveryValue(view).OfType<string>());
+    }
+
+    /// <remarks>
+    /// A field arrives holding what the setting holds. A form that opened empty
+    /// would have the owner retyping every setting on the page to change one of
+    /// them, and a blank left behind would clear it.
+    /// </remarks>
+    [Fact]
+    public void EveryFieldOpensHoldingWhatTheSettingHolds()
+    {
+        Settings settings = new();
+        settings.Client.ListenPort = 6881;
+
+        PluginView view = SettingsView.Render(settings, [], []);
+
+        Assert.Contains("6881", Rendered.EveryValue(view).Select(value => value?.ToString()));
+    }
+
+    /// <remarks>
+    /// Every field the page offers has somewhere to land, and every setting
+    /// this plugin lets a page change is offered. A field the applier does not
+    /// know is one the owner types into and saves and nothing happens; a
+    /// setting the page never renders is one they cannot reach at all.
+    /// </remarks>
+    [Fact]
+    public void ThePageOffersEveryFieldThatCanBeApplied()
+    {
+        PluginView view = SettingsView.Render(new(), [], []);
+
+        IReadOnlyList<string> rendered = [.. Rendered.EveryValue(view).OfType<string>()];
+
+        foreach (string field in SettingsEdit.Fields)
+        {
+            Assert.Contains(field, rendered);
+        }
+    }
+
+    /// <remarks>
+    /// These said they did nothing until 21 August 2026, and that was honest
+    /// while nothing was behind them. Sprint 8 built the pipeline; nothing came
+    /// back to turn the words into controls, so the plugin could not be asked
+    /// to do anything at all from any page it serves.
+    /// </remarks>
+    [Theory]
+    [InlineData("run-run", "run")]
+    [InlineData("run-stop", "stop")]
+    public void RunAndStopArePressableAndReachTheirEndpoints(string id, string route)
+    {
+        PluginView view = SettingsView.Render(new(), [], []);
+
+        PluginComponent control = Rendered.ById(view, id);
+
+        Assert.Equal(PluginComponentType.Button, control.Component);
+        Assert.Equal(route, Assert.IsType<PluginActionIntent>(control.Action).Payload["method"]);
+    }
+
+    /// <remarks>
+    /// Dry run changes what a cycle does with what it decides, so the page says
+    /// which of the two the button in front of it will start.
+    /// </remarks>
+    [Theory]
+    [InlineData(true, "hands nothing")]
+    [InlineData(false, "downloads what it settles on")]
+    public void ThePageSaysWhatPressingRunWouldDo(bool dryRun, string expected)
+    {
+        PluginView view = SettingsView.Render(new() { DryRun = dryRun }, [], []);
+
+        Assert.Contains(expected, string.Join(" ", Rendered.Words(view)), StringComparison.Ordinal);
     }
 
     /// <remarks>

@@ -25,17 +25,22 @@ public static class DownloadsView
 {
     public const string TableId = "downloads";
 
+    // A control's "method" is the path the client posts to:
+    // plugins/{id}/{method}, straight through. Naming the action instead of the
+    // route gave every button on every page a URL this plugin does not serve,
+    // and nothing anyone pressed did anything at all.
+
     /// <summary>Pausing a transfer, keeping its pieces.</summary>
-    public const string PauseAction = "PauseDownload";
+    public static string PauseAction(string infoHash) => $"downloads/{infoHash}/pause";
 
     /// <summary>Starting a paused one again.</summary>
-    public const string ResumeAction = "ResumeDownload";
+    public static string ResumeAction(string infoHash) => $"downloads/{infoHash}/resume";
 
     /// <summary>Stopping it, forgetting it, and putting its episodes back.</summary>
-    public const string CancelAction = "CancelDownload";
+    public static string CancelAction(string infoHash) => $"downloads/{infoHash}/cancel";
 
     /// <summary>Taking on a torrent the owner found themselves.</summary>
-    public const string AddAction = "AddTorrent";
+    public const string AddAction = "downloads";
 
     public static PluginView Render(IReadOnlyList<DownloadRow> rows)
     {
@@ -70,15 +75,17 @@ public static class DownloadsView
                 $"downloads-pause-{row.Grab.InfoHash}",
                 paused ? "Resume" : "Pause",
                 PluginActionIntent.CallPlugin(
-                    paused ? ResumeAction : PauseAction,
-                    new Dictionary<string, object?> { ["infoHash"] = row.Grab.InfoHash },
+                    // In the path, not the payload: that is where the route
+                    // takes it, and a body beside it would be read by nothing.
+                    paused ? ResumeAction(row.Grab.InfoHash) : PauseAction(row.Grab.InfoHash),
+                    null,
                     PluginActionTransport.Rest)),
             PluginViews.Button(
                 $"downloads-cancel-{row.Grab.InfoHash}",
                 "Cancel",
                 PluginActionIntent.CallPlugin(
-                    CancelAction,
-                    new Dictionary<string, object?> { ["infoHash"] = row.Grab.InfoHash },
+                    CancelAction(row.Grab.InfoHash),
+                    null,
                     PluginActionTransport.Rest,
 
                     // Confirmed, because it deletes what has been downloaded so

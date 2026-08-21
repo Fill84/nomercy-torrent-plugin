@@ -124,6 +124,79 @@ public class SettingsControllerTests
         }
     }
 
+    /// <remarks>
+    /// The page posts what its fields hold — flat names and values — and this
+    /// is the only way the owner can change a setting from the dashboard. Until
+    /// 21 August 2026 the page rendered every setting as text and offered no
+    /// way to change any of them.
+    /// </remarks>
+    [Fact]
+    public async Task ThePageCanChangeOneSettingWithoutSendingTheRest()
+    {
+        TorrentDownloaderPlugin plugin = Initialised();
+        SettingsController controller = new(plugin);
+
+        await controller.Save(Writable(), CancellationToken.None);
+
+        OkObjectResult result = Assert.IsType<OkObjectResult>(
+            await controller.Edit(
+                new Dictionary<string, object?> { ["client.listenPort"] = 6881 },
+                CancellationToken.None));
+
+        Assert.Equal("ok", Assert.IsType<PluginStatusResponse<SaveResult>>(result.Value).Status);
+
+        Settings saved = await plugin.Settings.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(6881, saved.Client.ListenPort);
+
+        // The folders were never in the post and are still there. A page that
+        // sent one section and cleared the others would lose a setting every
+        // time the owner saved a different one.
+        Assert.Equal(Path.GetTempPath(), saved.IncompleteFolder);
+    }
+
+    /// <remarks>
+    /// The store is what validates, for the page exactly as for the endpoint
+    /// beside it, and its reason is what the owner reads.
+    /// </remarks>
+    [Fact]
+    public async Task AnEditTheStoreRefusesIsRefusedWithItsReason()
+    {
+        SettingsController controller = new(Initialised());
+
+        OkObjectResult result = Assert.IsType<OkObjectResult>(
+            await controller.Edit(
+                new Dictionary<string, object?> { ["cadences.feed"] = "nonsense" },
+                CancellationToken.None));
+
+        PluginStatusResponse<SaveResult> response =
+            Assert.IsType<PluginStatusResponse<SaveResult>>(result.Value);
+
+        Assert.Equal("refused", response.Status);
+        Assert.Contains("feed", response.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
+    /// A field nothing answers to is refused by name rather than dropped: the
+    /// owner typed into it and watched it save.
+    /// </remarks>
+    [Fact]
+    public async Task AFieldThatIsNotASettingIsRefusedByName()
+    {
+        SettingsController controller = new(Initialised());
+
+        OkObjectResult result = Assert.IsType<OkObjectResult>(
+            await controller.Edit(
+                new Dictionary<string, object?> { ["client.listenPortt"] = 6881 },
+                CancellationToken.None));
+
+        PluginStatusResponse<SaveResult> response =
+            Assert.IsType<PluginStatusResponse<SaveResult>>(result.Value);
+
+        Assert.Equal("refused", response.Status);
+        Assert.Contains("client.listenPortt", response.Message ?? string.Empty, StringComparison.Ordinal);
+    }
+
     private static TorrentDownloaderPlugin Initialised()
     {
         TorrentDownloaderPlugin plugin = new();
