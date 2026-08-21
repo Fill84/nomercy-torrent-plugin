@@ -331,7 +331,7 @@ public static class SettingsView
     /// </remarks>
     private static PluginComponent Section(string id, params PluginFormField[] fields)
     {
-        return PluginViews.Form(
+        return Forms.Section(
             id,
             "Save",
             PluginActionIntent.CallPlugin(SaveAction, null, PluginActionTransport.Rest),

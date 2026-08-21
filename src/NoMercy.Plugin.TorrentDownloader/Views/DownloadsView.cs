@@ -112,7 +112,7 @@ public static class DownloadsView
     /// </remarks>
     private static PluginComponent Add()
     {
-        return PluginViews.Form(
+        return Forms.Section(
             "downloads-add",
             "Add",
             PluginActionIntent.CallPlugin(AddAction, null, PluginActionTransport.Rest),
