@@ -331,6 +331,53 @@ public class ReleaseFilterTests
             .JudgeName(pack, episode, Blacklist.None).Accepted);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Only a video file.</strong> A release whose name ends in a file
+    /// type has to end in a video one. On 22 August 2026 the owner's server
+    /// grabbed <c>Lioness 2023 S03E02 1080p WEB h264-ETHEL.exe</c> — 1.2 GB of
+    /// executable named after an episode — and nothing in the chain looked at
+    /// it, because the only rule that knew about file types lived in one site's
+    /// reader and only fired when that site wrote the type as a separate word.
+    /// </para>
+    /// <para>
+    /// The name is a claim and not the truth, which is why the same rule is
+    /// applied again to the torrent's own contents. This one saves the grab.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("Silo.S03E06.1080p.WEB.H264-CAKES", true)]
+    [InlineData("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", true)]
+    [InlineData("Silo S03E06 1080p WEB H264-CAKES mkv", true)]
+    [InlineData("Silo.S03E06.1080p.WEB.H264-CAKES.exe", false)]
+    [InlineData("Silo S03E06 1080p WEB H264-CAKES exe", false)]
+    [InlineData("Silo.S03E06.1080p.WEB.H264-CAKES.rar", false)]
+    [InlineData("Silo.S03E06.1080p.WEB.H264-CAKES.iso", false)]
+    public void ANameThatCarriesAFileTypeHasToCarryAVideoOne(string title, bool accepted)
+    {
+        Verdict verdict = Filter().JudgeName(
+            ReleaseName.Parse(title),
+            Episode("Silo", 3, 6),
+            Blacklist.None);
+
+        Assert.Equal(accepted, verdict.Accepted);
+    }
+
+    /// <remarks>
+    /// The release group is not a file type. Reading it as one takes the group
+    /// off the name or refuses the release outright, and both were measured
+    /// against real captures: <c>Greek S01E01 HR HDTV XviD-2HD</c> disappeared
+    /// the first time this was written by taking the last word blindly.
+    /// </remarks>
+    [Theory]
+    [InlineData("Greek S01E01 HR HDTV XviD-2HD")]
+    [InlineData("Silo.S03E06.1080p.WEB.H264-FQM")]
+    [InlineData("Silo.S03E06.PROPER.1080p.WEB.H264-NTb")]
+    public void AReleaseGroupIsNotAFileType(string title)
+    {
+        Assert.Null(TitleMatcher.FileType(title));
+    }
+
     private static ReleaseFilter Filter(Profile? profile = null)
     {
         return new(profile ?? new() { MaximumResolution = "1080p" });

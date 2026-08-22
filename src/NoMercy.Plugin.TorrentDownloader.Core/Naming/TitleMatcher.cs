@@ -30,6 +30,39 @@ public static class TitleMatcher
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
+    /// Words that are a file type when a name ends in one.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A lexicon and not a policy. What may be downloaded is decided by
+    /// <c>Staging.VideoExtensions</c>, which is a whitelist; this list
+    /// answers a different question — whether the last word of a name is a file
+    /// type at all, or the release group.
+    /// </para>
+    /// <para>
+    /// It has to be asked, because most names end in the group:
+    /// <c>H264-CAKES</c>, <c>XviD-2HD</c>, <c>FQM</c>. Reading one of those as a
+    /// file type takes the group off the name or throws the release away for
+    /// having a type nobody recognises, and both were measured happening.
+    /// </para>
+    /// </remarks>
+    private static readonly Regex Type = new(
+        @"[.\s](mkv|mp4|avi|m4v|mov|wmv|mpg|mpeg|m2ts|mts|ts|vob|webm|ogm|divx|m2v"
+        + @"|exe|scr|msi|bat|cmd|com|vbs|ps1|jar|apk|dmg|pkg|deb|rpm|lnk|iso|img|bin"
+        + @"|rar|zip|7z|gz|tar|nfo|txt|url|html|htm|srt|sub|idx|jpg|jpeg|png)\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// The file type a name ends in, or null when it ends in anything else.
+    /// </summary>
+    public static string? FileType(string title)
+    {
+        Match match = Type.Match((title ?? string.Empty).TrimEnd());
+
+        return match.Success ? match.Groups[1].Value : null;
+    }
+
+    /// <summary>
     /// Whoever reposted it, written bare at the end.
     /// </summary>
     /// <remarks>

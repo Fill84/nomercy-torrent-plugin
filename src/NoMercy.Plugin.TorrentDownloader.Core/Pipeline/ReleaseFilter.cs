@@ -113,6 +113,16 @@ public sealed class ReleaseFilter(Profile profile)
             return Verdict.No($"{name.Original} is blacklisted.");
         }
 
+        if (TitleMatcher.FileType(name.Original) is string type && !Staging.VideoExtensions.Contains("." + type))
+        {
+            // Only a video file. The name is a claim rather than the truth —
+            // what is really in the torrent is judged again when its metadata
+            // arrives — but a name that admits to being an executable is not
+            // worth a grab, and on 22 August 2026 one was taken: 1.2 GB of
+            // Lioness 2023 S03E02 1080p WEB h264-ETHEL.exe.
+            return Verdict.No($"'{name.Original}' is a {type} file and only video files are downloaded.");
+        }
+
         if (!TitleMatcher.Matches(name.Title, episode.ShowTitle))
         {
             return Verdict.No($"'{name.Title}' is not a release of {episode.ShowTitle}.");
