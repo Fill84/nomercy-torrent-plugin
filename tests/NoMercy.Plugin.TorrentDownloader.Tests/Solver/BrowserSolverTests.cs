@@ -40,6 +40,48 @@ public class BrowserSolverTests
     }
 
     /// <remarks>
+    /// <para>
+    /// Chrome does not <em>show</em> a feed, it downloads one, and a navigation
+    /// to a download is aborted: <c>net::ERR_ABORTED</c>. So the address that
+    /// carries the answer is the one address the browser will not go to, and
+    /// giving up there loses the whole source.
+    /// </para>
+    /// <para>
+    /// Measured against SceneSource on 22 August 2026, whose search is RSS:
+    /// every query aborted, and the page reported the site as not answering
+    /// while the feed was sitting there for anyone who asked for it rather than
+    /// navigated to it.
+    /// </para>
+    /// <para>
+    /// The host is still reachable — it is this document Chrome refuses to
+    /// render — so the tab goes to the site itself for its clearance and the
+    /// feed is fetched from inside the page, which is how every other
+    /// non-HTML body already comes back.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFeedTheBrowserRefusesToRenderIsFetchedFromInsideThePage()
+    {
+        const string feed = """<?xml version="1.0"?><rss><channel><item><title>Silo S03E08 1080p WEB H264-CAKES</title></channel></rss>""";
+
+        FakeTabs tabs = new();
+        FakeTab tab = tabs.Tab("www.scnsrc.me");
+        tab.Shows("<html><body>SceneSource</body></html>");
+        tab.ContentType = "application/rss+xml";
+        tab.InPageBody = feed;
+        tab.FailsToLoadOnly("/feed/", "net::ERR_ABORTED at https://www.scnsrc.me/feed/?s=Silo");
+
+        string? body = await Solver(tabs).GetPageAsync(
+            new("https://www.scnsrc.me/feed/?s=Silo"),
+            CancellationToken.None);
+
+        Assert.Equal(feed, body);
+
+        // The site itself, for the clearance the feed needs and cannot ask for.
+        Assert.Contains(tab.Visited, visited => visited == "https://www.scnsrc.me/");
+    }
+
+    /// <remarks>
     /// An HTML page is read from the document, because that is where the site's
     /// own scripts have finished putting it. Fetching it again inside the page
     /// would get the markup before any of that ran.

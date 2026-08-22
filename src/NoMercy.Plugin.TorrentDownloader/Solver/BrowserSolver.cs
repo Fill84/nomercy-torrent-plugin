@@ -90,7 +90,29 @@ public sealed class BrowserSolver(
             return null;
         }
 
-        if (!await Navigate(tab, url, ct) || !await WaitForClear(tab, url, ct))
+        if (!await Navigate(tab, url, ct))
+        {
+            // Chrome does not show a feed, it downloads one, and a navigation
+            // to a download is aborted — so the address carrying the answer is
+            // the one address the browser will not go to. Giving up here loses
+            // the whole source, and the page reports the site as not answering
+            // while the feed sits there for anyone who asks for it instead.
+            //
+            // The host is reachable; it is this document Chrome refuses to
+            // render. So the tab goes to the site itself for the clearance the
+            // feed cannot ask for, and the body is fetched from inside the
+            // page, which is how every other non-HTML body already comes back.
+            Uri site = new(url.GetLeftPart(UriPartial.Authority) + "/");
+
+            if (!await Navigate(tab, site, ct) || !await WaitForClear(tab, site, ct))
+            {
+                return null;
+            }
+
+            return await tab.FetchInPageAsync(url, ct);
+        }
+
+        if (!await WaitForClear(tab, url, ct))
         {
             return null;
         }
