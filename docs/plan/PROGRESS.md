@@ -4,34 +4,37 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**The plugin found nothing for five episodes every site was carrying, and the reasons are found and
-fixed. It needs the server stopped once so 0.4.0 can go over and a real cycle be watched.**
+**The plugin picks the right release now, and that is proved against pages four sites really served
+rather than promised. What has never run is everything after the choice.**
 
-The owner's Skipped page on 22 August 2026 showed Silo S03E04 to S03E07 in 1080p being refused for
-not being S03E08 — while all five were missing from the library and every indexer had them. Reading
-the server's own database and then the sites themselves turned up six faults, each now fixed with a
-test that was seen to fail first, and each recorded under **Decisions**:
+0.4.0 loaded on `beast-unit` on 22 August 2026 and two cycles were watched end to end. Ten faults
+came out of it, each fixed with a test seen to fail first and each recorded under **Decisions**. The
+last four were found by the owner watching the pages rather than by any test:
 
-- **The question no site could answer.** A3 said the full release name and nothing else. apibay
-  answers that with "No results returned" and `Silo S03E08` with twelve rows. Four of eight indexers
-  read nothing off a release every one of them carried. A3 is corrected.
-- **An episode with no pooled name was never searched at all.** S03E05 and S03E06 had none.
-- **Copies for the cycle's other gaps were thrown away**, and recorded as refusals against the wrong
+- **A3 was wrong.** Asking for the full release name is a question search engines cannot answer.
+- **An episode with no pooled name was never searched**, and two of the owner's Silo gaps had none.
+- **Copies for the cycle's other gaps were thrown away** and recorded as refusals against the wrong
   episode, which is what filled the Skipped page.
-- **The best copy was tried and no other.** TorrentBay tops the ranking and named no torrent, so the
-  cycle stopped there.
+- **The best copy was tried and no other**, so a site that names no torrent stopped the episode.
 - **TorrentBay's signed POST was never written.** It is now, and the site was seen to answer it.
-- **Nothing counted a search**, so `MaxSearchAttempts` decided nothing and the queue never reordered.
+- **Nothing counted a search**, so `MaxSearchAttempts` and the queue's order were both dead.
+- **Two callers shared one browser tab**, so every gated name database aborted itself.
+- **Nothing ever pushed to an open page.** `LiveSnapshot.Changed` was called by no code at all.
+- **One ordinary word matched five other programmes.** *Lucky* collected *Lucky Hank*, *Lucky Dog*,
+  *Lucky 7*, *Lucky Bastards* and *Lucky 13*.
+- **A leftover from another episode's search settled an episode**, so the release everybody was
+  seeding was never fetched. This one was mine, added the same day as a saving, and it is the fault
+  the owner had been describing from the start.
 
-Also: EZTV's seed column was hard-coded to null; a run of tags was worth a space wherever it stood,
-which mangled twenty-six of thirty-four TorrentBay names; and KickassTorrents is removed on the
-owner's decision.
+`TheRightReleaseTests` is what stops the tenth coming back: two episodes of one programme, over what
+The Pirate Bay, LimeTorrents, TorrentGalaxy and TorrentDownloads really answered, through the real
+readers, profile and decision. S02E08 answers CAKES at 458 seeders; S02E01 has no CAKES release at
+all and answers playWEB at 247. Both were confirmed by the owner.
 
 **Waiting on the owner to stop the media server.** Then `scripts/deploy-to-server.ps1 -Build`, and
-start it. `DryRun` is on in the server's settings, so the first cycle will decide everything and hand
-nothing over — which is the safest thing to watch first. What to look for is one line per missing
-episode on the Dashboard saying what it would take and from where, and a Skipped page carrying only
-reasons the owner can act on.
+start it. What is still unproven is everything after the choice: the grab, the download completing,
+only the video being staged, no sample, and the encoder being handed the file. Every test of that
+runs against fakes, and none of it has been watched once.
 
 ## Blocked
 
