@@ -196,6 +196,23 @@ public sealed class ReleaseFilter(Profile profile)
         return Verdict.Yes;
     }
 
+    /// <summary>
+    /// Whether this name is a release of this episode at all.
+    /// </summary>
+    /// <remarks>
+    /// The two rules that say <em>which</em> episode a name is for, apart from
+    /// the rules that say whether it is worth having. The difference matters
+    /// because a search engine answers broadly: asked about Silo S03E08 on
+    /// 22 August 2026 a site answered with S03E04 to S03E07 as well, and those
+    /// rows were never offered for S03E08 by anybody. Recording them as refused
+    /// filled the Skipped page with lines the owner could do nothing about, and
+    /// throwing them away lost four episodes the library was missing.
+    /// </remarks>
+    public static bool IsFor(ReleaseName name, TrackedEpisode episode)
+    {
+        return TitleMatcher.Matches(name.Title, episode.ShowTitle) && Slot(name, episode);
+    }
+
     /// <summary>Whether this name is for this episode.</summary>
     /// <remarks>
     /// A pack answers for the season it covers. Whether one is worth its bytes

@@ -37,6 +37,18 @@ public sealed record EpisodeOutcome(
     public string? Magnet { get; init; }
 
     /// <summary>
+    /// Whether an indexer was actually asked about this episode.
+    /// </summary>
+    /// <remarks>
+    /// What makes a search attempt an attempt. An episode nothing could be
+    /// asked about, and one settled by a pack taken earlier, have not been
+    /// looked for — counting either would spend the owner's
+    /// <c>MaxSearchAttempts</c> on work nobody did and give up on an episode
+    /// that was never searched for once.
+    /// </remarks>
+    public bool Searched { get; init; }
+
+    /// <summary>
     /// Every gap this release answers for: one for an ordinary release, the
     /// season's remaining gaps for a pack.
     /// </summary>
@@ -139,6 +151,14 @@ public sealed class SearchCycle(
         // were met so the owner's settings do not churn.
         List<string> trackers = [];
 
+        // Every copy any search this cycle answered with, whichever gap it was
+        // asked for. A site asked about one episode answers with the whole
+        // programme, and on 22 August 2026 four 1080p copies of Silo S03E04 to
+        // S03E07 - every one of them an episode the library was missing - came
+        // back from a search for S03E08 and were thrown away. They are kept so
+        // the gap they do answer for can have them without asking again.
+        List<ReleaseCopy> answered = [];
+
         // One episode at a time, because the decisions of each are part of the
         // state of the next: a pack taken for season three settles the rest of
         // season three, and running them together would have two of them grab
@@ -153,6 +173,7 @@ public sealed class SearchCycle(
                 decisions,
                 options,
                 trackers,
+                answered,
                 ct));
         }
 
@@ -165,6 +186,7 @@ public sealed class SearchCycle(
         Decisions decisions,
         CycleOptions options,
         List<string> trackers,
+        List<ReleaseCopy> answered,
         CancellationToken ct)
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
@@ -178,60 +200,42 @@ public sealed class SearchCycle(
 
         journal.Started(ActivityStage.Decide, subject, $"{candidates.Count} names");
 
+        // Why the client would not have a copy that was otherwise worth
+        // taking. Kept, because "nothing anybody is serving is worth taking" is
+        // the wrong answer when the truth is that the disk is full - and the
+        // owner can act on one of those two and not on the other.
+        List<string> refused = [];
+
         try
         {
-            string[] acceptable =
-            [
-                .. candidates.Where(title => decisions.JudgeName(ReleaseName.Parse(title), episode).Accepted),
-            ];
-
-            if (acceptable.Length == 0)
+            // What earlier searches this cycle have already turned up. Free:
+            // the request has been made and paid for, and the answer to
+            // "who is serving Silo S03E04" was already inside it.
+            if (await TakeAsync(episode, answered, decisions, options, subject, trackers, refused, ct)
+                is EpisodeOutcome held)
             {
-                journal.Finished(ActivityStage.Decide, subject, "no acceptable name");
-
-                return new(
-                    episode.Key,
-                    null,
-                    null,
-                    null,
-                    false,
-                    candidates.Count == 0
-                        ? "nothing has a name for it yet"
-                        : $"none of its {candidates.Count} names is acceptable");
+                return held;
             }
 
-            // In turn, stopping at the first that produces a copy worth taking,
-            // and never more than the owner's own MaxSearchAttempts: twenty
-            // spellings of one release times seventeen indexers is a cycle that
-            // gets the plugin banned from every site it asks.
-            foreach (string title in acceptable.Take(Math.Max(1, options.Profile.MaxSearchAttempts)))
-            {
-                ReleaseName name = ReleaseName.Parse(title);
+            bool asked = false;
 
-                IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(title, episode.Kind, ct);
+            foreach (string term in Terms(episode, candidates, options.Profile))
+            {
+                IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(term, episode.Kind, ct);
+
+                asked = true;
 
                 // Every copy, taken or not: a tracker on a release the profile
                 // refused is serving the same swarm as the one it accepted.
                 trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
 
-                Decision decision = decisions.Choose(episode, name, copies);
+                answered.AddRange(copies);
 
-                if (decision.Chosen is null)
+                if (await TakeAsync(episode, copies, decisions, options, subject, trackers, refused, ct)
+                    is EpisodeOutcome taken)
                 {
-                    continue;
+                    return taken;
                 }
-
-                ReleaseCopy chosen = await find.FollowAsync(decision.Chosen, ct);
-
-                // And the copy that was followed. No shipped listing publishes
-                // a magnet — every one of the nine captured carries the row's
-                // own page instead — so a torrent's trackers are not known
-                // until its page has been read.
-                trackers.AddRange(chosen.Trackers);
-
-                journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}");
-
-                return await GrabAsync(episode, chosen, decisions.CoveredBy(episode, name), options, ct);
             }
 
             journal.Finished(ActivityStage.Decide, subject, "nobody is serving an acceptable copy");
@@ -242,7 +246,14 @@ public sealed class SearchCycle(
                 null,
                 null,
                 false,
-                $"{acceptable.Length} names, and no copy of any of them is worth taking");
+                refused.Count > 0
+                    ? refused[^1]
+                    : asked
+                        ? "every indexer was asked, and nothing anybody is serving is worth taking"
+                        : "there was nothing to ask an indexer")
+            {
+                Searched = asked,
+            };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -252,7 +263,151 @@ public sealed class SearchCycle(
         }
     }
 
-    private async Task<EpisodeOutcome> GrabAsync(
+    /// <summary>
+    /// Takes the best copy of this episode anybody is serving, or none.
+    /// </summary>
+    /// <remarks>
+    /// Down the ranking rather than only at the top of it. The best copy is the
+    /// one with the most seeders, and that is often the one hardest to reach:
+    /// on 22 August 2026 the highest-seeded copy of Silo S03E08 came from a
+    /// site whose magnet lives behind a signed request this plugin does not
+    /// make. The cycle followed it, found no torrent and stopped, with a copy
+    /// of the same episode from another site sitting unexamined and the
+    /// episode reported as though nobody were serving it.
+    /// </remarks>
+    private async Task<EpisodeOutcome?> TakeAsync(
+        TrackedEpisode episode,
+        IReadOnlyList<ReleaseCopy> copies,
+        Decisions decisions,
+        CycleOptions options,
+        string subject,
+        List<string> trackers,
+        List<string> refused,
+        CancellationToken ct)
+    {
+        if (copies.Count == 0)
+        {
+            return null;
+        }
+
+        Decision decision = decisions.Rank(episode, Find.Merge(copies));
+
+        foreach (ReleaseCopy candidate in decision.Ranked)
+        {
+            ReleaseCopy chosen = await find.FollowAsync(candidate, ct);
+
+            // And the copy that was followed. No shipped listing publishes a
+            // magnet, so a torrent's trackers are not known until its own page
+            // has been read.
+            trackers.AddRange(chosen.Trackers);
+
+            if (chosen.Magnet is null)
+            {
+                // Reached for and not to be had. Recorded, so the owner can see
+                // which site keeps answering with rows nobody can download
+                // from, and passed over so the next copy gets its turn.
+                decisions.Unreachable(
+                    episode,
+                    candidate,
+                    $"{candidate.Source} named no torrent for it, on the row or on its own page.");
+
+                continue;
+            }
+
+            journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}");
+
+            IReadOnlyList<EpisodeKey> covers = decisions.CoveredBy(episode, ReleaseName.Parse(chosen.Title));
+
+            (EpisodeOutcome outcome, bool stands) = await GrabAsync(episode, chosen, covers, options, ct);
+
+            if (!stands)
+            {
+                // The client would not have it. A download that never started
+                // settles nothing, and the next copy is worth a turn - but the
+                // reason is kept, because it is the true answer for this
+                // episode if no other copy can be had either.
+                refused.Add(outcome.Detail);
+
+                continue;
+            }
+
+            decisions.Settle(episode, chosen);
+
+            return outcome with { Searched = true };
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// What to ask the indexers, in the order it is worth asking.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A3 said the full release name and nothing else, and A3 is
+    /// wrong.</strong> On 22 August 2026 apibay answered
+    /// <c>Silo S03E08 1080p WEB H264 CAKES</c> with "No results returned" and
+    /// <c>Silo S03E08</c> with twelve rows, the first of them seeded by six
+    /// thousand. Four of the eight indexers that cycle read nothing at all off
+    /// a release every one of them was carrying, and the episode was reported
+    /// as though it did not exist. Both captures are in tests/fixtures.
+    /// </para>
+    /// <para>
+    /// The episode's own number first, because that is the question nearly
+    /// every search box can answer. Then the programme on its own, because
+    /// EZTV's box is labelled "Search title" and answers a release name with
+    /// nothing at all, and because one such answer carries every gap of that
+    /// programme this cycle is looking for. Then the release names, which are
+    /// exact and worth having wherever a site can use them.
+    /// </para>
+    /// <para>
+    /// What comes back is judged name by name against the profile, which is the
+    /// protection A3 was really asking for. 0.3.4 searched broadly and had no
+    /// rule saying a row had to be a release of the episode it was asked about,
+    /// so whatever came back well seeded was taken. This has that rule, and it
+    /// is <see cref="ReleaseFilter.IsFor"/>.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<string> Terms(
+        TrackedEpisode episode,
+        IReadOnlyList<string> names,
+        Profile profile)
+    {
+        // Never more than the owner's own MaxSearchAttempts. Every term is a
+        // request to every indexer, and a cycle that asks twenty of them gets
+        // the plugin banned from all of them.
+        return Every().Take(Math.Max(1, profile.MaxSearchAttempts));
+
+        IEnumerable<string> Every()
+        {
+            yield return $"{episode.ShowTitle} {episode.Key}";
+
+            if (episode.Absolute is int absolute)
+            {
+                // An absolute-numbered release carries no season tag at all, so
+                // the form above finds none of them.
+                yield return $"{episode.ShowTitle} {absolute}";
+            }
+
+            yield return episode.ShowTitle;
+
+            foreach (string name in names)
+            {
+                yield return name;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Hands one chosen copy over, and says whether the decision stands.
+    /// </summary>
+    /// <returns>
+    /// The outcome, and whether it is the last word on this episode. A client
+    /// that would not take the torrent has not decided anything: the next copy
+    /// down the ranking is still worth a turn, and nothing this one would have
+    /// covered is settled by it.
+    /// </returns>
+    private async Task<(EpisodeOutcome Outcome, bool Stands)> GrabAsync(
         TrackedEpisode episode,
         ReleaseCopy chosen,
         IReadOnlyList<EpisodeKey> covers,
@@ -261,24 +416,21 @@ public sealed class SearchCycle(
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
 
-        if (chosen.Magnet is null)
-        {
-            // Chosen and unreachable: its own page named no torrent either. Not
-            // a refusal by the profile, and it must not read like one.
-            journal.Failed(ActivityStage.Grab, subject, $"{chosen.Title} offers no way to the torrent.");
-
-            return new(episode.Key, chosen.Title, chosen.Source, chosen.Seeders, false, "no way to the torrent");
-        }
-
         if (options.DryRun)
         {
-            return new(
-                episode.Key,
-                chosen.Title,
-                chosen.Source,
-                chosen.Seeders,
-                false,
-                "would take it — dry run is on");
+            return (
+                new(
+                    episode.Key,
+                    chosen.Title,
+                    chosen.Source,
+                    chosen.Seeders,
+                    false,
+                    "would take it — dry run is on")
+                {
+                    Magnet = chosen.Magnet,
+                    Covers = covers,
+                },
+                true);
         }
 
         if (grab is null)
@@ -286,13 +438,19 @@ public sealed class SearchCycle(
             // Said plainly rather than left looking like a decision nobody
             // made. A plugin with no torrent client decides and hands nothing
             // over, and the page says exactly that.
-            return new(
-                episode.Key,
-                chosen.Title,
-                chosen.Source,
-                chosen.Seeders,
-                false,
-                "would take it — there is no torrent client yet");
+            return (
+                new(
+                    episode.Key,
+                    chosen.Title,
+                    chosen.Source,
+                    chosen.Seeders,
+                    false,
+                    "would take it — there is no torrent client yet")
+                {
+                    Magnet = chosen.Magnet,
+                    Covers = covers,
+                },
+                true);
         }
 
         journal.Started(ActivityStage.Grab, subject, chosen.Title);
@@ -307,28 +465,32 @@ public sealed class SearchCycle(
         {
             // B2: a client that would not take a magnet is not the episode's
             // fault, so this costs it no search attempt.
-            return new(
-                episode.Key,
-                chosen.Title,
-                chosen.Source,
-                chosen.Seeders,
-                false,
-                taken.Reason ?? "the client would not take it and gave no reason");
+            return (
+                new(
+                    episode.Key,
+                    chosen.Title,
+                    chosen.Source,
+                    chosen.Seeders,
+                    false,
+                    taken.Reason ?? "the client would not take it and gave no reason"),
+                false);
         }
 
         journal.Finished(ActivityStage.Grab, subject, $"{chosen.Title} from {chosen.Source}");
 
-        return new(
-            episode.Key,
-            chosen.Title,
-            chosen.Source,
-            chosen.Seeders,
-            true,
-            $"taken from {chosen.Source}, {taken.InfoHash}")
-        {
-            InfoHash = taken.InfoHash,
-            Magnet = chosen.Magnet,
-            Covers = covers,
-        };
+        return (
+            new(
+                episode.Key,
+                chosen.Title,
+                chosen.Source,
+                chosen.Seeders,
+                true,
+                $"taken from {chosen.Source}, {taken.InfoHash}")
+            {
+                InfoHash = taken.InfoHash,
+                Magnet = chosen.Magnet,
+                Covers = covers,
+            },
+            true);
     }
 }

@@ -57,13 +57,16 @@ public class SearchCycleTests
 
         Assert.Equal(Folder, engine.Taken[0].DownloadFolder);
 
-        // And the episode nothing has a name for says exactly that, rather than
-        // disappearing from the report.
+        // And the episode nobody is serving says exactly that, rather than
+        // disappearing from the report. It was asked about: the indexer was put
+        // the question and answered with a page carrying nothing for it, which
+        // is a different thing from never having been asked.
         EpisodeOutcome missing = report.Outcomes.Single(outcome => outcome.Episode == Silo(7).Key);
 
         Assert.Null(missing.Release);
         Assert.False(missing.HandedOver);
-        Assert.Contains("name", missing.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.True(missing.Searched);
+        Assert.Contains("nothing anybody is serving", missing.Detail, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <remarks>
@@ -95,10 +98,9 @@ public class SearchCycleTests
     /// <remarks>
     /// Forty-two episodes across six seasons cost six questions per name
     /// database, end to end and not only in the resolver's own test. The pool
-    /// answers the rest, and an episode nobody has a name for costs no indexer
-    /// anything at all. The year form is left out of this one: a one-word title
-    /// with a year is asked under both, which doubles the count honestly and is
-    /// the resolver's own rule rather than this stage's.
+    /// answers the rest. The year form is left out of this one: a one-word
+    /// title with a year is asked under both, which doubles the count honestly
+    /// and is the resolver's own rule rather than this stage's.
     /// </remarks>
     [Fact]
     public async Task FortyTwoEpisodesAcrossSixSeasonsCostSixQuestionsPerNameDatabase()
@@ -124,10 +126,14 @@ public class SearchCycleTests
         Assert.Equal(6, fetch.Asked.Count(address => address.Host == "api.srrdb.com"));
         Assert.Equal(6, fetch.Asked.Count(address => address.Host == "predb.me"));
 
-        // And not one indexer was asked, because no episode had a name to ask
-        // about. A search for nothing is the request 0.3.4 made forty times a
-        // cycle.
-        Assert.DoesNotContain(fetch.Asked, address => address.Host == "www.limetorrents.lol");
+        // And the indexer was asked about every one of them, because an episode
+        // nothing has a name for is still an episode a search engine can be
+        // asked about by number. While it was not, five gaps of the owner's own
+        // Silo season three were never put to a single site: two of them had no
+        // name in the pool at all, and every indexer was carrying the release.
+        Assert.Equal(42, fetch.Asked.Count(address =>
+            address.Host == "www.limetorrents.lol"
+            && address.AbsolutePath.Contains('E', StringComparison.Ordinal)));
     }
 
     /// <remarks>
@@ -305,6 +311,143 @@ public class SearchCycleTests
         Assert.Contains("free", outcome.Detail, StringComparison.Ordinal);
     }
 
+
+    /// <remarks>
+    /// <strong>A3 was wrong, and this is the test that proves it.</strong> The
+    /// rule said an indexer is asked the full release name and nothing else. On
+    /// 22 August 2026 the real library asked apibay for
+    /// <c>Silo S03E08 1080p WEB H264 CAKES</c> and it answered
+    /// <em>No results returned</em>; the same site answers
+    /// <c>Silo S03E08</c> with twelve rows, the first of them seeded by six
+    /// thousand. Both captures are in tests/fixtures. A search engine is asked
+    /// what it can answer, and what comes back is judged by the profile — which
+    /// is the protection A3 was really asking for and which 0.3.4 did not have.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeIsAskedForByItsOwnNumberSoASiteCanAnswerIt()
+    {
+        FakeFetch fetch = new();
+
+        // Nothing has a name for it: the pool is empty and the name databases
+        // answer with a feed carrying nothing at all.
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        fetch.Answers(
+            "https://apibay.org/q.php?q=Silo+S03E08&cat=",
+            Capture.Fixture("the-pirate-bay-episode.json"));
+
+        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
+            [Silo(8)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal("Silo S03E08 1080p HEVC x265-MeGusta", outcome.Release);
+        Assert.Equal(6372, outcome.Seeders);
+    }
+
+    /// <remarks>
+    /// A site asked about one gap answers with the whole programme, and the
+    /// other gaps of this cycle are in that answer. Throwing them away is what
+    /// the owner saw on 22 August 2026: four 1080p copies of Silo S03E04 to
+    /// S03E07 came back from a search for S03E08, every one of them an episode
+    /// the library was missing, and every one recorded as refused for not being
+    /// S03E08.
+    /// </remarks>
+    [Fact]
+    public async Task ACopyThatAnswersAnotherGapOfThisCycleIsGivenToIt()
+    {
+        FakeFetch fetch = new();
+
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        // The whole programme, which is what this site answers when it is asked
+        // for one: a hundred rows from S01E01 to S03E08, with hashes and
+        // seeders on all of them.
+        fetch.Answers(
+            "https://apibay.org/q.php?q=Silo+S03E04&cat=",
+            Capture.Fixture("the-pirate-bay-show.json"));
+
+        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
+            [Silo(4), Silo(5), Silo(6), Silo(7)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        Assert.Equal(4, report.Outcomes.Count);
+        Assert.All(report.Outcomes, outcome => Assert.True(outcome.HandedOver, outcome.Detail));
+
+        // One request for the four of them. The three that followed were
+        // answered out of what the first already had.
+        Assert.Equal(1, fetch.Asked.Count(address => address.Host == "apibay.org"));
+    }
+
+    /// <remarks>
+    /// A row that came back for another episode is not a refusal. It was never
+    /// offered for this one — a search engine answered broadly — and recording
+    /// it as refused is what filled the Skipped page with
+    /// "'Silo S03E04 …' is not S03E08" and buried the reasons the page exists
+    /// for.
+    /// </remarks>
+    [Fact]
+    public async Task ARowForAnotherEpisodeIsNotRecordedAsARefusal()
+    {
+        FakeFetch fetch = new();
+
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+        fetch.Answers(
+            "https://apibay.org/q.php?q=Silo+S03E08&cat=",
+            Capture.Fixture("the-pirate-bay-show.json"));
+
+        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
+            [Silo(8)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        Assert.DoesNotContain(
+            report.Skipped,
+            skipped => skipped.Reason.Contains("is not S03E08", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// The best copy is the one with the most seeders, and the site with the
+    /// most seeders is the one whose magnet is hardest to get: TorrentBay's
+    /// comes from a signed request this plugin does not make, so every row it
+    /// answers with is unreachable. On 22 August 2026 it outranked everything
+    /// for Silo S03E08, the cycle followed it, found no torrent and stopped —
+    /// with a copy of the same episode from another site sitting unexamined.
+    /// </remarks>
+    [Fact]
+    public async Task WhenTheBestCopyNamesNoTorrentTheNextOneIsTaken()
+    {
+        FakeFetch fetch = new();
+
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        // TorrentGalaxy publishes neither a magnet nor a hash, and its rows'
+        // own pages are unreachable in this test — so every copy it offers is
+        // a dead end, and it is asked first because it answers with the higher
+        // count.
+        fetch.Answers(
+            "https://torrentgalaxy.one/get-posts/keywords:Silo%20S03E07/",
+            Capture.Fixture("torrentgalaxy.html"));
+
+        fetch.Answers(
+            "https://apibay.org/q.php?q=Silo+S03E07&cat=",
+            Capture.Fixture("the-pirate-bay-show.json"));
+
+        CycleReport report = await Cycle(fetch, new(), sources: WithGalaxyAndPirateBay).RunAsync(
+            [Silo(7)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal("The Pirate Bay", outcome.Source);
+    }
+
     /// <summary>Where a download would land, if anything were downloading.</summary>
     private const string Folder = @"C:\downloads";
 
@@ -343,6 +486,33 @@ public class SearchCycleTests
     [
         .. Sources,
         new("Nyaa", "torrent-rss", "https://nyaa.si/?page=rss&q={query}") { Priority = 30 },
+    ];
+
+    /// <summary>
+    /// One indexer, and it is the real one whose two captures prove what a
+    /// search term does: The Pirate Bay's own JSON, hashes and seeders and all.
+    /// </summary>
+    private static readonly SourceDefinition[] WithPirateBay =
+    [
+        new("srrDB search", "srrdb", "https://api.srrdb.com/v1/search/{query}") { Query = QueryStyles.Slug },
+        new("PreDB", "rss", "https://predb.me/?rss=1") { SearchUrl = "https://predb.me/?search={query}&rss=1" },
+        new("The Pirate Bay", "apibay", "https://apibay.org/q.php?q={query}&cat=") { Priority = 45 },
+    ];
+
+    /// <summary>
+    /// The same, with a site that publishes no route to a torrent at all in
+    /// front of it - which is the arrangement that stopped every download on
+    /// 22 August 2026.
+    /// </summary>
+    private static readonly SourceDefinition[] WithGalaxyAndPirateBay =
+    [
+        .. WithPirateBay,
+        new("TorrentGalaxy", "site", "https://torrentgalaxy.one/get-posts/keywords:{query}/")
+        {
+            Reader = "torrentgalaxy",
+            Query = QueryStyles.Spaced,
+            Priority = 30,
+        },
     ];
 
     private static SearchCycle Cycle(

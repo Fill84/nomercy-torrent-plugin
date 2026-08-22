@@ -61,7 +61,7 @@ public sealed class Find(
     /// </remarks>
     public async Task<ReleaseCopy> FollowAsync(ReleaseCopy chosen, CancellationToken ct)
     {
-        if (chosen.Magnet is not null || chosen.DetailUrl is null)
+        if (chosen.Magnet is not null)
         {
             return chosen;
         }
@@ -73,7 +73,21 @@ public sealed class Find(
             // a hashed .torrent link on every row and nothing else, and
             // following those pages would be a request per grab for a torrent
             // already in hand.
+            //
+            // Asked before the page address rather than after it. The Pirate
+            // Bay's own endpoint answers with a hash and no page at all, and
+            // while the two were the other way round every row it gave came
+            // back unreachable: the highest-priority indexer in the catalogue,
+            // with the most honest seeder counts of any of them, could not
+            // produce a single download.
             return chosen with { Magnet = Magnets.For(known, chosen.Title) };
+        }
+
+        if (chosen.DetailUrl is null)
+        {
+            // No magnet, no hash and no page to look on. Nothing more can be
+            // done for it here.
+            return chosen;
         }
 
         SourceDefinition? indexer = catalogue.Enabled

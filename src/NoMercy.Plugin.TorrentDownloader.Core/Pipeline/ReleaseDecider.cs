@@ -3,14 +3,27 @@ using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
 /// <summary>
-/// Which copy was taken, and what became of the rest.
+/// Which copies are worth taking, best first, and what became of the rest.
 /// </summary>
-/// <param name="Chosen">The one to grab, or null when nothing was acceptable.</param>
+/// <param name="Ranked">
+/// Every acceptable copy in the order it is worth trying. A list rather than
+/// one copy, because the best copy is not always reachable: on 22 August 2026
+/// the highest-seeded copy of Silo S03E08 came from a site whose magnet lives
+/// behind a signed request this plugin does not make, the cycle followed it,
+/// found no torrent and stopped — with a copy of the same episode from another
+/// site sitting unexamined and the episode reported as unavailable.
+/// </param>
 /// <param name="Refused">
-/// Every copy that was not taken and why. Kept rather than discarded: the
+/// Every copy that was not acceptable and why. Kept rather than discarded: the
 /// Skipped page renders exactly this, and the owner can allow one anyway.
 /// </param>
-public sealed record Decision(ReleaseCopy? Chosen, IReadOnlyList<(ReleaseCopy Copy, string Reason)> Refused);
+public sealed record Decision(
+    IReadOnlyList<ReleaseCopy> Ranked,
+    IReadOnlyList<(ReleaseCopy Copy, string Reason)> Refused)
+{
+    /// <summary>The one to try first, or null when nothing was acceptable.</summary>
+    public ReleaseCopy? Chosen => Ranked.Count > 0 ? Ranked[0] : null;
+}
 
 /// <summary>
 /// Chooses one copy from what the indexers answered, or none.
@@ -26,7 +39,7 @@ public sealed class ReleaseDecider(Profile profile)
     private readonly ReleaseFilter _filter = new(profile);
 
     /// <summary>
-    /// Judges every copy and takes the best of the survivors.
+    /// Judges every copy and ranks the survivors, best first.
     /// </summary>
     /// <remarks>
     /// Seeders first, then the site's own rating <strong>descending</strong>.
@@ -52,13 +65,16 @@ public sealed class ReleaseDecider(Profile profile)
             }
         }
 
-        ReleaseCopy? chosen = acceptable
-            // A copy whose site does not publish a count sorts below one that
-            // does and has some: it might be well seeded and nothing says so.
-            .OrderByDescending(copy => copy.Seeders ?? 0)
-            .ThenByDescending(copy => copy.Priority)
-            .FirstOrDefault();
+        ReleaseCopy[] ranked =
+        [
+            .. acceptable
+                // A copy whose site does not publish a count sorts below one
+                // that does and has some: it might be well seeded and nothing
+                // says so.
+                .OrderByDescending(copy => copy.Seeders ?? 0)
+                .ThenByDescending(copy => copy.Priority),
+        ];
 
-        return new(chosen, refused);
+        return new(ranked, refused);
     }
 }

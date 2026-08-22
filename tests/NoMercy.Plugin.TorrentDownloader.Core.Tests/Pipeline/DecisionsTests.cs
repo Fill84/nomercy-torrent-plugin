@@ -70,9 +70,13 @@ public class DecisionsTests
 
         Assert.False(decisions.Settled(Gap(2).Key));
 
-        Decision decision = decisions.Choose(Gap(1), Pack, [Copy(Pack.Original, seeders: 40)]);
+        Decision decision = decisions.Rank(Gap(1), [Copy(Pack.Original, seeders: 40)]);
 
         Assert.NotNull(decision.Chosen);
+
+        // Settled when it is taken, not when it is chosen: a copy that turns
+        // out to have no route to a torrent settles nothing.
+        decisions.Settle(Gap(1), decision.Chosen!);
 
         Assert.True(decisions.Settled(Gap(1).Key));
         Assert.True(decisions.Settled(Gap(2).Key));
@@ -91,7 +95,9 @@ public class DecisionsTests
             [Silo(6), Silo(7)],
             Blacklist.None);
 
-        decisions.Choose(Silo(6), Single, [Copy(Single.Original, seeders: 40)]);
+        Decision decision = decisions.Rank(Silo(6), [Copy(Single.Original, seeders: 40)]);
+
+        decisions.Settle(Silo(6), decision.Chosen!);
 
         Assert.True(decisions.Settled(Silo(6).Key));
         Assert.False(decisions.Settled(Silo(7).Key));
@@ -111,14 +117,14 @@ public class DecisionsTests
             Blacklist.Of(Blacklist.KeyOf(Single.Original)));
 
         Assert.False(byTitle.JudgeName(Single, Silo(6)).Accepted);
-        Assert.Null(byTitle.Choose(Silo(6), Single, [Copy(Single.Original, seeders: 40)]).Chosen);
+        Assert.Null(byTitle.Rank(Silo(6), [Copy(Single.Original, seeders: 40)]).Chosen);
 
         Decisions byHash = new(
             new() { MaximumResolution = "720p", MinimumSeeders = 2 },
             [Silo(6)],
             Blacklist.Of(Hash));
 
-        Assert.Null(byHash.Choose(Silo(6), Single, [Copy(Single.Original, seeders: 40)]).Chosen);
+        Assert.Null(byHash.Rank(Silo(6), [Copy(Single.Original, seeders: 40)]).Chosen);
     }
 
     /// <remarks>
@@ -135,7 +141,7 @@ public class DecisionsTests
             [Silo(6)],
             Blacklist.None);
 
-        decisions.Choose(Silo(6), Single, [Copy(Single.Original, seeders: 1)]);
+        decisions.Rank(Silo(6), [Copy(Single.Original, seeders: 1)]);
 
         SkippedRelease skipped = Assert.Single(decisions.Skipped);
 

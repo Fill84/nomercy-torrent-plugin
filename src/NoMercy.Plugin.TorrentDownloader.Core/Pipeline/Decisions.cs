@@ -129,22 +129,40 @@ public sealed class Decisions
     }
 
     /// <summary>
-    /// Takes the best copy of <paramref name="name"/>, or none, and remembers
-    /// what that settles.
+    /// Ranks what the indexers answered with, best first, for this episode.
     /// </summary>
-    public Decision Choose(TrackedEpisode episode, ReleaseName name, IReadOnlyList<ReleaseCopy> copies)
+    /// <remarks>
+    /// A search engine answers the question it understood, not the one it was
+    /// asked: a search for Silo S03E08 comes back carrying S03E04 to S03E07 and
+    /// rows for other programmes entirely. Those are not refusals — nobody
+    /// offered them for this episode — so they are passed over in silence and
+    /// left for whichever gap they do answer for. Everything that <em>is</em> a
+    /// release of this episode and is still not taken is recorded with its
+    /// reason, which is what the Skipped page is for.
+    /// </remarks>
+    public Decision Rank(TrackedEpisode episode, IReadOnlyList<ReleaseCopy> copies)
     {
-        // What a site answered with is not necessarily what it was asked for.
-        // A search puts a release name to seventeen indexers and each one
-        // answers with whatever its own search engine thought; the copy's own
-        // announced title has to pass the same rules the name did, or a row
-        // for another programme entirely is taken because it happened to come
-        // back well seeded.
         List<ReleaseCopy> forThisEpisode = [];
 
         foreach (ReleaseCopy copy in copies)
         {
-            Verdict verdict = _filter.JudgeName(ReleaseName.Parse(copy.Title), episode, _blacklisted);
+            ReleaseName parsed = ReleaseName.Parse(copy.Title);
+
+            if (!ReleaseFilter.IsFor(parsed, episode))
+            {
+                // Another episode's row, or another programme's. It was never
+                // offered for this one.
+                continue;
+            }
+
+            Verdict verdict = _filter.JudgeName(parsed, episode, _blacklisted);
+
+            if (verdict.Accepted && parsed.IsPack && !WorthAPack(episode))
+            {
+                verdict = Verdict.No(
+                    $"Season {episode.Key.Season} has {GapsIn(episode.Key.ShowId, episode.Key.Season)} gaps "
+                    + $"and a pack is worth taking at {_profile.SeasonPackThreshold}.");
+            }
 
             if (verdict.Accepted)
             {
@@ -163,21 +181,49 @@ public sealed class Decisions
             _skipped.Add(new(episode.Key, copy.Title, copy.Source, reason));
         }
 
-        if (decision.Chosen is null)
-        {
-            return decision;
-        }
+        return decision;
+    }
 
-        // A pack answers for every gap in the season it covers, and those are
-        // the gaps this cycle knows about — which is the only list anything
-        // here has. An episode of that season that is not missing needs
-        // nothing, and one the library gains tomorrow is tomorrow's business.
-        foreach (EpisodeKey key in CoveredBy(episode, name))
+    /// <summary>
+    /// Records that this copy has been taken for this episode, and what else it
+    /// answers for.
+    /// </summary>
+    /// <remarks>
+    /// Settled when it is taken and not when it is chosen. A copy that is
+    /// chosen and then turns out to have no route to a torrent settles nothing,
+    /// or the rest of its season is written off for a download that never
+    /// started.
+    /// </remarks>
+    public IReadOnlyList<EpisodeKey> Settle(TrackedEpisode episode, ReleaseCopy taken)
+    {
+        // The name it was announced under, not the name that was searched for:
+        // whether the season's other gaps come with it is a property of the
+        // file being taken.
+        IReadOnlyList<EpisodeKey> covered = CoveredBy(episode, ReleaseName.Parse(taken.Title));
+
+        foreach (EpisodeKey key in covered)
         {
             _settled.Add(key);
         }
 
-        return decision;
+        return covered;
+    }
+
+    /// <summary>Records a copy that was reached for and could not be had.</summary>
+    /// <remarks>
+    /// Not a refusal by the profile and it must not read like one, but it does
+    /// belong on the Skipped page: a site that answers with rows nobody can
+    /// download from is a site the owner wants to know about.
+    /// </remarks>
+    public void Unreachable(TrackedEpisode episode, ReleaseCopy copy, string reason)
+    {
+        _skipped.Add(new(episode.Key, copy.Title, copy.Source, reason));
+    }
+
+    /// <summary>Whether a pack is worth its bytes for this episode's season.</summary>
+    private bool WorthAPack(TrackedEpisode episode)
+    {
+        return GapsIn(episode.Key.ShowId, episode.Key.Season) >= _profile.SeasonPackThreshold;
     }
 
     /// <summary>
