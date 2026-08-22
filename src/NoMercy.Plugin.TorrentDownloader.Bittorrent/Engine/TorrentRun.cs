@@ -85,6 +85,16 @@ public sealed class TorrentRun : IDisposable
     private readonly int _listenPort;
     private readonly TimeProvider _time;
     private readonly ResumeKeeper? _resume;
+
+    /// <summary>
+    /// Which of the torrent's files are downloaded, or null for all of them.
+    /// </summary>
+    /// <remarks>
+    /// Handed in rather than decided here. This engine deals in pieces and has
+    /// no opinion about file types; what a video file is belongs to the plugin,
+    /// which is the only thing that knows the owner's rule.
+    /// </remarks>
+    private readonly Func<IReadOnlyList<TorrentFileEntry>, IReadOnlyList<TorrentFileEntry>>? _choose;
     private readonly RateMeter _down;
     private readonly RateMeter _up;
     private readonly Lock _lock = new();
@@ -119,6 +129,7 @@ public sealed class TorrentRun : IDisposable
     private TorrentDisk? _disk;
     private TorrentMetadata? _torrent;
     private bool _disposed;
+    private bool _nothingWanted;
 
     public TorrentRun(
         byte[] infoHash,
@@ -130,7 +141,8 @@ public sealed class TorrentRun : IDisposable
         int listenPort,
         TimeProvider time,
         TorrentMetadata? torrent = null,
-        ResumeKeeper? resume = null)
+        ResumeKeeper? resume = null,
+        Func<IReadOnlyList<TorrentFileEntry>, IReadOnlyList<TorrentFileEntry>>? choose = null)
     {
         _infoHash = infoHash;
         _trackers = [.. trackers];
@@ -142,6 +154,7 @@ public sealed class TorrentRun : IDisposable
         _time = time;
         _torrent = torrent;
         _resume = resume;
+        _choose = choose;
         _down = new(time);
         _up = new(time);
     }
@@ -160,6 +173,29 @@ public sealed class TorrentRun : IDisposable
 
     /// <summary>Whether this run is stopped and dialling nobody.</summary>
     public bool Paused { get; private set; }
+
+    /// <summary>
+    /// Whether the metadata arrived and held nothing worth downloading.
+    /// </summary>
+    /// <remarks>
+    /// A torrent with no video file in it. The caller stops it and says so —
+    /// it is the shape a fake release takes, and on 22 August 2026 one of them
+    /// was a 1.2 GB executable named after an episode.
+    /// </remarks>
+    public bool NothingWanted
+    {
+        get
+        {
+            lock (_lock)
+            {
+                // Asked for rather than waited for: nothing decides which files
+                // are wanted until something asks for the session.
+                Session();
+
+                return _nothingWanted;
+            }
+        }
+    }
 
     /// <summary>
     /// How long to leave it before announcing again, until a tracker has said.
@@ -223,7 +259,12 @@ public sealed class TorrentRun : IDisposable
                 _torrent.Name,
                 true,
                 progress.BytesDone,
-                _torrent.TotalLength,
+
+                // What is being downloaded, not what the torrent weighs. Only
+                // the video files are fetched, so a percentage against the
+                // whole would stop short of a hundred on every torrent that
+                // carries anything else.
+                progress.WantedBytes,
                 progress.Peers,
                 progress.Seeds,
                 progress.Downloaded,
@@ -686,10 +727,27 @@ public sealed class TorrentRun : IDisposable
                 return null;
             }
 
+            IReadOnlyList<TorrentFileEntry> keeping = _choose is null ? _torrent.Files : _choose(_torrent.Files);
+
+            if (keeping.Count == 0)
+            {
+                _nothingWanted = true;
+
+                // Nothing in it is worth a byte. Said rather than started: the
+                // caller stops this torrent and blames it, and creating a
+                // session that wants no pieces would report itself finished
+                // the moment it existed.
+                return null;
+            }
+
             _disk = new(_torrent, _folder);
             _disk.Create();
 
-            _session = new(_torrent, _disk, Verified(_torrent, _disk));
+            _session = new(
+                _torrent,
+                _disk,
+                Verified(_torrent, _disk),
+                keeping.Count == _torrent.Files.Count ? null : _torrent.PiecesOf(keeping));
 
             return _session;
         }

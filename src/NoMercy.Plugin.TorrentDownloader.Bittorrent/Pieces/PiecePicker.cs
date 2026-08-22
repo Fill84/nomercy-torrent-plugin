@@ -18,7 +18,10 @@ public readonly record struct BlockRequest(int Piece, int Offset, int Length);
 /// number.
 /// </para>
 /// </remarks>
-public sealed class PiecePicker(int pieces, int endgamePieces = PiecePicker.DefaultEndgamePieces)
+public sealed class PiecePicker(
+    int pieces,
+    int endgamePieces = PiecePicker.DefaultEndgamePieces,
+    Bitfield? only = null)
 {
     private readonly int[] _availability = new int[pieces];
 
@@ -85,10 +88,50 @@ public sealed class PiecePicker(int pieces, int endgamePieces = PiecePicker.Defa
         return _availability[piece];
     }
 
+    /// <summary>How many pieces this picker will ever ask for.</summary>
+    /// <remarks>
+    /// Every piece unless the caller named a mask, in which case only the ones
+    /// inside it — the owner downloads video files and nothing else, so most
+    /// torrents have pieces this client will never want.
+    /// </remarks>
+    public int Wanted => only?.Count ?? pieces;
+
+    /// <summary>Whether this piece is one of the ones being downloaded.</summary>
+    public bool Wants(int piece)
+    {
+        return only is null || only.Has(piece);
+    }
+
+    /// <summary>How many wanted pieces are still missing.</summary>
+    public int Missing(Bitfield mine)
+    {
+        if (only is null)
+        {
+            return pieces - mine.Count;
+        }
+
+        int missing = 0;
+
+        for (int piece = 0; piece < pieces; piece++)
+        {
+            if (only.Has(piece) && !mine.Has(piece))
+            {
+                missing++;
+            }
+        }
+
+        return missing;
+    }
+
     /// <summary>Whether the tail of the download has been reached.</summary>
+    /// <remarks>
+    /// Counted over the wanted pieces alone. Against the whole torrent a
+    /// download of one file out of twenty would look like the endgame from its
+    /// first message and ask every peer for everything at once.
+    /// </remarks>
     public bool Endgame(Bitfield mine)
     {
-        return mine.Pieces - mine.Count <= endgamePieces;
+        return Missing(mine) <= endgamePieces;
     }
 
     /// <summary>
@@ -109,7 +152,7 @@ public sealed class PiecePicker(int pieces, int endgamePieces = PiecePicker.Defa
 
         int[] wanted =
         [
-            .. mine.Wanted(theirs).Where(piece => endgame || !inFlight.Contains(piece)),
+            .. mine.Wanted(theirs).Where(piece => Wants(piece) && (endgame || !inFlight.Contains(piece))),
         ];
 
         if (wanted.Length == 0)

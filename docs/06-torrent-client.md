@@ -183,6 +183,42 @@ Token buckets: one global pair, one pair per torrent, refilled on a timer and dr
 and write. `MaxDownloadRate` and `MaxUploadRate` from settings, live-adjustable, zero meaning
 unlimited. The lower of the global and per-torrent limit wins.
 
+## What is downloaded
+
+**Video files, and nothing else.** The list of what counts is a whitelist in
+`Staging.VideoExtensions`; a type that is not on it is not downloaded, whatever it is. Samples are
+not downloaded either — a video under 50 MB beside something bigger, or any file with `sample` in
+its path.
+
+The choice is made when the metadata arrives, before a byte is asked for. The wanted files become a
+mask of pieces and the picker offers nothing outside it. A piece straddling a wanted file and an
+unwanted one is fetched, because a piece is the smallest thing a swarm hands over; the fragment of
+the neighbour that comes with it is never staged.
+
+A torrent with no video file in it is **refused**: it is paused, the reason is recorded against the
+grab, and nothing of it is downloaded. That is the shape a fake release takes — on 22 August 2026
+one was a 1.2 GB executable named after an episode, and it downloaded to completion because the only
+thing that knew what a video file was ran afterwards rather than before.
+
+Progress is measured against what is being downloaded, not against what the torrent weighs.
+
+## Requests
+
+Four pieces are asked of a peer at a time. One at a time leaves it idle for a round trip between
+finishing one piece and being asked for the next.
+
+A piece is marked as on its way when it is requested, and the picker offers nobody a piece already
+on its way. **A piece that has not been answered for a minute is given back**, along with whatever
+was assembled of it. Without that the mark is only ever cleared by the piece arriving or failing its
+hash, so a peer that took a request and went quiet kept that piece for the rest of the run — and
+with peers joining and leaving the marked pieces pile up until the picker has nothing to offer
+anybody. That is a download sitting at nought bytes a second with seeds on it, which is what
+happened on 22 August 2026.
+
+Every request this client makes is made in answer to a message, so a peer that goes quiet is never
+asked again on its own. Each connection therefore has a beat — a quarter of the patience above — on
+which it asks again.
+
 ## Uploading
 
 **A public torrent never uploads.** Not while it is downloading, not once it is finished. A peer on

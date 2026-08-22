@@ -8,6 +8,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 /// <param name="Seeds">How many of those have the lot.</param>
 /// <param name="Downloaded">Bytes of pieces that have arrived, good and bad.</param>
 /// <param name="Uploaded">Bytes of pieces that have gone out.</param>
+/// <param name="WantedBytes">
+/// How much of the torrent is being downloaded. Only the video files are, so on
+/// a torrent that carries anything else this is smaller than the torrent —
+/// and it is the number a percentage has to be taken against, or a download
+/// that has everything it wants shows as nine tenths done for ever.
+/// </param>
 public sealed record SessionProgress(
     int Verified,
     int Pieces,
@@ -15,10 +21,11 @@ public sealed record SessionProgress(
     int Peers,
     int Seeds,
     long Downloaded,
-    long Uploaded)
+    long Uploaded,
+    long WantedBytes)
 {
-    /// <summary>Whether every piece is verified.</summary>
-    public bool Complete => Verified == Pieces;
+    /// <summary>Whether every wanted piece is verified.</summary>
+    public bool Complete => BytesDone >= WantedBytes;
 }
 
 /// <summary>
@@ -38,10 +45,31 @@ public sealed record SessionProgress(
 /// pipe.
 /// </para>
 /// </remarks>
-public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bitfield verified) : IDisposable
+/// <param name="torrent">What the <c>.torrent</c> says.</param>
+/// <param name="disk">Where the pieces are written and read.</param>
+/// <param name="verified">What is already on disk and hashed.</param>
+/// <param name="wanted">
+/// Which pieces to download, or null for all of them. The owner's rule is that
+/// only video files are downloaded, and the caller is the only thing that knows
+/// what a video file is — the engine deals in pieces.
+/// </param>
+/// <param name="patience">
+/// How long a piece may sit unanswered before it is offered to somebody else.
+/// </param>
+/// <param name="time">Where now comes from, so a test can hand in its own.</param>
+public sealed class TorrentSession(
+    TorrentMetadata torrent,
+    TorrentDisk disk,
+    Bitfield verified,
+    Bitfield? wanted = null,
+    TimeSpan? patience = null,
+    TimeProvider? time = null) : IDisposable
 {
-    private readonly PiecePicker _picker = new(torrent.PieceCount);
+    private readonly PiecePicker _picker = new(torrent.PieceCount, PiecePicker.DefaultEndgamePieces, wanted);
     private readonly Dictionary<int, PieceAssembly> _building = [];
+
+    /// <summary>When each piece being built last heard anything.</summary>
+    private readonly Dictionary<int, DateTimeOffset> _asked = [];
     private readonly PeerTrust _trust = new();
     private readonly List<PeerConnection> _peers = [];
     private readonly Lock _lock = new();
@@ -49,14 +77,60 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
     private long _downloaded;
     private long _uploaded;
 
+    /// <summary>
+    /// How long a piece may sit unanswered before it is given back.
+    /// </summary>
+    /// <remarks>
+    /// A minute. No document gives a number, so this is the one this client
+    /// uses: long enough that a peer feeding blocks slowly over a poor line is
+    /// never given up on, short enough that a peer which has gone silent costs
+    /// one piece of delay and not the whole download.
+    /// </remarks>
+    public static TimeSpan DefaultPatience { get; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>
+    /// How many pieces are asked of one peer at a time.
+    /// </summary>
+    /// <remarks>
+    /// One piece at a time leaves a peer idle for a whole round trip between
+    /// finishing one and being asked for the next, which on a link to another
+    /// continent is most of the time. Four is enough to keep it busy without
+    /// claiming pieces this client cannot get to.
+    /// </remarks>
+    public const int Pipeline = 4;
+
     /// <summary>The torrent this is for.</summary>
     public TorrentMetadata Torrent => torrent;
 
     /// <summary>What is verified on disk.</summary>
     public Bitfield Verified => verified;
 
-    /// <summary>Whether every piece is there.</summary>
-    public bool Complete => verified.All;
+    /// <summary>Whether every piece that is wanted is there.</summary>
+    /// <remarks>
+    /// Wanted, not every piece. A torrent holding an episode and something else
+    /// is finished when the episode is, and a client that waited for the rest
+    /// would never stage the file it downloaded.
+    /// </remarks>
+    public bool Complete => _picker.Missing(verified) == 0;
+
+    /// <summary>How many bytes this session is downloading.</summary>
+    public long WantedBytes
+    {
+        get
+        {
+            long bytes = 0;
+
+            for (int piece = 0; piece < torrent.PieceCount; piece++)
+            {
+                if (_picker.Wants(piece))
+                {
+                    bytes += torrent.LengthOfPiece(piece);
+                }
+            }
+
+            return bytes;
+        }
+    }
 
     /// <summary>Where it stands, as a page would say it.</summary>
     public SessionProgress Progress()
@@ -70,7 +144,8 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
                 _peers.Count,
                 _peers.Count(one => one.Seed),
                 _downloaded,
-                _uploaded);
+                _uploaded,
+                WantedBytes);
         }
     }
 
@@ -88,6 +163,8 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
         {
             _peers.Add(peer);
         }
+
+        Task? beating = null;
 
         try
         {
@@ -114,6 +191,8 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
 
             await Turn(peer, ct).ConfigureAwait(false);
 
+            beating = BeatAsync(peer, ct);
+
             // Until the peer goes or the caller stops it. A session that hung
             // up on its own once it was complete would stop seeding the moment
             // it finished, which is the one thing a swarm cannot forgive.
@@ -135,6 +214,14 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
             {
                 _peers.Remove(peer);
                 _picker.Left(peer.Has);
+            }
+
+            if (beating is not null)
+            {
+                // Waited for rather than dropped: it holds this peer, and a
+                // beat still running after the connection is gone asks a
+                // disposed socket for a piece.
+                await beating.ConfigureAwait(false);
             }
         }
     }
@@ -169,33 +256,147 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
             return;
         }
 
-        int? next;
+        List<int> asking = [];
 
         lock (_lock)
         {
+            Abandoned();
+
             _picker.Saw(peer.Has);
 
-            next = _picker.Next(verified, peer.Has, _building.Keys.ToHashSet(), _random);
+            while (asking.Count < Pipeline)
+            {
+                int? next = _picker.Next(verified, peer.Has, _building.Keys.ToHashSet(), _random);
+
+                if (next is not int piece)
+                {
+                    break;
+                }
+
+                asking.Add(piece);
+
+                if (_building.ContainsKey(piece))
+                {
+                    // The endgame, which hands the same piece to everybody. It
+                    // is asked for but not claimed again, and asking a second
+                    // peer for a piece already claimed is the point of it.
+                    break;
+                }
+
+                _building[piece] = new(piece, torrent.LengthOfPiece(piece), torrent.Pieces[piece]);
+                _asked[piece] = Now();
+            }
 
             // Undone straight away: availability is counted once per peer, and
             // this is asked on every message that arrives.
             _picker.Left(peer.Has);
+        }
 
-            if (next is int piece && !_building.ContainsKey(piece))
+        foreach (int piece in asking)
+        {
+            foreach (BlockRequest block in PiecePicker.Blocks(piece, torrent.LengthOfPiece(piece)))
             {
-                _building[piece] = new(piece, torrent.LengthOfPiece(piece), torrent.Pieces[piece]);
+                await peer.SendAsync(PeerMessage.Request(block.Piece, block.Offset, block.Length), ct).ConfigureAwait(false);
             }
         }
+    }
 
-        if (next is not int wanted)
-        {
-            return;
-        }
+    /// <summary>
+    /// Keeps asking a peer that has gone quiet without hanging up on it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every request this client makes is made in answer to a message. A peer
+    /// that stops sending messages therefore stops being asked for anything,
+    /// and so does the peer next to it — because the pieces the quiet one was
+    /// asked for stay claimed until something runs
+    /// <see cref="Abandoned"/>, and nothing runs it unless a message arrives.
+    /// </para>
+    /// <para>
+    /// So a download with peers on it can sit at nought bytes a second for
+    /// ever, which is what the owner's did. This is the beat that gets it out
+    /// of that: it costs one pass over a dictionary and, when there is nothing
+    /// to ask for, nothing at all.
+    /// </para>
+    /// </remarks>
+    private async Task BeatAsync(PeerConnection peer, CancellationToken ct)
+    {
+        TimeSpan every = Heartbeat(patience ?? DefaultPatience);
 
-        foreach (BlockRequest block in PiecePicker.Blocks(wanted, torrent.LengthOfPiece(wanted)))
+        try
         {
-            await peer.SendAsync(PeerMessage.Request(block.Piece, block.Offset, block.Length), ct).ConfigureAwait(false);
+            while (!ct.IsCancellationRequested && !Complete)
+            {
+                await Task.Delay(every, (time ?? TimeProvider.System), ct).ConfigureAwait(false);
+                await Turn(peer, ct).ConfigureAwait(false);
+            }
         }
+        catch (OperationCanceledException)
+        {
+            // The caller stopping, which is not a fault.
+        }
+        catch (IOException)
+        {
+            // The peer has gone. Its own loop notices and tidies up.
+        }
+        catch (ObjectDisposedException)
+        {
+            // The same, one layer down.
+        }
+    }
+
+    /// <summary>How often a quiet peer is asked again.</summary>
+    /// <remarks>
+    /// Often enough that a piece given back is asked for again promptly, and
+    /// never so often that it is asked before it could possibly have arrived.
+    /// </remarks>
+    private static TimeSpan Heartbeat(TimeSpan waited)
+    {
+        TimeSpan quarter = waited / 4;
+
+        return quarter < TimeSpan.FromMilliseconds(100) ? TimeSpan.FromMilliseconds(100) : quarter;
+    }
+
+    /// <summary>
+    /// Gives back every piece that was asked for and never answered.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A piece is marked as on its way the moment it is requested, and the
+    /// picker offers nobody a piece already on its way. Without this the mark
+    /// is only ever cleared by the piece arriving whole or failing its hash —
+    /// so a peer that took a request and then went quiet kept that piece for
+    /// the rest of the run.
+    /// </para>
+    /// <para>
+    /// It is not rare. With a hundred peers joining and leaving, the marked
+    /// pieces pile up until every piece still missing is marked and the picker
+    /// has nothing to offer anybody: peers connected, seeds available, nought
+    /// bytes a second. That is exactly what the owner's server did on
+    /// 22 August 2026, at 24.5% of a 3.6 GB episode with 95 seeds on it.
+    /// </para>
+    /// <para>
+    /// What has been assembled so far goes with it. Half a piece from a peer
+    /// that has gone cannot be finished by anybody else — the blocks it is
+    /// missing were never asked of them — so keeping it would leave the piece
+    /// marked all over again.
+    /// </para>
+    /// </remarks>
+    private void Abandoned()
+    {
+        DateTimeOffset now = Now();
+        TimeSpan waited = patience ?? DefaultPatience;
+
+        foreach (int piece in _asked.Where(one => now - one.Value >= waited).Select(one => one.Key).ToArray())
+        {
+            _building.Remove(piece);
+            _asked.Remove(piece);
+        }
+    }
+
+    private DateTimeOffset Now()
+    {
+        return (time ?? TimeProvider.System).GetUtcNow();
     }
 
     /// <summary>A block arrived.</summary>
@@ -220,6 +421,11 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
 
             outcome = assembly.Add(offset, data, who);
 
+            // It is still moving, so it keeps its place. The clock is on the
+            // piece and not on the request: a peer sending it a block at a time
+            // is slow and not gone.
+            _asked[piece] = Now();
+
             if (outcome == PieceOutcome.Verified)
             {
                 // Written first, then counted, then announced. Only a crash
@@ -229,11 +435,13 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
                 disk.Write(piece, assembly.Bytes);
                 verified.Set(piece);
                 _building.Remove(piece);
+                _asked.Remove(piece);
             }
             else if (outcome == PieceOutcome.Failed)
             {
                 _trust.Failed(assembly.Contributors);
                 _building.Remove(piece);
+                _asked.Remove(piece);
             }
         }
 

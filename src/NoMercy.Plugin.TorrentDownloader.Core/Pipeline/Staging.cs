@@ -37,7 +37,55 @@ public static class Staging
     /// also stage.
     /// </remarks>
     public static IReadOnlySet<string> VideoExtensions { get; } =
-        new HashSet<string>([".mkv", ".mp4", ".avi", ".iso", ".ts", ".m4v", ".wmv", ".mov"], StringComparer.OrdinalIgnoreCase);
+        new HashSet<string>(
+        [
+            ".mkv", ".mp4", ".avi", ".m4v", ".wmv", ".mov", ".mpg", ".mpeg",
+            ".m2ts", ".mts", ".ts", ".vob", ".webm", ".ogm", ".divx", ".m2v",
+        ],
+        StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Whether this file is one this plugin will have anything to do with.</summary>
+    /// <remarks>
+    /// A whitelist and never a list of what is refused. A list of bad types has
+    /// to be added to every time somebody thinks of a new way to name an
+    /// executable, and on 22 August 2026 exactly that happened: a 1.2 GB
+    /// <c>.exe</c> downloaded to completion because the refusal list was
+    /// written into one site's reader and knew nothing about the file inside.
+    /// If a type is not named here it is not downloaded, whatever it is.
+    /// </remarks>
+    public static bool IsVideo(string path)
+    {
+        return VideoExtensions.Contains(System.IO.Path.GetExtension(path));
+    }
+
+    /// <summary>
+    /// Which files out of a torrent this plugin downloads at all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Video files that are not samples, and nothing else. It is used twice:
+    /// once when the metadata arrives, to decide which pieces are ever asked
+    /// for, and once at the end, to decide what is staged. One list, so the
+    /// file that was downloaded is the file that is staged.
+    /// </para>
+    /// <para>
+    /// A torrent nothing survives here is a torrent with no episode in it, and
+    /// the caller stops it rather than downloading a byte of it.
+    /// </para>
+    /// </remarks>
+    public static IReadOnlyList<TorrentFile> Wanted(IReadOnlyList<TorrentFile> files)
+    {
+        TorrentFile[] videos = [.. files.Where(one => IsVideo(one.Path)).OrderByDescending(one => one.Length)];
+
+        // Size only says "sample" when there is something bigger for it to be a
+        // sample of. A twenty-minute anime episode at a low bitrate is smaller
+        // than this and is the whole torrent — refusing it would leave the
+        // episode missing for ever, and a mutation showed no test would have
+        // noticed.
+        bool bigger = videos.Any(one => one.Length >= SampleUnder);
+
+        return [.. videos.Where(one => !Sample(one, bigger))];
+    }
 
     /// <summary>
     /// How small a video has to be before it is taken for a sample.
@@ -60,23 +108,9 @@ public static class Staging
     /// </param>
     public static IReadOnlyList<Staged> Choose(IReadOnlyList<TorrentFile> files, IReadOnlyList<EpisodeKey> covers)
     {
-        TorrentFile[] all =
-        [
-            .. files
-                .Where(one => VideoExtensions.Contains(System.IO.Path.GetExtension(one.Path)))
-                .OrderByDescending(one => one.Length),
-        ];
+        IReadOnlyList<TorrentFile> videos = Wanted(files);
 
-        // Size only says "sample" when there is something bigger for it to be a
-        // sample of. A twenty-minute anime episode at a low bitrate is smaller
-        // than this and is the whole torrent — refusing it would leave the
-        // episode missing for ever, and a mutation showed no test would have
-        // noticed.
-        bool bigger = all.Any(one => one.Length >= SampleUnder);
-
-        TorrentFile[] videos = [.. all.Where(one => !Sample(one, bigger))];
-
-        if (videos.Length == 0 || covers.Count == 0)
+        if (videos.Count == 0 || covers.Count == 0)
         {
             return [];
         }

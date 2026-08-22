@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -184,7 +185,17 @@ public sealed class BittorrentEngine(
                 _sockets?.Port ?? listenPort,
                 _time,
                 torrent,
-                resume);
+                resume,
+
+                // The owner's rule, handed to an engine that has no idea what a
+                // video file is: only the video files in a torrent are ever
+                // downloaded, and samples are not among them.
+                files =>
+                [
+                    .. Staging
+                        .Wanted([.. files.Select(file => new TorrentFile(file.Path, file.Length))])
+                        .Select(kept => files.First(file => string.Equals(file.Path, kept.Path, StringComparison.Ordinal))),
+                ]);
 
             Held held = new(run, name, _time.GetUtcNow());
 
@@ -484,10 +495,19 @@ public sealed class BittorrentEngine(
     /// </remarks>
     private void Expire(Held held, DateTimeOffset now)
     {
-        if (held.Error is not null
-            || held.Run.Paused
-            || held.Run.Torrent is not null
-            || now - held.Since < metadataTimeout)
+        if (held.Error is not null || held.Run.Paused)
+        {
+            return;
+        }
+
+        if (held.Run.Torrent is not null)
+        {
+            Refuse(held);
+
+            return;
+        }
+
+        if (now - held.Since < metadataTimeout)
         {
             return;
         }
@@ -500,6 +520,30 @@ public sealed class BittorrentEngine(
 
         logger.LogWarning("{Hash} was dropped: {Reason}", held.Run.Torrent?.Name ?? held.Name, held.Error);
         journal.Failed(ActivityStage.Download, held.Name ?? "a magnet", held.Error);
+    }
+
+    /// <summary>
+    /// Stops a torrent whose contents are not worth a byte.
+    /// </summary>
+    /// <remarks>
+    /// The metadata has arrived and there is no video file in it. That is what
+    /// a fake release looks like from the inside — on 22 August 2026 one was a
+    /// 1.2 GB executable named after an episode — and the whole of the defence
+    /// is that this runs before any of it is asked for.
+    /// </remarks>
+    private void Refuse(Held held)
+    {
+        if (!held.Run.NothingWanted)
+        {
+            return;
+        }
+
+        held.Error = "There is no video file in it, so nothing in it was downloaded.";
+
+        held.Run.Pause();
+
+        logger.LogWarning("{Name} was refused: {Reason}", held.Run.Torrent?.Name ?? held.Name, held.Error);
+        journal.Failed(ActivityStage.Download, held.Run.Torrent?.Name ?? held.Name ?? "a torrent", held.Error);
     }
 
     /// <summary>One torrent as the pipeline is allowed to see it.</summary>

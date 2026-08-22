@@ -184,11 +184,22 @@ public class TorrentSessionTests : IDisposable
         await liar.SendAsync(new(PeerMessageId.Bitfield, everything.Write()), stopping.Token);
         await liar.SendAsync(PeerMessage.Of(PeerMessageId.Unchoke), stopping.Token);
 
-        for (int answered = 0; answered < 8 && !stopping.IsCancellationRequested; answered++)
+        // Counted by what it answers rather than by what it reads. The client
+        // sends its bitfield and its interest before it asks for anything, and
+        // it asks for several pieces at once — so a loop that stopped after a
+        // fixed number of messages could stop before answering one of them.
+        int answered = 0;
+
+        while (answered < 8 && !stopping.IsCancellationRequested)
         {
             PeerMessage? asked = await liar.NextAsync(stopping.Token);
 
-            if (asked?.Id != PeerMessageId.Request)
+            if (asked is null)
+            {
+                break;
+            }
+
+            if (asked.Id != PeerMessageId.Request)
             {
                 continue;
             }
@@ -196,6 +207,8 @@ public class TorrentSessionTests : IDisposable
             (int piece, int offset, int length) = asked.AsRequest();
 
             await liar.SendAsync(PeerMessage.Block(piece, offset, new byte[length]), stopping.Token);
+
+            answered++;
         }
 
         await stopping.CancelAsync();

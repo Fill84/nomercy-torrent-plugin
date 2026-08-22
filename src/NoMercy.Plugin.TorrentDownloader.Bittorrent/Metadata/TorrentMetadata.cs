@@ -75,6 +75,50 @@ public sealed record TorrentMetadata(
     /// thumbnail and the start of the thing you actually wanted, and a client
     /// that wrote it to one file would corrupt both.
     /// </remarks>
+    /// <summary>
+    /// Which pieces hold any part of these files.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The mask a session downloads by. The owner's rule is that only video
+    /// files are downloaded, and a torrent addresses bytes rather than files —
+    /// so "only these files" has to become "only these pieces" before the
+    /// picker can act on it.
+    /// </para>
+    /// <para>
+    /// A piece that straddles a wanted file and an unwanted one is wanted, and
+    /// there is no finer answer available: a piece is the smallest thing a
+    /// swarm hands over and its hash covers all of it. It costs at most one
+    /// piece at each end of each wanted file, and the fragment of the neighbour
+    /// that comes with it is never staged and goes with the download folder.
+    /// </para>
+    /// </remarks>
+    public Bitfield PiecesOf(IEnumerable<TorrentFileEntry> files)
+    {
+        Bitfield wanted = new(PieceCount);
+
+        foreach (TorrentFileEntry file in files)
+        {
+            if (file.Length <= 0)
+            {
+                // A zero-length file sits at an offset without occupying it.
+                // Asking for the piece it points at would fetch a neighbour
+                // nobody wanted.
+                continue;
+            }
+
+            int first = (int)(file.Offset / PieceLength);
+            int last = (int)((file.Offset + file.Length - 1) / PieceLength);
+
+            for (int piece = first; piece <= last && piece < PieceCount; piece++)
+            {
+                wanted.Set(piece);
+            }
+        }
+
+        return wanted;
+    }
+
     public IEnumerable<TorrentSlice> Slice(long offset, long length)
     {
         foreach (TorrentFileEntry file in Files)

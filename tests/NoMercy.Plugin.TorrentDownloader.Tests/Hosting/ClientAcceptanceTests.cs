@@ -203,7 +203,11 @@ public class ClientAcceptanceTests : IDisposable
                 new BencodeDictionary(
                 [
                     new("length"u8.ToArray(), new BencodeInteger(content.Length)),
-                    new("name"u8.ToArray(), new BencodeBytes("acceptance.bin"u8.ToArray())),
+                    // A video, because this client downloads video files and nothing
+                    // else — see docs/06-torrent-client.md § What is downloaded.
+                    // Named .bin this torrent is refused before a byte of it is
+                    // asked for, which is the rule working.
+                    new("name"u8.ToArray(), new BencodeBytes("acceptance.mkv"u8.ToArray())),
                     new("piece length"u8.ToArray(), new BencodeInteger(pieceLength)),
                     new("pieces"u8.ToArray(), new BencodeBytes([.. hashes])),
 
