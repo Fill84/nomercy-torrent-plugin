@@ -47,6 +47,24 @@ public static class CycleRecord
             // Downloads page show a torrent nothing is downloading.
             if (!outcome.HandedOver || outcome.InfoHash is not string hash)
             {
+                // Decided and not handed over: dry run, no client yet, or a
+                // client that would not take it. Written down, because
+                // otherwise a cycle that found the right release for every
+                // episode leaves a Skipped page full of refusals and no trace
+                // of one thing it would have taken - and that page is the only
+                // evidence the owner has.
+                if (outcome.Release is string decided)
+                {
+                    await grabs.RecordDecidedAsync(
+                        outcome.Episode,
+                        titles.GetValueOrDefault(outcome.Episode, string.Empty),
+                        decided,
+                        outcome.Source,
+                        outcome.Detail,
+                        at,
+                        ct);
+                }
+
                 continue;
             }
 

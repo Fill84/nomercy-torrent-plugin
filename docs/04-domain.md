@@ -224,7 +224,7 @@ CREATE TABLE blacklist (
 CREATE TABLE history (
     id            INTEGER PRIMARY KEY,
     at            TEXT NOT NULL,
-    event         TEXT NOT NULL,              -- grabbed | skipped | failed | dispatched | allowed
+    event         TEXT NOT NULL,              -- grabbed | decided | skipped | failed | dispatched | allowed
     show_id       INTEGER NULL,
     season        INTEGER NULL,
     episode       INTEGER NULL,

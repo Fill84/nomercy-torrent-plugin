@@ -225,7 +225,7 @@ public static class DownloadsView
 }
 
 /// <summary>What happened, in the order it happened.</summary>
-/// <param name="Event">grabbed, skipped, failed, dispatched or allowed.</param>
+/// <param name="Event">grabbed, decided, skipped, failed, dispatched or allowed.</param>
 /// <param name="At">When.</param>
 /// <param name="Subject">Which episode or release it was about.</param>
 /// <param name="Detail">The reason, the library, or whatever that event carries.</param>

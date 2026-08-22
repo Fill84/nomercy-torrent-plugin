@@ -197,6 +197,67 @@ public class CycleRecordTests : IDisposable
         Assert.Equal(EpisodeState.Missing, after.State);
     }
 
+    /// <remarks>
+    /// <strong>Dry run decided everything and wrote down nothing.</strong> A
+    /// cycle that found the right release for every episode left a Skipped page
+    /// full of refusals and no trace of one thing it would have taken — and the
+    /// owner read that as a plugin refusing everything, which is the only thing
+    /// the evidence said. What it would take is the whole point of the switch.
+    /// </remarks>
+    [Fact]
+    public async Task WhatADryRunWouldTakeIsWrittenDown()
+    {
+        GrabRepository grabs = await Repository();
+
+        await CycleRecord.WriteAsync(
+            new(
+                [
+                    Taken with
+                    {
+                        HandedOver = false,
+                        InfoHash = null,
+                        Detail = "would take it — dry run is on",
+                    },
+                ],
+                []),
+            [Tracked],
+            grabs,
+            When,
+            CancellationToken.None);
+
+        HistoryRow line = Assert.Single(
+            await grabs.HistoryAsync(CancellationToken.None),
+            row => row.Event == "decided");
+
+        Assert.Equal("Silo.S03E06.1080p.WEB.H264-CAKES", line.ReleaseTitle);
+        Assert.Equal("1337x", line.Source);
+        Assert.Contains("dry run", line.Detail!, StringComparison.OrdinalIgnoreCase);
+
+        // And still no grab, because nothing was handed over.
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
+    /// <remarks>
+    /// An episode nobody is serving decided nothing, so there is nothing to
+    /// write. A line naming no release would be the page inventing one.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeWithNoReleaseAtAllGetsNoDecisionLine()
+    {
+        GrabRepository grabs = await Repository();
+
+        await CycleRecord.WriteAsync(
+            new([new(Episode, null, null, null, false, "nobody is serving one")], []),
+            [Tracked],
+            grabs,
+            When,
+            CancellationToken.None);
+
+        Assert.DoesNotContain(
+            await grabs.HistoryAsync(CancellationToken.None),
+            row => row.Event == "decided");
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static readonly DateTimeOffset When = new(2026, 8, 19, 9, 30, 0, TimeSpan.Zero);

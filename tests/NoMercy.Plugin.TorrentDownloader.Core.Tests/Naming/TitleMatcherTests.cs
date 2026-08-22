@@ -30,7 +30,39 @@ public class TitleMatcherTests
     public void AWordThatMerelyStartsWithTheTitleIsADifferentWord()
     {
         Assert.False(TitleMatcher.Matches("Silos / Silo (2023–) S03E06", "Silo"));
-        Assert.True(TitleMatcher.Matches("Silo S03E06 1080p WEB H264-CAKES", "Silo"));
+
+        // What is put to this is the release's *title*, which is what the
+        // parser reads off the name before the season tag — never the whole
+        // name. Both callers in the plugin pass that, and passing a whole name
+        // here asked a question nothing asks.
+        Assert.True(TitleMatcher.Matches("Silo", "Silo"));
+        Assert.True(TitleMatcher.Matches("Silo 2023", "Silo"));
+    }
+
+    /// <remarks>
+    /// <strong>Beginning with is not enough when the show is one ordinary
+    /// word.</strong> On 22 August 2026 the owner's <em>Lucky</em> collected
+    /// five other programmes this way — over a hundred rows in one cycle, every
+    /// one of them judged as though it were the right show and refused for its
+    /// resolution. Nothing was downloaded that day only because none of them
+    /// was 1080p; a 1080p copy of any of them would have been taken and filed
+    /// as the owner's episode.
+    ///
+    /// The year is the one addition that does not make it another programme.
+    /// The library's own titles carry none — Silo, Lucky, Sugar, Lioness — and
+    /// the sites post all four both ways.
+    /// </remarks>
+    [Theory]
+    [InlineData("Lucky", true)]
+    [InlineData("Lucky 2026", true)]
+    [InlineData("Lucky Hank", false)]
+    [InlineData("Lucky Dog", false)]
+    [InlineData("Lucky 7", false)]
+    [InlineData("Lucky Bastards", false)]
+    [InlineData("Lucky 13 2024", false)]
+    public void AShowNamedByOneOrdinaryWordTakesNoExtraWords(string releaseTitle, bool matches)
+    {
+        Assert.Equal(matches, TitleMatcher.Matches(releaseTitle, "Lucky"));
     }
 
     /// <remarks>

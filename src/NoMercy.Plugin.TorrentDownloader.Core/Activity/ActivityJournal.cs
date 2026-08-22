@@ -33,6 +33,19 @@ public sealed class ActivityJournal : IActivityJournal
         _time = time ?? TimeProvider.System;
     }
 
+    /// <summary>
+    /// Raised after anything is recorded, so an open page can be sent the new
+    /// state.
+    /// </summary>
+    /// <remarks>
+    /// Nothing told the pages. <c>LiveSnapshot</c> was written, tested and
+    /// wired to a hub, and the one method that starts a push was called by no
+    /// code at all — so a dashboard opened during a cycle showed the stage the
+    /// plugin was on when the page loaded and never moved again. Its own tests
+    /// called that method by hand, which is why they passed throughout.
+    /// </remarks>
+    public event Action? Recorded;
+
     public void Started(ActivityStage stage, string subject, string? detail = null)
     {
         Record(new(stage, ActivityOutcome.Started, subject, _time.GetUtcNow(), detail));
@@ -63,6 +76,16 @@ public sealed class ActivityJournal : IActivityJournal
     }
 
     private void Record(ActivityEvent activity)
+    {
+        Store(activity);
+
+        // Outside the lock. A listener that pushes takes its own, and holding
+        // two in one order here and the other order there is how a deadlock is
+        // built — which this plugin has already shipped once.
+        Recorded?.Invoke();
+    }
+
+    private void Store(ActivityEvent activity)
     {
         lock (_lock)
         {

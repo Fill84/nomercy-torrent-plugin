@@ -138,6 +138,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _grabs = new(_database);
         _ledger = new(_database);
         _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
+
+        // The one line that makes the pages live. Without it LiveSnapshot is a
+        // push nothing ever asks for: a dashboard opened during a cycle showed
+        // the stage the plugin was on when the page loaded and never moved
+        // again, and the owner reported it before any test did.
+        _journal.Recorded += Moved;
     }
 
     /// <summary>The database, migrated up to date before anything opens it.</summary>
@@ -433,6 +439,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             _cycle = null;
             _running.Leave();
+
+            // The last thing a run does. Nothing is recorded in the journal by
+            // stopping, so without this the status bar keeps saying "Running"
+            // on every page that was open when it finished.
+            Moved();
         }
     }
 
@@ -456,6 +467,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // Never the caller's token, and never awaited: the endpoint answers
         // that a cycle has begun, not that it has finished.
         _ = Task.Run(() => CycleAsync(Lifetime), CancellationToken.None);
+
+        Moved();
 
         return true;
     }
@@ -1073,6 +1086,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// one stays unknown: a cadence's schedule belongs to the host that
     /// registered it, and this plugin is never told it.
     /// </remarks>
+    /// <summary>Something moved, so the open pages are due a push.</summary>
+    /// <remarks>
+    /// Also called where the cycle itself starts and stops, because those move
+    /// the status bar without recording anything in the journal — and a page
+    /// still saying "Running" after a cycle has finished is the same fault in
+    /// a smaller place.
+    /// </remarks>
+    private void Moved()
+    {
+        _live?.Changed();
+    }
+
     private CycleStatus CurrentCycle()
     {
         return new(_running.Busy, _lastCycleAt, null);

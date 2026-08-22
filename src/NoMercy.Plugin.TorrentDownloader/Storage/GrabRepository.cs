@@ -332,6 +332,54 @@ public sealed class GrabRepository(Database database)
     }
 
     /// <summary>
+    /// Records a release that was decided on and not handed over.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Dry run decides everything and hands nothing to the client, and until
+    /// this existed it wrote down nothing at all — so a cycle that found the
+    /// right release for every episode left a Skipped page full of refusals and
+    /// no trace of a single thing it would have taken. The owner reads that as
+    /// a plugin that refused everything, and they are reading the only evidence
+    /// there was.
+    /// </para>
+    /// <para>
+    /// A client that would not take the torrent lands here too. It is a
+    /// decision that was made and not carried out, which is the same kind of
+    /// line, and it carries the reason the client gave.
+    /// </para>
+    /// </remarks>
+    public async Task RecordDecidedAsync(
+        EpisodeKey episode,
+        string showTitle,
+        string releaseTitle,
+        string? source,
+        string detail,
+        DateTimeOffset at,
+        CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+            VALUES ($at, 'decided', $show, $season, $episode, $title, $release, $source, $detail);
+            """;
+
+        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$show", episode.ShowId);
+        command.Parameters.AddWithValue("$season", episode.Season);
+        command.Parameters.AddWithValue("$episode", episode.Number);
+        command.Parameters.AddWithValue("$title", showTitle);
+        command.Parameters.AddWithValue("$release", releaseTitle);
+        command.Parameters.AddWithValue("$source", (object?)source ?? DBNull.Value);
+        command.Parameters.AddWithValue("$detail", detail);
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
     /// A download the owner cancelled: forgotten, and its episodes put back.
     /// </summary>
     /// <remarks>
