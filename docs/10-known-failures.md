@@ -11,8 +11,32 @@ that is the property to design against.
 | --- | --- | --- | --- |
 | A1 | **The profile asked a release *name* how many seeders it has.** Every announcement was refused for having nought, the resolver was never reached, and **not one indexer was ever asked**. `MinSeeders` is floored at 1, so no configuration worked. | Names were found for every episode. The log said "searched 24 episodes, found nothing worth taking". | A name with no torrent is not judged on seeders; the resolved copy is, and a copy below the minimum is refused with a history line naming the site and the count. |
 | A2 | **An RSS feed was put in the search set** and asked a question per episode — forty identical requests per cycle, each answering with the newest twenty posts. | Every request succeeded. | A feed with no search address is read whole and never asked a query. |
-| A3 | **Indexers were searched with `Silo S03E06`** instead of the full release name. | It sometimes worked, which is worse. | The find stage is asked the full release name; a query that is not a full name is a bug. |
+| A3 | **Indexers were searched with `Silo S03E06`** instead of the full release name. | It sometimes worked, which is worse. | ~~The find stage is asked the full release name; a query that is not a full name is a bug.~~ **Corrected 22 August 2026 — see below.** An episode is asked for by its own number first, then by its programme, then by the release names the pool has; every row that comes back is judged against the profile, and a row that is not a release of the episode asked about is not a candidate for it. |
 | A4 | **Backfill used the indexers' search** instead of the feeds' and name databases'. | Results came back. | Backfill resolves names through feeds and name databases only. |
+
+**A3 was wrong, and the fix it prescribed is what stopped the plugin working.** The failure was real:
+0.3.4 searched broadly and took whatever came back well seeded, because it had no rule saying a row
+had to be a release of the episode it was asked about. The fix named the wrong cause. It was not the
+breadth of the question — it was the absence of that rule.
+
+Written to the letter, it asks a search engine something a search engine cannot answer. Measured on
+22 August 2026, against the owner's own library:
+
+```
+apibay  q=Silo S03E08 1080p WEB H264 CAKES   →  "No results returned"
+apibay  q=Silo S03E08                        →  12 rows, the first seeded by 6,372
+apibay  q=Silo                               →  100 rows, S01E01 to S03E08, hashes and counts on all
+EZTV    search box is labelled "Search title" →  a release name answers nothing; "silo" answers 200 rows
+```
+
+Four of the eight indexers asked that cycle read **nothing at all** off a release every one of them
+was carrying, and five episodes of one season went undownloaded while every site had them. Both
+apibay captures are in `tests/fixtures/`.
+
+The rule the failure really wanted is `ReleaseFilter.IsFor`: a row is a candidate for an episode only
+if its title is a release of that show and its slot is that episode. With that in place the question
+can be as broad as the site needs, because breadth costs nothing but rows to refuse — and a broad
+answer carries the other gaps of the same programme, which are then had for no further request.
 
 ## B. A rule applied where it cannot be true
 

@@ -369,7 +369,19 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // After the cycle rather than during it: a grab is written down once
         // the client has been handed something, and the pages that say what
         // happened read the store rather than anything held in memory.
-        await CycleRecord.WriteAsync(_lastCycle, tracked, grabs, DateTimeOffset.UtcNow, ct);
+        await CycleRecord.WriteAsync(
+            _lastCycle,
+            tracked,
+            grabs,
+            DateTimeOffset.UtcNow,
+            ct,
+
+            // Where a search attempt is counted. Nothing counted one at all, so
+            // MaxSearchAttempts decided nothing and the queue's own order -
+            // never searched first, then longest waiting - had nothing to sort
+            // by and ran the same way every cycle.
+            await EpisodesAsync(ct),
+            settings.Profile.MaxSearchAttempts);
 
         await KeepTrackersAsync(settings, _lastCycle.Trackers, ct);
     }

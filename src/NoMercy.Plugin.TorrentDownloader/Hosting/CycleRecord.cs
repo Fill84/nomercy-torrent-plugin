@@ -22,12 +22,16 @@ public static class CycleRecord
     /// <param name="grabs">Where it is written.</param>
     /// <param name="at">When the cycle finished.</param>
     /// <param name="ct">Cancellation.</param>
+    /// <param name="episodes">Where a search attempt is counted, when there is one to count it in.</param>
+    /// <param name="maxAttempts">How many searches an episode gets before it is given up on for now.</param>
     public static async Task WriteAsync(
         CycleReport report,
         IReadOnlyList<TrackedEpisode> looked,
         GrabRepository grabs,
         DateTimeOffset at,
-        CancellationToken ct)
+        CancellationToken ct,
+        EpisodeRepository? episodes = null,
+        int maxAttempts = 0)
     {
         Dictionary<EpisodeKey, string> titles = [];
 
@@ -61,6 +65,8 @@ public static class CycleRecord
                 ct);
         }
 
+        await CountSearchesAsync(report, looked, at, episodes, maxAttempts, ct);
+
         foreach (SkippedRelease skipped in report.Skipped)
         {
             await grabs.RecordSkippedAsync(
@@ -71,6 +77,72 @@ public static class CycleRecord
                 skipped.Reason,
                 at,
                 ct);
+        }
+    }
+
+    /// <summary>
+    /// Counts a search against every episode one was really made for, and gives
+    /// up on the ones that have had their share.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nothing counted a search at all. <c>attempts</c> stayed at nought on
+    /// every row of the owner's library, so <c>MaxSearchAttempts</c> decided
+    /// nothing, no episode ever reached <em>given up for now</em>, and the
+    /// Queue page's third list could not fill. <c>last_search_at</c> stayed
+    /// null with it — and that is what the queue is ordered by, so "never
+    /// searched first, then longest waiting" ordered every cycle the same way
+    /// and the episodes at the end of it were reached last for ever.
+    /// </para>
+    /// <para>
+    /// <strong>B2:</strong> only a search counts. An episode settled by a pack
+    /// taken earlier, and one nothing could be asked about, have not been
+    /// looked for — and a grab the client refused is not the episode's fault
+    /// either, which is why the cycle says whether an indexer was actually
+    /// asked rather than leaving this to guess from the outcome.
+    /// </para>
+    /// </remarks>
+    private static async Task CountSearchesAsync(
+        CycleReport report,
+        IReadOnlyList<TrackedEpisode> looked,
+        DateTimeOffset at,
+        EpisodeRepository? episodes,
+        int maxAttempts,
+        CancellationToken ct)
+    {
+        if (episodes is null)
+        {
+            return;
+        }
+
+        Dictionary<EpisodeKey, int> already = [];
+
+        foreach (TrackedEpisode episode in looked)
+        {
+            already[episode.Key] = episode.Attempts;
+        }
+
+        foreach (EpisodeOutcome outcome in report.Outcomes)
+        {
+            if (!outcome.Searched)
+            {
+                continue;
+            }
+
+            await episodes.RecordSearchAsync(outcome.Episode, at, ct);
+
+            if (outcome.HandedOver || maxAttempts <= 0)
+            {
+                continue;
+            }
+
+            // The attempt just recorded included. Giving up is a consequence of
+            // the attempts already made, so the count that decides it is the
+            // one after this search rather than the one before.
+            if (already.GetValueOrDefault(outcome.Episode) + 1 >= maxAttempts)
+            {
+                await episodes.MarkUnavailableAsync(outcome.Episode, ct);
+            }
         }
     }
 }

@@ -86,6 +86,117 @@ public class CycleRecordTests : IDisposable
         Assert.Contains("1080p rung", refused.Reason, StringComparison.Ordinal);
     }
 
+
+    /// <remarks>
+    /// <strong>Nothing counted a search at all.</strong> On the owner's own
+    /// library every row still read nought attempts and a null last-search,
+    /// which cost two things. <c>MaxSearchAttempts</c> decided nothing, so no
+    /// episode ever reached <em>given up for now</em> and the Queue page's
+    /// third list could not fill. And the queue is ordered by last-search —
+    /// never searched first, then longest waiting — so with the column never
+    /// written every cycle ran in the same order and whatever was at the end of
+    /// it stayed there.
+    /// </remarks>
+    [Fact]
+    public async Task ASearchThatWasReallyMadeIsCountedAgainstItsEpisode()
+    {
+        (GrabRepository grabs, EpisodeRepository episodes) = await Both();
+
+        await CycleRecord.WriteAsync(
+            new([Taken with { HandedOver = false, InfoHash = null, Searched = true }], []),
+            [Tracked],
+            grabs,
+            When,
+            CancellationToken.None,
+            episodes,
+            maxAttempts: 3);
+
+        TrackedEpisode after = Assert.Single(await episodes.AllAsync(CancellationToken.None));
+
+        Assert.Equal(1, after.Attempts);
+        Assert.Equal(When, after.LastSearchAt);
+
+        // One of three, so it is still being looked for.
+        Assert.Equal(EpisodeState.Missing, after.State);
+    }
+
+    /// <remarks>
+    /// <strong>B2.</strong> Only a search counts. An episode settled by a pack
+    /// taken earlier in the cycle, and one nothing could be asked about, have
+    /// not been looked for — and in 0.3.4 three failed grabs exhausted an
+    /// episode that had never had a search go badly, because the number going
+    /// up looked like work.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeNoIndexerWasAskedAboutCostsItNoAttempt()
+    {
+        (GrabRepository grabs, EpisodeRepository episodes) = await Both();
+
+        await CycleRecord.WriteAsync(
+            new([Taken with { HandedOver = false, InfoHash = null, Searched = false }], []),
+            [Tracked],
+            grabs,
+            When,
+            CancellationToken.None,
+            episodes,
+            maxAttempts: 3);
+
+        TrackedEpisode after = Assert.Single(await episodes.AllAsync(CancellationToken.None));
+
+        Assert.Equal(0, after.Attempts);
+        Assert.Null(after.LastSearchAt);
+    }
+
+    /// <remarks>
+    /// The last of the owner's attempts gives up on the episode for now. Not
+    /// for good: the next maintenance pass re-derives every state from the
+    /// library, so a release that appears next week puts it back to missing —
+    /// which is <strong>B1</strong>, and the reason this is written here rather
+    /// than in the refresh.
+    /// </remarks>
+    [Fact]
+    public async Task TheLastAttemptGivesUpOnTheEpisodeForNow()
+    {
+        (GrabRepository grabs, EpisodeRepository episodes) = await Both(attempts: 2);
+
+        await CycleRecord.WriteAsync(
+            new([Taken with { HandedOver = false, InfoHash = null, Searched = true }], []),
+            [Tracked with { Attempts = 2 }],
+            grabs,
+            When,
+            CancellationToken.None,
+            episodes,
+            maxAttempts: 3);
+
+        TrackedEpisode after = Assert.Single(await episodes.AllAsync(CancellationToken.None));
+
+        Assert.Equal(3, after.Attempts);
+        Assert.Equal(EpisodeState.Unavailable, after.State);
+    }
+
+    /// <remarks>
+    /// An episode whose release was taken is not given up on, whatever it cost
+    /// to find. It is about to stop being missing at all.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeWhoseReleaseWasTakenIsNeverGivenUpOn()
+    {
+        (GrabRepository grabs, EpisodeRepository episodes) = await Both(attempts: 2);
+
+        await CycleRecord.WriteAsync(
+            new([Taken with { Searched = true }], []),
+            [Tracked with { Attempts = 2 }],
+            grabs,
+            When,
+            CancellationToken.None,
+            episodes,
+            maxAttempts: 3);
+
+        TrackedEpisode after = Assert.Single(await episodes.AllAsync(CancellationToken.None));
+
+        Assert.Equal(EpisodeState.Missing, after.State);
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static readonly DateTimeOffset When = new(2026, 8, 19, 9, 30, 0, TimeSpan.Zero);
@@ -102,6 +213,31 @@ public class CycleRecordTests : IDisposable
             Magnet = $"magnet:?xt=urn:btih:{Hash}",
             Covers = [Episode, new(41, 3, 7)],
         };
+
+    /// <summary>
+    /// Both stores over one database, with the episode already in it — a search
+    /// can only be counted against a row that exists.
+    /// </summary>
+    private async Task<(GrabRepository Grabs, EpisodeRepository Episodes)> Both(int attempts = 0)
+    {
+        Database database = new(_folder);
+
+        await database.MigrateAsync(CancellationToken.None);
+
+        EpisodeRepository episodes = new(database);
+
+        await episodes.ReplaceAsync([Tracked], CancellationToken.None);
+
+        // The attempts a row arrives with are the ones earlier cycles recorded,
+        // and only a recorded search moves them - so they are put there the one
+        // way anything can.
+        for (int already = 0; already < attempts; already++)
+        {
+            await episodes.RecordSearchAsync(Episode, When.AddDays(-1), CancellationToken.None);
+        }
+
+        return (new(database), episodes);
+    }
 
     private async Task<GrabRepository> Repository()
     {

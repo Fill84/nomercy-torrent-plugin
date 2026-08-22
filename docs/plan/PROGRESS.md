@@ -540,6 +540,37 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **A3 is wrong and `docs/10-known-failures.md` is corrected.** It said an indexer is asked the full
+  release name and nothing else. Measured against the sites on 22 August 2026, apibay answers
+  `Silo S03E08 1080p WEB H264 CAKES` with "No results returned" and `Silo S03E08` with twelve rows,
+  the first seeded by six thousand; EZTV's box is labelled *Search title* and answers a release name
+  with nothing. Four of the eight indexers asked that cycle read nothing off a release every one of
+  them was carrying. The failure A3 recorded was real and its cause was named wrongly: 0.3.4's fault
+  was having no rule that a row must be a release of the episode asked about, not the breadth of the
+  question. That rule is `ReleaseFilter.IsFor`, and with it the question can be as broad as the site
+  needs.
+- **A search answers for every gap of the cycle it fits, not only the one it was made for.** A site
+  asked about one episode answers with the whole programme. Four 1080p copies of Silo S03E04 to
+  S03E07 — every one an episode the library was missing — came back from a search for S03E08 and were
+  discarded, each recorded as refused for not being S03E08. They are now offered to the gap they
+  answer for, and a row for another episode is not a refusal at all: nobody offered it for this one.
+- **The best copy is tried, and then the next one.** The ranking is walked until a copy can actually
+  be had. TorrentBay outranks everything on seeders and names its torrents only to a signed request;
+  while that request was unwritten the cycle chose its copy, followed it, found nothing and stopped.
+  A copy the client refuses settles nothing either.
+- **KickassTorrents is removed**, on the owner's decision of 22 August 2026, host and all. Asked a
+  full release name that day it answered with no listing and one magnet anywhere on the page, and
+  that magnet was a wallpaper pack. **E4's prescribed fallback — no rows, so take a magnet anywhere on
+  the page — is unsafe and is corrected with it:** a row is named by the torrent it points at, never
+  by the page around it.
+- **TorrentBay's signed POST is written**, and the site was seen to answer it: asked for Silo S03E08
+  on 22 August 2026 it named `99B54F771D311003FF6B6F95F8D54FCACC6DC08C`. `docs/05-sources.md` carries
+  the whole request. A source can now declare the parameter that asks for its next page and how many
+  are worth reading; TorrentBay declares three.
+- **A search attempt is counted, at last.** Nothing counted one, so `attempts` stayed at nought on
+  every row of the owner's library: `MaxSearchAttempts` decided nothing, no episode ever reached
+  *given up for now*, and the queue — ordered by last-search — ran in the same order every cycle.
+  **B2** decides what counts: only an episode an indexer was really asked about.
 - The plugin keeps id `1SBQT26FHF98EBRPYVRGD92CZF`, so 0.4.0 is an upgrade of the installed plugin
   rather than a second one.
 - The BitTorrent protocol is written in this repository. No third-party torrent library.
