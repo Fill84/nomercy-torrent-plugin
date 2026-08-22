@@ -203,7 +203,11 @@ public class SearchCycleTests
             new(new() { MaximumResolution = "1080p", MaxSearchAttempts = 2 }, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
-        Assert.Equal(2, fetch.Asked.Count(address => address.Host == "www.limetorrents.lol"));
+        // Two names, plus the season's shelf and the programme's. The shelves
+        // are fetched once a cycle however many gaps fall through to them, so
+        // charging this episode's allowance for them would spend the whole of
+        // it on two requests that every other gap shares.
+        Assert.Equal(4, fetch.Asked.Count(address => address.Host == "www.limetorrents.lol"));
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
         Assert.False(outcome.HandedOver);
@@ -368,8 +372,9 @@ public class SearchCycleTests
         // The whole programme, which is what this site answers when it is asked
         // for one: a hundred rows from S01E01 to S03E08, with hashes and
         // seeders on all of them.
+        // The season's own shelf, which is the one fetch every gap of it shares.
         fetch.Answers(
-            "https://apibay.org/q.php?q=Silo+S03E04&cat=",
+            "https://apibay.org/q.php?q=Silo+S03&cat=",
             Capture.Fixture("the-pirate-bay-show.json"));
 
         CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
@@ -380,14 +385,12 @@ public class SearchCycleTests
         Assert.Equal(4, report.Outcomes.Count);
         Assert.All(report.Outcomes, outcome => Assert.True(outcome.HandedOver, outcome.Detail));
 
-        // Every gap is still asked about - what an earlier search turned up is
-        // a candidate and never an answer, which is
-        // WhatAnEarlierSearchTurnedUpDoesNotStopThisOneBeingMade. Only S03E04's
-        // address is scripted here, so the three that follow are answered with
-        // a page carrying nothing for them, and they are taken anyway: out of
-        // what the first search brought back and would otherwise have thrown
-        // away.
-        Assert.Equal(4, fetch.Asked.Count(address => address.Host == "apibay.org"));
+        // One fetch of the season for the four of them. A season is asked for
+        // the whole of itself, so every gap in it is entitled to the answer and
+        // none of them pays again - which is the whole of the saving. An
+        // episode's own search is not shared that way: see
+        // WhatAnEarlierSearchTurnedUpDoesNotStopThisOneBeingMade.
+        Assert.Equal(1, fetch.Asked.Count(address => address.Host == "apibay.org"));
     }
 
     /// <remarks>

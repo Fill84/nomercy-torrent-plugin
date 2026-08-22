@@ -289,7 +289,7 @@ public sealed class SearchCycle(
 
             bool searched = false;
 
-            foreach (string term in Terms(episode, candidates, options.Profile))
+            foreach ((string term, bool shelf) in Terms(episode, candidates, options.Profile))
             {
                 if (!asked.TryGetValue(term, out IReadOnlyList<ReleaseCopy>? copies))
                 {
@@ -301,7 +301,17 @@ public sealed class SearchCycle(
                     // accepted.
                     trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
 
-                    answered.AddRange(copies);
+                    // Only what a shelf answered is shared. A season or a
+                    // programme was asked for the whole of itself, so every gap
+                    // in it is entitled to the answer; an episode's own search
+                    // was asked about that episode, and letting its leftovers
+                    // settle another gap is how Sugar S02E08 came to be decided
+                    // by a stray row while the release everybody was seeding
+                    // went unfetched.
+                    if (shelf)
+                    {
+                        answered.AddRange(copies);
+                    }
                 }
 
                 searched = true;
@@ -506,15 +516,25 @@ public sealed class SearchCycle(
     /// is <see cref="ReleaseFilter.IsFor"/>.
     /// </para>
     /// </remarks>
-    private static IEnumerable<string> Terms(
+    private static IEnumerable<(string Term, bool Shelf)> Terms(
         TrackedEpisode episode,
         IReadOnlyList<string> names,
         Profile profile)
     {
-        // Never more than the owner's own MaxSearchAttempts. Every term is a
-        // request to every indexer, and a cycle that asks twenty of them gets
-        // the plugin banned from all of them.
-        return Every().Take(Math.Max(1, profile.MaxSearchAttempts));
+        // Never more than the owner's own MaxSearchAttempts, counting only the
+        // terms that really cost something. The season and the programme are
+        // fetched once a cycle however many gaps fall through to them, so
+        // charging every gap for them would spend the whole allowance on two
+        // requests that were already paid for.
+        return Shelves()
+            .Select(term => (term, true))
+            .Concat(Every().Take(Math.Max(1, profile.MaxSearchAttempts)).Select(term => (term, false)));
+
+        IEnumerable<string> Shelves()
+        {
+            yield return $"{episode.ShowTitle} S{episode.Key.Season:00}";
+            yield return episode.ShowTitle;
+        }
 
         IEnumerable<string> Every()
         {
@@ -526,8 +546,6 @@ public sealed class SearchCycle(
                 // the form above finds none of them.
                 yield return $"{episode.ShowTitle} {absolute}";
             }
-
-            yield return episode.ShowTitle;
 
             foreach (string name in names)
             {
