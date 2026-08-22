@@ -276,23 +276,62 @@ internal static class Program
     /// Saves one address as the bytes it really is.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// For a <c>.torrent</c>, which is bencode and therefore binary. It goes
     /// straight out over HTTP rather than through the plugin's fetch: the fetch
     /// answers a string, and a string is exactly what must not happen to these
     /// bytes.
+    /// </para>
+    /// <para>
+    /// Straight out, but not unpaced. The plugin's own gate widens the gap
+    /// every time a host says it has had enough; this had nothing at all, so a
+    /// run of captures walked apibay into a 429 and then kept asking. It waits
+    /// and asks again, twice, doubling as it goes — the same shape of answer
+    /// the gate gives, in the one place that cannot use it.
+    /// </para>
     /// </remarks>
     private static async Task<int> SaveFileAsync(string address, string name)
     {
         string path = Path.Combine(RepositoryRoot(), "tests", "fixtures", name);
 
         using HttpClient http = new();
-        byte[] bytes = await http.GetByteArrayAsync(address, CancellationToken.None);
 
-        await File.WriteAllBytesAsync(path, bytes, CancellationToken.None);
+        TimeSpan wait = TimeSpan.FromSeconds(15);
 
-        Console.Error.WriteLine($"Wrote {bytes.Length} bytes to {path}.");
+        for (int attempt = 1; ; attempt++)
+        {
+            using HttpResponseMessage answer = await http.GetAsync(address, CancellationToken.None);
 
-        return 0;
+            if (answer.StatusCode is not (HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable))
+            {
+                answer.EnsureSuccessStatusCode();
+
+                byte[] bytes = await answer.Content.ReadAsByteArrayAsync(CancellationToken.None);
+
+                await File.WriteAllBytesAsync(path, bytes, CancellationToken.None);
+
+                Console.Error.WriteLine($"Wrote {bytes.Length} bytes to {path}.");
+
+                return 0;
+            }
+
+            if (attempt > 2)
+            {
+                Console.Error.WriteLine(
+                    $"{new Uri(address).Host} answered {(int)answer.StatusCode} three times. "
+                    + "It is asking to be left alone; try again later.");
+
+                return 1;
+            }
+
+            Console.Error.WriteLine(
+                $"{new Uri(address).Host} answered {(int)answer.StatusCode}. "
+                + $"Waiting {wait.TotalSeconds:0} seconds and asking once more.");
+
+            await Task.Delay(wait, CancellationToken.None);
+
+            wait *= 2;
+        }
     }
 
     /// <summary>

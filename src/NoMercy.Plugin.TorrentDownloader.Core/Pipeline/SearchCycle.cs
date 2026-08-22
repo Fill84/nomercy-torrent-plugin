@@ -159,6 +159,14 @@ public sealed class SearchCycle(
         // the gap they do answer for can have them without asking again.
         List<ReleaseCopy> answered = [];
 
+        // What each term this cycle has already been answered with. The
+        // programme's own name is a term every gap of that programme falls
+        // through to, so eight gaps asked every indexer the identical question
+        // eight times - and apibay, which rate-limits hard, answered 429 to the
+        // ninth. It saves the request and never the decision: what comes back
+        // still goes to every gap it answers for.
+        Dictionary<string, IReadOnlyList<ReleaseCopy>> asked = new(StringComparer.OrdinalIgnoreCase);
+
         // One episode at a time, because the decisions of each are part of the
         // state of the next: a pack taken for season three settles the rest of
         // season three, and running them together would have two of them grab
@@ -174,6 +182,7 @@ public sealed class SearchCycle(
                 options,
                 trackers,
                 answered,
+                asked,
                 ct));
         }
 
@@ -187,6 +196,7 @@ public sealed class SearchCycle(
         CycleOptions options,
         List<string> trackers,
         List<ReleaseCopy> answered,
+        Dictionary<string, IReadOnlyList<ReleaseCopy>> asked,
         CancellationToken ct)
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
@@ -222,19 +232,25 @@ public sealed class SearchCycle(
             // fetched at all.
             List<ReleaseCopy> gathered = [.. answered];
 
-            bool asked = false;
+            bool searched = false;
 
             foreach (string term in Terms(episode, candidates, options.Profile))
             {
-                IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(term, episode.Kind, ct);
+                if (!asked.TryGetValue(term, out IReadOnlyList<ReleaseCopy>? copies))
+                {
+                    copies = await find.SearchAsync(term, episode.Kind, ct);
+                    asked[term] = copies;
 
-                asked = true;
+                    // Every copy, taken or not: a tracker on a release the
+                    // profile refused is serving the same swarm as the one it
+                    // accepted.
+                    trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
 
-                // Every copy, taken or not: a tracker on a release the profile
-                // refused is serving the same swarm as the one it accepted.
-                trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
+                    answered.AddRange(copies);
+                }
 
-                answered.AddRange(copies);
+                searched = true;
+
                 gathered.AddRange(copies);
 
                 // Over everything, every time. The best copy of an episode is
@@ -257,11 +273,11 @@ public sealed class SearchCycle(
                 false,
                 refused.Count > 0
                     ? refused[^1]
-                    : asked
+                    : searched
                         ? "every indexer was asked, and nothing anybody is serving is worth taking"
                         : "there was nothing to ask an indexer")
             {
-                Searched = asked,
+                Searched = searched,
             };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)

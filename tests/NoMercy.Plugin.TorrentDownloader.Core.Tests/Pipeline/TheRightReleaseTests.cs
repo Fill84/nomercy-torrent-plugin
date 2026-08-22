@@ -65,6 +65,54 @@ public class TheRightReleaseTests
     }
 
     /// <remarks>
+    /// <para>
+    /// The show whose name five other programmes begin with. This page carries
+    /// <c>Lucky Luke 2026 S01E02 1080p WEB h264-EDITH</c> — a different
+    /// programme, the same slot, the same resolution — and
+    /// <c>Dexter Resurrection S01E02 MULTi 1080p WEB x264-LUCKY</c>, where
+    /// LUCKY is the release group. Neither is this episode and neither may be
+    /// taken for it.
+    /// </para>
+    /// <para>
+    /// Three sites rather than four: apibay answered 429 to the capture and
+    /// what those three served is enough to decide. The right release is
+    /// <c>Lucky 2026 S01E02 1080p WEB h264-ETHEL</c> at 878 seeders, confirmed
+    /// by the owner.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ADifferentProgrammeBeginningWithTheSameWordIsNotTaken()
+    {
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await Cycle(engine, AnsweringLucky()).RunAsync(
+            [
+                new TrackedEpisode(
+                    new(4471, 1, 2),
+                    "Lucky",
+                    2026,
+                    LibraryKind.Television,
+                    null,
+                    new DateOnly(2026, 7, 7),
+                    EpisodeState.Missing),
+            ],
+            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal("Lucky 2026 S01E02 1080p WEB h264-ETHEL", outcome.Release);
+        Assert.Equal(878, outcome.Seeders);
+
+        // And the two decoys were never even weighed against it.
+        Assert.DoesNotContain(
+            report.Skipped,
+            skipped => skipped.Title.Contains("Lucky Luke", StringComparison.OrdinalIgnoreCase)
+                       || skipped.Title.Contains("Dexter", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <remarks>
     /// Every episode is asked about by its own number. What another episode's
     /// search turned up is a candidate and never an answer — the fault that let
     /// a leftover settle Sugar S02E08 while the release everybody was seeding
@@ -144,6 +192,26 @@ public class TheRightReleaseTests
         fetch.Answers(
             $"https://www.torrentdownloads.pro/search/?search={term}",
             Capture.Fixture($"{set}-torrentdownloads.html"));
+
+        return fetch;
+    }
+
+    /// <summary>What three sites really answered for Lucky S01E02.</summary>
+    private static FakeFetch AnsweringLucky()
+    {
+        FakeFetch fetch = new();
+
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        fetch.Answers(
+            "https://www.limetorrents.lol/search/all/Lucky+S01E02/",
+            Capture.Fixture("lucky2-limetorrents.html"));
+        fetch.Answers(
+            "https://torrentgalaxy.one/get-posts/keywords:Lucky%20S01E02/",
+            Capture.Fixture("lucky2-torrentgalaxy.html"));
+        fetch.Answers(
+            "https://www.torrentdownloads.pro/search/?search=Lucky+S01E02",
+            Capture.Fixture("lucky2-torrentdownloads.html"));
 
         return fetch;
     }

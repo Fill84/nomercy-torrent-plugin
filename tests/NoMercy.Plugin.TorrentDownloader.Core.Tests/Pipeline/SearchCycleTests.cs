@@ -505,6 +505,44 @@ public class SearchCycleTests
         Assert.Equal(6372, last.Seeders);
     }
 
+    /// <remarks>
+    /// <strong>One term is asked once.</strong> The programme's own name is a
+    /// term every gap of that programme falls through to, so eight gaps asked
+    /// every indexer the identical question eight times — and apibay, which
+    /// rate-limits hard, answered 429 to the ninth. The answer to a question
+    /// already asked this cycle is the answer already in hand.
+    ///
+    /// Not a short cut: it saves the <em>request</em> and never the decision.
+    /// Every gap is still decided over everything, which is
+    /// <see cref="WhatAnEarlierSearchTurnedUpDoesNotStopThisOneBeingMade"/>.
+    /// </remarks>
+    [Fact]
+    public async Task ATermAlreadyAskedThisCycleIsNotAskedAgain()
+    {
+        FakeFetch fetch = new();
+
+        // The name databases have nothing, and neither has either episode's own
+        // number - a real page with no rows on it.
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        // The programme's own name, which both gaps fall through to.
+        fetch.Answers(
+            "https://www.limetorrents.lol/search/all/Silo/",
+            Capture.Fixture("limetorrents.html"));
+
+        CycleReport report = await Cycle(fetch, new()).RunAsync(
+            [Silo(6), Silo(7)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        Assert.Equal(2, report.Outcomes.Count);
+
+        Assert.Equal(
+            1,
+            fetch.Asked.Count(address =>
+                address.Host == "www.limetorrents.lol" && address.AbsolutePath == "/search/all/Silo/"));
+    }
+
     /// <summary>Where a download would land, if anything were downloading.</summary>
     private const string Folder = @"C:\downloads";
 
