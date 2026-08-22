@@ -61,7 +61,14 @@ public class TheRightReleaseTests
         Assert.Equal(release, outcome.Release);
         Assert.Equal(seeders, outcome.Seeders);
 
-        Assert.StartsWith("magnet:?", Assert.Single(engine.Taken).Source, StringComparison.Ordinal);
+        // Something the client can be handed, carrying the hash of the torrent
+        // that was chosen rather than of whatever the page happened to mention.
+        string magnet = Assert.Single(engine.Taken).Source;
+
+        Assert.StartsWith("magnet:?xt=urn:btih:", magnet, StringComparison.Ordinal);
+        Assert.Equal(40, Magnets.HashOf(magnet)!.Length);
+
+        Console.WriteLine($"S02E{number:00}: {outcome.Source} -> {Magnets.HashOf(magnet)}");
     }
 
     /// <remarks>
@@ -104,6 +111,12 @@ public class TheRightReleaseTests
         Assert.True(outcome.HandedOver, outcome.Detail);
         Assert.Equal("Lucky 2026 S01E02 1080p WEB h264-ETHEL", outcome.Release);
         Assert.Equal(878, outcome.Seeders);
+
+        string magnet = Assert.Single(engine.Taken).Source;
+
+        Assert.StartsWith("magnet:?xt=urn:btih:", magnet, StringComparison.Ordinal);
+
+        Console.WriteLine($"Lucky S01E02: {outcome.Source} -> {Magnets.HashOf(magnet)}");
 
         // And the two decoys were never even weighed against it.
         Assert.DoesNotContain(
