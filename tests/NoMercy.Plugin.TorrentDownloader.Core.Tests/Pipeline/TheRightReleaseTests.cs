@@ -1,0 +1,171 @@
+using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
+using NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
+using Xunit;
+
+namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
+
+/// <summary>
+/// One episode, four sites, and the release that ought to win.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The owner watched a cycle take
+/// <c>Sugar 2024 S02E08 1080p ATVP WEB-DL DDP5 1 Atmos H 264-FLUX exe</c> on
+/// 22 August 2026 and said, correctly, that
+/// <c>Sugar 2024 S02E08 1080p WEB H264-CAKES</c> is the release. This is that
+/// episode, against what those four sites really answered that day, through
+/// the real catalogue, the real readers, the real profile and the real
+/// decision.
+/// </para>
+/// <para>
+/// Nothing here is stood in for except the wire and the torrent client, and
+/// neither of those decides anything. It exists so that the next change to any
+/// of it has to keep answering with the right release.
+/// </para>
+/// </remarks>
+public class TheRightReleaseTests
+{
+    /// <remarks>
+    /// <para>
+    /// Two episodes of one programme, and the answer is different for each
+    /// because what is posted is different. S02E08 has a CAKES release and it
+    /// is the best seeded thing on every site that carries it. S02E01 has no
+    /// CAKES release at all, and the best seeded 1080p copy is playWEB's — so
+    /// that is the right answer there, and taking CAKES would be as wrong as
+    /// taking FLUX was.
+    /// </para>
+    /// <para>
+    /// The counts are the swarm's rather than any one site's: apibay says 458
+    /// for the S02E08 release and LimeTorrents 439 for the same file.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(8, "Sugar 2024 S02E08 1080p WEB H264-CAKES", 458)]
+    [InlineData(1, "Sugar 2024 S02E01 Home Away from Home 1080p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB", 247)]
+    public async Task TheBestCopyAnybodyIsServingIsTheOneThatIsTaken(int number, string release, int seeders)
+    {
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await Cycle(engine, Answering(number)).RunAsync(
+            [Gap(number)],
+            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal(release, outcome.Release);
+        Assert.Equal(seeders, outcome.Seeders);
+
+        Assert.StartsWith("magnet:?", Assert.Single(engine.Taken).Source, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// Every episode is asked about by its own number. What another episode's
+    /// search turned up is a candidate and never an answer — the fault that let
+    /// a leftover settle Sugar S02E08 while the release everybody was seeding
+    /// went unfetched.
+    /// </remarks>
+    [Fact]
+    public async Task TheEpisodeIsAskedAboutByItsOwnNumber()
+    {
+        FakeFetch fetch = Answering(8);
+
+        await Cycle(new(), fetch).RunAsync(
+            [Gap(8)],
+            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        Assert.Contains(
+            fetch.Asked,
+            address => address.ToString().Contains("Sugar+S02E08", StringComparison.OrdinalIgnoreCase)
+                       || address.ToString().Contains("Sugar%20S02E08", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>One gap, as the owner's library holds it.</summary>
+    private static TrackedEpisode Gap(int number)
+    {
+        return new(
+            new(9931, 2, number),
+            "Sugar",
+            2024,
+            LibraryKind.Television,
+            null,
+            new DateOnly(2026, 8, 6),
+            EpisodeState.Missing);
+    }
+
+    /// <summary>The four sites, at the addresses the plugin itself builds.</summary>
+    private static readonly SourceDefinition[] Sources =
+    [
+        new("The Pirate Bay", "apibay", "https://apibay.org/q.php?q={query}&cat=") { Priority = 45 },
+        new("LimeTorrents", "site", "https://www.limetorrents.lol/search/all/{query}/") { Priority = 35 },
+        new("TorrentGalaxy", "site", "https://torrentgalaxy.one/get-posts/keywords:{query}/")
+        {
+            Reader = "torrentgalaxy",
+            Query = QueryStyles.Spaced,
+            Priority = 30,
+        },
+        new("TorrentDownloads", "site", "https://www.torrentdownloads.pro/search/?search={query}")
+        {
+            Reader = "torrentdownloads",
+            Priority = 25,
+        },
+    ];
+
+    /// <summary>
+    /// What those four really answered, and a name database with nothing in it.
+    /// </summary>
+    /// <remarks>
+    /// Nothing has a name for this episode, which is the harder case and the
+    /// real one: the pool was empty for most of the owner's library.
+    /// </remarks>
+    private static FakeFetch Answering(int number)
+    {
+        FakeFetch fetch = new();
+
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        string term = $"Sugar+S02E{number:00}";
+        string spaced = $"Sugar%20S02E{number:00}";
+        string set = number == 8 ? "sugar" : "sugar1";
+
+        fetch.Answers($"https://apibay.org/q.php?q={term}&cat=", Capture.Fixture($"{set}-apibay.json"));
+        fetch.Answers(
+            $"https://www.limetorrents.lol/search/all/{term}/",
+            Capture.Fixture($"{set}-limetorrents.html"));
+        fetch.Answers(
+            $"https://torrentgalaxy.one/get-posts/keywords:{spaced}/",
+            Capture.Fixture($"{set}-torrentgalaxy.html"));
+        fetch.Answers(
+            $"https://www.torrentdownloads.pro/search/?search={term}",
+            Capture.Fixture($"{set}-torrentdownloads.html"));
+
+        return fetch;
+    }
+
+    private static SearchCycle Cycle(FakeTorrentEngine engine, FakeFetch answering)
+    {
+        SourceCatalogue catalogue = SourceCatalogue.Build(Sources, [], []);
+        ActivityJournal journal = new();
+        Readers readers = Readers.Shipped();
+
+        return new(
+            new(catalogue, answering, readers, new FakePool(), journal, TimeProvider.System),
+            new(catalogue, answering, readers, journal),
+            journal,
+            new Grab(engine, new EndlessDisk(), journal));
+    }
+
+    private sealed class EndlessDisk : IStorageSpace
+    {
+        public long? FreeBytes(string folder)
+        {
+            return long.MaxValue;
+        }
+    }
+}
