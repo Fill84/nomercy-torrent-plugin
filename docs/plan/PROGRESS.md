@@ -4,29 +4,34 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.4.0 went onto `beast-unit` on 21 August 2026 and could not load. The cause is found and fixed;
-it needs the server stopped once more.**
+**The plugin found nothing for five episodes every site was carrying, and the reasons are found and
+fixed. It needs the server stopped once so 0.4.0 can go over and a real cycle be watched.**
 
-The plugin was absent from the server's list entirely. It was never a fault in the plugin's code:
-this is a class library, and a class library's build does not copy the packages it depends on into
-its output. The folder held three assemblies while the manifest beside it named twelve, so the host
-could not resolve one of them, and `PluginLoader`'s `ReflectionTypeLoadException` path reports the
-failure and returns **without registering the plugin** — absent from the list, with nothing to say
-why. See **Decisions**.
+The owner's Skipped page on 22 August 2026 showed Silo S03E04 to S03E07 in 1080p being refused for
+not being S03E08 — while all five were missing from the library and every indexer had them. Reading
+the server's own database and then the sites themselves turned up six faults, each now fixed with a
+test that was seen to fail first, and each recorded under **Decisions**:
 
-**Waiting on the owner to stop the media server again.** Then
-`scripts/deploy-to-server.ps1 -Build`, and start it. The first thing to look at is still whether the
-plugin appears in the list at all — that is the one thing no test here can prove, because every test
-of the host contract runs against types written from `docs/09-host-contract.md` rather than against
-the host.
+- **The question no site could answer.** A3 said the full release name and nothing else. apibay
+  answers that with "No results returned" and `Silo S03E08` with twelve rows. Four of eight indexers
+  read nothing off a release every one of them carried. A3 is corrected.
+- **An episode with no pooled name was never searched at all.** S03E05 and S03E06 had none.
+- **Copies for the cycle's other gaps were thrown away**, and recorded as refusals against the wrong
+  episode, which is what filled the Skipped page.
+- **The best copy was tried and no other.** TorrentBay tops the ranking and named no torrent, so the
+  cycle stopped there.
+- **TorrentBay's signed POST was never written.** It is now, and the site was seen to answer it.
+- **Nothing counted a search**, so `MaxSearchAttempts` decided nothing and the queue never reordered.
 
-`S8-05` step 3 is done once more and is only proved by the server. Step 4 — a missing episode found,
-downloaded, staged and an encode queued, with the log and the dashboard as evidence — is the last
-thing in the plan.
+Also: EZTV's seed column was hard-coded to null; a run of tags was worth a space wherever it stood,
+which mangled twenty-six of thirty-four TorrentBay names; and KickassTorrents is removed on the
+owner's decision.
 
-The crash recorded here yesterday was not a crash. It was a **deadlock**, and it is fixed. See
-**Decisions**: the plugin waited on itself on the first cadence tick after every restart, silently,
-for as long as the server was up.
+**Waiting on the owner to stop the media server.** Then `scripts/deploy-to-server.ps1 -Build`, and
+start it. `DryRun` is on in the server's settings, so the first cycle will decide everything and hand
+nothing over — which is the safest thing to watch first. What to look for is one line per missing
+episode on the Dashboard saying what it would take and from where, and a Skipped page carrying only
+reasons the owner can act on.
 
 ## Blocked
 
