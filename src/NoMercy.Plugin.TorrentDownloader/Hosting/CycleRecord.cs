@@ -60,7 +60,9 @@ public static class CycleRecord
                         titles.GetValueOrDefault(outcome.Episode, string.Empty),
                         decided,
                         outcome.Source,
-                        outcome.Detail,
+                        outcome.Considered is string ahead
+                            ? $"{outcome.Detail} — {ahead}"
+                            : outcome.Detail,
                         at,
                         ct);
                 }

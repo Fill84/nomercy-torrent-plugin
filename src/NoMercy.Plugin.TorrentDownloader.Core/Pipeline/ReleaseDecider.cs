@@ -1,4 +1,5 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
@@ -42,11 +43,30 @@ public sealed class ReleaseDecider(Profile profile)
     /// Judges every copy and ranks the survivors, best first.
     /// </summary>
     /// <remarks>
-    /// Seeders first, then the site's own rating <strong>descending</strong>.
-    /// 0.3.4 had the second one inverted and picked the worst-rated site every
-    /// time two copies were level on seeders, which is most of the time.
+    /// <para>
+    /// The release the name databases published for this episode first, then
+    /// seeders, then the site's own rating <strong>descending</strong>. 0.3.4
+    /// had the last one inverted and picked the worst-rated site every time two
+    /// copies were level on seeders, which is most of the time.
+    /// </para>
+    /// <para>
+    /// The scene name coming first is the whole point of the pool. SceneSource
+    /// and PreDB publish what a release is called minutes after it lands, and a
+    /// copy whose title <em>is</em> that name is the strongest evidence there is
+    /// that it is the genuine thing. Ranking on a seeder count alone hands the
+    /// episode to whichever re-encode a crowd happened to gather around.
+    /// </para>
     /// </remarks>
-    public Decision Decide(IReadOnlyList<ReleaseCopy> copies, IReadOnlySet<string> blacklisted)
+    /// <param name="copies">What the indexers answered with.</param>
+    /// <param name="blacklisted">Keys already refused.</param>
+    /// <param name="known">
+    /// The release names a name database published for this episode, normalised.
+    /// A copy that <em>is</em> one of them wins outright.
+    /// </param>
+    public Decision Decide(
+        IReadOnlyList<ReleaseCopy> copies,
+        IReadOnlySet<string> blacklisted,
+        IReadOnlySet<string>? known = null)
     {
         List<(ReleaseCopy Copy, string Reason)> refused = [];
         List<ReleaseCopy> acceptable = [];
@@ -68,10 +88,18 @@ public sealed class ReleaseDecider(Profile profile)
         ReleaseCopy[] ranked =
         [
             .. acceptable
+                // The release a name database published for this episode, if
+                // one of them is here. It wins outright and seeders do not get
+                // a say: for Silo S03E04 an x265 re-encode is seeded by 2,898
+                // and the scene release by 1,774, so on a count alone the
+                // re-encode wins a contest it should never have been in.
+                .OrderByDescending(copy => known is not null
+                                           && known.Contains(TitleMatcher.Normalised(copy.Title)))
+
                 // A copy whose site does not publish a count sorts below one
                 // that does and has some: it might be well seeded and nothing
                 // says so.
-                .OrderByDescending(copy => copy.Seeders ?? 0)
+                .ThenByDescending(copy => copy.Seeders ?? 0)
                 .ThenByDescending(copy => copy.Priority),
         ];
 

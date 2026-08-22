@@ -140,7 +140,17 @@ public sealed class Decisions
     /// release of this episode and is still not taken is recorded with its
     /// reason, which is what the Skipped page is for.
     /// </remarks>
-    public Decision Rank(TrackedEpisode episode, IReadOnlyList<ReleaseCopy> copies)
+    /// <param name="episode">The gap being decided.</param>
+    /// <param name="copies">What the indexers answered with.</param>
+    /// <param name="known">
+    /// The release names a name database published for this episode. A copy
+    /// that is one of them wins outright, and is recorded under that spelling
+    /// rather than under the site's own rendering of it.
+    /// </param>
+    public Decision Rank(
+        TrackedEpisode episode,
+        IReadOnlyList<ReleaseCopy> copies,
+        IReadOnlyList<string>? known = null)
     {
         List<ReleaseCopy> forThisEpisode = [];
 
@@ -174,7 +184,11 @@ public sealed class Decisions
             }
         }
 
-        Decision decision = _decider.Decide(forThisEpisode, _blacklisted);
+        HashSet<string>? published = known is null
+            ? null
+            : [.. known.Select(TitleMatcher.Normalised)];
+
+        Decision decision = _decider.Decide(forThisEpisode, _blacklisted, published);
 
         foreach ((ReleaseCopy copy, string reason) in decision.Refused)
         {
@@ -182,6 +196,30 @@ public sealed class Decisions
         }
 
         return decision;
+    }
+
+    /// <summary>
+    /// What a copy is really called, which is what the name databases say.
+    /// </summary>
+    /// <remarks>
+    /// One release comes off one site as
+    /// <c>- Silo S03E04 1080p WEB H264-CAKES</c>, off another in lower case
+    /// with <c>[EZTVx to]</c> stuck on the end, and off a third with its dots
+    /// intact. They are one release with one name, and the name is the one
+    /// SceneSource or PreDB published. It is written against the grab and is
+    /// what staging matches a finished file by, so a site's rendering of it is
+    /// a name nothing answers to.
+    /// </remarks>
+    public static string NameOf(ReleaseCopy copy, IReadOnlyList<string>? known)
+    {
+        if (known is null)
+        {
+            return copy.Title;
+        }
+
+        string key = TitleMatcher.Normalised(copy.Title);
+
+        return known.FirstOrDefault(name => TitleMatcher.Normalised(name) == key) ?? copy.Title;
     }
 
     /// <summary>

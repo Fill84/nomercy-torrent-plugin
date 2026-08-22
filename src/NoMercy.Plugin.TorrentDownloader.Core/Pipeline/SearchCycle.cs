@@ -49,6 +49,18 @@ public sealed record EpisodeOutcome(
     public bool Searched { get; init; }
 
     /// <summary>
+    /// What this copy was chosen ahead of, and by how much.
+    /// </summary>
+    /// <remarks>
+    /// A copy that is acceptable and not taken is recorded nowhere, so "why
+    /// did that one win" could only be answered by running the cycle again and
+    /// watching. On 22 August 2026 the owner asked it of a real decision and
+    /// nothing in the plugin could say. The runners-up travel with the outcome
+    /// so the History page can.
+    /// </remarks>
+    public string? Considered { get; init; }
+
+    /// <summary>
     /// Every gap this release answers for: one for an ordinary release, the
     /// season's remaining gaps for a pack.
     /// </summary>
@@ -256,7 +268,7 @@ public sealed class SearchCycle(
                 // Over everything, every time. The best copy of an episode is
                 // the best of all of them, not the best of the last page to
                 // arrive.
-                if (await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, ct)
+                if (await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, candidates, ct)
                     is EpisodeOutcome taken)
                 {
                     return taken;
@@ -308,6 +320,7 @@ public sealed class SearchCycle(
         string subject,
         List<string> trackers,
         List<string> refused,
+        IReadOnlyList<string> known,
         CancellationToken ct)
     {
         if (copies.Count == 0)
@@ -315,7 +328,7 @@ public sealed class SearchCycle(
             return null;
         }
 
-        Decision decision = decisions.Rank(episode, Find.Merge(copies));
+        Decision decision = decisions.Rank(episode, Find.Merge(copies), known);
 
         foreach (ReleaseCopy candidate in decision.Ranked)
         {
@@ -341,6 +354,10 @@ public sealed class SearchCycle(
 
             journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}");
 
+            // Under the name a name database published for it, never under
+            // the site's own rendering.
+            chosen = chosen with { Title = Decisions.NameOf(chosen, known) };
+
             IReadOnlyList<EpisodeKey> covers = decisions.CoveredBy(episode, ReleaseName.Parse(chosen.Title));
 
             (EpisodeOutcome outcome, bool stands) = await GrabAsync(episode, chosen, covers, options, ct);
@@ -358,10 +375,41 @@ public sealed class SearchCycle(
 
             decisions.Settle(episode, chosen);
 
-            return outcome with { Searched = true };
+            return outcome with
+            {
+                Searched = true,
+                Considered = AheadOf(chosen, decision.Ranked),
+            };
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The copies this one was taken ahead of, with what each was seeded by.
+    /// </summary>
+    /// <remarks>
+    /// Three of them, which is enough to see whether the winner won on a
+    /// number or on a whisker, and few enough to read on one line. A count
+    /// nobody gave is said as unknown rather than as nought: the difference is
+    /// the whole reason the ranking sorts them apart.
+    /// </remarks>
+    private static string? AheadOf(ReleaseCopy taken, IReadOnlyList<ReleaseCopy> ranked)
+    {
+        string[] others =
+        [
+            .. ranked
+                .Where(copy => !ReferenceEquals(copy, taken) && copy.Title != taken.Title)
+                .Take(3)
+                .Select(copy => $"{copy.Title} ({copy.Source}, {Count(copy.Seeders)})"),
+        ];
+
+        return others.Length == 0 ? null : $"ahead of {string.Join("; ", others)}";
+    }
+
+    private static string Count(int? seeders)
+    {
+        return seeders is int many ? $"{many} seeders" : "no count given";
     }
 
     /// <summary>

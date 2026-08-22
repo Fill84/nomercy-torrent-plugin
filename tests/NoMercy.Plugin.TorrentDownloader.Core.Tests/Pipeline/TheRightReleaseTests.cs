@@ -126,6 +126,111 @@ public class TheRightReleaseTests
     }
 
     /// <remarks>
+    /// <strong>Why that one and not the other.</strong> A copy that is
+    /// acceptable and not taken is recorded nowhere, so on 22 August 2026 the
+    /// owner asked why an x265 release had won over the CAKES one and nothing
+    /// in the plugin could answer: the winner was on the page, the runner-up
+    /// was on no page at all. The decision now carries what it beat and by how
+    /// much.
+    /// </remarks>
+    [Fact]
+    public async Task TheDecisionSaysWhatItWasTakenAheadOf()
+    {
+        CycleReport report = await Cycle(new(), Answering(8)).RunAsync(
+            [Gap(8)],
+            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.NotNull(outcome.Considered);
+
+        // The runner-up on this page is the x265 release, and the number it
+        // lost by is there to be read.
+        Assert.Contains("MeGusta", outcome.Considered!, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("seeders", outcome.Considered!, StringComparison.Ordinal);
+
+        // And never the copy that was taken.
+        Assert.DoesNotContain(outcome.Release!, outcome.Considered!, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The release name comes from the name databases, and the copy
+    /// that is that release wins outright.</strong> SceneSource publishes the
+    /// scene name minutes after a release lands, which is what the pool is for
+    /// and what the indexers are meant to be asked about. Ranking on seeders
+    /// alone throws that away: for Silo S03E04 an x265 re-encode is seeded by
+    /// 2,898 and the scene release by 1,774, so the re-encode wins a contest
+    /// it should never have been in.
+    /// </para>
+    /// <para>
+    /// And the name that is recorded is the pool's, not the indexer's. The
+    /// same release comes off TorrentDownloads as
+    /// <c>- Silo S03E04 1080p WEB H264-CAKES</c> and off another site in lower
+    /// case with <c>[EZTVx to]</c> stuck on the end. That name is written
+    /// against the grab and is what staging matches a finished file by, so a
+    /// site's rendering of it is a name nothing answers to.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheSceneReleaseTheNameDatabasesKnowIsTheOneThatIsTaken()
+    {
+        FakePool pool = new();
+
+        // Exactly what SceneSource had for this episode on 22 August 2026.
+        await pool.AddAsync(
+            [new("silo|s03e04", "Silo S03E04 1080p WEB H264-CAKES", "SceneSource", DateTimeOffset.UtcNow)],
+            CancellationToken.None);
+
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await Cycle(engine, AnsweringSilo(), pool).RunAsync(
+            [SiloGap(4)],
+            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal("Silo S03E04 1080p WEB H264-CAKES", outcome.Release);
+    }
+
+    /// <summary>The Silo gap, as the owner's library holds it.</summary>
+    private static TrackedEpisode SiloGap(int number)
+    {
+        return new(
+            new(1399, 3, number),
+            "Silo",
+            2023,
+            LibraryKind.Television,
+            null,
+            new DateOnly(2026, 7, 23),
+            EpisodeState.Missing);
+    }
+
+    /// <summary>What three sites really answered for Silo S03E04.</summary>
+    private static FakeFetch AnsweringSilo()
+    {
+        FakeFetch fetch = new();
+
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        fetch.Answers("https://apibay.org/q.php?q=Silo+S03E04&cat=", Capture.Fixture("silo4-apibay.json"));
+        fetch.Answers(
+            "https://www.limetorrents.lol/search/all/Silo+S03E04/",
+            Capture.Fixture("silo4-limetorrents.html"));
+        fetch.Answers(
+            "https://torrentgalaxy.one/get-posts/keywords:Silo%20S03E04/",
+            Capture.Fixture("silo4-torrentgalaxy.html"));
+        fetch.Answers(
+            "https://www.torrentdownloads.pro/search/?search=Silo+S03E04",
+            Capture.Fixture("silo4-torrentdownloads.html"));
+
+        return fetch;
+    }
+
+    /// <remarks>
     /// Every episode is asked about by its own number. What another episode's
     /// search turned up is a candidate and never an answer — the fault that let
     /// a leftover settle Sugar S02E08 while the release everybody was seeding
@@ -229,14 +334,14 @@ public class TheRightReleaseTests
         return fetch;
     }
 
-    private static SearchCycle Cycle(FakeTorrentEngine engine, FakeFetch answering)
+    private static SearchCycle Cycle(FakeTorrentEngine engine, FakeFetch answering, FakePool? pool = null)
     {
         SourceCatalogue catalogue = SourceCatalogue.Build(Sources, [], []);
         ActivityJournal journal = new();
         Readers readers = Readers.Shipped();
 
         return new(
-            new(catalogue, answering, readers, new FakePool(), journal, TimeProvider.System),
+            new(catalogue, answering, readers, pool ?? new FakePool(), journal, TimeProvider.System),
             new(catalogue, answering, readers, journal),
             journal,
             new Grab(engine, new EndlessDisk(), journal));

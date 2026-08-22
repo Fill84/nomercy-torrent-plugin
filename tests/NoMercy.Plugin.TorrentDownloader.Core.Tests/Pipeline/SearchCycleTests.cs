@@ -40,10 +40,12 @@ public class SearchCycleTests
 
         EpisodeOutcome taken = report.Outcomes.Single(outcome => outcome.Episode == Silo(6).Key);
 
-        // The title the site announced, not the one that was searched for:
-        // LimeTorrents prints this release with spaces where the scene name
-        // has dots, and the copy is what it said it was.
-        Assert.Equal("Silo S03E06 1080p WEB H264-CAKES", taken.Release);
+        // The name a name database published, not the site's rendering of it.
+        // LimeTorrents prints this release with spaces where the scene name has
+        // dots; it is one release with one name, and the name is srrDB's. It is
+        // written against the grab and is what staging matches a finished file
+        // by, so a site's spelling of it is a name nothing answers to.
+        Assert.Equal("Silo.S03E06.1080p.WEB.H264-CAKES", taken.Release);
         Assert.Equal("LimeTorrents", taken.Source);
         Assert.NotNull(taken.Seeders);
         Assert.True(taken.HandedOver);
@@ -153,7 +155,7 @@ public class SearchCycleTests
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
 
-        Assert.Equal("Silo S03E06 1080p WEB H264-CAKES", outcome.Release);
+        Assert.Equal("Silo.S03E06.1080p.WEB.H264-CAKES", outcome.Release);
         Assert.False(outcome.HandedOver);
         Assert.Contains("dry run", outcome.Detail, StringComparison.OrdinalIgnoreCase);
 
