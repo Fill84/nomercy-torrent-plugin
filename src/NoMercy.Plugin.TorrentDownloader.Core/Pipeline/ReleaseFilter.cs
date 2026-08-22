@@ -67,18 +67,35 @@ public static class Blacklist
 public sealed class ReleaseFilter(Profile profile)
 {
     /// <summary>
-    /// The languages that say a release is not in English.
+    /// What says a release is not in English, read off the name as written.
     /// </summary>
     /// <remarks>
-    /// <c>multi</c> and <c>dual audio</c> are not among them: both mean several
-    /// audio tracks and normally include the English one. A subtitle claim is
-    /// not here either — subtitles do not change what a release sounds like.
+    /// <para>
+    /// Any one of these refuses it, <strong>even beside an English tag</strong>.
+    /// A <c>MULTI</c> or an <c>ITA.ENG</c> release carries the English audio and
+    /// several others with it, and on 22 August 2026 that is how
+    /// <c>Silo.S03E07.MULTI.1080p.WEB.H264-HiggsBoson</c> came to be taken for
+    /// an owner who wanted the plain one. The list this replaced had nine
+    /// entries and counted <c>multi</c> as English.
+    /// </para>
+    /// <para>
+    /// Taken from the owner's own working tool, which has been reading these
+    /// same sites for months. Its list deliberately omits <c>IT</c>, <c>ES</c>
+    /// and <c>DE</c>: they are ordinary English words or common substrings, and
+    /// a marker that false-matches refuses releases nobody would question.
+    /// </para>
     /// </remarks>
     private static readonly string[] NotEnglish =
-        ["german", "italian", "french", "vostfr", "spanish", "russian", "polish", "swedish", "japanese"];
-
-    /// <summary>What makes a release English enough for the English-only rule.</summary>
-    private static readonly string[] CarriesEnglish = ["english", "multi", "dual audio"];
+    [
+        "polish", "pl", "plsub", "vostfr", "vost", "vf", "vff", "vfq", "vfi",
+        "fr", "truefrench", "french", "german", "ger", "ita", "italian", "spanish",
+        "esp", "espanol", "castellano", "latino", "dutch", "nl", "korean", "kor",
+        "japanese", "jpn", "chinese", "cantonese", "mandarin", "russian", "rus",
+        "hindi", "tamil", "telugu", "swedish", "danish", "norwegian", "finnish",
+        "nordic", "czech", "hungarian", "hun", "turkish", "portuguese", "por",
+        "ptbr", "greek", "hebrew", "arabic", "thai", "vietnamese", "indonesian",
+        "multi", "multi6", "dual", "dubbed",
+    ];
 
     /// <summary>
     /// Whether this name is worth putting to an indexer for this episode.
@@ -145,12 +162,9 @@ public sealed class ReleaseFilter(Profile profile)
             }
         }
 
-        if (profile.EnglishOnly
-            && name.Languages.Any(claimed => NotEnglish.Contains(claimed, StringComparer.OrdinalIgnoreCase))
-            && !name.Languages.Any(claimed => CarriesEnglish.Contains(claimed, StringComparer.OrdinalIgnoreCase)))
+        if (profile.EnglishOnly && Foreign(name.Original) is string marker)
         {
-            return Verdict.No(
-                $"'{name.Original}' is in {string.Join(", ", name.Languages)} and English only is on.");
+            return Verdict.No($"'{name.Original}' is marked {marker} and English only is on.");
         }
 
         foreach (string term in profile.ExcludeTerms)
@@ -165,6 +179,39 @@ public sealed class ReleaseFilter(Profile profile)
         }
 
         return Verdict.Yes;
+    }
+
+    /// <summary>
+    /// The first foreign-audio marker the name carries, or null.
+    /// </summary>
+    /// <remarks>
+    /// Read off the name as written rather than off a parsed field: a release
+    /// says <c>ITA.ENG</c> or <c>MULTi</c> in the middle of its own name, and a
+    /// vocabulary that only collects what it recognises misses whatever it has
+    /// not been told about. Whole words only, so <c>POR</c> does not match
+    /// inside <c>PORTAL</c>.
+    /// </remarks>
+    private static string? Foreign(string name)
+    {
+        foreach (string word in Words(name))
+        {
+            if (NotEnglish.Contains(word, StringComparer.OrdinalIgnoreCase))
+            {
+                return word;
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>A name as its words, however the site punctuated it.</summary>
+    private static IEnumerable<string> Words(string name)
+    {
+        return name
+            .Select(character => char.IsLetterOrDigit(character) ? character : ' ')
+            .Aggregate(new System.Text.StringBuilder(), (text, character) => text.Append(character))
+            .ToString()
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 
     /// <summary>

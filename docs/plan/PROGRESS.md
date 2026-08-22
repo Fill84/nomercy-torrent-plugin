@@ -579,6 +579,19 @@ and note it here.
   every row of the owner's library: `MaxSearchAttempts` decided nothing, no episode ever reached
   *given up for now*, and the queue — ordered by last-search — ran in the same order every cycle.
   **B2** decides what counts: only an episode an indexer was really asked about.
+- **The owner's own tool is the reference for what a good decision is**, and they pointed at it twice
+  before I read it: `github.com/Fill84/BeastStack/tree/main/torrent-feed`. Three of its rules are now
+  this plugin's, each because a real decision here was wrong without them. Its resolver ranks *exact
+  scene release first, then the site, then most seeders*. Its `matches()` refuses any foreign-audio
+  marker even beside an English one, `MULTi` and `DUAL` included. Its `name_matches()` accepts a show
+  name in exactly two places — leading the title with only a year or a country after it, or ending
+  where the episode marker begins, which is where a franchise prefix leaves it (*Special Ops
+  Lioness*). Its comment on the country list names the fault the shortness is guarding, and it is the
+  same one seen here: a loose list reopens *Lucky* matching five other programmes.
+- **The codec and the resolution are chosen from a list.** A box takes anything, and a codec spelled
+  a way the parser never answers refuses every release there is with no reason the owner can read. A
+  blank codec wants nothing, exactly as `any` does — the field was empty on the server for a while,
+  and an empty string is a codec no release claims.
 - The plugin keeps id `1SBQT26FHF98EBRPYVRGD92CZF`, so 0.4.0 is an upgrade of the installed plugin
   rather than a second one.
 - The BitTorrent protocol is written in this repository. No third-party torrent library.

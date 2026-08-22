@@ -66,6 +66,31 @@ public class TitleMatcherTests
     }
 
     /// <remarks>
+    /// <strong>A name is accepted in exactly two places.</strong> Leading the
+    /// title, where only a year or a country may follow it, or ending it, which
+    /// is where a franchise prefix leaves it: a release of <em>Lioness</em> is
+    /// posted as <em>Special Ops Lioness</em>, and refusing that loses the show
+    /// entirely.
+    ///
+    /// Both positions and the country list come from the owner's own working
+    /// tool, whose comment on that list says what this is guarding: every entry
+    /// is a token a name can swallow, so a loose one reopens the fault where
+    /// <em>Lucky</em> matched five other programmes.
+    /// </remarks>
+    [Theory]
+    [InlineData("Lioness", "Lioness", true)]
+    [InlineData("Lioness", "Lioness 2023", true)]
+    [InlineData("Lioness", "Special Ops Lioness", true)]
+    [InlineData("Lioness", "Lioness Hank", false)]
+    [InlineData("Big Brother", "Big Brother US", true)]
+    [InlineData("Lucky", "Lucky Hank", false)]
+    [InlineData("Lucky", "We Were the Lucky Ones", false)]
+    public void ANameLeadsTheTitleOrEndsItAndNothingElse(string show, string releaseTitle, bool matches)
+    {
+        Assert.Equal(matches, TitleMatcher.Matches(releaseTitle, show));
+    }
+
+    /// <remarks>
     /// <strong>A repost's tag and a file's extension are not the release's
     /// name.</strong> One release arrived on the owner's own library on
     /// 22 August 2026 as <c>Sugar 2024 S02E08 1080p WEB H264-CAKES</c> from the

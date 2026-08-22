@@ -77,16 +77,30 @@ public static class TitleMatcher
 
         // Nothing matches nothing. A show with no title is a fault upstream,
         // and answering true would file every release in the pool under it.
-        if (show.Length == 0
-            || release.Length < show.Length
-            || !release.Take(show.Length).SequenceEqual(show, StringComparer.Ordinal))
+        if (show.Length == 0 || release.Length < show.Length)
         {
             return false;
         }
 
-        string[] rest = [.. release.Skip(show.Length)];
+        // Leading it, where only a year or a country may follow.
+        if (release.Take(show.Length).SequenceEqual(show, StringComparer.Ordinal))
+        {
+            string[] rest = [.. release.Skip(show.Length)];
 
-        return rest.Length == 0 || IsYear(rest) || !IsOneCommonWord(show);
+            if (rest.Length == 0 || IsQualifier(rest) || !IsOneCommonWord(show))
+            {
+                return true;
+            }
+        }
+
+        // Or ending it, which is where a franchise prefix leaves it: a release
+        // of Lioness is posted as "Special Ops Lioness S02E01", and the title
+        // this is handed ends at the season tag. Taken from the owner's own
+        // working tool, which accepts the name in exactly these two places and
+        // nowhere else - anywhere else is how "Lucky" came to match
+        // "We Were the Lucky Ones".
+        return release.Length >= show.Length
+               && release.Skip(release.Length - show.Length).SequenceEqual(show, StringComparer.Ordinal);
     }
 
     /// <summary>
@@ -116,7 +130,21 @@ public static class TitleMatcher
         return show.Length == 1 && show[0].All(char.IsAsciiLetter);
     }
 
-    /// <summary>Whether what follows the show's title is only its year.</summary>
+    /// <summary>
+    /// Countries that tell one version of a format from another.
+    /// </summary>
+    /// <remarks>
+    /// <em>Big Brother US</em> is a different programme from <em>Big Brother</em>
+    /// and the library holds whichever it holds, so a country is a word the
+    /// show's name may absorb. Kept as short as the owner's own tool keeps it,
+    /// and for the reason its comment gives: every entry is a token a name can
+    /// swallow, and a loose list reopens the Lucky fault.
+    /// </remarks>
+    private static readonly string[] Countries = ["us", "uk", "au", "ca", "nz", "ie", "za"];
+
+    /// <summary>
+    /// Whether what follows the show's title is only a year or a country.
+    /// </summary>
     /// <remarks>
     /// A release names the year to tell one programme from another of the same
     /// name, which is the one addition that does not make it a different
@@ -124,13 +152,14 @@ public static class TitleMatcher
     /// <em>Lucky</em>, <em>Sugar</em>, <em>Lioness</em> — and the sites post all
     /// four both ways.
     /// </remarks>
-    private static bool IsYear(string[] rest)
+    private static bool IsQualifier(string[] rest)
     {
         return rest.Length == 1
-               && rest[0].Length == 4
-               && rest[0].All(char.IsAsciiDigit)
-               && (rest[0].StartsWith("19", StringComparison.Ordinal)
-                   || rest[0].StartsWith("20", StringComparison.Ordinal));
+               && (Countries.Contains(rest[0], StringComparer.Ordinal)
+                   || (rest[0].Length == 4
+                       && rest[0].All(char.IsAsciiDigit)
+                       && (rest[0].StartsWith("19", StringComparison.Ordinal)
+                           || rest[0].StartsWith("20", StringComparison.Ordinal))));
     }
 
     /// <summary>

@@ -107,9 +107,16 @@ A release that does not say what resolution it is is refused, and the reason say
 naming a resolution it never claimed. The same choice as the codec tag, for the same reason: what a
 release does not say is where the thing you did not want hides.
 
-The language claims a name can make are in § Release names, and the English-only rule reads them as
-follows: a release claiming a language that is not English, and not also claiming English, `MULTi` or
-`Dual Audio`, is refused. Subtitles are not audio and never refuse anything.
+**English only means English only, and `MULTi` is not English.** Corrected 22 August 2026, from the
+owner's own working tool. Any foreign-audio marker on the name refuses it — **even beside an English
+one**: `ITA.ENG` carries the English audio and the Italian together, and `MULTI` carries several. The
+rule this replaced counted both as English, and it is how
+`Silo.S03E07.MULTI.1080p.WEB.H264-HiggsBoson` was taken for an owner whose plain copy was sitting
+beside it.
+
+The markers are read off the name as written rather than off a parsed field, whole words only, and
+the list is that tool's — fifty of them, and deliberately without `IT`, `ES` or `DE`, which are
+ordinary English words or common substrings. Subtitles are not audio and never refuse anything.
 
 Quality is one rung, not a ceiling. `1080p` means 1080p — a ceiling reads as generous and behaves as
 a downgrade, because the 720p copy is usually posted first.

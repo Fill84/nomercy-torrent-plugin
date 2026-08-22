@@ -219,8 +219,10 @@ public class ReleaseFilterTests
         Assert.True(Filter(new() { MaximumResolution = "1080p", Codec = "h265", RequireCodecTag = false })
             .JudgeName(untagged, Episode("Silo", 3, 6), Blacklist.None).Accepted);
 
-        // A profile wanting no codec in particular takes it.
-        Assert.True(Filter(new() { MaximumResolution = "1080p", Codec = Profile.AnyCodec })
+        // A profile wanting no codec in particular takes it. English only is
+        // off here on purpose: this release is MULTI, and that is a language
+        // question rather than a codec one.
+        Assert.True(Filter(new() { MaximumResolution = "1080p", Codec = Profile.AnyCodec, EnglishOnly = false })
             .JudgeName(
                 ReleaseName.Parse(Real("limetorrents.html", "site", "Silo S03E06 MULTI 1080p WEB H264-HiggsBoson")),
                 Episode("Silo", 3, 6),
@@ -243,11 +245,22 @@ public class ReleaseFilterTests
             Episode("Silo", 3, 6),
             Blacklist.None).Accepted);
 
-        Assert.True(Filter(english).JudgeName(
+        // And a release carrying both is still refused. It says ITA.ENG: the
+        // English audio is in there with the Italian, and the owner asked for
+        // English. This asserted the opposite until 22 August 2026, when a
+        // MULTI release was taken for an episode whose plain one was sitting
+        // beside it.
+        Assert.False(Filter(english).JudgeName(
             ReleaseName.Parse(Real(
                 "1337x.html",
                 "1337x",
                 "Silo.S03E06.The.Drive.1080p.ATVP.WEB-DL.ITA.ENG.DDP5.1.Atmos.H.265-G66.mkv")),
+            Episode("Silo", 3, 6),
+            Blacklist.None).Accepted);
+
+        // And the plain one beside it is taken.
+        Assert.True(Filter(english).JudgeName(
+            ReleaseName.Parse(Real("limetorrents.html", "site", "Silo S03E06 1080p WEB H264-CAKES")),
             Episode("Silo", 3, 6),
             Blacklist.None).Accepted);
 
