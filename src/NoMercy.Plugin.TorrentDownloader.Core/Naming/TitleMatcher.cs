@@ -24,6 +24,21 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Naming;
 /// </remarks>
 public static class TitleMatcher
 {
+    /// <summary>A file type at the very end, which is the file and not the release.</summary>
+    private static readonly Regex Extension = new(
+        @"[.\s](?:mkv|mp4|avi|m4v|mov|wmv|ts|iso|rar|zip)\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>Whoever reposted it, in brackets at the end.</summary>
+    /// <remarks>
+    /// <c>[EZTVx to]</c>, <c>[EZTVx.to]</c>, <c>[TGx]</c>, <c>[eztv]</c>. A
+    /// bracketed group anywhere else in a name is left alone: anime writes its
+    /// own group that way at the front, and that is part of the name.
+    /// </remarks>
+    private static readonly Regex SiteTag = new(
+        @"[\[(][^\[\]()]{1,20}[\])]\s*$",
+        RegexOptions.Compiled);
+
     private static readonly Regex Punctuation = new(
         @"[^\p{L}\p{N}]+",
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -126,6 +141,49 @@ public static class TitleMatcher
     public static string Normalised(string title)
     {
         return string.Concat(Words(title));
+    }
+
+    /// <summary>
+    /// A release's identity: its name with what the site stuck on it gone.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One release arrives as <c>Sugar 2024 S02E08 1080p WEB H264-CAKES</c>
+    /// from the site that has it, as
+    /// <c>sugar 2024 s02e08 1080p web h264-cakes[EZTVx to]</c> from one that
+    /// reposted it, and as
+    /// <c>Sugar.2024.S02E08.1080p.WEB.h264-CAKES[EZTVx.to].mkv</c> from a
+    /// third. The tag names whoever reposted it and the extension names the
+    /// file inside; neither is part of what the release is called.
+    /// </para>
+    /// <para>
+    /// It matters twice. A copy carrying a tag does not match the name a name
+    /// database published, so it is neither ranked as the scene release nor
+    /// recorded under its proper name — ten of twenty-two decisions on
+    /// 22 August 2026 kept a site's rendering for exactly this reason. And two
+    /// copies of one release, one tagged and one not, look like two torrents.
+    /// </para>
+    /// <para>
+    /// Kept apart from <see cref="Normalised"/>, which is the pool's key: that
+    /// one has to spell a name the same way on both sides of the store and is
+    /// not free to drop anything.
+    /// </para>
+    /// </remarks>
+    public static string Release(string title)
+    {
+        string trimmed = (title ?? string.Empty).Trim();
+
+        // The extension first: the tag usually sits in front of it.
+        Match named = Extension.Match(trimmed);
+
+        if (named.Success)
+        {
+            trimmed = trimmed[..named.Index];
+        }
+
+        Match tagged = SiteTag.Match(trimmed);
+
+        return Normalised(tagged.Success ? trimmed[..tagged.Index] : trimmed);
     }
 
     /// <summary>

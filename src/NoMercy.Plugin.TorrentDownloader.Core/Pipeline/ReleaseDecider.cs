@@ -94,7 +94,7 @@ public sealed class ReleaseDecider(Profile profile)
                 // and the scene release by 1,774, so on a count alone the
                 // re-encode wins a contest it should never have been in.
                 .OrderByDescending(copy => known is not null
-                                           && known.Contains(TitleMatcher.Normalised(copy.Title)))
+                                           && known.Contains(TitleMatcher.Release(copy.Title)))
 
                 // A copy whose site does not publish a count sorts below one
                 // that does and has some: it might be well seeded and nothing

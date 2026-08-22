@@ -186,7 +186,7 @@ public sealed class Decisions
 
         HashSet<string>? published = known is null
             ? null
-            : [.. known.Select(TitleMatcher.Normalised)];
+            : [.. known.Select(TitleMatcher.Release)];
 
         Decision decision = _decider.Decide(forThisEpisode, _blacklisted, published);
 
@@ -217,9 +217,9 @@ public sealed class Decisions
             return copy.Title;
         }
 
-        string key = TitleMatcher.Normalised(copy.Title);
+        string key = TitleMatcher.Release(copy.Title);
 
-        return known.FirstOrDefault(name => TitleMatcher.Normalised(name) == key) ?? copy.Title;
+        return known.FirstOrDefault(name => TitleMatcher.Release(name) == key) ?? copy.Title;
     }
 
     /// <summary>

@@ -66,6 +66,46 @@ public class TitleMatcherTests
     }
 
     /// <remarks>
+    /// <strong>A repost's tag and a file's extension are not the release's
+    /// name.</strong> One release arrived on the owner's own library on
+    /// 22 August 2026 as <c>Sugar 2024 S02E08 1080p WEB H264-CAKES</c> from the
+    /// site that had it, as
+    /// <c>sugar 2024 s02e08 1080p web h264-cakes[EZTVx to]</c> from one that
+    /// reposted it, and as
+    /// <c>Sugar.2024.S02E05.1080p.WEB.h264-ETHEL[EZTVx.to].mkv</c> from a
+    /// third. Ten of twenty-two decisions kept a site's rendering because the
+    /// tagged copy did not match the name a name database had published for it.
+    ///
+    /// A bracketed group anywhere but the end is left alone: anime writes its
+    /// own group that way at the front, and there it is part of the name.
+    /// </remarks>
+    [Theory]
+    [InlineData("Sugar 2024 S02E08 1080p WEB H264-CAKES", "sugar 2024 s02e08 1080p web h264-cakes[EZTVx to]")]
+    [InlineData("Sugar.2024.S02E08.1080p.WEB.H264-CAKES", "Sugar 2024 S02E08 1080p WEB H264-CAKES[EZTVx.to].mkv")]
+    [InlineData("Silo S03E08 1080p WEB H264-CAKES", "Silo.S03E08.1080p.WEB.H264-CAKES [TGx]")]
+    public void ARepostsTagAndAFilesExtensionAreNotPartOfTheName(string published, string reposted)
+    {
+        Assert.Equal(TitleMatcher.Release(published), TitleMatcher.Release(reposted));
+    }
+
+    /// <remarks>
+    /// Two different releases stay different, whatever is stuck on the end of
+    /// them. Dropping a tag must not drop the group with it.
+    /// </remarks>
+    [Fact]
+    public void TwoDifferentReleasesAreStillDifferent()
+    {
+        Assert.NotEqual(
+            TitleMatcher.Release("Silo S03E08 1080p WEB H264-CAKES[EZTVx to]"),
+            TitleMatcher.Release("Silo S03E08 1080p WEB H264-SYLiX[EZTVx to]"));
+
+        // And an anime group at the front is the name, not a repost's tag.
+        Assert.NotEqual(
+            TitleMatcher.Release("[SubsPlease] Frieren - 12 (1080p)"),
+            TitleMatcher.Release("[Erai-raws] Frieren - 12 (1080p)"));
+    }
+
+    /// <remarks>
     /// Punctuation and case are how a site writes a title, not what it is. The
     /// scene name here is real, off the Nyaa capture, and the show title is the
     /// one the library holds.

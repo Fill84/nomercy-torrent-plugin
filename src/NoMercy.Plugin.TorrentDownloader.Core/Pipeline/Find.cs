@@ -237,7 +237,7 @@ public sealed class Find(
     {
         List<ReleaseCopy> merged = [];
 
-        foreach (IGrouping<string, ReleaseCopy> named in copies.GroupBy(copy => TitleMatcher.Normalised(copy.Title)))
+        foreach (IGrouping<string, ReleaseCopy> named in copies.GroupBy(copy => TitleMatcher.Release(copy.Title)))
         {
             string[] hashes =
             [

@@ -455,9 +455,9 @@ public sealed class SearchCycle(
             return false;
         }
 
-        HashSet<string> known = [.. names.Select(TitleMatcher.Normalised)];
+        HashSet<string> known = [.. names.Select(TitleMatcher.Release)];
 
-        return gathered.Any(copy => known.Contains(TitleMatcher.Normalised(copy.Title)));
+        return gathered.Any(copy => known.Contains(TitleMatcher.Release(copy.Title)));
     }
 
     /// <summary>
