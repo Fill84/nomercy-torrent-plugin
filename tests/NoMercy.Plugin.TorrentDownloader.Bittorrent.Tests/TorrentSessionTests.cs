@@ -44,7 +44,13 @@ public class TorrentSessionTests : IDisposable
     public async Task OneInstanceOfThisClientDownloadsAWholeTorrentFromAnother()
     {
         byte[] content = Fixture("ubuntu-desktop.torrent");
-        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768);
+
+        // Private, because this client only ever uploads on a private torrent —
+        // see docs/06-torrent-client.md § Uploading. Over a public one the
+        // seeding side would answer nothing and this would prove the refusal
+        // rather than the transfer, which is what
+        // OnlyAPrivateTorrentGivesAnythingBack is for.
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768, secret: true);
 
         Assert.InRange(torrent.PieceCount, 10, 200);
 
@@ -241,6 +247,99 @@ public class TorrentSessionTests : IDisposable
             ours, RandomNumberGenerator.GetBytes(20), Id("US"), 10, dialling: true, stopping.Token));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>The owner's rule, and it overrides tit for tat.</strong> Nothing
+    /// this client downloaded from a public swarm is given back: not while it
+    /// is downloading, not once it is finished. Only a torrent whose metadata
+    /// says <c>private</c> uploads at all, because there the owner has an
+    /// account on a tracker that keeps score and a client that took without
+    /// giving would cost them it.
+    /// </para>
+    /// <para>
+    /// It is not a preference expressed in the abstract. On 22 August 2026 the
+    /// Downloads page showed a public torrent at 0.2% downloaded with a ratio
+    /// of 0.17 — about a megabyte had already gone out — and the owner had
+    /// never agreed to send a byte to a public swarm.
+    /// </para>
+    /// <para>
+    /// Both halves are asserted from the peer's side, over a real socket: what
+    /// arrives when a block is asked for, and what the session says it has
+    /// uploaded. A public torrent is never even unchoked, so a well-behaved
+    /// peer does not ask; this one asks anyway, because a swarm contains
+    /// clients that do.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task OnlyAPrivateTorrentGivesAnythingBack(bool secret, bool expected)
+    {
+        byte[] content = Fixture("ubuntu-desktop.torrent");
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768, secret);
+
+        Assert.Equal(secret, torrent.Private);
+
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(20));
+
+        (Stream seeding, Stream asking) = await LoopbackAsync(stopping.Token);
+
+        using TorrentSession seeder = Seeding(torrent, content, secret ? "seed-private" : "seed-public");
+
+        Task<PeerConnection?> ours = PeerConnection.IntroduceAsync(
+            seeding, Hash(torrent), Id("SEED"), torrent.PieceCount, dialling: false, stopping.Token);
+
+        Task<PeerConnection?> theirs = PeerConnection.IntroduceAsync(
+            asking, Hash(torrent), Id("TAKER"), torrent.PieceCount, dialling: true, stopping.Token);
+
+        PeerConnection?[] both = await Task.WhenAll(ours, theirs);
+
+        Task serves = seeder.RunAsync(both[0]!, stopping.Token);
+
+        PeerConnection taker = both[1]!;
+
+        await taker.SendAsync(PeerMessage.Of(PeerMessageId.Interested), stopping.Token);
+        await taker.SendAsync(PeerMessage.Request(0, 0, PeerMessage.BlockLength), stopping.Token);
+
+        bool block = false;
+        bool unchoked = false;
+
+        // Long enough for an answer to cross a loopback socket many times over,
+        // and it has to end by itself: the thing being proved for a public
+        // torrent is that nothing arrives, and nothing arriving never wakes a
+        // read up.
+        using CancellationTokenSource listening = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
+
+        listening.CancelAfter(TimeSpan.FromSeconds(3));
+
+        try
+        {
+            while (!block)
+            {
+                PeerMessage? said = await taker.NextAsync(listening.Token);
+
+                if (said is null)
+                {
+                    break;
+                }
+
+                block |= said.Id == PeerMessageId.Piece;
+                unchoked |= said.Id == PeerMessageId.Unchoke;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Nothing came, which for a public torrent is the whole point.
+        }
+
+        await stopping.CancelAsync();
+        await serves.ContinueWith(_ => { }, TaskScheduler.Default);
+
+        Assert.Equal(expected, block);
+        Assert.Equal(expected, unchoked);
+        Assert.Equal(expected, seeder.Progress().Uploaded > 0);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_folder))
@@ -353,7 +452,7 @@ public class TorrentSessionTests : IDisposable
     /// reader makes of a real published torrent is asserted elsewhere; what
     /// matters here is that the hashes are real hashes of real bytes.
     /// </remarks>
-    private static TorrentMetadata TorrentOf(byte[] content, int pieceLength)
+    private static TorrentMetadata TorrentOf(byte[] content, int pieceLength, bool secret = false)
     {
         List<byte> hashes = [];
 
@@ -362,15 +461,22 @@ public class TorrentSessionTests : IDisposable
             hashes.AddRange(SHA1.HashData(content.AsSpan(at, Math.Min(pieceLength, content.Length - at))));
         }
 
-        return TorrentMetadata.FromInfo(
-            Bencode.Write(new BencodeDictionary(
-            [
-                new("length"u8.ToArray(), new BencodeInteger(content.Length)),
-                new("name"u8.ToArray(), new BencodeBytes("seeded.bin"u8.ToArray())),
-                new("piece length"u8.ToArray(), new BencodeInteger(pieceLength)),
-                new("pieces"u8.ToArray(), new BencodeBytes([.. hashes])),
-            ])),
-            []);
+        List<BencodeEntry> info =
+        [
+            new("length"u8.ToArray(), new BencodeInteger(content.Length)),
+            new("name"u8.ToArray(), new BencodeBytes("seeded.bin"u8.ToArray())),
+            new("piece length"u8.ToArray(), new BencodeInteger(pieceLength)),
+            new("pieces"u8.ToArray(), new BencodeBytes([.. hashes])),
+        ];
+
+        if (secret)
+        {
+            // BEP 27, and the keys are read in the order a bencoded dictionary
+            // sorts them, which puts this one after "pieces".
+            info.Add(new("private"u8.ToArray(), new BencodeInteger(1)));
+        }
+
+        return TorrentMetadata.FromInfo(Bencode.Write(new BencodeDictionary([.. info])), []);
     }
 
     private static byte[] Hash(TorrentMetadata torrent)

@@ -93,10 +93,19 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
         {
             await peer.SendAsync(new(PeerMessageId.Bitfield, verified.Write()), ct).ConfigureAwait(false);
 
-            // Unchoked from the start. Choking properly is a decision across
-            // every peer at once and belongs to the choking round; refusing
-            // everybody until it has run would leave a two-peer swarm silent.
-            await peer.SendAsync(PeerMessage.Of(PeerMessageId.Unchoke), ct).ConfigureAwait(false);
+            if (torrent.Private)
+            {
+                // Unchoked from the start. Choking properly is a decision
+                // across every peer at once and belongs to the choking round;
+                // refusing everybody until it has run would leave a two-peer
+                // swarm silent.
+                //
+                // A public torrent is never unchoked at all: the owner's rule
+                // is that nothing taken from a public swarm goes back out, so
+                // there is nobody to promise anything to. A peer starts choked
+                // by BEP 3, so saying nothing is the whole of saying no.
+                await peer.SendAsync(PeerMessage.Of(PeerMessageId.Unchoke), ct).ConfigureAwait(false);
+            }
 
             if (!Complete)
             {
@@ -259,8 +268,19 @@ public sealed class TorrentSession(TorrentMetadata torrent, TorrentDisk disk, Bi
     }
 
     /// <summary>A peer asked for a block, and it is there to give.</summary>
+    /// <remarks>
+    /// Only on a private torrent. The owner's rule is that this client uploads
+    /// to their own trackers and to nowhere else, and a public swarm contains
+    /// peers that ask whether or not they were unchoked — so the refusal is
+    /// here as well as in the unchoke, and it is here that it counts.
+    /// </remarks>
     private async Task Serve(PeerConnection peer, PeerMessage message, CancellationToken ct)
     {
+        if (!torrent.Private)
+        {
+            return;
+        }
+
         (int piece, int offset, int length) = message.AsRequest();
 
         if (piece < 0 || piece >= torrent.PieceCount || !verified.Has(piece) || length > PeerMessage.BlockLength)

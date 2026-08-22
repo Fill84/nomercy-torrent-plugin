@@ -183,10 +183,24 @@ Token buckets: one global pair, one pair per torrent, refilled on a timer and dr
 and write. `MaxDownloadRate` and `MaxUploadRate` from settings, live-adjustable, zero meaning
 unlimited. The lower of the global and per-torrent limit wins.
 
+## Uploading
+
+**A public torrent never uploads.** Not while it is downloading, not once it is finished. A peer on
+a public torrent is never unchoked and a request from one is never answered, so its ratio stays at
+nought.
+
+This is the owner's rule, decided on 22 August 2026 after the Downloads page showed a public torrent
+at 0.2% downloaded with a ratio of 0.17. It costs download speed: a swarm reciprocates, and a client
+that gives nothing back is choked by the peers that notice. That is the trade the owner chose.
+
+Only a torrent whose metadata says `private` uploads, because there the tracker keeps an account of
+what the owner has given back and a client that took without giving would cost them it.
+
 ## Seeding
 
-Continues until `SeedRatio` **or** `SeedHours`, whichever comes first. A private torrent is never
-stopped early by this rule.
+A private torrent seeds until `SeedRatio` **or** `SeedHours`, whichever comes first — except that it
+is never stopped early by the ratio, because the ratio its own tracker credits is the one that
+counts. A public torrent has nothing to seed with.
 
 ## Stalls
 
@@ -203,7 +217,8 @@ on — a server behind a router that refuses both still downloads from peers it 
 ## Private torrents
 
 When `info.private` is 1: no DHT, no peer exchange, no local peer discovery, announce only to the
-torrent's own trackers. The passkey is read through `IPluginSecretStore` and never appears in a log
+torrent's own trackers, and it is the only kind of torrent this client uploads on — see
+**Uploading**. The passkey is read through `IPluginSecretStore` and never appears in a log
 line, an error message, a page, or the activity journal.
 
 ## Around the transfer

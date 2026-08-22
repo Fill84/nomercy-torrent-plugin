@@ -166,7 +166,13 @@ public static class SettingsView
             new PluginFormField
             {
                 Name = "profile.maximumResolution",
-                Label = "Maximum resolution",
+
+                // Not "maximum". The rule is one rung and never a ceiling -
+                // 1080p means 1080p, and a 720p copy is refused rather than
+                // taken as good enough. The label said the opposite of what
+                // the code does, which is the page telling the owner something
+                // untrue about their own library.
+                Label = "Resolution",
                 Type = PluginFormFieldType.Select,
                 Value = profile.MaximumResolution,
                 Options = [.. Profile.Resolutions.Select(Choice)],

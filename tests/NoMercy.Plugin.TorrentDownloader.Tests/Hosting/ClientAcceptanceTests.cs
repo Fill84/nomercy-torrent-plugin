@@ -206,6 +206,13 @@ public class ClientAcceptanceTests : IDisposable
                     new("name"u8.ToArray(), new BencodeBytes("acceptance.bin"u8.ToArray())),
                     new("piece length"u8.ToArray(), new BencodeInteger(pieceLength)),
                     new("pieces"u8.ToArray(), new BencodeBytes([.. hashes])),
+
+                    // Private, because this client only ever uploads on a
+                    // private torrent — see docs/06-torrent-client.md
+                    // § Uploading. Over a public one the seeding end would
+                    // refuse every request and this would be a test of the
+                    // refusal rather than of the transfer.
+                    new("private"u8.ToArray(), new BencodeInteger(1)),
                 ])),
         ]));
     }
