@@ -37,8 +37,8 @@ public class QueryTests
 
     /// <remarks>
     /// A site whose search is the path segment: one dash between words, runs
-    /// collapsed, lowercase. TorrentFunk answers a 301 to nothing for anything
-    /// else.
+    /// collapsed, lowercase. srrDB's search is its own path and wants exactly
+    /// this shape.
     /// </remarks>
     [Fact]
     public void SlugIsLowercaseAndSingleDashed()

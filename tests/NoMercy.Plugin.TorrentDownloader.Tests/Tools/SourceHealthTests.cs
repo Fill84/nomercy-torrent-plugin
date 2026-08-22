@@ -381,7 +381,6 @@ public class SourceHealthTests
     [InlineData("limetorrents.html")]
     [InlineData("torrentbay.html")]
     [InlineData("torrentdownloads.html")]
-    [InlineData("torrentfunk.html")]
     [InlineData("torrentgalaxy.html")]
     [InlineData("torrentz2.html")]
     [InlineData("nyaa.xml")]

@@ -57,7 +57,7 @@ public class FindTests
         FakeFetch fetch = new(clock);
 
         fetch.Answers(Address("LimeTorrents"), Capture.Fixture("limetorrents.html"), TimeSpan.FromSeconds(5));
-        fetch.Answers(Address("TorrentFunk"), Capture.Fixture("torrentfunk.html"), TimeSpan.FromSeconds(3));
+        fetch.Answers(Address("Torrentz2"), Capture.Fixture("torrentz2.html"), TimeSpan.FromSeconds(3));
         fetch.Answers(Address("TorrentDownloads"), Capture.Fixture("torrentdownloads.html"), TimeSpan.FromSeconds(1));
 
         Task run = Finding(fetch, clock).SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
@@ -87,7 +87,7 @@ public class FindTests
         [
             new(Name, "LimeTorrents", 35, Hash, $"magnet:?xt=urn:btih:{Hash}&tr=udp%3A%2F%2Fone.example%3A80", null, 4, 1_000),
             new(Name, "The Pirate Bay", 45, Hash, $"magnet:?xt=urn:btih:{Hash}&tr=udp%3A%2F%2Ftwo.example%3A80", null, 40, 1_000),
-            new(Name, "TorrentFunk", 25, Hash, $"magnet:?xt=urn:btih:{Hash}&tr=udp%3A%2F%2Fone.example%3A80", null, 12, 1_000),
+            new(Name, "Torrentz2", 25, Hash, $"magnet:?xt=urn:btih:{Hash}&tr=udp%3A%2F%2Fone.example%3A80", null, 12, 1_000),
         ];
 
         ReleaseCopy merged = Assert.Single(Find.Merge(copies));
@@ -129,22 +129,22 @@ public class FindTests
     /// <strong>C3.</strong> No shipped indexer publishes a magnet on its
     /// listing, so the row's own page is the only route to one — and 0.3.4
     /// wrote that address and read it nowhere, so TorrentBay produced rows for
-    /// weeks and zero downloads. The page here is a real TorrentFunk detail
+    /// weeks and zero downloads. The page here is a real TorrentDownloads detail
     /// page, which carries no magnet at all and prints the bare hash.
     /// </remarks>
     [Fact]
     public async Task ARowWithNoMagnetIsFollowedToItsOwnPage()
     {
         FakeFetch fetch = new();
-        fetch.Answers(Detail, Capture.Fixture("torrentfunk-detail.html"));
+        fetch.Answers(Detail, Capture.Fixture("torrentdownloads-detail.html"));
 
-        ReleaseCopy chosen = new(Name, "TorrentFunk", 25, null, null, new(Detail), 9);
+        ReleaseCopy chosen = new(Name, "TorrentDownloads", 25, null, null, new(Detail), 9);
 
         ReleaseCopy followed = await Finding(fetch).FollowAsync(chosen, CancellationToken.None);
 
-        Assert.Equal("60207FB3AE7877C8C76DDD27A07C385E5047783C", followed.InfoHash);
+        Assert.Equal("D8C536D10926761FCC69265308070B19DB6DA336", followed.InfoHash);
         Assert.StartsWith(
-            "magnet:?xt=urn:btih:60207FB3AE7877C8C76DDD27A07C385E5047783C",
+            "magnet:?xt=urn:btih:D8C536D10926761FCC69265308070B19DB6DA336",
             followed.Magnet,
             StringComparison.Ordinal);
 
@@ -269,7 +269,7 @@ public class FindTests
     {
         FakeFetch fetch = new();
         fetch.Answers(Address("LimeTorrents"), Capture.Fixture("limetorrents.html"));
-        fetch.FailsHost("www.torrentfunk.com", FetchOutcome.RateLimited, "www.torrentfunk.com answered 429");
+        fetch.FailsHost("torrentz2.nz", FetchOutcome.RateLimited, "torrentz2.nz answered 429");
         fetch.Answers(Address("TorrentDownloads"), Capture.Fixture("torrentdownloads.html"));
 
         ActivityJournal journal = new();
@@ -278,13 +278,13 @@ public class FindTests
             .SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
 
         Assert.NotEmpty(copies);
-        Assert.DoesNotContain(copies, copy => copy.Source == "TorrentFunk");
+        Assert.DoesNotContain(copies, copy => copy.Source == "Torrentz2");
 
         Assert.Contains(
             journal.Snapshot().History,
             entry => entry.Stage == ActivityStage.Find
                      && entry.Outcome == ActivityOutcome.Failed
-                     && entry.Subject.Contains("TorrentFunk", StringComparison.Ordinal));
+                     && entry.Subject.Contains("Torrentz2", StringComparison.Ordinal));
 
         Assert.Empty(journal.Snapshot().InFlight);
     }
@@ -302,7 +302,7 @@ public class FindTests
         RecordingLedger ledger = new();
 
         fetch.Answers(Address("LimeTorrents"), Capture.Fixture("limetorrents.html"));
-        fetch.Fails(Address("TorrentFunk"), FetchOutcome.RateLimited, "429 Too Many Requests");
+        fetch.Fails(Address("Torrentz2"), FetchOutcome.RateLimited, "429 Too Many Requests");
         fetch.Fails(Address("TorrentDownloads"), FetchOutcome.Refused, "403 Forbidden");
 
         await Finding(fetch, ledger: ledger).SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
@@ -312,7 +312,7 @@ public class FindTests
         Assert.True(answered.Rows > 0, "The captured page is covered in releases.");
         Assert.Null(answered.Refusal);
 
-        SourceAnswer refused = ledger.Answers.Single(one => one.Name == "TorrentFunk");
+        SourceAnswer refused = ledger.Answers.Single(one => one.Name == "Torrentz2");
 
         // Its own words. "Broken" would be this plugin's judgement of a site
         // that simply asked to be left alone for a while, which is G2 exactly.
@@ -584,7 +584,8 @@ public class FindTests
 
     private const string Name = "Silo.S03E06.1080p.WEB.H264-CAKES";
 
-    private const string Detail = "https://www.torrentfunk.com/torrent/50533062/silo-s03e06.html";
+    private const string Detail =
+        "https://www.torrentdownloads.pro/torrent/1707086634/Sugar-S02E08-Like-Sugar-2160p-ATVP-WEB-DL-ITA-ENG-DD5-1-DV-HDR-H-265-G66-mkv";
 
     /// <summary>
     /// The site that publishes neither a magnet nor a hash, as the catalogue
@@ -603,10 +604,9 @@ public class FindTests
     private static readonly SourceDefinition[] Indexers =
     [
         new("LimeTorrents", "site", "https://www.limetorrents.lol/search/all/{query}/") { Priority = 35 },
-        new("TorrentFunk", "site", "https://www.torrentfunk.com/all/torrents/{query}.html")
+        new("Torrentz2", "site", "https://torrentz2.nz/search?q={query}")
         {
-            Reader = "torrentfunk",
-            Query = QueryStyles.Slug,
+            Reader = "torrentz2",
             Priority = 25,
         },
         new("TorrentDownloads", "site", "https://www.torrentdownloads.pro/search/?search={query}")

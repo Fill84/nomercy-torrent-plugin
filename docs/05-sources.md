@@ -34,7 +34,6 @@ and the presence of `searchUrl`, and nothing else guesses.
 | TorrentGalaxy | `site` | `torrentgalaxy` | **spaced** | no | 30 | 15s | indexer |
 | Torrentz2 | `site` | `torrentz2` | words | no | 25 | 15s | indexer |
 | TorrentDownloads | `site` | `torrentdownloads` | words | no | 25 | 15s | indexer |
-| TorrentFunk | `site` | `torrentfunk` | **slug** | no | 25 | 15s | indexer |
 | Nyaa | `torrent-rss` | — | words | no | **50** | 15s | indexer, **anime libraries only** |
 | YTS | `yts` | — | words | no | 20 | 15s | films — **off** |
 
@@ -54,7 +53,6 @@ EZTV             https://eztvx.to/search/{query}
 TorrentGalaxy    https://torrentgalaxy.one/get-posts/keywords:{query}/
 Torrentz2        https://torrentz2.nz/search?q={query}
 TorrentDownloads https://www.torrentdownloads.pro/search/?search={query}
-TorrentFunk      https://www.torrentfunk.com/all/torrents/{query}.html
 Nyaa             https://nyaa.si/?page=rss&q={query}
 YTS              https://yts.gg/api/v2/list_movies.json?query_term={query}
 ```
@@ -152,11 +150,9 @@ name is full of dashes and the one before the group has none.
 rows on the numeric id every real release has in its address. Seeders and leechers are two bare
 spans in that order followed by the size.
 
-**TorrentFunk** — query style `slug`; a query with spaces gets a 301 to nothing. Attributes are
-**bare**: `class=tv3`, not `class="tv3"`. The name is split by a span colouring the group, so read
-the anchor whole and strip its tags. The detail page carries **no magnet** — its download button
-leads to an advertising redirect on a third host — but it prints the bare info hash. Read a bare
-forty-hex string as a hash **only when the page has exactly one**.
+**TorrentFunk was removed on 22 August 2026**, on the owner's decision, and its host is out of the
+manifest with it. It answered nothing for the episodes of the owner's own library while every other
+site answered plenty. Nothing here reads that site any more.
 
 **LimeTorrents** — a hashed `.torrent` link on the listing; the generic reader handles it.
 

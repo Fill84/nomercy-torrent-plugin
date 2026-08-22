@@ -59,7 +59,6 @@ public sealed class Readers
             new TorrentGalaxyReader(),
             new Torrentz2Reader(),
             new TorrentDownloadsReader(),
-            new TorrentFunkReader(),
             new RssNameReader(),
             new TorrentRssReader(),
             new ApibayReader(),

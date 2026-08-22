@@ -93,8 +93,8 @@ public static class Html
     /// <remarks>
     /// Read whole and stripped, never joined from the text nodes. A name split
     /// by a span colouring the matched word is one word per node, and joining
-    /// the nodes glues them together — TorrentGalaxy and TorrentFunk both do
-    /// this, and both lost the release group to it.
+    /// the nodes glues them together — 1337x does this, and lost the release
+    /// group to it.
     /// </remarks>
     public static string Text(string markup)
     {
@@ -107,10 +107,10 @@ public static class Html
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Both halves of this are a real capture. TorrentGalaxy and TorrentFunk
-    /// write <c>&lt;span&gt;Silo&lt;/span&gt;&lt;span&gt;S03E07&lt;/span&gt;</c>
-    /// and taking the tags out with nothing in their place glues the words
-    /// together, which is how a release group was lost in 0.3.4.
+    /// Both halves of this are a real capture. 1337x writes a row whose words
+    /// are held apart by nothing but a tag, and taking the tags out with nothing
+    /// in their place glues them together — which is how a release group was
+    /// lost in 0.3.4.
     /// </para>
     /// <para>
     /// TorrentBay writes

@@ -84,8 +84,8 @@ all.
 
 | # | What happened | Test |
 | --- | --- | --- |
-| E1 | **TorrentFunk writes bare attributes** (`class=tv3`); the reader asked for quoted ones. Zero rows from a page whose heading said "We have 1 for you". | Read against the real capture; assert the row and its detail address. |
-| E2 | **TorrentFunk's title is split by a span** colouring the group, so the group was lost. | The parsed title from the capture includes the group. |
+| E1 | **A site writes bare attributes** (`class=tv3`); the reader asked for quoted ones. Zero rows from a page whose heading said "We have 1 for you". The source it was written for — TorrentFunk — was removed on 22 August 2026. | Read against the real capture; assert the row and its detail address. |
+| E2 | **A title is split by a span** colouring the group, so the group was lost. Its source is gone, but the rule is not: a run of tags leaves a space only where it was all that separated two words, which 1337x still proves. | The parsed title from the capture includes the group. |
 | E3 | **A plus in a path is a plus.** TorrentGalaxy answered nothing for a release it has sixteen copies of. 1337x searches from its path too and wants the plus. | `spaced` sends `%20`, the default sends `+`, both asserted on the URL. |
 | E4 | **A site answers a full release name with that release's own page**, not a listing — and the fallback written for it, "no rows, so take a magnet anywhere on the page", is unsafe. The capture of 22 August 2026 has no listing and one magnet, and that magnet is a wallpaper pack: the page's title would have gone out in front of a stranger's torrent. The source it was written for is gone. | A row is named by the torrent it points at, never by the page around it. |
 | E5 | **Sites were declared dead too fast.** TorrentGalaxy, Torrentz2 and TorrentDownloads each worked once the right address and shape were found. | Every source has a fixture and a reader test with a non-zero row count. |

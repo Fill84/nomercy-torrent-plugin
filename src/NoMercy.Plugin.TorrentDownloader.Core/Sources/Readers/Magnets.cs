@@ -53,7 +53,7 @@ public static class Magnets
     /// A magnet for a hash a page printed on its own.
     /// </summary>
     /// <remarks>
-    /// TorrentFunk's detail page carries no magnet at all and prints the bare
+    /// A detail page that carries no magnet at all prints the bare
     /// info hash, which is all a magnet needs. The trackers come from whatever
     /// else knows this torrent and from the owner's own list at the grab.
     /// </remarks>

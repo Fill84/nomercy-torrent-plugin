@@ -126,16 +126,6 @@
       "note": "The first link is an advert for another site carrying the same terms, so rows are matched on the numeric id every real release has in its address."
     },
     {
-      "name": "TorrentFunk",
-      "kind": "site",
-      "url": "https://www.torrentfunk.com/all/torrents/{query}.html",
-      "reader": "torrentfunk",
-      "query": "slug",
-      "priority": 25,
-      "minimumIntervalSeconds": 15,
-      "note": "A query with spaces gets a 301 to nothing. Attributes are bare: class=tv3, not class=\"tv3\". The detail page carries no magnet but prints the bare info hash."
-    },
-    {
       "name": "Nyaa",
       "kind": "torrent-rss",
       "url": "https://nyaa.si/?page=rss&q={query}",

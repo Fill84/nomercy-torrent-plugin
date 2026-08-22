@@ -464,7 +464,6 @@ public class ReleaseNameTests
         ("torrentbay.html", "torrentbay"),
         ("torrentdownloads.html", "torrentdownloads"),
         ("torrentdownloads-greek.html", "torrentdownloads"),
-        ("torrentfunk.html", "torrentfunk"),
         ("torrentgalaxy.html", "torrentgalaxy"),
         ("torrentz2.html", "torrentz2"),
         ("nyaa.xml", "torrent-rss"),

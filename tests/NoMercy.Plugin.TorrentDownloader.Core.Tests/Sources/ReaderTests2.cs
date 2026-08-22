@@ -153,37 +153,6 @@ public class ReaderTests2
     }
 
     /// <remarks>
-    /// <strong>E1.</strong> Attributes here are bare — <c>class=tv3</c>, not
-    /// <c>class="tv3"</c> — and a reader asking for quoted ones reads zero rows
-    /// from a page whose own heading says it has results. Thirteen rows in the
-    /// capture, and the reader has to find every one of them.
-    ///
-    /// The page also opens with a block of advertising that names the search
-    /// term and links to a third host. None of that is a release.
-    /// </remarks>
-    [Fact]
-    public void TorrentFunkReadsItsBareAttributesAndSkipsTheThirdHostAdverts()
-    {
-        string body = Fixture("torrentfunk");
-
-        // The two things the rule exists for are really on the page.
-        Assert.Contains("class=tv3", body, StringComparison.Ordinal);
-        Assert.Contains("t0r.space", body, StringComparison.Ordinal);
-
-        IReadOnlyList<SourceRow> rows = new TorrentFunkReader().Read(
-            body,
-            new("https://www.torrentfunk.com/all/torrents/silo-s03e06.html"));
-
-        Assert.Equal(13, rows.Count);
-
-        // Not one of them is an advertisement on somebody else's host.
-        Assert.All(rows, row => Assert.Equal("www.torrentfunk.com", row.DetailUrl?.Host));
-
-        Assert.Equal("Silo S03E06 The Drive 2160p ATVP WEB-DL ITA ENG DDP5.1 Atmos DV HDR H 265-G66", rows[0].Title);
-        Assert.Equal((long)(9.6 * 1024 * 1024 * 1024), rows[0].SizeBytes);
-    }
-
-    /// <remarks>
     /// <strong>This site writes the file's type as the last word of the
     /// title.</strong> The capture carries
     /// <c>Silo S03E06 MULTI 1080p WEB H264-HiggsBoson exe</c>, and on the
@@ -254,26 +223,6 @@ public class ReaderTests2
         // page really is called "…Atmos. X265 POOTLED…" — so only the first is
         // worth asserting, and asserting the second refused a real name.
         Assert.DoesNotContain(rows, row => row.Title.Contains(" .", StringComparison.Ordinal));
-    }
-
-    /// <remarks>
-    /// <strong>E2.</strong> The name is split by a span colouring the release
-    /// group, so reading the anchor whole and stripping it keeps the group —
-    /// reading only the first text node would lose it.
-    ///
-    /// This asserted <c>Silo S03E06 XviD -AFG</c>, with a space nothing on the
-    /// page put there, for as long as a tag was worth a space wherever it
-    /// stood. The release is called <c>XviD-AFG</c> and the space was the
-    /// stripper's, not the site's.
-    /// </remarks>
-    [Fact]
-    public void TorrentFunkKeepsTheGroupThatASpanCutsOffTheTitle()
-    {
-        SourceRow split = new TorrentFunkReader()
-            .Read(Fixture("torrentfunk"), new("https://www.torrentfunk.com/all/torrents/silo-s03e06.html"))
-            .First(row => row.Title.Contains("XviD", StringComparison.Ordinal));
-
-        Assert.Equal("Silo S03E06 XviD-AFG", split.Title);
     }
 
     /// <remarks>
