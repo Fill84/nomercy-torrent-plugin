@@ -1,6 +1,7 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
@@ -136,7 +137,8 @@ public sealed class SearchCycle(
     NameResolve names,
     Find find,
     IActivityJournal journal,
-    Grab? grab = null)
+    Grab? grab = null,
+    ICycleJournal? written = null)
 {
     /// <param name="missing">The gaps to look at, in whatever order they arrive.</param>
     /// <param name="options">What the owner will accept, and what to do with what is found.</param>
@@ -177,6 +179,11 @@ public sealed class SearchCycle(
         // eight times - and apibay, which rate-limits hard, answered 429 to the
         // ninth. It saves the request and never the decision: what comes back
         // still goes to every gap it answers for.
+        //
+        // For this cycle and no longer. Both this and the copies below are
+        // thrown away when the run ends, so the next one asks again from
+        // nothing - which is what an episode that aired an hour ago needs, and
+        // is why neither of them is written down anywhere.
         Dictionary<string, IReadOnlyList<ReleaseCopy>> asked = new(StringComparer.OrdinalIgnoreCase);
 
         // One episode at a time, because the decisions of each are part of the
@@ -187,7 +194,11 @@ public sealed class SearchCycle(
         {
             ct.ThrowIfCancellationRequested();
 
-            outcomes.Add(await LookAsync(
+            // What was refused before this episode, so what is refused for it
+            // can be told apart and written with it.
+            int refusedBefore = decisions.Skipped.Count;
+
+            EpisodeOutcome outcome = await LookAsync(
                 episode,
                 byEpisode.GetValueOrDefault(episode.Key, []),
                 decisions,
@@ -195,7 +206,21 @@ public sealed class SearchCycle(
                 trackers,
                 answered,
                 asked,
-                ct));
+                ct);
+
+            outcomes.Add(outcome);
+
+            // Written now rather than when the whole queue is done. Over
+            // twenty-eight gaps that is half an hour in which the pages say
+            // nothing, and a run stopped in that time threw away everything it
+            // had decided.
+            if (written is not null)
+            {
+                await written.DecidedAsync(
+                    outcome,
+                    [.. decisions.Skipped.Skip(refusedBefore)],
+                    ct);
+            }
         }
 
         return new(outcomes, decisions.Skipped) { Trackers = trackers };
@@ -243,6 +268,24 @@ public sealed class SearchCycle(
             // page on two sites at four hundred and eighty seeders, was never
             // fetched at all.
             List<ReleaseCopy> gathered = [.. answered];
+
+            // The programme's own answer, already paid for. One search of
+            // "Silo" carries every gap of every season of it, and the term is
+            // asked once a cycle - so the second gap of a season costs nothing
+            // where the first one paid.
+            //
+            // Stopping here is safe only because of what is being looked for:
+            // the release a name database published for this episode. Nothing a
+            // further search could return is better than that, by the same rule
+            // that puts it first in the ranking. Where no name database knows
+            // the episode there is no such copy, nothing stops early, and every
+            // term is asked as before.
+            if (Published(candidates, gathered)
+                && await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, candidates, ct)
+                    is EpisodeOutcome held)
+            {
+                return held with { Searched = true };
+            }
 
             bool searched = false;
 
@@ -383,6 +426,28 @@ public sealed class SearchCycle(
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Whether the release a name database published for this episode is
+    /// already among the copies in hand.
+    /// </summary>
+    /// <remarks>
+    /// It is the answer, not a candidate: the ranking puts a published name
+    /// first and seeders do not get a say, so no further search can improve on
+    /// having it. Asking anyway is a request per site per episode spent on a
+    /// question already answered.
+    /// </remarks>
+    private static bool Published(IReadOnlyList<string> names, IReadOnlyList<ReleaseCopy> gathered)
+    {
+        if (names.Count == 0 || gathered.Count == 0)
+        {
+            return false;
+        }
+
+        HashSet<string> known = [.. names.Select(TitleMatcher.Normalised)];
+
+        return gathered.Any(copy => known.Contains(TitleMatcher.Normalised(copy.Title)));
     }
 
     /// <summary>

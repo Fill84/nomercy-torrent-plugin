@@ -351,7 +351,19 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         try
         {
-            _lastCycle = await chain.Search(settings).RunAsync(
+            _lastCycle = await chain.Search(
+                settings,
+
+                // Each decision is written the moment it is made. Written at
+                // the end instead, twenty-eight gaps meant half an hour in
+                // which every page said nothing and a run stopped in the
+                // meantime threw away everything it had decided.
+                new CycleWriter(
+                    tracked,
+                    grabs,
+                    await EpisodesAsync(ct),
+                    settings.Profile.MaxSearchAttempts,
+                    () => DateTimeOffset.UtcNow)).RunAsync(
                 tracked,
                 new(
                     settings.Profile,
@@ -372,23 +384,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             _lastCycleAt = DateTimeOffset.UtcNow;
         }
 
-        // After the cycle rather than during it: a grab is written down once
-        // the client has been handed something, and the pages that say what
-        // happened read the store rather than anything held in memory.
-        await CycleRecord.WriteAsync(
-            _lastCycle,
-            tracked,
-            grabs,
-            DateTimeOffset.UtcNow,
-            ct,
-
-            // Where a search attempt is counted. Nothing counted one at all, so
-            // MaxSearchAttempts decided nothing and the queue's own order -
-            // never searched first, then longest waiting - had nothing to sort
-            // by and ran the same way every cycle.
-            await EpisodesAsync(ct),
-            settings.Profile.MaxSearchAttempts);
-
+        // Everything the cycle decided is already written: CycleWriter put
+        // each episode down as it was decided rather than all of them here.
         await KeepTrackersAsync(settings, _lastCycle.Trackers, ct);
     }
 

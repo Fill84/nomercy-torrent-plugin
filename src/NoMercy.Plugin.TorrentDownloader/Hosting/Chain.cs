@@ -182,7 +182,12 @@ public sealed class Chain : IAsyncDisposable
     }
 
     /// <summary>The whole search chain: names, indexers, decision, grab.</summary>
-    public SearchCycle Search(Settings settings)
+    /// <param name="settings">What the owner will accept.</param>
+    /// <param name="written">
+    /// Where each decision is written the moment it is made, or null when
+    /// nothing is keeping them.
+    /// </param>
+    public SearchCycle Search(Settings settings, ICycleJournal? written = null)
     {
         SourceCatalogue catalogue = Catalogue(settings);
         IFetch fetch = Fetch();
@@ -200,7 +205,8 @@ public sealed class Chain : IAsyncDisposable
             // handed over. A cycle that reached the client directly went round
             // that check, and a torrent that fills the disk takes the media
             // server with it.
-            _engine is null ? null : new Grab(_engine, new DiskSpace(), _journal));
+            _engine is null ? null : new Grab(_engine, new DiskSpace(), _journal),
+            written);
     }
 
     public async ValueTask DisposeAsync()
