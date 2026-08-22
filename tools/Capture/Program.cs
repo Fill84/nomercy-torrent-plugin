@@ -6,6 +6,7 @@ using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Solver;
 using NoMercy.Plugins.Abstractions;
@@ -205,9 +206,70 @@ internal static class Program
             result.Body!.Length,
             path);
 
+        // A source whose rows name no torrent has one more thing to prove, and
+        // it cannot be proved from a saved page: whether the site accepts the
+        // signed request the plugin now makes for it. Asked here, in the
+        // session that just loaded the page, because that is the only session
+        // the token belongs to.
+        await ProveTheClaimAsync(source, result.Body!, address, solver, logger);
+
         browser.Dispose();
 
         return 0;
+    }
+
+    /// <summary>
+    /// Asks a site for a torrent it will not print, and says what it answered.
+    /// </summary>
+    /// <remarks>
+    /// The contract was read off the script the page loads, and a contract read
+    /// rather than exercised is one nobody has seen the site honour. This is
+    /// how it is seen. Nothing is written down: the answer carries a magnet for
+    /// a real torrent, and a fixture is not the place for one.
+    /// </remarks>
+    private static async Task ProveTheClaimAsync(
+        SourceDefinition source,
+        string body,
+        Uri address,
+        IInPagePost post,
+        ILogger logger)
+    {
+        if (Readers.Shipped().For(source) is not ISourceReader reader)
+        {
+            return;
+        }
+
+        if (reader.Read(body, address).FirstOrDefault(row => row.Claim is not null) is not SourceRow row)
+        {
+            return;
+        }
+
+        SignedClaim claim = row.Claim!;
+        Uri endpoint = SignedMagnet.EndpointOn(row.DetailUrl ?? address);
+
+        logger.LogInformation("Asking {Name} for the torrent of '{Title}' at {Endpoint}.", source.Name, row.Title, endpoint);
+
+        string? answered = await post.PostAsync(
+            endpoint,
+            SignedMagnet.Body(claim, DateTimeOffset.UtcNow),
+            CancellationToken.None);
+
+        if (SignedMagnet.MagnetIn(answered) is string magnet)
+        {
+            // The hash and nothing else. The rest of a magnet is the release
+            // name and a tracker list, and neither is what is being proved.
+            logger.LogInformation(
+                "{Name} named it: {Hash}.",
+                source.Name,
+                Magnets.HashOf(magnet) ?? "a magnet carrying no hash");
+
+            return;
+        }
+
+        logger.LogWarning(
+            "{Name} would not name it. It answered: {Answer}",
+            source.Name,
+            answered is null ? "nothing at all" : answered[..Math.Min(300, answered.Length)]);
     }
 
     /// <summary>

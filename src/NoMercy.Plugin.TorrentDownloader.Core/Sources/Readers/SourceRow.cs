@@ -75,7 +75,13 @@ public sealed record SourceRow(
 /// </remarks>
 public static class Html
 {
-    private static readonly Regex Tags = new("<[^>]*>", RegexOptions.Compiled | RegexOptions.Singleline);
+    /// <summary>A run of tags, however many are stacked together.</summary>
+    /// <remarks>
+    /// A run rather than one tag, because what matters is the gap the whole run
+    /// leaves behind: <c>&lt;/span&gt;&lt;span&gt;</c> is one gap and two tags,
+    /// and deciding it twice gets it wrong the second time.
+    /// </remarks>
+    private static readonly Regex Tags = new("(?:<[^>]*>)+", RegexOptions.Compiled | RegexOptions.Singleline);
     private static readonly Regex Spaces = new(@"\s+", RegexOptions.Compiled);
     private static readonly Regex Hash = new("[a-fA-F0-9]{40}", RegexOptions.Compiled);
     private static readonly Regex Magnets = new(@"magnet:\?[^""'<\s]+", RegexOptions.Compiled);
@@ -92,7 +98,44 @@ public static class Html
     /// </remarks>
     public static string Text(string markup)
     {
-        return Decode(Spaces.Replace(Tags.Replace(markup, " "), " ").Trim());
+        return Decode(Spaces.Replace(Tags.Replace(markup, Gap), " ").Trim());
+    }
+
+    /// <summary>
+    /// What a run of tags leaves behind: a space only where it was holding two
+    /// words apart.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Both halves of this are a real capture. TorrentGalaxy and TorrentFunk
+    /// write <c>&lt;span&gt;Silo&lt;/span&gt;&lt;span&gt;S03E07&lt;/span&gt;</c>
+    /// and taking the tags out with nothing in their place glues the words
+    /// together, which is how a release group was lost in 0.3.4.
+    /// </para>
+    /// <para>
+    /// TorrentBay writes
+    /// <c>&lt;span&gt;Silo&lt;/span&gt;.&lt;span&gt;S03E08&lt;/span&gt;.1080p</c>
+    /// — a scene name whose separators are already there — and putting a space
+    /// in each gap made <c>Silo.S03E08.1080p.WEB.H264-CAKES</c> come off the
+    /// page as <c>Silo . S03E08 .1080p.WEB.H264-CAKES</c>. Twenty-six of the
+    /// thirty-four rows on the capture of 22 August 2026 were mangled that way,
+    /// including the copy of the episode the owner's library was missing.
+    /// </para>
+    /// <para>
+    /// So: a space when the run really is all that separates two words, and
+    /// nothing when the page put a separator there itself.
+    /// </para>
+    /// </remarks>
+    private static string Gap(Match run)
+    {
+        string markup = run.Result("$_");
+
+        char before = run.Index > 0 ? markup[run.Index - 1] : ' ';
+        int after = run.Index + run.Length;
+
+        return char.IsLetterOrDigit(before) && after < markup.Length && char.IsLetterOrDigit(markup[after])
+            ? " "
+            : string.Empty;
     }
 
     /// <summary>

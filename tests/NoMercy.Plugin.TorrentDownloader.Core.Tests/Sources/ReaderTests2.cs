@@ -183,9 +183,44 @@ public class ReaderTests2
     }
 
     /// <remarks>
+    /// <strong>A separator the page already had is not a gap to fill.</strong>
+    /// This site colours the matched words with spans and writes a scene name
+    /// around them:
+    /// <c>&lt;span&gt;Silo&lt;/span&gt;.&lt;span&gt;S03E08&lt;/span&gt;.1080p.WEB.H264-CAKES</c>.
+    /// A tag worth a space wherever it stood turned that into
+    /// <c>Silo . S03E08 .1080p.WEB.H264-CAKES</c> — twenty-six of the
+    /// thirty-four rows on the capture of 22 August 2026, including the copy of
+    /// the episode the owner's library was missing.
+    ///
+    /// It matters beyond how it reads. The announced name is what is written
+    /// against the grab and what the staging matches a finished file by, so a
+    /// name with spaces the release never had is a name nothing answers to.
+    /// </remarks>
+    [Fact]
+    public void ASceneNameCutIntoSpansKeepsItsOwnSeparators()
+    {
+        IReadOnlyList<SourceRow> rows = new TorrentBayReader().Read(
+            Fixture("torrentbay-scene-names"),
+            new("https://extranet.torrentbay.st/browse/?q=Silo+S03E08"));
+
+        Assert.Contains("Silo.S03E08.1080p.WEB.H264-CAKES", rows.Select(row => row.Title));
+
+        // A space before a separator is always the stripper's: no release name
+        // on any capture has one. A space after a dot is not — one row on this
+        // page really is called "…Atmos. X265 POOTLED…" — so only the first is
+        // worth asserting, and asserting the second refused a real name.
+        Assert.DoesNotContain(rows, row => row.Title.Contains(" .", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
     /// <strong>E2.</strong> The name is split by a span colouring the release
-    /// group, so reading the anchor whole and stripping it keeps the group.
-    /// Joining its text nodes would run <c>XviD</c> and <c>-AFG</c> together.
+    /// group, so reading the anchor whole and stripping it keeps the group —
+    /// reading only the first text node would lose it.
+    ///
+    /// This asserted <c>Silo S03E06 XviD -AFG</c>, with a space nothing on the
+    /// page put there, for as long as a tag was worth a space wherever it
+    /// stood. The release is called <c>XviD-AFG</c> and the space was the
+    /// stripper's, not the site's.
     /// </remarks>
     [Fact]
     public void TorrentFunkKeepsTheGroupThatASpanCutsOffTheTitle()
@@ -194,8 +229,7 @@ public class ReaderTests2
             .Read(Fixture("torrentfunk"), new("https://www.torrentfunk.com/all/torrents/silo-s03e06.html"))
             .First(row => row.Title.Contains("XviD", StringComparison.Ordinal));
 
-        Assert.Equal("Silo S03E06 XviD -AFG", split.Title);
-        Assert.EndsWith("-AFG", split.Title, StringComparison.Ordinal);
+        Assert.Equal("Silo S03E06 XviD-AFG", split.Title);
     }
 
     /// <remarks>
