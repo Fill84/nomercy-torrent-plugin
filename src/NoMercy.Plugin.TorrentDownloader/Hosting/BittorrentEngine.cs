@@ -29,6 +29,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 public sealed class BittorrentEngine(
     int listenPort,
     TimeSpan metadataTimeout,
+    TimeSpan stallLimit,
+    int maxConcurrent,
     IActivityJournal journal,
     ILogger logger,
     ITrackerTransport transport,
@@ -197,7 +199,7 @@ public sealed class BittorrentEngine(
                         .Select(kept => files.First(file => string.Equals(file.Path, kept.Path, StringComparison.Ordinal))),
                 ]);
 
-            Held held = new(run, name, _time.GetUtcNow());
+            Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time));
 
             _torrents[infoHash] = held;
 
@@ -237,7 +239,10 @@ public sealed class BittorrentEngine(
             foreach (Held held in _torrents.Values)
             {
                 Expire(held, now);
+                Stalled(held);
             }
+
+            Queue();
 
             return Task.FromResult<IReadOnlyList<TorrentStatus>>([.. _torrents.Select(one => Status(one.Key, one.Value))]);
         }
@@ -254,6 +259,10 @@ public sealed class BittorrentEngine(
                 // conversations, because a paused torrent still answering peers
                 // is not paused.
                 held.Run.Pause();
+
+                // The owner's decision, not the queue's. Left marked as queued
+                // it would be started again the moment a slot came free.
+                held.Queued = false;
             }
 
             return Task.CompletedTask;
@@ -267,6 +276,7 @@ public sealed class BittorrentEngine(
             if (_torrents.TryGetValue(infoHash, out Held? held))
             {
                 held.Run.Resume();
+                held.Queued = false;
 
                 // The clock starts again with it. A torrent resumed after the
                 // limit had passed would otherwise fail on the very next tick
@@ -546,6 +556,102 @@ public sealed class BittorrentEngine(
         journal.Failed(ActivityStage.Download, held.Run.Torrent?.Name ?? held.Name ?? "a torrent", held.Error);
     }
 
+    /// <summary>
+    /// Gives up on a torrent that has stopped getting anywhere.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>StallMinutes</c> from settings: no progress <strong>and</strong> no
+    /// peers for that long. Both halves, because a torrent moving slowly from
+    /// one peer is not stalled and a torrent with forty peers waiting on the
+    /// last piece is not either.
+    /// </para>
+    /// <para>
+    /// Without it a magnet whose swarm has died sits on the Downloads page for
+    /// as long as the server runs and the episode it was grabbed for is never
+    /// looked for again. <c>StallWatch</c> was written for this in Sprint 6 and
+    /// then wired to nothing at all, which is how fifteen of the owner's
+    /// torrents came to sit at nought peers indefinitely.
+    /// </para>
+    /// </remarks>
+    private void Stalled(Held held)
+    {
+        if (held.Error is not null || held.Run.Paused)
+        {
+            return;
+        }
+
+        RunProgress progress = held.Run.Progress();
+
+        if (!held.Stall.Observe(progress.BytesDone, progress.Peers))
+        {
+            return;
+        }
+
+        // Its own words, and they name the limit so the owner knows which
+        // setting to change.
+        held.Error = $"Nothing arrived and no peer was connected for {stallLimit.TotalMinutes:0.#} minutes.";
+
+        held.Run.Pause();
+
+        logger.LogWarning("{Name} stalled: {Reason}", progress.Name ?? held.Name, held.Error);
+        journal.Failed(ActivityStage.Download, progress.Name ?? held.Name ?? "a torrent", held.Error);
+    }
+
+    /// <summary>
+    /// Keeps no more than <c>MaxConcurrentDownloads</c> of them running.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The setting existed and was read from the page and passed to nothing at
+    /// all: on 22 August 2026 the owner's client had sixteen torrents dialling
+    /// at once, which is sixteen swarms sharing one line and one set of
+    /// sockets, and fifteen of them never got past fetching their metadata.
+    /// </para>
+    /// <para>
+    /// Oldest first, so the queue is the order they were grabbed in and a
+    /// torrent cannot be overtaken for ever by newer ones. A torrent that is
+    /// finished does not hold a slot — it is seeding, not downloading — and a
+    /// torrent the owner stopped keeps its place rather than being started
+    /// again by this.
+    /// </para>
+    /// </remarks>
+    private void Queue()
+    {
+        int running = 0;
+
+        foreach (Held held in _torrents.Values
+                     .Where(one => one.Error is null && (!one.Run.Paused || one.Queued))
+                     .OrderBy(one => one.Since))
+        {
+            if (held.Run.Progress().Complete)
+            {
+                // Seeding, which costs a connection and not the download this
+                // limit is about.
+                continue;
+            }
+
+            if (running < maxConcurrent)
+            {
+                running++;
+
+                if (held.Queued)
+                {
+                    held.Run.Resume();
+                    held.Queued = false;
+                }
+
+                continue;
+            }
+
+            if (!held.Queued)
+            {
+                held.Run.Pause();
+                held.Queued = true;
+            }
+        }
+    }
+
     /// <summary>One torrent as the pipeline is allowed to see it.</summary>
     private TorrentStatus Status(string infoHash, Held held)
     {
@@ -586,7 +692,7 @@ public sealed class BittorrentEngine(
 
         if (held.Run.Paused)
         {
-            return TorrentState.Paused;
+            return held.Queued ? TorrentState.Queued : TorrentState.Paused;
         }
 
         if (!progress.HasMetadata)
@@ -642,9 +748,12 @@ public sealed class BittorrentEngine(
     /// knows about the run — when it was taken on, what it was called before
     /// anybody knew its real name, and why it was given up on.
     /// </remarks>
-    private sealed class Held(TorrentRun run, string? name, DateTimeOffset since)
+    private sealed class Held(TorrentRun run, string? name, DateTimeOffset since, StallWatch stall)
     {
         public TorrentRun Run => run;
+
+        /// <summary>Whether it has stopped getting anywhere.</summary>
+        public StallWatch Stall => stall;
 
         /// <summary>What the magnet called it, until the metadata says better.</summary>
         public string? Name => name;
@@ -654,5 +763,8 @@ public sealed class BittorrentEngine(
 
         /// <summary>Why it was given up on, in the client's own words.</summary>
         public string? Error { get; set; }
+
+        /// <summary>Whether it is stopped because the client is full, not because the owner stopped it.</summary>
+        public bool Queued { get; set; }
     }
 }

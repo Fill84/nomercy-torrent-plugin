@@ -874,6 +874,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 _engine = new(
                     settings.Client.ListenPort,
                     TimeSpan.FromMinutes(settings.Client.MetadataTimeoutMinutes),
+                    TimeSpan.FromMinutes(settings.Client.StallMinutes),
+                    settings.Client.MaxConcurrentDownloads,
                     _journal,
                     Context.Logger,
                     new SocketTrackerTransport(_trackerHttp),

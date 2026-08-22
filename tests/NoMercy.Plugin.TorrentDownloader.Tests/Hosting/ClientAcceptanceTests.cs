@@ -138,6 +138,8 @@ public class ClientAcceptanceTests : IDisposable
         return new(
             0,
             TimeSpan.FromMinutes(5),
+            TimeSpan.FromMinutes(30),
+            5,
             new ActivityJournal(),
             new CapturingLogger(),
             trackers,

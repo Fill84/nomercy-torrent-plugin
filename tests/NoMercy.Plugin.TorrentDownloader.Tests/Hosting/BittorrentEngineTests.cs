@@ -25,7 +25,7 @@ public class BittorrentEngineTests : IDisposable
     {
         // Nought, so the operating system picks the number: what matters is
         // that four ticks leave one port and not four.
-        using BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
+        using BittorrentEngine engine = new(0, Timeout, Stall, Together, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
 
@@ -48,7 +48,7 @@ public class BittorrentEngineTests : IDisposable
     [Fact]
     public void DisposingItTwiceIsSafe()
     {
-        BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
+        BittorrentEngine engine = new(0, Timeout, Stall, Together, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
         engine.Dispose();
@@ -73,6 +73,8 @@ public class BittorrentEngineTests : IDisposable
         using BittorrentEngine engine = new(
             port,
             Timeout,
+            Stall,
+            Together,
             journal,
             new CapturingLogger(),
             new SilentTrackers(),
@@ -133,6 +135,8 @@ public class BittorrentEngineTests : IDisposable
         using BittorrentEngine engine = new(
             0,
             Timeout,
+            Stall,
+            Together,
             new ActivityJournal(),
             new CapturingLogger(),
             trackers,
@@ -164,6 +168,8 @@ public class BittorrentEngineTests : IDisposable
         using BittorrentEngine engine = new(
             0,
             Timeout,
+            Stall,
+            Together,
             new ActivityJournal(),
             new CapturingLogger(),
             new SilentTrackers(),
@@ -316,11 +322,82 @@ public class BittorrentEngineTests : IDisposable
         Assert.NotEmpty(await engine.FilesAsync(handle.InfoHash, CancellationToken.None));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong><c>MaxConcurrentDownloads</c> is a limit and not a note.</strong>
+    /// It was read from the Settings page and passed to nothing at all: on
+    /// 22 August 2026 the owner's client had sixteen torrents dialling at once
+    /// over one line, and fifteen of them never got past fetching metadata.
+    /// </para>
+    /// <para>
+    /// The ones over the limit wait, and they say so — queued is its own state,
+    /// because a torrent the owner stopped and a torrent about to start on its
+    /// own are not the same thing to look at. Oldest first, so the queue is the
+    /// order they were grabbed in.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task NoMoreThanTheLimitRunAtOnce()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 22, 12, 0, 0, TimeSpan.Zero));
+
+        using BittorrentEngine engine = new(
+            0,
+            TimeSpan.FromHours(6),
+            TimeSpan.FromHours(6),
+            3,
+            new ActivityJournal(clock),
+            new CapturingLogger(),
+            new SilentTrackers(),
+            new NoPeers(),
+            clock);
+
+        engine.Start();
+
+        for (int which = 0; which < 5; which++)
+        {
+            await engine.AddAsync(Another(which), CancellationToken.None);
+
+            // A second apart, so the order they were grabbed in is a fact and
+            // not whatever a dictionary hands back.
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        IReadOnlyList<TorrentStatus> running = await engine.StatusAsync(CancellationToken.None);
+
+        Assert.Equal(5, running.Count);
+        Assert.Equal(3, running.Count(one => one.State == TorrentState.FetchingMetadata));
+        Assert.Equal(2, running.Count(one => one.State == TorrentState.Queued));
+
+        // And the two waiting are the two grabbed last.
+        Assert.All(
+            running.Where(one => one.State == TorrentState.Queued),
+            one => Assert.Contains(one.InfoHash, new[] { HashOf(3), HashOf(4) }, StringComparer.OrdinalIgnoreCase));
+    }
+
+    /// <summary>One more magnet, with an info hash of its own.</summary>
+    private static TorrentRequest Another(int which)
+    {
+        return Request with
+        {
+            Source = $"magnet:?xt=urn:btih:{HashOf(which)}&dn=Silo+S03E0{which}&tr=udp%3A%2F%2Fone.example%3A80",
+        };
+    }
+
+    private static string HashOf(int which)
+    {
+        return new string((char)('A' + which), 40);
+    }
+
     /// <summary>
     /// <c>MetadataTimeoutMinutes</c>' own default, five minutes. The tests that
     /// are not about the clock never reach it.
     /// </summary>
     private static readonly TimeSpan Timeout = TimeSpan.FromMinutes(new ClientLimits().MetadataTimeoutMinutes);
+
+    private static readonly TimeSpan Stall = TimeSpan.FromMinutes(new ClientLimits().StallMinutes);
+
+    private static readonly int Together = new ClientLimits().MaxConcurrentDownloads;
 
     private static readonly TorrentRequest Request = new(
         "magnet:?xt=urn:btih:92D8A3F6864911EF292B4BE0DD5286406396D2B3&dn=Silo+S03E06&tr=udp%3A%2F%2Fone.example%3A80",
@@ -346,7 +423,7 @@ public class BittorrentEngineTests : IDisposable
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
         ActivityJournal journal = new(clock);
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -375,7 +452,7 @@ public class BittorrentEngineTests : IDisposable
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
         ActivityJournal journal = new(clock);
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -403,7 +480,7 @@ public class BittorrentEngineTests : IDisposable
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -422,6 +499,56 @@ public class BittorrentEngineTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A torrent nothing is happening to is given up on.</strong> No
+    /// progress and no peer for <c>StallMinutes</c>: the reason is recorded
+    /// against the grab and the episode goes back to being missing, rather than
+    /// the row sitting on the Downloads page for as long as the server runs.
+    /// </para>
+    /// <para>
+    /// <c>StallWatch</c> was written in Sprint 6 and wired to nothing at all,
+    /// which is how fifteen of the owner's torrents came to sit at nought peers
+    /// indefinitely on 22 August 2026. The metadata clock is set long here so
+    /// that what fires is this rule and not that one.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentWithNoPeersAndNoProgressIsGivenUpOn()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 22, 12, 0, 0, TimeSpan.Zero));
+
+        using BittorrentEngine engine = new(
+            0,
+            TimeSpan.FromHours(6),
+            TimeSpan.FromMinutes(30),
+            Together,
+            new ActivityJournal(clock),
+            new CapturingLogger(),
+            new SilentTrackers(),
+            new NoPeers(),
+            clock);
+
+        engine.Start();
+
+        await engine.AddAsync(Request, CancellationToken.None);
+
+        // The first reading starts its clock, and it has to be taken before the
+        // wait rather than after it.
+        Assert.Equal(TorrentState.FetchingMetadata, (await engine.StatusAsync(CancellationToken.None))[0].State);
+
+        clock.Advance(TimeSpan.FromMinutes(29));
+
+        Assert.Equal(TorrentState.FetchingMetadata, (await engine.StatusAsync(CancellationToken.None))[0].State);
+
+        clock.Advance(TimeSpan.FromMinutes(2));
+
+        TorrentStatus given = (await engine.StatusAsync(CancellationToken.None))[0];
+
+        Assert.Equal(TorrentState.Error, given.State);
+        Assert.Contains("30", given.Error!, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
     /// Paused is not fetching. A torrent the owner stopped is not failed for
     /// having sat there while it was stopped.
     /// </remarks>
@@ -430,7 +557,7 @@ public class BittorrentEngineTests : IDisposable
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -472,7 +599,7 @@ public class BittorrentEngineTests : IDisposable
 
     private static BittorrentEngine Started()
     {
-        BittorrentEngine engine = new(0, Timeout, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
+        BittorrentEngine engine = new(0, Timeout, Stall, Together, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
 

@@ -26,6 +26,18 @@ public enum TorrentState
 
     Paused,
 
+    /// <summary>
+    /// Waiting for a free slot, because <c>MaxConcurrentDownloads</c> are
+    /// already running.
+    /// </summary>
+    /// <remarks>
+    /// Its own state and not <see cref="Paused"/>: one was stopped by the owner
+    /// and the other is about to start on its own, and an owner can act on the
+    /// difference. Sixteen torrents dialling at once is how none of them
+    /// finished.
+    /// </remarks>
+    Queued,
+
     Stopped,
 
     Error,

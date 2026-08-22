@@ -240,8 +240,8 @@ counts. A public torrent has nothing to seed with.
 
 ## Stalls
 
-No progress **and** no peers for `StallMinutes` is reported as stalled: the hash is blacklisted with
-the reason and the episode returns to missing. Progress with no peers is not a stall; peers with no
+No progress **and** no peers for `StallMinutes`: the torrent is stopped, the reason is recorded
+against the grab and the episode returns to missing. Progress with no peers is not a stall; peers with no
 progress for a minute is not either.
 
 ## Ports
@@ -263,7 +263,7 @@ line, an error message, a page, or the activity journal.
 | --- | --- |
 | Where files land | the incomplete folder while downloading, then staged to the intake folder |
 | Which file is the episode | the largest video; samples, subtitles and NFOs ignored |
-| How many at once | `MaxConcurrentDownloads`, default 5 |
+| How many at once | `MaxConcurrentDownloads`, default 5. The rest wait and report as **queued**, oldest first. A finished torrent does not hold a slot: it is seeding, not downloading. |
 | Trackers | `DefaultTrackers` plus every tracker the find stage merged |
 
 ## Lifecycle
