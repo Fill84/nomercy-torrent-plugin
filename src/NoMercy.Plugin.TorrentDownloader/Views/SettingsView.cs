@@ -167,13 +167,22 @@ public static class SettingsView
             {
                 Name = "profile.maximumResolution",
                 Label = "Maximum resolution",
+                Type = PluginFormFieldType.Select,
                 Value = profile.MaximumResolution,
+                Options = [.. Profile.Resolutions.Select(Choice)],
             },
             new PluginFormField
             {
                 Name = "profile.codec",
                 Label = "Codec",
+
+                // A list rather than a box. Typed by hand the field takes
+                // anything, and anything is what it got: a codec spelled a way
+                // the parser does not know refuses every release there is, and
+                // an empty one is not "any" either.
+                Type = PluginFormFieldType.Select,
                 Value = profile.Codec,
+                Options = [.. Profile.Codecs.Select(Choice)],
             },
             new PluginFormField
             {
@@ -318,6 +327,12 @@ public static class SettingsView
                 Type = PluginFormFieldType.Toggle,
                 Value = dryRun,
             });
+    }
+
+    /// <summary>One entry of a list the owner picks from.</summary>
+    private static PluginFormOption Choice(string value)
+    {
+        return new() { Label = value, Value = value };
     }
 
     /// <summary>

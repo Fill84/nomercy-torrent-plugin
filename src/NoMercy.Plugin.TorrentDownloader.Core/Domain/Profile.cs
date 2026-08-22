@@ -13,6 +13,27 @@ public sealed class Profile
     /// <summary>No codec wanted in particular, which is the default.</summary>
     public const string AnyCodec = "any";
 
+    /// <summary>
+    /// The codecs a release name can be read as, and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// The parser answers a codec as a family rather than as a spelling —
+    /// <c>x265</c>, <c>H.265</c>, <c>HEVC</c> and <c>265</c> are one family —
+    /// so these four are every answer it can give. Offered as a list because a
+    /// box takes anything: a codec spelled a way the parser never answers
+    /// refuses every release there is, silently, and the owner is left with an
+    /// empty queue and no reason for it.
+    /// </remarks>
+    public static IReadOnlyList<string> Codecs { get; } = [AnyCodec, "h264", "h265", "xvid", "divx"];
+
+    /// <summary>The rungs of the ladder, highest first.</summary>
+    /// <remarks>
+    /// One rung, not a ceiling: <c>1080p</c> means 1080p. Offered as a list for
+    /// the same reason as the codecs — a rung nothing is posted at refuses
+    /// everything.
+    /// </remarks>
+    public static IReadOnlyList<string> Resolutions { get; } = ["2160p", "1080p", "720p", "480p"];
+
     /// <summary>Season 0. Off, because a special rarely has an air date worth chasing.</summary>
     public bool IncludeSpecials { get; set; }
 
@@ -52,5 +73,19 @@ public sealed class Profile
     /// empty queue with no reason given.
     /// </remarks>
     public bool CodecTagRequired =>
-        RequireCodecTag && !string.Equals(Codec, AnyCodec, StringComparison.OrdinalIgnoreCase);
+        RequireCodecTag && Wanted is not null;
+
+    /// <summary>
+    /// The codec the owner asked for, or null when they asked for none.
+    /// </summary>
+    /// <remarks>
+    /// Blank is none. The field was empty on the owner's own server on
+    /// 22 August 2026, and an empty string is not a codec any release claims —
+    /// compared against one, every release there is would be refused for being
+    /// the wrong codec, with a reason naming nothing at all.
+    /// </remarks>
+    public string? Wanted =>
+        string.IsNullOrWhiteSpace(Codec) || string.Equals(Codec, AnyCodec, StringComparison.OrdinalIgnoreCase)
+            ? null
+            : Codec.Trim();
 }

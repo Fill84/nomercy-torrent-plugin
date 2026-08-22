@@ -362,6 +362,37 @@ public class ReleaseNameTests
     }
 
     /// <remarks>
+    /// <strong>One codec, every spelling a site writes it with.</strong> The
+    /// answer is the family and never the spelling, because the profile is
+    /// asked "is this h264" and the sites write that eight different ways —
+    /// <c>x264</c>, <c>H.264</c>, <c>H 264</c>, <c>h-264</c>, <c>AVC</c>, and a
+    /// bare <c>264</c> where a site turned the dots into spaces.
+    ///
+    /// It stopped being cosmetic the moment a codec was actually wanted: a
+    /// spelling the parser cannot read is a release with no codec at all, and
+    /// with "refuse a release that does not say" on, that is every one of them
+    /// refused for a reason naming nothing.
+    /// </remarks>
+    [Theory]
+    [InlineData("Silo.S03E04.1080p.WEB.x264-CAKES", "h264")]
+    [InlineData("Silo.S03E04.1080p.WEB.H.264-CAKES", "h264")]
+    [InlineData("Silo S03E04 1080p WEB H 264-CAKES", "h264")]
+    [InlineData("Silo S03E04 1080p WEB h-264-CAKES", "h264")]
+    [InlineData("Silo S03E04 1080p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB", "h264")]
+    [InlineData("Silo.S03E04.1080p.WEB.AVC-CAKES", "h264")]
+    [InlineData("Silo S03E04 1080p WEB 264-CAKES", "h264")]
+    [InlineData("Silo.S03E04.1080p.WEB.x265-CAKES", "h265")]
+    [InlineData("Silo.S03E04.1080p.WEB.H.265-CAKES", "h265")]
+    [InlineData("Silo S03E04 1080p WEB H 265-CAKES", "h265")]
+    [InlineData("Silo S03E04 1080p HEVC x265-MeGusta", "h265")]
+    [InlineData("Silo.S03E04.1080p.WEB.HEVC-CAKES", "h265")]
+    [InlineData("Silo S03E04 1080p WEB XviD-AFG", "xvid")]
+    public void EverySpellingOfOneCodecReadsAsOneFamily(string name, string family)
+    {
+        Assert.Equal(family, ReleaseName.Parse(name).Codec);
+    }
+
+    /// <remarks>
     /// <strong>H3.</strong> A diacritic is a letter. 0.3.4 tokenised it into
     /// fragments and the show it belonged to was never matched again.
     /// </remarks>

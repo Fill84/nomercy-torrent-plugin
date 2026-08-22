@@ -126,7 +126,11 @@ public sealed class ReleaseFilter(Profile profile)
             return Verdict.No($"{name.Resolution} is not {profile.MaximumResolution}.");
         }
 
-        if (!string.Equals(profile.Codec, Profile.AnyCodec, StringComparison.OrdinalIgnoreCase))
+        // Blank is no codec wanted, exactly as "any" is. The field was empty on
+        // the owner's own server, and an empty string is not a codec any
+        // release claims - compared against one, every release there is is
+        // refused for being the wrong codec, with a reason naming nothing.
+        if (profile.Wanted is string wanted)
         {
             if (name.Codec is null)
             {
@@ -135,9 +139,9 @@ public sealed class ReleaseFilter(Profile profile)
                     : Verdict.Yes;
             }
 
-            if (!string.Equals(name.Codec, profile.Codec, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(name.Codec, wanted, StringComparison.OrdinalIgnoreCase))
             {
-                return Verdict.No($"{name.Codec} is not {profile.Codec}.");
+                return Verdict.No($"{name.Codec} is not {wanted}.");
             }
         }
 
