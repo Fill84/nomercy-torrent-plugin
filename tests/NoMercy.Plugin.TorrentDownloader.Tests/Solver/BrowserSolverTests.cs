@@ -302,6 +302,81 @@ public class BrowserSolverTests
         Assert.Null(await solver.GetPageAsync(new("https://predb.me/"), CancellationToken.None));
     }
 
+
+    /// <remarks>
+    /// <strong>One tab is one document, and two callers at once abort each
+    /// other.</strong> Watched on the owner's own server on 22 August 2026: the
+    /// name resolver asks eight seasons at once and the gate lets two through
+    /// per host, so two navigations landed in the same tab and Chrome reported
+    /// the loser as <c>net::ERR_ABORTED</c> — which reads exactly like a site
+    /// refusing to load. Every gated name database failed that way in one
+    /// second, and the pool went so thin that two episodes of the owner's own
+    /// Silo season had no name in it at all.
+    ///
+    /// The wait is what has to be exclusive, not the navigation: a caller that
+    /// navigated and is polling for its challenge to clear still owns the
+    /// document, and anyone arriving in the middle takes it away.
+    /// </remarks>
+    [Fact]
+    public async Task OneTabServesOneCallerAtATime()
+    {
+        FakeTabs tabs = new();
+        FakeTab tab = tabs.Tab("predb.me").Shows("<html><body><p>the feed</p></body></html>");
+
+        tab.HoldsTheFirstCaller();
+
+        BrowserSolver solver = Solver(tabs);
+
+        Task<string?> first = solver.GetPageAsync(new("https://predb.me/?search=Silo+S03"), CancellationToken.None);
+
+        await tab.Entered.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+
+        Task<string?> second = solver.GetPageAsync(new("https://predb.me/?search=Lucky+S01"), CancellationToken.None);
+
+        // Bounded, and it is proving something did not happen: the second
+        // caller must still be waiting while the first holds the tab.
+        Assert.False(second.IsCompleted);
+        Assert.Equal(1, tab.Navigations);
+
+        tab.LetGo();
+
+        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+
+        Assert.Equal(2, tab.Navigations);
+        Assert.False(tab.Overlapped);
+    }
+
+    /// <remarks>
+    /// One host waiting does not hold up another. The lock is the tab's, and
+    /// there is a tab per host — a single lock over the browser would make
+    /// every gated source in a cycle wait out every other one.
+    /// </remarks>
+    [Fact]
+    public async Task ATabHeldOnOneHostDoesNotHoldUpAnother()
+    {
+        FakeTabs tabs = new();
+
+        FakeTab held = tabs.Tab("predb.me").Shows("<html><body><p>the feed</p></body></html>");
+        held.HoldsTheFirstCaller();
+
+        tabs.Tab("www.scnsrc.me").Shows("<html><body><p>another feed</p></body></html>");
+
+        BrowserSolver solver = Solver(tabs);
+
+        Task<string?> waiting = solver.GetPageAsync(new("https://predb.me/?search=Silo+S03"), CancellationToken.None);
+
+        await held.Entered.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+
+        string? other = await solver
+            .GetPageAsync(new("https://www.scnsrc.me/feed/?s=Silo+S03"), CancellationToken.None)
+            .WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+
+        Assert.Contains("another feed", other!, StringComparison.Ordinal);
+
+        held.LetGo();
+        await waiting.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+    }
+
     private static BrowserSolver Solver(FakeTabs tabs, TimeProvider? clock = null)
     {
         return new(

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -41,7 +42,50 @@ public sealed class BrowserSolver(
     private readonly TimeSpan _timeout = solveTimeout ?? DefaultSolveTimeout;
     private readonly TimeSpan _poll = pollInterval ?? TimeSpan.FromSeconds(1);
 
+    /// <summary>
+    /// One caller at a time per host, because one tab is one document.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Two navigations in a tab do not queue: they abort each other, and Chrome
+    /// reports the loser as <c>net::ERR_ABORTED</c>, which reads exactly like a
+    /// site refusing to load. Watched on the owner's own server on 22 August
+    /// 2026 — the name resolver asks eight seasons at once and the host gate
+    /// lets two through per host, so every gated name database failed in the
+    /// same second, and the pool went so thin that two episodes of the owner's
+    /// own Silo season had no name in it at all.
+    /// </para>
+    /// <para>
+    /// It covers the waiting as well as the navigating. A caller polling for
+    /// its challenge to clear still owns that document, and anyone arriving in
+    /// the middle takes it away.
+    /// </para>
+    /// <para>
+    /// Per host and not over the browser: there is a tab per host, and one lock
+    /// across all of them would make every gated source in a cycle wait out
+    /// every other one.
+    /// </para>
+    /// </remarks>
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _oneAtATime =
+        new(StringComparer.OrdinalIgnoreCase);
+
     public async Task<Clearance?> SolveAsync(Uri url, CancellationToken ct)
+    {
+        SemaphoreSlim turn = TurnOn(url.Host);
+
+        await turn.WaitAsync(ct);
+
+        try
+        {
+            return await SolvingAsync(url, ct);
+        }
+        finally
+        {
+            turn.Release();
+        }
+    }
+
+    private async Task<Clearance?> SolvingAsync(Uri url, CancellationToken ct)
     {
         IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
 
@@ -82,6 +126,22 @@ public sealed class BrowserSolver(
     }
 
     public async Task<string?> GetPageAsync(Uri url, CancellationToken ct)
+    {
+        SemaphoreSlim turn = TurnOn(url.Host);
+
+        await turn.WaitAsync(ct);
+
+        try
+        {
+            return await ReadingAsync(url, ct);
+        }
+        finally
+        {
+            turn.Release();
+        }
+    }
+
+    private async Task<string?> ReadingAsync(Uri url, CancellationToken ct)
     {
         IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
 
@@ -129,6 +189,22 @@ public sealed class BrowserSolver(
 
     public async Task<string?> PostAsync(Uri url, string formBody, CancellationToken ct)
     {
+        SemaphoreSlim turn = TurnOn(url.Host);
+
+        await turn.WaitAsync(ct);
+
+        try
+        {
+            return await PostingAsync(url, formBody, ct);
+        }
+        finally
+        {
+            turn.Release();
+        }
+    }
+
+    private async Task<string?> PostingAsync(Uri url, string formBody, CancellationToken ct)
+    {
         IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
 
         if (tab is null)
@@ -143,6 +219,12 @@ public sealed class BrowserSolver(
         }
 
         return await tab.PostInPageAsync(url, formBody, ct);
+    }
+
+    /// <summary>This host's turn-taking, made once and kept.</summary>
+    private SemaphoreSlim TurnOn(string host)
+    {
+        return _oneAtATime.GetOrAdd(host, _ => new SemaphoreSlim(1, 1));
     }
 
     /// <summary>
