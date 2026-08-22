@@ -39,20 +39,23 @@ public class ReaderTests2
     /// <remarks>
     /// The magnet is not on the page: the site's own script fetches it from an
     /// endpoint this page never names, and each row carries only the id it
-    /// would be asked for. A row with no id cannot be asked, and asking without
-    /// one earns a refusal that reads like the site's.
+    /// would be asked for. What that request is, and what the row has to carry
+    /// for it to be made, is <c>SignedMagnetTests</c>.
     /// </remarks>
     [Fact]
     public void ATorrentBayRowCarriesTheIdItsMagnetWouldBeAskedFor()
     {
         string body = Fixture("torrentbay");
 
-        Assert.Equal("21152668", TorrentBayReader.MagnetIdOf(body));
-        Assert.Null(TorrentBayReader.MagnetIdOf("<tr><td>a row with no button</td></tr>"));
+        IReadOnlyList<SourceRow> rows = new TorrentBayReader()
+            .Read(body, new("https://extranet.torrentbay.st/browse/"));
 
-        Assert.All(
-            new TorrentBayReader().Read(body, new("https://extranet.torrentbay.st/browse/")),
-            row => Assert.Null(row.Magnet));
+        Assert.Equal("21152668", rows[0].Claim?.TorrentId);
+        Assert.All(rows, row => Assert.Null(row.Magnet));
+
+        Assert.Empty(new TorrentBayReader().Read(
+            "<tr><td>a row with no button</td></tr>",
+            new("https://extranet.torrentbay.st/browse/")));
     }
 
     /// <remarks>

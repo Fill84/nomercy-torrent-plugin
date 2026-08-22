@@ -20,7 +20,8 @@ public sealed class Find(
     Readers readers,
     IActivityJournal journal,
     ISourceLedger? ledger = null,
-    TimeProvider? time = null)
+    TimeProvider? time = null,
+    IInPagePost? post = null)
 {
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
@@ -83,6 +84,16 @@ public sealed class Find(
             return chosen with { Magnet = Magnets.For(known, chosen.Title) };
         }
 
+        if (chosen.Claim is SignedClaim claim && chosen.DetailUrl is not null)
+        {
+            // A site that prints no magnet and no hash anywhere, on the listing
+            // or on the row's own page, and answers a signed request instead.
+            // Asked before the page is fetched, because on this site the page
+            // has nothing on it either and fetching it is a request spent for
+            // certain on nothing.
+            return await AskForMagnetAsync(chosen, claim, ct);
+        }
+
         if (chosen.DetailUrl is null)
         {
             // No magnet, no hash and no page to look on. Nothing more can be
@@ -128,6 +139,65 @@ public sealed class Find(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             journal.Failed(ActivityStage.Find, $"{chosen.Title} · {chosen.Source}", exception.Message);
+
+            return chosen;
+        }
+    }
+
+    /// <summary>
+    /// Asks a site for a torrent it will not print, and answers the copy with
+    /// the magnet on it.
+    /// </summary>
+    /// <remarks>
+    /// From inside the browser session that loaded the page. Sent from this
+    /// process the request arrives without the session that earned the right to
+    /// ask, and is refused — so where there is no browser this says so and
+    /// changes nothing, which leaves the caller free to try the next copy.
+    /// </remarks>
+    private async Task<ReleaseCopy> AskForMagnetAsync(
+        ReleaseCopy chosen,
+        SignedClaim claim,
+        CancellationToken ct)
+    {
+        string subject = $"{chosen.Title} · {chosen.Source}";
+
+        if (post is null)
+        {
+            journal.Failed(ActivityStage.Find, subject, $"{chosen.Source} names its torrents only to a browser.");
+
+            return chosen;
+        }
+
+        Uri endpoint = SignedMagnet.EndpointOn(chosen.DetailUrl!);
+
+        journal.Started(ActivityStage.Find, subject, "asking the site for the torrent");
+
+        try
+        {
+            string? answered = await post.PostAsync(
+                endpoint,
+                SignedMagnet.Body(claim, _time.GetUtcNow()),
+                ct);
+
+            if (SignedMagnet.MagnetIn(answered) is not string magnet)
+            {
+                journal.Failed(ActivityStage.Find, subject, $"{chosen.Source} would not name the torrent.");
+
+                return chosen;
+            }
+
+            journal.Finished(ActivityStage.Find, subject, "magnet answered");
+
+            return chosen with
+            {
+                Magnet = magnet,
+                InfoHash = chosen.InfoHash ?? Magnets.HashOf(magnet),
+                Trackers = [.. chosen.Trackers.Union(Magnets.TrackersOf(magnet), StringComparer.OrdinalIgnoreCase)],
+            };
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            journal.Failed(ActivityStage.Find, subject, exception.Message);
 
             return chosen;
         }
@@ -182,9 +252,9 @@ public sealed class Find(
 
         try
         {
-            Uri address = new(Query.Write(indexer.SearchAddress!, releaseName, indexer.Query));
+            Uri first = new(Query.Write(indexer.SearchAddress!, releaseName, indexer.Query));
 
-            FetchResult result = await fetch.GetAsync(address, indexer.SearchAddressGated, ct);
+            FetchResult result = await fetch.GetAsync(first, indexer.SearchAddressGated, ct);
 
             if (result.Failure is FetchFailure failure)
             {
@@ -206,24 +276,42 @@ public sealed class Find(
                 return [];
             }
 
-            ReleaseCopy[] copies =
-            [
-                .. reader.Read(result.Body!, address).Select(row => new ReleaseCopy(
-                    row.Title,
-                    indexer.Name,
-                    indexer.Priority,
-                    row.InfoHash ?? Magnets.HashOf(row.Magnet),
-                    row.Magnet,
-                    row.DetailUrl,
-                    row.Seeders,
-                    row.SizeBytes,
-                    Magnets.TrackersOf(row.Magnet))),
-            ];
+            List<ReleaseCopy> copies = [.. CopiesIn(reader, result.Body!, first, indexer)];
 
-            journal.Finished(ActivityStage.Find, subject, $"{copies.Length} copies");
-            await WroteAsync(indexer, started, copies.Length, null, ct);
+            // The pages after the first, for a site that declares it has them.
+            // A listing that answers seventy-one results fifty to a page keeps
+            // the other twenty-one somewhere, and the release the owner wants
+            // is as likely to be among them as not.
+            foreach (Uri next in NextPages(indexer, first))
+            {
+                FetchResult page = await fetch.GetAsync(next, indexer.SearchAddressGated, ct);
 
-            return copies;
+                if (page.Failure is not null)
+                {
+                    // One page is one page. What the earlier ones answered is
+                    // still worth having, and a site that stops answering
+                    // half way through is not a site that answered nothing.
+                    journal.Failed(ActivityStage.Find, subject, page.Failure.ToString());
+
+                    break;
+                }
+
+                ReleaseCopy[] more = [.. CopiesIn(reader, page.Body!, next, indexer)];
+
+                if (more.Length == 0)
+                {
+                    // Past the end. Asking for the page after the last is a
+                    // request spent on a page nobody wrote.
+                    break;
+                }
+
+                copies.AddRange(more);
+            }
+
+            journal.Finished(ActivityStage.Find, subject, $"{copies.Count} copies");
+            await WroteAsync(indexer, started, copies.Count, null, ct);
+
+            return [.. copies];
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -233,6 +321,52 @@ public sealed class Find(
             await WroteAsync(indexer, started, 0, exception.Message, ct);
 
             return [];
+        }
+    }
+
+    /// <summary>What one page of one site's answer holds.</summary>
+    private static IEnumerable<ReleaseCopy> CopiesIn(
+        ISourceReader reader,
+        string body,
+        Uri address,
+        SourceDefinition indexer)
+    {
+        return reader.Read(body, address).Select(row => new ReleaseCopy(
+            row.Title,
+            indexer.Name,
+            indexer.Priority,
+            row.InfoHash ?? Magnets.HashOf(row.Magnet),
+            row.Magnet,
+            row.DetailUrl,
+            row.Seeders,
+            row.SizeBytes,
+            Magnets.TrackersOf(row.Magnet))
+        {
+            Claim = row.Claim,
+        });
+    }
+
+    /// <summary>
+    /// The addresses of the pages after the first, for a site that declares it
+    /// paginates.
+    /// </summary>
+    /// <remarks>
+    /// Declared rather than discovered: the parameter is the site's own, and a
+    /// guess at it is a request that fetches page one again and reads every row
+    /// of it twice.
+    /// </remarks>
+    private static IEnumerable<Uri> NextPages(SourceDefinition indexer, Uri first)
+    {
+        if (indexer.PageParameter is not string parameter || indexer.Pages <= 1)
+        {
+            yield break;
+        }
+
+        string join = first.Query.Length > 0 ? "&" : "?";
+
+        for (int page = 2; page <= indexer.Pages; page++)
+        {
+            yield return new($"{first}{join}{parameter}={page}");
         }
     }
 

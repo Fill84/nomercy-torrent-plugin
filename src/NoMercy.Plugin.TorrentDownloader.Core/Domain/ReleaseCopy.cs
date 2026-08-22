@@ -38,6 +38,16 @@ public sealed record ReleaseCopy(
     long? SizeBytes = null,
     IReadOnlyList<string>? Trackers = null)
 {
+    /// <summary>
+    /// What its site must be asked before it will name the torrent, when the
+    /// row carries neither a magnet nor a hash.
+    /// </summary>
+    /// <remarks>
+    /// It travels with the copy because the tokens it holds belong to the page
+    /// the row was read from, and a token from another page is refused.
+    /// </remarks>
+    public Sources.Readers.SignedClaim? Claim { get; init; }
+
     /// <summary>Never null: a copy naming no tracker names none.</summary>
     public IReadOnlyList<string> Trackers { get; init; } = Trackers ?? [];
 }

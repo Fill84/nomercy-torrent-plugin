@@ -79,6 +79,23 @@ public sealed record SourceDefinition(
     /// Which libraries this source is worth asking about, or none at all for
     /// every library.
     /// </summary>
+    /// <summary>
+    /// How many pages of one search are worth reading, and the parameter that
+    /// asks for the next.
+    /// </summary>
+    /// <remarks>
+    /// Nothing by default, which is one page. A site that answers seventy-one
+    /// results fifty to a page has the other twenty-one somewhere, and if it
+    /// sorts by seeders the first page holds the best of them - so this is
+    /// declared per source rather than assumed, and each extra page is one more
+    /// request that has to be worth making. TorrentBay is the one that needs
+    /// it: its listing takes <c>page</c> and nothing else does.
+    /// </remarks>
+    public string? PageParameter { get; init; }
+
+    /// <summary>How many pages to read, counting the first. One unless the catalogue says more.</summary>
+    public int Pages { get; init; } = 1;
+
     /// <remarks>
     /// docs/05-sources.md scopes Nyaa to <em>indexer (anime)</em>. Empty means
     /// everywhere and not nowhere: saying nothing has to mean every library, or

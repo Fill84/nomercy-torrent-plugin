@@ -189,7 +189,11 @@ public sealed class Chain : IAsyncDisposable
 
         return new(
             new NameResolve(catalogue, fetch, _readers, _pool, _journal, TimeProvider.System),
-            new Find(catalogue, fetch, _readers, _journal, _ledger),
+            // The solver again, as the thing that can post from inside the
+            // session that loaded the page. TorrentBay names its torrents to
+            // nothing else, and while nobody passed this its every row was a
+            // dead end - the best-seeded dead end on the page.
+            new Find(catalogue, fetch, _readers, _journal, _ledger, TimeProvider.System, _solver),
             _journal,
 
             // Through the grab, which checks there is room before anything is

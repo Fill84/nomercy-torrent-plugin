@@ -112,10 +112,32 @@ was a stranger's torrent wearing the page's own title. The reader's fallback for
 capture had ever demonstrated, is what would have handed it over. Nothing here reads that site any
 more.
 
-**TorrentBay** (gated) — publishes no magnet. The magnet comes from a **signed POST** to its own
-endpoint, built from two values off the row and two off the search page, sent from inside the
-browser session. `[GeneratedRegex]` was measured returning zero matches here where the identical
-inline `Regex` returned fifty — use `static readonly Regex`.
+**TorrentBay** (gated) — publishes **neither a magnet nor a hash**, on the listing or on a row's own
+page. Both carry a button and an id, and nothing else. The magnet comes from a **signed POST** to
+`/ajax/getSearchMagnet.php`, sent from inside the browser session:
+
+```
+torrent_id  the row's data-id, off .search-magnet-btn
+hash        empty — the button carries none and the site's script posts it anyway
+name        empty — the same
+timestamp   unix seconds, now
+hmac        SHA-256 over "{torrent_id}|{timestamp}|{pageToken}", lower-case hex
+sessid      the content of <meta name="csrf-token">
+```
+
+`pageToken` is `window.searchPageToken`, declared inline on the search page; the detail page declares
+`window.pageToken` instead and the same session. Both belong to the page they were read from, so they
+travel with the row and a token from another page is refused. The answer is
+`{"success":true,"url":"magnet:?…"}`, and a refusal has the same shape — reading one as an address
+hands the client something that is not a torrent.
+
+This is the reason the source could not simply be dropped. It sorts by seeders and publishes honest
+counts, so its rows outrank every other site's: while the request was unwritten its copy was chosen,
+followed, found to name no torrent, and the episode was reported as though nobody were serving it.
+Fifty rows to a page and it answers more, so `pageParameter` is `page` and three pages are read.
+
+`[GeneratedRegex]` was measured returning zero matches here where the identical inline expression
+returned fifty
 
 **TorrentGalaxy** — `torrentgalaxy.one`; query style `spaced`. No magnet and no hash on the listing:
 the dozen forty-character hex strings are element ids. Title from the anchor's `title` attribute —

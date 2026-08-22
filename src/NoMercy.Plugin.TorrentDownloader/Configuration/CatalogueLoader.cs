@@ -102,6 +102,8 @@ public sealed class CatalogueLoader(ILogger logger)
             entry.Note)
         {
             Libraries = entry.Libraries ?? [],
+            PageParameter = entry.PageParameter,
+            Pages = entry.Pages,
         };
     }
 
@@ -135,6 +137,12 @@ public sealed class CatalogueLoader(ILogger logger)
 
         /// <summary>Which libraries it is worth asking, or nothing for all of them.</summary>
         public List<string>? Libraries { get; init; }
+
+        /// <summary>The parameter that asks a listing for its next page, when it has one.</summary>
+        public string? PageParameter { get; init; }
+
+        /// <summary>How many pages of one search to read. One unless the file says more.</summary>
+        public int Pages { get; init; } = 1;
 
         /// <summary>On unless the file says otherwise, so a new entry works.</summary>
         public bool Enabled { get; init; } = true;

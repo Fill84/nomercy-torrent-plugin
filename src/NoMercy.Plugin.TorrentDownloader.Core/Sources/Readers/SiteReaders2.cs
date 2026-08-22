@@ -276,8 +276,23 @@ public sealed class TorrentBayReader : ISourceReader
         RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
 
     /// <summary>The id the magnet is asked for by.</summary>
+    /// <remarks>
+    /// The class comes after the address on this page and before the id, so the
+    /// two are read in the order the page writes them rather than the order the
+    /// request wants them.
+    /// </remarks>
     private static readonly Regex MagnetId = new(
         @"class=""[^""]*search-magnet-btn[^""]*""[^>]*data-id=""(\d+)""",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>The token the page declares for its own script to sign with.</summary>
+    private static readonly Regex PageToken = new(
+        @"window\.searchPageToken\s*=\s*['""]([^'""]+)['""]",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>The session the page was served to, which the request carries back.</summary>
+    private static readonly Regex SessionId = new(
+        @"<meta\s+name=""csrf-token""\s+content=""([^""]+)""",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex Leechers = new(
@@ -293,6 +308,11 @@ public sealed class TorrentBayReader : ISourceReader
     public IReadOnlyList<SourceRow> Read(string body, Uri from)
     {
         List<SourceRow> rows = [];
+
+        // Read once for the page rather than once per row: both belong to the
+        // page, and a row carrying a token from a different one is refused.
+        Match token = PageToken.Match(body);
+        Match session = SessionId.Match(body);
 
         foreach (Match row in Rows.Matches(body))
         {
@@ -314,23 +334,25 @@ public sealed class TorrentBayReader : ISourceReader
                 Html.Absolute(release.Groups[1].Value, from),
                 Seeders: seeders.Success ? Html.Count(seeders.Groups[1].Value) : null,
                 Leechers: leechers.Success ? Html.Count(leechers.Groups[1].Value) : null,
-                SizeBytes: Html.Size(markup)));
+                SizeBytes: Html.Size(markup),
+
+                // What this site has to be asked for the torrent, since it
+                // prints neither a magnet nor a hash anywhere. A row missing
+                // any of the three cannot be asked at all, and says so by
+                // carrying no claim rather than by carrying half of one.
+                Claim: ClaimOn(markup, token, session)));
         }
 
         return rows;
     }
 
-    /// <summary>
-    /// The id the site's own script asks the magnet for, from a row's markup.
-    /// </summary>
-    /// <remarks>
-    /// Exposed so the grab can ask for it. A row with no id cannot be asked,
-    /// and asking without one produces a refusal that reads like the site's.
-    /// </remarks>
-    public static string? MagnetIdOf(string rowMarkup)
+    /// <summary>The row's id and the page's two tokens, when the page has all three.</summary>
+    private static SignedClaim? ClaimOn(string markup, Match token, Match session)
     {
-        Match found = MagnetId.Match(rowMarkup);
+        Match id = MagnetId.Match(markup);
 
-        return found.Success ? found.Groups[1].Value : null;
+        return id.Success && token.Success && session.Success
+            ? new(id.Groups[1].Value, token.Groups[1].Value, session.Groups[1].Value)
+            : null;
     }
 }

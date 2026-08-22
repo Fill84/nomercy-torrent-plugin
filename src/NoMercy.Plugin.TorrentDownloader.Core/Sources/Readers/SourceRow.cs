@@ -3,6 +3,31 @@ using System.Text.RegularExpressions;
 namespace NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 
 /// <summary>
+/// What a site has to be asked, in its own words, before it will name a row's
+/// torrent.
+/// </summary>
+/// <remarks>
+/// <para>
+/// TorrentBay publishes no magnet and no hash, on the listing or on the row's
+/// own page: both carry a button and an id, and the magnet comes back from a
+/// signed request to the site's own endpoint. Everything that request needs is
+/// on the page it was read from — the id off the row, and two tokens off the
+/// page — so it is carried with the row rather than fetched again later, and a
+/// token from one page is never sent with a row from another.
+/// </para>
+/// <para>
+/// The signature is over the id, the moment, and the page token. That is the
+/// site's own rule, taken from the script the page loads, and it is why this
+/// cannot be a plain address: the moment is part of what is signed, so the
+/// request has to be built when it is made.
+/// </para>
+/// </remarks>
+/// <param name="TorrentId">The row's own id, off the button that would be pressed.</param>
+/// <param name="PageToken">The token the page declared, which the signature is over.</param>
+/// <param name="SessionId">The session the page was served to.</param>
+public sealed record SignedClaim(string TorrentId, string PageToken, string SessionId);
+
+/// <summary>
 /// One row a source answered with.
 /// </summary>
 /// <remarks>
@@ -23,6 +48,10 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 /// <param name="Seeders">How many are serving it, or null when the page does not say.</param>
 /// <param name="Leechers">How many are taking it, or null.</param>
 /// <param name="SizeBytes">Its size, or null.</param>
+/// <param name="Claim">
+/// What this site must be asked before it will name the torrent, for a site
+/// that publishes neither a magnet nor a hash anywhere.
+/// </param>
 public sealed record SourceRow(
     string Title,
     Uri? DetailUrl = null,
@@ -30,7 +59,8 @@ public sealed record SourceRow(
     string? InfoHash = null,
     int? Seeders = null,
     int? Leechers = null,
-    long? SizeBytes = null);
+    long? SizeBytes = null,
+    SignedClaim? Claim = null);
 
 /// <summary>
 /// The small amount of HTML handling every reader needs.

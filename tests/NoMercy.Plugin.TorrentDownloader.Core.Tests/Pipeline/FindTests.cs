@@ -21,12 +21,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 public class FindTests
 {
     /// <remarks>
-    /// <strong>A3.</strong> An indexer is asked the full release name and
-    /// nothing else. 0.3.4 searched them for <c>Silo S03E06</c>, which
-    /// sometimes worked — and the times it did hid the times it did not.
+    /// Whatever term this stage is handed goes out whole, to every indexer,
+    /// written the way each one wants it. Which terms are worth asking is
+    /// <c>SearchCycle</c>'s business and not this one's — see its own tests,
+    /// and the correction to <strong>A3</strong> they carry.
     /// </remarks>
     [Fact]
-    public async Task EveryIndexerIsAskedTheFullReleaseName()
+    public async Task EveryIndexerIsAskedTheTermItWasGivenWhole()
     {
         FakeFetch fetch = new();
         fetch.AnswersAnything(Capture.Fixture("limetorrents.html"));
@@ -349,9 +350,155 @@ public class FindTests
             Libraries = [LibraryKinds.Anime],
         };
 
+
+    /// <remarks>
+    /// <strong>The one shipped site that names its torrents nowhere.</strong>
+    /// Not on the listing, not on the row's own page: both carry a button and
+    /// an id, and the magnet comes back from a signed request to the site's own
+    /// endpoint. It was deferred from <c>S2-06</c> to <c>S6-01</c> and never
+    /// written, and the cost was not that this site gave nothing — it was that
+    /// it gave the <em>best</em> rows. It publishes honest seeder counts and
+    /// sorts by them, so its copy outranked every other site's, was chosen, was
+    /// followed, named no torrent, and the episode was reported as though
+    /// nobody were serving it.
+    /// </remarks>
+    [Fact]
+    public async Task ASiteThatPrintsNoTorrentIsAskedForOneAndAnswersWithIt()
+    {
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("torrentbay.html"));
+
+        RecordingPost post = new(
+            """{"success":true,"url":"magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567&dn=Silo&tr=udp%3A%2F%2Ft.test%3A80%2Fannounce"}""");
+
+        Find find = Finding(fetch, sources: [TorrentBay], post: post);
+
+        ReleaseCopy row = (await find.SearchAsync(Name, LibraryKind.Television, CancellationToken.None))[0];
+
+        // Nothing a client could be handed, which is what every row of this
+        // site looks like.
+        Assert.Null(row.Magnet);
+        Assert.Null(row.InfoHash);
+
+        ReleaseCopy followed = await find.FollowAsync(row, CancellationToken.None);
+
+        Assert.StartsWith("magnet:?", followed.Magnet!, StringComparison.Ordinal);
+        Assert.Equal("0123456789ABCDEF0123456789ABCDEF01234567", followed.InfoHash);
+        Assert.Contains("udp://t.test:80/announce", followed.Trackers);
+
+        // The request the site's own script would have made, to the host the
+        // row came from.
+        Assert.Equal("https://extranet.torrentbay.st/ajax/getSearchMagnet.php", post.Url!.ToString());
+        Assert.Contains("torrent_id=21152668", post.Body!, StringComparison.Ordinal);
+        Assert.Contains("sessid=0c01634dba9aa280bc08db6088889c8a", post.Body!, StringComparison.Ordinal);
+
+        // And the row's own page was never fetched: it names no torrent either,
+        // so asking for it is a request spent for certain on nothing.
+        Assert.DoesNotContain(
+            fetch.Asked,
+            address => address.AbsolutePath.Contains("silo-s03e06", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <remarks>
+    /// A refusal is not a magnet. This site answers one with the same shape of
+    /// body as a success, and reading it as an address would hand the client
+    /// something that is not a torrent — while the copy that could have been
+    /// taken instead went unexamined.
+    /// </remarks>
+    [Fact]
+    public async Task ARefusalFromThatSiteLeavesTheCopyWithNoTorrent()
+    {
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("torrentbay.html"));
+
+        RecordingPost post = new("""{"success":false,"error":"Invalid or expired token."}""");
+
+        Find find = Finding(fetch, sources: [TorrentBay], post: post);
+
+        ReleaseCopy row = (await find.SearchAsync(Name, LibraryKind.Television, CancellationToken.None))[0];
+
+        Assert.Null((await find.FollowAsync(row, CancellationToken.None)).Magnet);
+    }
+
+    /// <remarks>
+    /// With nothing that can post from inside the session, the copy is left as
+    /// it is rather than guessed at. Sent from this process the request arrives
+    /// without the session that earned the right to ask and is refused, and the
+    /// caller needs to be free to try the next copy.
+    /// </remarks>
+    [Fact]
+    public async Task WithNothingAbleToPostTheCopyIsLeftAlone()
+    {
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("torrentbay.html"));
+
+        Find find = Finding(fetch, sources: [TorrentBay]);
+
+        ReleaseCopy row = (await find.SearchAsync(Name, LibraryKind.Television, CancellationToken.None))[0];
+
+        Assert.Null((await find.FollowAsync(row, CancellationToken.None)).Magnet);
+    }
+
+    /// <remarks>
+    /// A listing that answers seventy-one results fifty to a page keeps the
+    /// other twenty-one somewhere. The pages after the first are read for a
+    /// site that declares it has them, and a page with nothing on it is the end
+    /// — asking for the one after that is a request spent on a page nobody
+    /// wrote.
+    /// </remarks>
+    [Fact]
+    public async Task ASiteThatDeclaresMorePagesIsReadPastItsFirst()
+    {
+        FakeFetch fetch = new();
+
+        string first = Query.Write(TorrentBay.SearchAddress!, Name, TorrentBay.Query);
+
+        fetch.Answers(first, Capture.Fixture("torrentbay.html"));
+        fetch.Answers($"{first}&page=2", Capture.Fixture("torrentbay.html"));
+        fetch.Answers($"{first}&page=3", "<html><body>no rows here</body></html>");
+
+        IReadOnlyList<ReleaseCopy> copies = await Finding(fetch, sources: [TorrentBay])
+            .SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
+
+        Assert.Equal(3, fetch.Asked.Count(address => address.Host == "extranet.torrentbay.st"));
+
+        // Both pages that had rows, and neither read twice.
+        Assert.Equal(68, copies.Count);
+    }
+
+    /// <remarks>
+    /// A site that declares no pages is asked once. Guessing at the parameter
+    /// fetches page one again under another name and reads every row of it
+    /// twice.
+    /// </remarks>
+    [Fact]
+    public async Task ASiteThatDeclaresNoPagesIsAskedOnce()
+    {
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("limetorrents.html"));
+
+        await Finding(fetch, sources: [Indexers[0]])
+            .SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
+
+        Assert.Single(fetch.Asked);
+    }
+
     private const string Name = "Silo.S03E06.1080p.WEB.H264-CAKES";
 
     private const string Detail = "https://www.torrentfunk.com/torrent/50533062/silo-s03e06.html";
+
+    /// <summary>
+    /// The site that publishes neither a magnet nor a hash, as the catalogue
+    /// has it — paging and all.
+    /// </summary>
+    private static readonly SourceDefinition TorrentBay =
+        new("TorrentBay", "site", "https://extranet.torrentbay.st/browse/?q={query}&sort=seeders&order=desc")
+        {
+            Reader = "torrentbay",
+            Priority = 30,
+            PageParameter = "page",
+            Pages = 3,
+        };
 
     /// <summary>Three real indexers, as the catalogue has them.</summary>
     private static readonly SourceDefinition[] Indexers =
@@ -382,7 +529,8 @@ public class FindTests
         TimeProvider? clock = null,
         ActivityJournal? journal = null,
         ISourceLedger? ledger = null,
-        IReadOnlyList<SourceDefinition>? sources = null)
+        IReadOnlyList<SourceDefinition>? sources = null,
+        IInPagePost? post = null)
     {
         _ = clock;
 
@@ -391,6 +539,8 @@ public class FindTests
             fetch,
             Readers.Shipped(),
             journal ?? new ActivityJournal(),
-            ledger);
+            ledger,
+            TimeProvider.System,
+            post);
     }
 }

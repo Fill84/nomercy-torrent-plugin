@@ -83,7 +83,9 @@
       "gated": true,
       "priority": 30,
       "minimumIntervalSeconds": 15,
-      "note": "Publishes no magnet: it comes from a signed POST to its own endpoint, built from two values off the row and two off the search page, sent from inside the browser session."
+      "pageParameter": "page",
+      "pages": 3,
+      "note": "Publishes neither a magnet nor a hash, on the listing or on the row's own page: both carry a button and an id. The magnet comes from a signed POST to /ajax/getSearchMagnet.php, sent from inside the browser session - SHA-256 over the row id, the moment and window.searchPageToken, with the csrf-token meta as the session. Sorted by seeders, so its rows outrank everything, which is why the request had to be written rather than the source dropped. Fifty rows to a page and it answers more than that, so three pages are read."
     },
     {
       "name": "EZTV",
