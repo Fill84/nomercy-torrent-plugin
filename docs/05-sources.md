@@ -24,7 +24,7 @@ and the presence of `searchUrl`, and nothing else guesses.
 | PreDB | `rss` | — | words | no | 20 | 60s | feed + names |
 | srrDB | `rss` | — | words | no | 20 | 60s | feed |
 | srrDB search | `srrdb` | — | slug | no | 20 | 15s | names |
-| SceneSource | `rss` | — | words | **yes** | 20 | 60s | feed |
+| SceneSource | `rss` | — | words | **yes** | 20 | 60s | feed + names |
 | EZTV latest | `eztv-api` | — | words | no | 30 | 60s | feed |
 | The Pirate Bay | `apibay` | — | words | no | 45 | 5s | indexer |
 | 1337x | `site` | `1337x` | words | **yes** | 40 | 15s | indexer |
@@ -45,6 +45,7 @@ PreDB            https://predb.me/?rss=1
 srrDB            https://www.srrdb.com/feed/srrs
 srrDB search     https://api.srrdb.com/v1/search/{query}
 SceneSource      https://www.scnsrc.me/feed/
+                 https://www.scnsrc.me/feed/?s={query}
 EZTV latest      https://eztv.re/api/get-torrents?limit=100&search={query}
 The Pirate Bay   https://apibay.org/q.php?q={query}&cat=
 1337x            https://www.1337x.to/sort-category-search/{query}/TV/time/desc/1/
@@ -166,8 +167,24 @@ not a broken reader.
 **PreDB** — name database with an RSS search, paced at sixty seconds. `predb.me` answers a plain
 `curl` with an empty feed but answers the plugin; do not conclude it is dead from a shell test.
 
-**SceneSource** (gated) — read through the browser. **It is a feed and has no search.** 0.3.4 put it
-in the search set and made forty identical requests per cycle.
+**SceneSource** (gated) — read through the browser, both addresses, because both sit behind the same
+challenge: a plain request to either is a 403, which reads exactly like the site refusing us.
+
+**It does have a search, and this document said it did not.** `/feed/?s={query}` answers
+`You searched for X` with an item per release, in the same RSS the plain feed uses — so the same
+reader does both and nothing new had to be written. Captured 22 August 2026 as
+`tests/fixtures/scenesource-search-silo.xml`.
+
+**Where the wrong sentence came from.** 0.3.4 put SceneSource's *feed* address in the search set and
+asked it forty times a cycle, once per episode, getting the same newest-posts answer every time. The
+lesson taken from that was "it has no search". The lesson was "search the search address, once per
+show" — the fault was the address, not the site.
+
+**What it cost.** With SceneSource read only for what is new, a show that aired last week was left to
+srrDB's archive, which answers with years of foreign and 2160p releases. The profile then refuses
+them one after another, each with a good reason, and the page reads as a plugin working hard and
+finding nothing. The release the owner wanted was one request away: `/feed/?s=Silo` returns the
+whole season, 1080p, in English.
 
 ## Fetching
 

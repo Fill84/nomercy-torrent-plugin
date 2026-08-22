@@ -88,6 +88,36 @@ public class CatalogueTests
     }
 
     /// <remarks>
+    /// <para>
+    /// A name source that can be asked about one show has to be asked about one
+    /// show. SceneSource was in the catalogue as a feed and nothing else — the
+    /// note said it had no search — so the plugin only ever read its newest
+    /// posts, and a show that aired last week was left to srrDB's archive.
+    /// </para>
+    /// <para>
+    /// That archive answers with years of foreign and 2160p releases, which the
+    /// profile then refuses one after another with a good reason each time. The
+    /// page reads as a plugin working hard and finding nothing, and the release
+    /// the owner wanted was one request away the whole time:
+    /// <c>/feed/?s=Silo</c> returns the season, in the same RSS the feed uses.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void SceneSourceIsAskedAboutTheShowRatherThanOnlyReadForWhatIsNew()
+    {
+        SourceDefinition scenesource = Assert.Single(
+            new CatalogueLoader(new CapturingLogger()).Load(),
+            source => source.Name == "SceneSource");
+
+        Assert.True(scenesource.CanSearch);
+        Assert.Contains("{query}", scenesource.SearchAddress!, StringComparison.Ordinal);
+
+        // Both addresses sit behind the same challenge, and a search treated as
+        // plain HTTP is a 403 the plugin would report as the site refusing it.
+        Assert.True(scenesource.SearchAddressGated);
+    }
+
+    /// <remarks>
     /// Missing is not the same as empty, and the difference has to be loud. The
     /// fallback is nothing at all rather than a smaller built-in set, because a
     /// partial fallback is exactly what made C1 invisible.

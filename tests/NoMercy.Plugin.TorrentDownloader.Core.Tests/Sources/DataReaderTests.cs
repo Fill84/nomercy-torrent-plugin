@@ -112,6 +112,35 @@ public class DataReaderTests
     }
 
     /// <remarks>
+    /// <para>
+    /// SceneSource has a search, and it is the same RSS the feed is:
+    /// <c>/feed/?s={query}</c> answers "You searched for X" with an item per
+    /// release. The catalogue said it had none, so a show was left to srrDB's
+    /// archive — which answers with years of foreign and 2160p releases and
+    /// almost never the one that aired last week.
+    /// </para>
+    /// <para>
+    /// Off the real search, captured through the browser on 22 August 2026:
+    /// the address is behind a challenge and answers a plain request with 403.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void SceneSourcesSearchAnswersTheEpisodesOfTheShowAskedFor()
+    {
+        IReadOnlyList<SourceRow> rows = new RssNameReader().Read(
+            Fixture("scenesource-search-silo.xml"),
+            new("https://www.scnsrc.me/feed/?s=Silo"));
+
+        IReadOnlyList<string> titles = [.. rows.Select(row => row.Title)];
+
+        Assert.Contains("Silo S03E08 1080p WEB H264-CAKES", titles);
+        Assert.Contains("Silo S03E01 1080p WEB h264-ETHEL", titles);
+
+        // Eight episodes of the season the owner is missing, in one ask.
+        Assert.Equal(8, titles.Count(title => title.StartsWith("Silo S03E", StringComparison.Ordinal)));
+    }
+
+    /// <remarks>
     /// A feed answers what came out recently, and every item is a name.
     /// </remarks>
     [Theory]

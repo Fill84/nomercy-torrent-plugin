@@ -34,10 +34,12 @@
       "name": "SceneSource",
       "kind": "rss",
       "url": "https://www.scnsrc.me/feed/",
+      "searchUrl": "https://www.scnsrc.me/feed/?s={query}",
       "gated": true,
+      "searchGated": true,
       "priority": 20,
       "minimumIntervalSeconds": 60,
-      "note": "Read through the browser. It is a feed and has no search: 0.3.4 put it in the search set and made forty identical requests per cycle."
+      "note": "Read through the browser; both addresses sit behind the same challenge. It does have a search, and it is the same RSS: /feed/?s={query} answers 'You searched for X' with an item per release. Captured 22 August 2026 as tests/fixtures/scenesource-search-silo.xml. This entry used to say it had none, which is what 0.3.4's fault was misread into - 0.3.4 asked the feed address forty times a cycle, and the lesson taken was 'no search' rather than 'search the search address once'. Without it a show is left to srrDB's archive, which answers with years of foreign and 2160p releases and almost never the one that just aired."
     },
     {
       "name": "EZTV latest",
