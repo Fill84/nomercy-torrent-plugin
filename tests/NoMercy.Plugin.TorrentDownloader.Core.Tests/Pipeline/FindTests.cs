@@ -582,6 +582,47 @@ public class FindTests
         Assert.Equal(2, merged.Count);
     }
 
+
+    /// <remarks>
+    /// <strong>The two sites whose magnet path had never been walked.</strong>
+    /// EZTV and 1337x both publish nothing on the listing, so the row's own
+    /// page is the only route — and in every cycle so far a reachable copy of
+    /// the same release from somewhere else won first, so neither was ever
+    /// followed. Both pages here are real, captured through the same gate and
+    /// solver the plugin uses, and the hash asserted is the one each page
+    /// carries.
+    /// </remarks>
+    [Theory]
+    [InlineData("eztv-detail.html", "EZTV", "https://eztvx.to/ep/3141579/silo-s03e08-xvid-afg/?d=",
+        "FED03CC5627432777F0F6B6A0D62E96D0549E543")]
+    [InlineData("x1337-detail.html", "1337x",
+        "https://www.1337x.to/torrent/6701056/Silo-S03E06-The-Drive-2160p-ATVP-WEB-DL-ITA-ENG-DDP5-1-Atmos-DV-HDR-H-265-G66-mkv/",
+        "00784AF82A96D3B9600AED78BCB2B4B3D40932F3")]
+    public async Task ARowFromASiteThatPublishesNothingIsFollowedToItsMagnet(
+        string fixture,
+        string site,
+        string detail,
+        string hash)
+    {
+        FakeFetch fetch = new();
+        fetch.Answers(detail, Capture.Fixture(fixture));
+
+        ReleaseCopy row = new(Name, site, 30, null, null, new(detail), 9);
+
+        ReleaseCopy followed = await Finding(fetch).FollowAsync(row, CancellationToken.None);
+
+        Assert.Equal(hash, followed.InfoHash);
+        Assert.StartsWith("magnet:?xt=urn:btih:", followed.Magnet!, StringComparison.OrdinalIgnoreCase);
+
+        // And the trackers the page's own magnet names travel with it. They
+        // arrive HTML-escaped on both of these pages, which is a shape no
+        // client would announce to.
+        Assert.NotEmpty(followed.Trackers);
+        Assert.All(
+            followed.Trackers,
+            tracker => Assert.DoesNotContain("&amp;", tracker, StringComparison.Ordinal));
+    }
+
     private const string Name = "Silo.S03E06.1080p.WEB.H264-CAKES";
 
     private const string Detail =
