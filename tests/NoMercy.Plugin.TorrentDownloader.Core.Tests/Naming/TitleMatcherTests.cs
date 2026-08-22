@@ -83,6 +83,13 @@ public class TitleMatcherTests
     [InlineData("Sugar 2024 S02E08 1080p WEB H264-CAKES", "sugar 2024 s02e08 1080p web h264-cakes[EZTVx to]")]
     [InlineData("Sugar.2024.S02E08.1080p.WEB.H264-CAKES", "Sugar 2024 S02E08 1080p WEB H264-CAKES[EZTVx.to].mkv")]
     [InlineData("Silo S03E08 1080p WEB H264-CAKES", "Silo.S03E08.1080p.WEB.H264-CAKES [TGx]")]
+
+    // Written bare, with no brackets at all, which is how TorrentBay and
+    // TorrentGalaxy repost EZTV's rows. It kept the copy of exactly the release
+    // SceneSource had published from matching it, so an x265 re-encode won
+    // Silo S03E04 on a seeder count.
+    [InlineData("Silo S03E04 1080p WEB H264-CAKES", "Silo S03E04 1080p WEB H264-CAKES EZTV")]
+    [InlineData("Silo S03E04 1080p WEB H264-CAKES", "Silo S03E04 1080p WEB H264-CAKES EZTVx to")]
     public void ARepostsTagAndAFilesExtensionAreNotPartOfTheName(string published, string reposted)
     {
         Assert.Equal(TitleMatcher.Release(published), TitleMatcher.Release(reposted));
@@ -98,6 +105,11 @@ public class TitleMatcherTests
         Assert.NotEqual(
             TitleMatcher.Release("Silo S03E08 1080p WEB H264-CAKES[EZTVx to]"),
             TitleMatcher.Release("Silo S03E08 1080p WEB H264-SYLiX[EZTVx to]"));
+
+        // A trailing word that is not a site is the release group and stays.
+        Assert.NotEqual(
+            TitleMatcher.Release("Silo S03E04 1080p WEB H264-CAKES"),
+            TitleMatcher.Release("Silo S03E04 1080p WEB H264"));
 
         // And an anime group at the front is the name, not a repost's tag.
         Assert.NotEqual(

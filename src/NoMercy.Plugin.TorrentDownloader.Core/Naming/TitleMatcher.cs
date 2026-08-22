@@ -29,6 +29,23 @@ public static class TitleMatcher
         @"[.\s](?:mkv|mp4|avi|m4v|mov|wmv|ts|iso|rar|zip)\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    /// <summary>
+    /// Whoever reposted it, written bare at the end.
+    /// </summary>
+    /// <remarks>
+    /// TorrentBay and TorrentGalaxy repost EZTV's rows and write the site's
+    /// name after the release with no brackets at all:
+    /// <c>Silo S03E04 1080p WEB H264-CAKES EZTV</c>. It is the same tag in a
+    /// shape the bracket rule cannot see, and it kept that copy from matching
+    /// the name SceneSource published for exactly that release.
+    ///
+    /// Named sites only. A trailing word is otherwise the release group, and
+    /// dropping that would make two releases look like one.
+    /// </remarks>
+    private static readonly Regex BareTag = new(
+        @"\s+(?:eztvx?(?:\s+to)?|tgx|rarbg|ettv)\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     /// <summary>Whoever reposted it, in brackets at the end.</summary>
     /// <remarks>
     /// <c>[EZTVx to]</c>, <c>[EZTVx.to]</c>, <c>[TGx]</c>, <c>[eztv]</c>. A
@@ -183,7 +200,14 @@ public static class TitleMatcher
 
         Match tagged = SiteTag.Match(trimmed);
 
-        return Normalised(tagged.Success ? trimmed[..tagged.Index] : trimmed);
+        if (tagged.Success)
+        {
+            trimmed = trimmed[..tagged.Index];
+        }
+
+        Match bare = BareTag.Match(trimmed);
+
+        return Normalised(bare.Success ? trimmed[..bare.Index] : trimmed);
     }
 
     /// <summary>
