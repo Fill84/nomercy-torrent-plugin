@@ -378,9 +378,14 @@ public class SearchCycleTests
         Assert.Equal(4, report.Outcomes.Count);
         Assert.All(report.Outcomes, outcome => Assert.True(outcome.HandedOver, outcome.Detail));
 
-        // One request for the four of them. The three that followed were
-        // answered out of what the first already had.
-        Assert.Equal(1, fetch.Asked.Count(address => address.Host == "apibay.org"));
+        // Every gap is still asked about - what an earlier search turned up is
+        // a candidate and never an answer, which is
+        // WhatAnEarlierSearchTurnedUpDoesNotStopThisOneBeingMade. Only S03E04's
+        // address is scripted here, so the three that follow are answered with
+        // a page carrying nothing for them, and they are taken anyway: out of
+        // what the first search brought back and would otherwise have thrown
+        // away.
+        Assert.Equal(4, fetch.Asked.Count(address => address.Host == "apibay.org"));
     }
 
     /// <remarks>
@@ -446,6 +451,58 @@ public class SearchCycleTests
 
         Assert.True(outcome.HandedOver, outcome.Detail);
         Assert.Equal("The Pirate Bay", outcome.Source);
+    }
+
+    /// <remarks>
+    /// <strong>What an earlier search happened to turn up is a candidate, never
+    /// an answer.</strong> The cycle kept every copy it had seen and tried that
+    /// stack before searching, and took the first acceptable thing in it — so
+    /// an episode could be settled by a leftover from another episode's search
+    /// without one indexer being asked about it.
+    ///
+    /// The owner watched it happen on 22 August 2026. Sugar S02E08 was settled
+    /// from the stack by a FLUX release, and
+    /// <c>Sugar 2024 S02E08 1080p WEB H264-CAKES</c> — the top row on both
+    /// TorrentBay and The Pirate Bay, at 483 and 458 seeders — was never
+    /// fetched at all, because nothing ever asked for that episode.
+    ///
+    /// The stack now adds to what a search brings back and decides nothing on
+    /// its own.
+    /// </remarks>
+    [Fact]
+    public async Task WhatAnEarlierSearchTurnedUpDoesNotStopThisOneBeingMade()
+    {
+        FakeFetch fetch = new();
+
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        // The whole programme, which is what the first gap's search brings
+        // back: a hundred rows covering every episode of it.
+        fetch.Answers(
+            "https://apibay.org/q.php?q=Silo+S03E04&cat=",
+            Capture.Fixture("the-pirate-bay-show.json"));
+
+        // And S03E08's own answer, which carries the copy that is actually
+        // best seeded — six thousand of them.
+        fetch.Answers(
+            "https://apibay.org/q.php?q=Silo+S03E08&cat=",
+            Capture.Fixture("the-pirate-bay-episode.json"));
+
+        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
+            [Silo(4), Silo(8)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        EpisodeOutcome last = report.Outcomes.Single(outcome => outcome.Episode == Silo(8).Key);
+
+        // Asked, rather than settled out of what the first gap's search left
+        // lying about.
+        Assert.Contains(fetch.Asked, address => address.Query.Contains("Silo+S03E08", StringComparison.Ordinal));
+
+        // And the copy taken is the best-seeded one anybody offered, which is
+        // only in that answer.
+        Assert.True(last.HandedOver, last.Detail);
+        Assert.Equal(6372, last.Seeders);
     }
 
     /// <summary>Where a download would land, if anything were downloading.</summary>

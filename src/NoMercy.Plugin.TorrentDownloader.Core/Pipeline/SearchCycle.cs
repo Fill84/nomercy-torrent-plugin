@@ -208,14 +208,19 @@ public sealed class SearchCycle(
 
         try
         {
-            // What earlier searches this cycle have already turned up. Free:
-            // the request has been made and paid for, and the answer to
-            // "who is serving Silo S03E04" was already inside it.
-            if (await TakeAsync(episode, answered, decisions, options, subject, trackers, refused, ct)
-                is EpisodeOutcome held)
-            {
-                return held;
-            }
+            // What earlier searches this cycle have already turned up. A
+            // candidate and never an answer: it is added to what this
+            // episode's own search brings back, and decides nothing on its
+            // own.
+            //
+            // It used to decide. The cycle tried this stack first and took the
+            // first acceptable thing in it, so an episode could be settled by
+            // a leftover from another episode's search without one indexer
+            // being asked about it - and on 22 August 2026 Sugar S02E08 was
+            // settled that way while the copy the owner wanted, top of the
+            // page on two sites at four hundred and eighty seeders, was never
+            // fetched at all.
+            List<ReleaseCopy> gathered = [.. answered];
 
             bool asked = false;
 
@@ -230,8 +235,12 @@ public sealed class SearchCycle(
                 trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
 
                 answered.AddRange(copies);
+                gathered.AddRange(copies);
 
-                if (await TakeAsync(episode, copies, decisions, options, subject, trackers, refused, ct)
+                // Over everything, every time. The best copy of an episode is
+                // the best of all of them, not the best of the last page to
+                // arrive.
+                if (await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, ct)
                     is EpisodeOutcome taken)
                 {
                     return taken;
