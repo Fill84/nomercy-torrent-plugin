@@ -66,15 +66,40 @@ plugin never picks a library; it uses the show's own. See `docs/09-host-contract
 for each library whose media type is "tv" or "anime"
     for each show in GetShowsAsync(library.Id)
         skip the show when Folder is null            ← no folder means nowhere to download to
+        skip the show when no episode HasFile        ← not a show the owner has; see below
         for each episode in GetEpisodesAsync(show.Id)
             skip season 0 unless IncludeSpecials
             missing when   HasFile is false
                      and   AirDate is not null and in the past
 ```
 
-That is the whole rule. There is no follow list, no subscription, no opt-in and no status check.
-Every show in those libraries is in scope, and an episode that aired two years ago counts exactly
-as much as one that aired last night.
+That is the whole rule. There is no follow list, no subscription, no opt-in and no status check, and
+an episode that aired two years ago counts exactly as much as one that aired last night.
+
+### One episode on disk, or it is not the owner's show
+
+**Corrected 22 August 2026, against the server.** This document said "every show in those libraries
+is in scope". It is not what the server means by a library.
+
+`Tvs` holds a row for every show the server knows *about*, including ones it has only ever
+recommended — related titles, things nobody asked for. They carry the library's id, a folder and a
+full episode list, and nothing in the row tells them apart from a show the owner actually has.
+
+The server settles it in the query behind its own library page, and this is that query:
+
+```csharp
+.Where(tv => tv.Library.Id == libraryId)
+.Where(tv => tv.Episodes.Any(e => e.VideoFiles.Any(v => v.Folder != null)))
+```
+
+One episode with a file, or the show is not in the library. `HasFile` on the contract's episode is
+that same `VideoFiles.Any()`, so the plugin applies the rule with what it already has and makes no
+extra call.
+
+**What reading it the other way cost.** On the owner's server, twelve of sixty-seven rows had no
+file at all. The Shows page listed all twelve — one of them claiming 456 missing episodes on its own
+— and the plugin was set looking for 1,497 episodes where the true figure was 388. The owner saw a
+page full of shows they had never watched.
 
 ### Three corrections, each measured
 

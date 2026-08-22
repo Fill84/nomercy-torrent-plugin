@@ -47,6 +47,25 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
         {
             IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
 
+            // One episode on disk, or this is not a show the owner has.
+            //
+            // The server keeps rows for shows it has only ever recommended —
+            // related titles, things nobody asked for — in the same table,
+            // against the same library id, with a folder and a full episode
+            // list. Nothing in the row tells them apart. The server's own
+            // library page settles it with exactly this rule:
+            //
+            //   Episodes.Any(e => e.VideoFiles.Any(v => v.Folder != null))
+            //
+            // Taken as "every show in the library", twelve shows the owner had
+            // never seen turned up on the page — one of them claiming 456
+            // missing episodes on its own — and the plugin went looking for all
+            // of them.
+            if (!episodes.Any(episode => episode.HasFile))
+            {
+                continue;
+            }
+
             // Built from the list already fetched, so it costs no extra call —
             // and built from all of it, before anything is filtered out, because
             // a season already on disk still counts towards the next one's

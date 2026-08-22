@@ -11,6 +11,62 @@ public class MissingRefreshTests
     private static readonly DateTimeOffset Today = new(2026, 8, 14, 9, 0, 0, TimeSpan.Zero);
 
     /// <remarks>
+    /// <para>
+    /// A show the owner has none of is not a show they have. The server keeps
+    /// rows for shows it has only ever recommended — related titles, things
+    /// nobody asked for — in the same table, against the same library id, with
+    /// a folder and a full episode list. Nothing in the row says which is
+    /// which.
+    /// </para>
+    /// <para>
+    /// The server's own library page settles it, and this is its query:
+    /// <c>Episodes.Any(e =&gt; e.VideoFiles.Any(v =&gt; v.Folder != null))</c>.
+    /// One episode with a file, or the show is not in the library.
+    /// </para>
+    /// <para>
+    /// Read as "every show in the library", it put twelve shows the owner had
+    /// never seen on the page — one of them alone claiming 456 missing
+    /// episodes — and set the plugin looking for all of them.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AShowWithNotOneEpisodeOnDiskIsNotOneTheOwnerHas()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "Silo")
+            .Episode(1, 1, 1, hasFile: true, airDate: new DateOnly(2020, 1, 1))
+            .Episode(1, 1, 2, airDate: new DateOnly(2020, 1, 8))
+            .Show(2, "Recommended, never watched")
+            .Episode(2, 1, 1, airDate: new DateOnly(2020, 1, 1))
+            .Episode(2, 1, 2, airDate: new DateOnly(2020, 1, 8));
+
+        IReadOnlyList<TrackedEpisode> tracked = await Derive(library);
+
+        Assert.All(tracked, episode => Assert.Equal("Silo", episode.ShowTitle));
+    }
+
+    /// <remarks>
+    /// The one on disk is what puts the show in scope; it is not itself
+    /// something to look for. A show is either the owner's or it is not, and
+    /// deciding that per episode would track the whole of a show they have one
+    /// episode of and none of one they have none.
+    /// </remarks>
+    [Fact]
+    public async Task TheEpisodeThatPutsAShowInScopeIsStillNotTracked()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "Silo")
+            .Episode(1, 1, 1, hasFile: true, airDate: new DateOnly(2020, 1, 1))
+            .Episode(1, 1, 2, airDate: new DateOnly(2020, 1, 8));
+
+        IReadOnlyList<TrackedEpisode> tracked = await Derive(library);
+
+        TrackedEpisode only = Assert.Single(tracked);
+
+        Assert.Equal(2, only.Key.Number);
+    }
+
+    /// <remarks>
     /// Looking for an episode that has not aired finds either nothing or
     /// something that should not exist yet, and both are worse than waiting.
     /// </remarks>
@@ -19,6 +75,7 @@ public class MissingRefreshTests
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
+            .Episode(1, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
             .Episode(1, 1, 1, airDate: null)
             .Episode(1, 1, 2, airDate: new DateOnly(2026, 9, 1))
             .Episode(1, 1, 3, airDate: new DateOnly(2026, 8, 15));
@@ -38,6 +95,7 @@ public class MissingRefreshTests
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
+            .Episode(1, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
             .Episode(1, 1, 1, airDate: new DateOnly(2026, 8, 14));
 
         Assert.Equal(EpisodeState.Missing, (await Derive(library))[0].State);
@@ -53,6 +111,7 @@ public class MissingRefreshTests
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
+            .Episode(1, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
             .Episode(1, 1, 1, airDate: new DateOnly(2019, 3, 2))
             .Episode(1, 5, 9, airDate: new DateOnly(2026, 8, 13));
 
@@ -73,6 +132,7 @@ public class MissingRefreshTests
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Long finished", 2011)
+            .Episode(1, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
             .Episode(1, 4, 7, airDate: new DateOnly(2014, 6, 1));
 
         Assert.Single(await Derive(library));
@@ -103,6 +163,7 @@ public class MissingRefreshTests
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
+            .Episode(1, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
             .Episode(1, 0, 1, airDate: new DateOnly(2026, 1, 1))
             .Episode(1, 1, 1, airDate: new DateOnly(2026, 1, 8));
 
@@ -119,6 +180,7 @@ public class MissingRefreshTests
     {
         FakeLibrary library = new FakeLibrary()
             .Show(7, "Sugar", 2024, LibraryKind.Anime)
+            .Episode(7, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
             .Episode(7, 2, 4, airDate: new DateOnly(2026, 2, 2), title: "The one with the cat");
 
         TrackedEpisode episode = Assert.Single(await Derive(library));
@@ -142,6 +204,7 @@ public class MissingRefreshTests
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
+            .Episode(1, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
             .Episode(1, 1, 1, airDate: new DateOnly(2026, 1, 1));
 
         TrackedEpisode episode = Assert.Single(await Derive(library));
@@ -198,6 +261,8 @@ public class MissingRefreshTests
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Frieren", 2023, LibraryKind.Anime)
             .Show(2, "Silo")
+            .Episode(1, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
+            .Episode(2, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
             .Episode(1, 1, 1, airDate: new DateOnly(2026, 1, 1))
             .Episode(2, 1, 1, airDate: new DateOnly(2026, 1, 1));
 

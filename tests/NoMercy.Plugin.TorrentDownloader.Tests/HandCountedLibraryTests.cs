@@ -55,17 +55,21 @@ public class HandCountedLibraryTests : IDisposable
             .Episode(2, 2, 1, airDate: new DateTime(2026, 4, 1))
 
             // A special, and the owner has not asked for specials. → not counted.
+            // The second episode is on disk, which is what puts the show in the
+            // library at all: a show with nothing on disk is one the server has
+            // recommended, not one the owner has.
             .Show(3, "Lioness", "lib-tv", year: 2023)
             .Episode(3, 0, 1, airDate: new DateTime(2023, 7, 1))
             .Episode(3, 1, 1, airDate: new DateTime(2023, 7, 23))
+            .Episode(3, 1, 2, airDate: new DateTime(2023, 7, 30), hasFile: true)
 
             // No folder: nowhere to download to, so out of scope entirely.
             .Show(4, "Homeless", "lib-tv", folder: null)
-            .Episode(4, 1, 1, airDate: new DateTime(2020, 1, 1))
+            .Episode(4, 1, 1, airDate: new DateTime(2020, 1, 1), hasFile: true)
 
             // A film's show. This plugin has no business with it at all.
             .Show(5, "A film's show", "lib-films")
-            .Episode(5, 1, 1, airDate: new DateTime(2020, 1, 1));
+            .Episode(5, 1, 1, airDate: new DateTime(2020, 1, 1), hasFile: true);
 
         // Counted by hand: Silo 2 missing 1 waiting, Frieren 1 missing,
         // Lioness 1 missing. Three shows, four missing, one waiting.
