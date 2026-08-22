@@ -1,5 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
@@ -204,43 +205,105 @@ public sealed class Find(
     }
 
     /// <summary>
-    /// One torrent per info hash, with everything every site knew about it.
+    /// One torrent per release, with everything every site knew about it.
     /// </summary>
     /// <remarks>
-    /// The highest seeder count, the trackers of all of them, and the site that
-    /// had the highest count — which is the one the history line names. A copy
-    /// with no hash is left alone: nothing says two rows with the same title
-    /// are the same torrent, and merging them would hand one file's trackers to
-    /// another.
+    /// <para>
+    /// A scene release name is the file's identity — the group, the resolution
+    /// and the source are all in it — so two rows carrying that name are one
+    /// torrent however differently the sites punctuate it. They are merged, and
+    /// the count that survives is the highest any of them gave, because how
+    /// many are serving a torrent is a property of the swarm and not of the
+    /// site that was asked.
+    /// </para>
+    /// <para>
+    /// <strong>That is not a tidying-up.</strong> On the owner's own library on
+    /// 22 August 2026 TorrentBay offered
+    /// <c>Sugar (2024) S02E08 1080p Web h264 Cakes</c> and said one seeder, so
+    /// it was refused for being under the minimum — while the same release was
+    /// seeded in the thousands everywhere else. Merging was by info hash alone
+    /// and that site publishes none, so nothing could rescue it, and the cycle
+    /// took a different release the owner did not want.
+    /// </para>
+    /// <para>
+    /// Two <em>different</em> hashes under one name are still two files, and
+    /// they stay two: merging those would hand one torrent's trackers to
+    /// another. The copy that survives a merge is one that can actually be
+    /// reached, because the best-informed row is no use if it names nothing to
+    /// download.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<ReleaseCopy> Merge(IReadOnlyList<ReleaseCopy> copies)
     {
-        List<ReleaseCopy> merged = [.. copies.Where(copy => copy.InfoHash is null)];
+        List<ReleaseCopy> merged = [];
 
-        foreach (IGrouping<string, ReleaseCopy> same in copies
-                     .Where(copy => copy.InfoHash is not null)
-                     .GroupBy(copy => copy.InfoHash!, StringComparer.OrdinalIgnoreCase))
+        foreach (IGrouping<string, ReleaseCopy> named in copies.GroupBy(copy => TitleMatcher.Normalised(copy.Title)))
         {
-            ReleaseCopy best = same
-                .OrderByDescending(copy => copy.Seeders ?? 0)
-                .ThenByDescending(copy => copy.Priority)
-                .First();
+            string[] hashes =
+            [
+                .. named
+                    .Select(copy => copy.InfoHash)
+                    .OfType<string>()
+                    .Distinct(StringComparer.OrdinalIgnoreCase),
+            ];
 
-            merged.Add(best with
+            if (hashes.Length > 1)
             {
-                Trackers =
-                [
-                    .. same
-                        .SelectMany(copy => copy.Trackers.Union(Magnets.TrackersOf(copy.Magnet), StringComparer.OrdinalIgnoreCase))
-                        .Distinct(StringComparer.OrdinalIgnoreCase),
-                ],
-                Magnet = same.Select(copy => copy.Magnet).FirstOrDefault(magnet => magnet is not null),
-                DetailUrl = best.DetailUrl ?? same.Select(copy => copy.DetailUrl).FirstOrDefault(url => url is not null),
-                SizeBytes = best.SizeBytes ?? same.Select(copy => copy.SizeBytes).FirstOrDefault(size => size is not null),
-            });
+                // One name over two files. Nothing here can say which of them a
+                // row with no hash belongs to, so each hash is its own torrent
+                // and the rest are left exactly as they arrived.
+                merged.AddRange(named.Where(copy => copy.InfoHash is null));
+                merged.AddRange(hashes.Select(hash => One(named.Where(copy =>
+                    string.Equals(copy.InfoHash, hash, StringComparison.OrdinalIgnoreCase)))));
+
+                continue;
+            }
+
+            merged.Add(One(named));
         }
 
         return merged;
+    }
+
+    /// <summary>One torrent out of every row that named it.</summary>
+    private static ReleaseCopy One(IEnumerable<ReleaseCopy> same)
+    {
+        ReleaseCopy[] rows = [.. same];
+
+        // Reachable first: a copy with a route to the torrent, and among those
+        // the site that knew the most about it. A row that names nothing to
+        // download cannot be the one that is handed over, however well
+        // informed it was.
+        ReleaseCopy best = rows
+            .OrderByDescending(copy => copy.Magnet is not null || copy.InfoHash is not null)
+            .ThenByDescending(copy => copy.Seeders ?? 0)
+            .ThenByDescending(copy => copy.Priority)
+            .First();
+
+        // The count belongs to the swarm. Null stays null only when not one
+        // site gave a number: nought is not the same as nobody saying.
+        int? seeders = rows.Select(copy => copy.Seeders).OfType<int>().DefaultIfEmpty().Max();
+
+        return best with
+        {
+            Seeders = rows.Any(copy => copy.Seeders is not null) ? seeders : null,
+            Source = rows
+                .OrderByDescending(copy => copy.Seeders ?? -1)
+                .ThenByDescending(copy => copy.Priority)
+                .First()
+                .Source,
+            Trackers =
+            [
+                .. rows
+                    .SelectMany(copy => copy.Trackers.Union(Magnets.TrackersOf(copy.Magnet), StringComparer.OrdinalIgnoreCase))
+                    .Distinct(StringComparer.OrdinalIgnoreCase),
+            ],
+            Magnet = best.Magnet ?? rows.Select(copy => copy.Magnet).FirstOrDefault(magnet => magnet is not null),
+            InfoHash = best.InfoHash ?? rows.Select(copy => copy.InfoHash).FirstOrDefault(hash => hash is not null),
+            DetailUrl = best.DetailUrl ?? rows.Select(copy => copy.DetailUrl).FirstOrDefault(url => url is not null),
+            SizeBytes = best.SizeBytes ?? rows.Select(copy => copy.SizeBytes).FirstOrDefault(size => size is not null),
+            Claim = best.Claim ?? rows.Select(copy => copy.Claim).FirstOrDefault(claim => claim is not null),
+        };
     }
 
     private async Task<ReleaseCopy[]> AskAsync(SourceDefinition indexer, string releaseName, CancellationToken ct)

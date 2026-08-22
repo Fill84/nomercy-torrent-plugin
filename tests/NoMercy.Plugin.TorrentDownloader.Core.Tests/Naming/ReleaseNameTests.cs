@@ -160,7 +160,7 @@ public class ReleaseNameTests
     [InlineData("1337x.html", "1337x", "Silo.S03E06.The.Drive.1080p.ATVP.WEB-DL.ITA.ENG.DDP5.1.Atmos.H.265-G66.mkv", "italian")]
     [InlineData("1337x.html", "1337x", "Silo.S03E06.The.Drive.1080p.ATVP.WEB-DL.ITA.ENG.DDP5.1.Atmos.H.265-G66.mkv", "english")]
     [InlineData("nyaa-diacritic.xml", "torrent-rss", "[T3KASHi] Pokemon Master Quest S05 TRUEFRENCH 1080p WEB-DL H.264 (VF)", "french")]
-    [InlineData("torrentdownloads-greek.html", "torrentdownloads", "Greek S01e01 Swesub Hdtv Xvid D_s avi", "swedish")]
+    [InlineData("torrentdownloads-greek.html", "torrentdownloads", "Greek S01e01 Swesub Hdtv Xvid D_s", "swedish")]
     [InlineData("torrentdownloads-greek.html", "torrentdownloads", "Greek S01e01 2007 Spanish Dvd Xvid [www Torrentmas Com]", "spanish")]
     [InlineData("nyaa-version.xml", "torrent-rss", "[Erai-raws] Spy x Family Part 2 - 01 ~ 13 (v2) [480p][BATCH][Multiple Subtitle] [ENG][POR-BR][SPA-LA][SPA][ARA][FRE][GER][ITA][RUS]", "russian")]
     public void ALanguageIsReadWhereverTheCaptureClaimsOne(string fixture, string reader, string name, string language)

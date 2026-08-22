@@ -146,9 +146,10 @@ public class ReaderTests2
         Assert.DoesNotContain(rows, row => row.DetailUrl?.AbsolutePath.StartsWith("/td/", StringComparison.Ordinal) == true);
         Assert.All(rows, row => Assert.Contains("/torrent/", row.DetailUrl?.AbsolutePath ?? string.Empty, StringComparison.Ordinal));
 
-        Assert.Equal("Silo S03E06 MULTI 1080p WEB H264-HiggsBoson exe", rows[0].Title);
-        Assert.Equal(2367, rows[0].Seeders);
-        Assert.Equal(4219, rows[0].Leechers);
+        // The first row of the page is an executable and is no longer a
+        // release at all, so the first row here is the one after it — with the
+        // file type this site writes after every name taken off.
+        Assert.Equal("Silo S03E06 The Drive 720p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB[EZTVx to]", rows[0].Title);
     }
 
     /// <remarks>
@@ -180,6 +181,49 @@ public class ReaderTests2
 
         Assert.Equal("Silo S03E06 The Drive 2160p ATVP WEB-DL ITA ENG DDP5.1 Atmos DV HDR H 265-G66", rows[0].Title);
         Assert.Equal((long)(9.6 * 1024 * 1024 * 1024), rows[0].SizeBytes);
+    }
+
+    /// <remarks>
+    /// <strong>This site writes the file's type as the last word of the
+    /// title.</strong> The capture carries
+    /// <c>Silo S03E06 MULTI 1080p WEB H264-HiggsBoson exe</c>, and on the
+    /// owner's own library on 22 August 2026 the cycle chose
+    /// <c>Sugar 2024 S02E08 1080p ATVP WEB-DL DDP5 1 Atmos H 264-FLUX exe</c>
+    /// over the release the owner wanted.
+    ///
+    /// Two things are wrong with that. The word is not part of the release
+    /// name, so it is written against the grab and staging matches a finished
+    /// file by a name nothing answers to. And <c>exe</c> is not an episode at
+    /// all — nor is <c>scr</c>, which is the same thing wearing a screensaver's
+    /// extension. A row naming a type this plugin cannot play is not a
+    /// candidate for anything, whatever it is called.
+    /// </remarks>
+    [Fact]
+    public void TorrentDownloadsRowsNameTheirTypeAndOnlyVideoIsARelease()
+    {
+        IReadOnlyList<SourceRow> rows = new TorrentDownloadsReader().Read(
+            Fixture("torrentdownloads"),
+            new("https://www.torrentdownloads.pro/search/?search=Silo+S03E06"));
+
+        // The type is off the name, and the name is what the release is called.
+        Assert.Contains("Silo S03E06 1080p HEVC x265-MeGusta[EZTVx to]", rows.Select(row => row.Title));
+
+        Assert.DoesNotContain(
+            rows,
+            row => row.Title.EndsWith(" mkv", StringComparison.OrdinalIgnoreCase)
+                   || row.Title.EndsWith(" avi", StringComparison.OrdinalIgnoreCase)
+                   || row.Title.EndsWith(" mp4", StringComparison.OrdinalIgnoreCase));
+
+        // And the row that is an executable is not a release of anything. Its
+        // own page address is what identifies it: the same release is listed a
+        // second time on this page, legitimately, without a type after it.
+        Assert.DoesNotContain(
+            rows,
+            row => row.DetailUrl!.AbsolutePath.EndsWith("-exe", StringComparison.OrdinalIgnoreCase));
+
+        // The release group is not a file type and is never taken off. Most
+        // rows end in one.
+        Assert.Contains("Silo S03E06 1080p x265-ELiTE", rows.Select(row => row.Title));
     }
 
     /// <remarks>

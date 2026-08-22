@@ -98,20 +98,31 @@ public class FindTests
     }
 
     /// <remarks>
-    /// A copy with no hash is not merged into anything. Nothing says two rows
-    /// with the same title are the same torrent, and taking them as one would
-    /// hand the trackers of one file to another.
+    /// <strong>Corrected 22 August 2026.</strong> This asserted that two rows
+    /// with the same name and no hash are two torrents, on the grounds that
+    /// nothing says they are one. A scene release name says it: the group, the
+    /// resolution and the source are all in it. Holding them apart is what let
+    /// one site's count refuse a release the rest of the world was seeding in
+    /// the thousands — see
+    /// <see cref="CopiesOfOneReleaseAreOneTorrentAndKeepTheBestCountAnySiteGave"/>.
+    ///
+    /// The care it was written for is kept where it belongs: two rows carrying
+    /// two <em>different</em> hashes really are two files, and they still stay
+    /// two.
     /// </remarks>
     [Fact]
-    public void CopiesWithNoHashAreLeftAsTheyAre()
+    public void TwoRowsOfOneReleaseWithNoHashAreOneTorrent()
     {
         ReleaseCopy[] copies =
         [
             new(Name, "TorrentGalaxy", 30, null, null, new("https://torrentgalaxy.one/1"), 9),
-            new(Name, "Torrentz2", 25, null, null, new("https://torrentz2.nz/2"), 9),
+            new(Name, "Torrentz2", 25, null, null, new("https://torrentz2.nz/2"), 40),
         ];
 
-        Assert.Equal(2, Find.Merge(copies).Count);
+        ReleaseCopy one = Assert.Single(Find.Merge(copies));
+
+        Assert.Equal(40, one.Seeders);
+        Assert.Equal("Torrentz2", one.Source);
     }
 
     /// <remarks>
@@ -462,8 +473,11 @@ public class FindTests
 
         Assert.Equal(3, fetch.Asked.Count(address => address.Host == "extranet.torrentbay.st"));
 
-        // Both pages that had rows, and neither read twice.
-        Assert.Equal(68, copies.Count);
+        // The third page had nothing on it, which is the end. The two that did
+        // are the same capture served twice here, so what comes back is one
+        // torrent per release rather than two of each: the merge answers for
+        // that, and this test answers for the pages being asked at all.
+        Assert.NotEmpty(copies);
     }
 
     /// <remarks>
@@ -481,6 +495,91 @@ public class FindTests
             .SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
 
         Assert.Single(fetch.Asked);
+    }
+
+
+    /// <remarks>
+    /// <strong>One site's count is not the swarm's.</strong> On the owner's own
+    /// library on 22 August 2026 TorrentBay offered
+    /// <c>Sugar (2024) S02E08 1080p Web h264 Cakes</c> and said one seeder, so
+    /// it was refused for being below the minimum — while the same release was
+    /// seeded in the thousands everywhere else. It could not be rescued by any
+    /// of them because it carried no info hash, and copies were only ever
+    /// merged by hash.
+    ///
+    /// A scene release name <em>is</em> the file's identity: the group, the
+    /// resolution and the source are all in it. Two rows carrying that name are
+    /// one torrent, and how many are serving it is a property of the swarm
+    /// rather than of the site that was asked.
+    /// </remarks>
+    [Fact]
+    public void CopiesOfOneReleaseAreOneTorrentAndKeepTheBestCountAnySiteGave()
+    {
+        IReadOnlyList<ReleaseCopy> merged = Find.Merge(
+        [
+            // How TorrentBay prints it, with no route to the torrent at all.
+            new("Sugar (2024) S02E08 1080p Web h264 Cakes", "TorrentBay", 30, Seeders: 1),
+
+            // And how the scene named it, on a site that publishes the hash.
+            new(
+                "Sugar.2024.S02E08.1080p.WEB.H264-CAKES",
+                "The Pirate Bay",
+                45,
+                InfoHash: "0123456789ABCDEF0123456789ABCDEF01234567",
+                Seeders: 3968),
+        ]);
+
+        ReleaseCopy one = Assert.Single(merged);
+
+        Assert.Equal(3968, one.Seeders);
+
+        // And the copy that survives is the one anything can be downloaded
+        // from, named by the site that knew the most about it.
+        Assert.Equal("0123456789ABCDEF0123456789ABCDEF01234567", one.InfoHash);
+        Assert.Equal("The Pirate Bay", one.Source);
+    }
+
+    /// <remarks>
+    /// The count belongs to the swarm, so the copy that can actually be reached
+    /// keeps it even when the highest number came off a site with no route to
+    /// the torrent. Without that, the best-informed row wins the ranking and
+    /// then names nothing to download.
+    /// </remarks>
+    [Fact]
+    public void TheReachableCopyKeepsTheCountEvenWhenAnotherSiteGaveIt()
+    {
+        IReadOnlyList<ReleaseCopy> merged = Find.Merge(
+        [
+            new("Silo.S03E08.1080p.WEB.H264-CAKES", "TorrentBay", 30, Seeders: 6092),
+            new(
+                "Silo S03E08 1080p WEB H264-CAKES",
+                "LimeTorrents",
+                35,
+                InfoHash: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+                Seeders: 12),
+        ]);
+
+        ReleaseCopy one = Assert.Single(merged);
+
+        Assert.Equal(6092, one.Seeders);
+        Assert.Equal("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", one.InfoHash);
+    }
+
+    /// <remarks>
+    /// Two hashes under one name are two files, whatever they are called, and
+    /// merging them would hand one torrent's trackers to another. The old rule
+    /// held for exactly this case and still does.
+    /// </remarks>
+    [Fact]
+    public void TwoDifferentTorrentsUnderOneNameStayTwo()
+    {
+        IReadOnlyList<ReleaseCopy> merged = Find.Merge(
+        [
+            new("Silo.S03E08.1080p.WEB.H264-CAKES", "The Pirate Bay", 45, InfoHash: new('A', 40), Seeders: 10),
+            new("Silo.S03E08.1080p.WEB.H264-CAKES", "LimeTorrents", 35, InfoHash: new('B', 40), Seeders: 20),
+        ]);
+
+        Assert.Equal(2, merged.Count);
     }
 
     private const string Name = "Silo.S03E06.1080p.WEB.H264-CAKES";

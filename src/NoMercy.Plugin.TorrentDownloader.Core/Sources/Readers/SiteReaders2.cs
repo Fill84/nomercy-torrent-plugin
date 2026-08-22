@@ -170,8 +170,13 @@ public sealed class TorrentDownloadsReader : ISourceReader
 
             Match counts = Counts.Match(markup);
 
+            if (Named(Html.Text(release.Groups[2].Value)) is not string title)
+            {
+                continue;
+            }
+
             rows.Add(new(
-                Html.Text(release.Groups[2].Value),
+                title,
                 Html.Absolute(release.Groups[1].Value, from),
                 Seeders: counts.Success ? Html.Count(counts.Groups[1].Value) : null,
                 Leechers: counts.Success ? Html.Count(counts.Groups[2].Value) : null,
@@ -179,6 +184,78 @@ public sealed class TorrentDownloadsReader : ISourceReader
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// Types this site writes after a name, and nothing else.
+    /// </summary>
+    /// <remarks>
+    /// A list rather than "whatever the last word is". Most rows end in the
+    /// release group — <c>x265-MeGusta</c>, <c>H264-CAKES</c>, <c>XviD-2HD</c>,
+    /// <c>FQM</c> — and reading one of those as a file type takes the group off
+    /// the name, or throws the row away for having a type nobody recognises.
+    /// Both were measured against the two captures.
+    /// </remarks>
+    private static readonly HashSet<string> Types = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "mkv", "mp4", "avi", "iso", "ts", "m4v", "wmv", "mov", "mpg", "mpeg", "m2ts",
+        "rar", "zip", "7z", "img",
+        "exe", "scr", "msi", "bat", "cmd", "vbs", "jar", "apk",
+    };
+
+    /// <summary>
+    /// Types that are not something to watch under any name.
+    /// </summary>
+    /// <remarks>
+    /// An archive is not among them: a scene release really does ship as a
+    /// <c>.rar</c> the size of the episode, and refusing those would refuse the
+    /// scene. An executable is another matter — it is never an episode, and a
+    /// file named after one is the oldest trick on a torrent site.
+    /// </remarks>
+    private static readonly HashSet<string> NeverAnEpisode = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "exe", "scr", "msi", "bat", "cmd", "vbs", "jar", "apk",
+    };
+
+    /// <summary>
+    /// The release's name with the file type this site writes after it taken
+    /// off, or nothing at all when that type is not something to watch.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Some rows here end in the type of the file inside them:
+    /// <c>Silo S03E06 MULTI 1080p WEB H264-HiggsBoson exe</c>,
+    /// <c>silo s03e06 1080p web h264-cakes[EZTVx to] mkv</c>. It is not part of
+    /// the release name, and leaving it on writes a name against the grab that
+    /// staging then matches a finished file by and never finds.
+    /// </para>
+    /// <para>
+    /// On the owner's own library on 22 August 2026 this site offered
+    /// <c>Sugar 2024 S02E08 … H 264-FLUX exe</c> and the cycle took it. Nothing
+    /// would have reached the library — only video is ever written into one —
+    /// but the disk, the swarm and the episode were all spent on a file that
+    /// was never going to be watched.
+    /// </para>
+    /// </remarks>
+    private static string? Named(string printed)
+    {
+        int gap = printed.LastIndexOf(' ');
+
+        if (gap <= 0)
+        {
+            return printed;
+        }
+
+        string last = printed[(gap + 1)..];
+
+        if (!Types.Contains(last))
+        {
+            // The release group, which most rows end in. Left exactly as the
+            // site printed it.
+            return printed;
+        }
+
+        return NeverAnEpisode.Contains(last) ? null : printed[..gap].TrimEnd();
     }
 }
 
