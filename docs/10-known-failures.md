@@ -29,12 +29,23 @@ that is the property to design against.
 | # | What happened | Why it was invisible | Test |
 | --- | --- | --- | --- |
 | C1 | **`sources.json` read from `AppContext.BaseDirectory`** — the server's folder. Never found; silently fell back to three compiled-in sources. | Seventeen became three and nothing said so. | Read from the assembly's own folder; a missing file is logged; a test asserts more than ten sources load. |
-| C2 | **Network grants requested only for the owner's own indexers** while the pipeline searched the shipped catalogue too. On a default install **no host was ever requested**. | The refusal reads like the site refusing us. | Shipped hosts are in the manifest; the runtime request covers every owner-configured host, search addresses included. |
+| C2 | **Network grants requested only for the owner's own indexers** while the pipeline searched the shipped catalogue too. On a default install **no host was ever requested**. | The refusal reads like the site refusing us. | The runtime request covers **every source the pipeline will ask** — the shipped catalogue and the owner's own — search addresses included. See the note below: this shipped a second time. |
 | C3 | **`DetailUrl` was written and read nowhere.** TorrentBay produced rows for weeks and zero downloads. | Rows appeared on the sources page. | A row with no magnet is followed to its own page and produces one. |
 | C4 | **Two readers missing from the registry**; both fell through to the generic reader. | The generic reader returns rows on some pages. | Every reader name the catalogue uses resolves to a non-generic reader. |
 | C5 | **Chrome re-downloaded on every server start** — 150 MB and a minute, because the check looked in the wrong place. | It logged it as news. | A second start finds the browser and does not fetch again. |
 | C6 | **`GetShowsAsync(null)` returns every show in every library.** It only filters when a library id is passed. | Shows from libraries this plugin has no business in would be searched. | Libraries are enumerated and only `tv` and `anime` are read; a `movie` library's shows never appear. |
 | C7 | **`HaveEpisodeCount` is zero for shows with hundreds of episodes on disk.** | A show with everything looks like a show with nothing. | Presence is derived from each episode's own `HasFile`, never from the show's count. |
+
+**C2 shipped twice, and the second time it was this row that allowed it.** The fix column read
+"shipped hosts are in the manifest", and the plugin was written to that: it declared seventeen hosts
+in `plugin.json` and asked at runtime only for `settings.Indexers`. A manifest declares what a plugin
+*may* ask for. It is not a grant, and the owner cannot say yes to a question nobody put to them — so
+on 22 August 2026, on a default install with no indexers of the owner's own, not one request was
+made, the dashboard had nothing to show, and all seventeen sources refused themselves. The plugin ran
+its cadence and reported that the sites had refused it.
+
+Anything that reaches the network is asked for at runtime, every source, or it is not asked for at
+all.
 
 ## D. The browser and the wire
 

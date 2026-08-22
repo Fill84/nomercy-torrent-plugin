@@ -156,8 +156,22 @@ public sealed class Chain : IAsyncDisposable
             }
         }
 
+        // Every source the pipeline will actually ask, not only the ones the
+        // owner typed in.
+        //
+        // C2, and it had already happened once. This asked for
+        // settings.Indexers alone while the search reached the shipped
+        // catalogue too, so on a default install — where the owner has added
+        // none — nothing was ever asked for. The dashboard had no request to
+        // show, no host was ever granted, and every shipped source refused
+        // itself with "the server has not granted access", which reads exactly
+        // like the sites turning us away.
+        //
+        // Declaring a host in the manifest is not being granted it: the
+        // manifest says what the plugin may ask for, and the owner still says
+        // yes once per host. They cannot say yes to a question nobody asked.
         await new HostGrants(_context.Grants, _logger).RequestAsync(
-            [.. settings.Indexers.Select(Owned)],
+            [.. catalogue.Enabled, .. settings.Indexers.Select(Owned)],
             ct);
     }
 

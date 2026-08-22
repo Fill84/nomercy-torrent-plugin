@@ -23,7 +23,7 @@ public sealed class HostGrants(IPluginGrants grants, ILogger logger)
     public const string NetworkHost = PluginGrantKind.NetworkHost;
 
     /// <summary>
-    /// Asks for every host the owner's own sources reach that is not already
+    /// Asks for every host the plugin will actually reach that is not already
     /// granted, and says out loud which ones are being waited on.
     /// </summary>
     /// <remarks>
@@ -35,13 +35,26 @@ public sealed class HostGrants(IPluginGrants grants, ILogger logger)
         IEnumerable<SourceDefinition> ownSources,
         CancellationToken ct)
     {
-        string[] hosts =
-        [
-            .. ownSources
-                .SelectMany(source => source.Hosts)
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Order(StringComparer.OrdinalIgnoreCase),
-        ];
+        // Which sources reach each host, because two can share one and the
+        // owner is deciding about the host. The names are what they read.
+        SortedDictionary<string, SortedSet<string>> asking =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (SourceDefinition source in ownSources)
+        {
+            foreach (string host in source.Hosts)
+            {
+                if (!asking.TryGetValue(host, out SortedSet<string>? names))
+                {
+                    names = new(StringComparer.OrdinalIgnoreCase);
+                    asking[host] = names;
+                }
+
+                names.Add(source.Name);
+            }
+        }
+
+        string[] hosts = [.. asking.Keys];
 
         List<string> waiting = [];
 
@@ -55,10 +68,12 @@ public sealed class HostGrants(IPluginGrants grants, ILogger logger)
             await grants.RequestAsync(
                 NetworkHost,
                 host,
-                // The reason the owner reads when deciding. It names the source
-                // rather than the plugin, because "may this plugin reach the
-                // internet" is not a question anybody can answer well.
-                $"Searching the indexer you added at {host}.",
+                // The reason the owner reads when deciding. It names the
+                // sources rather than the plugin, because "may this plugin
+                // reach the internet" is not a question anybody can answer
+                // well — and it says every source that shares the host, so
+                // saying no is a decision about all of them.
+                $"Searching {string.Join(", ", asking[host])} for missing episodes.",
                 ct);
 
             waiting.Add(host);
@@ -67,7 +82,7 @@ public sealed class HostGrants(IPluginGrants grants, ILogger logger)
         if (waiting.Count > 0)
         {
             logger.LogWarning(
-                "Waiting for permission to reach {Count} host(s) you configured: {Hosts}. Until then they are skipped, and that is not the site refusing.",
+                "Waiting for permission to reach {Count} host(s): {Hosts}. Until then they are skipped, and that is not the site refusing.",
                 waiting.Count,
                 string.Join(", ", waiting));
         }
