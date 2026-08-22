@@ -48,7 +48,7 @@ public class ChallengeAwareFetchTests
         FakePages pages = new("<html>the real page</html>");
 
         FetchResult result = await Fetch(http, pages: pages)
-            .GetAsync(new("https://katcr.to/usearch/Silo/"), gated: true, CancellationToken.None);
+            .GetAsync(new("https://www.1337x.to/search/Silo/"), gated: true, CancellationToken.None);
 
         Assert.Empty(http.Attempts);
         Assert.Single(pages.Asked);
@@ -66,7 +66,7 @@ public class ChallengeAwareFetchTests
         FakeHttp http = new();
 
         FetchResult result = await Fetch(http)
-            .GetAsync(new("https://katcr.to/usearch/Silo/"), gated: true, CancellationToken.None);
+            .GetAsync(new("https://www.1337x.to/search/Silo/"), gated: true, CancellationToken.None);
 
         Assert.Empty(http.Attempts);
         Assert.Equal(FetchOutcome.NoBrowser, result.Failure?.Outcome);
@@ -234,7 +234,7 @@ public class ChallengeAwareFetchTests
     }
 
     /// <summary>The hosts these tests use, all granted.</summary>
-    private static readonly string[] Hosts = ["mine.example", "predb.me", "katcr.to"];
+    private static readonly string[] Hosts = ["mine.example", "predb.me", "www.1337x.to"];
 
     private static ChallengeAwareFetch Fetch(
         FakeHttp http,

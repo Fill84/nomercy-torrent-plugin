@@ -96,16 +96,6 @@
       "note": "Appends [eztv.re] to every title; strip it or nothing matches."
     },
     {
-      "name": "KickassTorrents",
-      "kind": "site",
-      "url": "https://katcr.to/usearch/{query}/",
-      "reader": "kickass",
-      "gated": true,
-      "priority": 25,
-      "minimumIntervalSeconds": 15,
-      "note": "Four anchors per row and three empty; the name is in cellMainLink, cut into highlighted fragments that must be joined. A search for a full release name often redirects to that release's own page."
-    },
-    {
       "name": "TorrentGalaxy",
       "kind": "site",
       "url": "https://torrentgalaxy.one/get-posts/keywords:{query}/",

@@ -89,6 +89,11 @@ public sealed class EztvReader : ISourceReader
         "<tr[^>]*>(.*?)</tr>",
         RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
 
+    /// <summary>Every cell of a row, so the last one can be picked out.</summary>
+    private static readonly Regex Cells = new(
+        "<td[^>]*>(.*?)</td>",
+        RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
+
     public string Name => "eztv";
 
     public IReadOnlyList<SourceRow> Read(string body, Uri from)
@@ -105,95 +110,25 @@ public sealed class EztvReader : ISourceReader
                 continue;
             }
 
+            string[] cells = [.. Cells.Matches(markup).Select(cell => cell.Groups[1].Value)];
+
             rows.Add(new(
                 Suffix.Replace(Html.Text(episode.Groups[2].Value), string.Empty),
                 Html.Absolute(episode.Groups[1].Value, from),
                 Html.Magnet(markup),
-                Seeders: null,
+
+                // The last cell, which is where this page prints the count, and
+                // it is the last rather than a numbered one because a row with
+                // a rowspanned links cell has one column more than its
+                // neighbours. It was hard-coded to null, so every copy this
+                // site answered with sorted below every copy from anywhere that
+                // published a number - and this is the site printing six
+                // thousand seeders against the release the owner was missing.
+                Seeders: cells.Length > 0 ? Html.Count(cells[^1]) : null,
                 SizeBytes: Html.Size(markup)));
         }
 
         return rows;
-    }
-}
-
-/// <summary>
-/// KickassTorrents: a name cut into highlighted fragments, and sometimes no
-/// listing at all.
-/// </summary>
-/// <remarks>
-/// <strong>E4.</strong> A search for a full release name often answers with
-/// that release's own page rather than a listing. A reader that finds no rows
-/// there and gives up throws away the one result the site actually had, so when
-/// there are no rows a magnet anywhere on the page is taken as the answer.
-///
-/// The name lives in <c>cellMainLink</c> and is cut into fragments by a span
-/// colouring the matched words, so the anchor is read whole and stripped rather
-/// than assembled from its text nodes.
-/// </remarks>
-public sealed class KickassReader : ISourceReader
-{
-    private static readonly Regex MainLinks = new(
-        @"<a\s[^>]*href=""([^""]+)""[^>]*class=""cellMainLink""[^>]*>(.*?)</a>",
-        RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
-
-    private static readonly Regex Rows = new(
-        "<tr[^>]*>(.*?)</tr>",
-        RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
-
-    private static readonly Regex Title = new(
-        "<title[^>]*>(.*?)</title>",
-        RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
-
-    public string Name => "kickass";
-
-    public IReadOnlyList<SourceRow> Read(string body, Uri from)
-    {
-        List<SourceRow> rows = [];
-
-        foreach (Match row in Rows.Matches(body))
-        {
-            string markup = row.Groups[1].Value;
-            Match main = MainLinks.Match(markup);
-
-            if (!main.Success)
-            {
-                continue;
-            }
-
-            rows.Add(new(
-                Html.Text(main.Groups[2].Value),
-                Html.Absolute(main.Groups[1].Value, from),
-                Html.Magnet(markup),
-                Seeders: Html.Count(Cells.Of(markup, "green")),
-                Leechers: Html.Count(Cells.Of(markup, "red lasttd")),
-                SizeBytes: Html.Size(Cells.Of(markup, "nobr"))));
-        }
-
-        if (rows.Count > 0)
-        {
-            return rows;
-        }
-
-        // No listing. This is the release's own page, reached by a redirect the
-        // search caused, and the magnet on it is the answer the search had.
-        string? magnet = Html.Magnet(body);
-
-        if (magnet is null)
-        {
-            return rows;
-        }
-
-        Match title = Title.Match(body);
-
-        return
-        [
-            new(
-                title.Success ? Html.Text(title.Groups[1].Value) : Html.Text(magnet),
-                from,
-                magnet,
-                Html.OnlyHash(magnet)),
-        ];
     }
 }
 

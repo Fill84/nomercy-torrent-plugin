@@ -105,4 +105,4 @@ its addresses needs it.
 
 Browser downloaded, hidden stage created, browser started and on which port, challenge met on which
 host, cleared or not and after how long, clearance kept, clearance spent — all to the activity
-journal, so the dashboard can say "waiting on katcr.to, 45s".
+journal, so the dashboard can say "waiting on eztvx.to, 45s".

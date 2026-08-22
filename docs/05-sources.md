@@ -31,7 +31,6 @@ and the presence of `searchUrl`, and nothing else guesses.
 | LimeTorrents | `site` | generic | words | no | 35 | 15s | indexer |
 | TorrentBay | `site` | `torrentbay` | words | **yes** | 30 | 15s | indexer |
 | EZTV | `site` | `eztv` | words | **yes** | 30 | 15s | indexer |
-| KickassTorrents | `site` | `kickass` | words | **yes** | 25 | 15s | indexer |
 | TorrentGalaxy | `site` | `torrentgalaxy` | **spaced** | no | 30 | 15s | indexer |
 | Torrentz2 | `site` | `torrentz2` | words | no | 25 | 15s | indexer |
 | TorrentDownloads | `site` | `torrentdownloads` | words | no | 25 | 15s | indexer |
@@ -52,7 +51,6 @@ The Pirate Bay   https://apibay.org/q.php?q={query}&cat=
 LimeTorrents     https://www.limetorrents.lol/search/all/{query}/
 TorrentBay       https://extranet.torrentbay.st/browse/?q={query}&sort=seeders&order=desc
 EZTV             https://eztvx.to/search/{query}
-KickassTorrents  https://katcr.to/usearch/{query}/
 TorrentGalaxy    https://torrentgalaxy.one/get-posts/keywords:{query}/
 Torrentz2        https://torrentz2.nz/search?q={query}
 TorrentDownloads https://www.torrentdownloads.pro/search/?search={query}
@@ -107,15 +105,12 @@ strips both: a site that has changed this once will change it again. The listing
 — the links sit behind a POST form — so the row's own page is the route, as with 1337x. The API form
 is JSON and must not be read as HTML.
 
-**KickassTorrents** (gated) — four anchors per row and three empty; the name is in `cellMainLink`,
-cut into highlighted fragments that must be joined — read the anchor whole and strip its tags rather
-than joining its text nodes. The listing carries **no magnet**: the row's own page is the route.
-
-0.3.4 measured that **a search for a full release name redirects to that release's own page**. It
-does not, as of 14 August 2026: the same search answers a listing with one row in it, and
-`tests/fixtures/kickasstorrents-full-name.html` is that page. The reader keeps the fallback — no
-rows, so take a magnet anywhere on the page — because a site that did this once may do it again, but
-**no capture demonstrates it and no test covers it**.
+**KickassTorrents was removed on 22 August 2026**, on the owner's decision, and its host is out of
+the manifest with it. Asked a full release name that day it answered with no listing at all, and the
+one magnet anywhere on the page belonged to a wallpaper pack — so the only thing it could contribute
+was a stranger's torrent wearing the page's own title. The reader's fallback for that shape, which no
+capture had ever demonstrated, is what would have handed it over. Nothing here reads that site any
+more.
 
 **TorrentBay** (gated) — publishes no magnet. The magnet comes from a **signed POST** to its own
 endpoint, built from two values off the row and two off the search page, sent from inside the

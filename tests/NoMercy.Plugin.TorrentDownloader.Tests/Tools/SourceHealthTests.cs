@@ -378,7 +378,6 @@ public class SourceHealthTests
     [Theory]
     [InlineData("1337x.html")]
     [InlineData("eztv.html")]
-    [InlineData("kickasstorrents.html")]
     [InlineData("limetorrents.html")]
     [InlineData("torrentbay.html")]
     [InlineData("torrentdownloads.html")]

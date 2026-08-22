@@ -90,10 +90,10 @@ public class BrowserSolverTests
     public async Task AnHtmlPageComesBackFromTheDocument()
     {
         FakeTabs tabs = new();
-        tabs.Tab("katcr.to").Shows("<html><body>the rendered site</body></html>");
-        tabs.Tab("katcr.to").InPageBody = "the markup before anything ran";
+        tabs.Tab("www.1337x.to").Shows("<html><body>the rendered site</body></html>");
+        tabs.Tab("www.1337x.to").InPageBody = "the markup before anything ran";
 
-        string? body = await Solver(tabs).GetPageAsync(new("https://katcr.to/usearch/Silo/"), CancellationToken.None);
+        string? body = await Solver(tabs).GetPageAsync(new("https://www.1337x.to/search/Silo/"), CancellationToken.None);
 
         Assert.Equal("<html><body>the rendered site</body></html>", body);
     }
@@ -195,18 +195,18 @@ public class BrowserSolverTests
     public async Task TwoRequestsToOneHostShareATabAndTwoHostsGetTwo()
     {
         FakeTabs tabs = new();
-        tabs.Tab("katcr.to").Shows("<html>one</html>");
+        tabs.Tab("www.1337x.to").Shows("<html>one</html>");
         tabs.Tab("eztvx.to").Shows("<html>two</html>");
 
         BrowserSolver solver = Solver(tabs);
 
-        await solver.GetPageAsync(new("https://katcr.to/usearch/Silo/"), CancellationToken.None);
-        await solver.GetPageAsync(new("https://katcr.to/usearch/Lioness/"), CancellationToken.None);
+        await solver.GetPageAsync(new("https://www.1337x.to/search/Silo/"), CancellationToken.None);
+        await solver.GetPageAsync(new("https://www.1337x.to/search/Lioness/"), CancellationToken.None);
         await solver.GetPageAsync(new("https://eztvx.to/search/Silo"), CancellationToken.None);
 
-        Assert.Equal(["katcr.to", "katcr.to", "eztvx.to"], tabs.Asked);
-        Assert.Same(tabs.Tab("katcr.to"), tabs.Tab("katcr.to"));
-        Assert.NotSame(tabs.Tab("katcr.to"), tabs.Tab("eztvx.to"));
+        Assert.Equal(["www.1337x.to", "www.1337x.to", "eztvx.to"], tabs.Asked);
+        Assert.Same(tabs.Tab("www.1337x.to"), tabs.Tab("www.1337x.to"));
+        Assert.NotSame(tabs.Tab("www.1337x.to"), tabs.Tab("eztvx.to"));
     }
 
     /// <remarks>

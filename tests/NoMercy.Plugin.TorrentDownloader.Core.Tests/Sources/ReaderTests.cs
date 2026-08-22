@@ -67,52 +67,6 @@ public class ReaderTests
     }
 
     /// <remarks>
-    /// The name is cut into fragments by a span colouring the matched words, so
-    /// the anchor is read whole and stripped. Joining its text nodes glues the
-    /// words together — which is how a release group was lost in 0.3.4.
-    /// </remarks>
-    [Fact]
-    public void TheKickassListingJoinsTheHighlightedFragmentsOfEachName()
-    {
-        IReadOnlyList<SourceRow> rows = new KickassReader().Read(
-            Fixture("kickasstorrents"),
-            new("https://katcr.to/usearch/Silo+S03E06/"));
-
-        Assert.Equal(8, rows.Count);
-
-        // "Silo" is inside a <strong class="red"> and the rest is not.
-        Assert.Equal(
-            "Silo S03E06 The Drive 1080p ATVP WEB-DL ITA ENG DDP5 1 Atmos H 265-G66 mkv",
-            rows[0].Title);
-        Assert.Equal(
-            "https://katcr.to/silo-s03e06-the-drive-1080p-atvp-web-dl-ita-eng-ddp5-1-atmos-h-265-g66-mkv-t6701055.html",
-            rows[0].DetailUrl?.ToString());
-        Assert.Equal(41, rows[0].Seeders);
-        Assert.Equal(6, rows[0].Leechers);
-    }
-
-    /// <remarks>
-    /// <strong>E4, as the site behaves today.</strong> The failure said a search
-    /// for a full release name is answered with that release's own page. It is
-    /// not, any more: the capture is a listing with one row in it. The reader's
-    /// fallback for the redirect stays — a site that did this once may do it
-    /// again — but this is what the site does now, and the reader has to handle
-    /// it as an ordinary listing.
-    /// </remarks>
-    [Fact]
-    public void AFullReleaseNameIsAnsweredWithAOneRowListing()
-    {
-        IReadOnlyList<SourceRow> rows = new KickassReader().Read(
-            Fixture("kickasstorrents-full-name"),
-            new("https://katcr.to/usearch/Silo+S03E06+The+Drive/"));
-
-        SourceRow only = Assert.Single(rows);
-
-        Assert.Contains("Silo", only.Title, StringComparison.Ordinal);
-        Assert.NotNull(only.DetailUrl);
-    }
-
-    /// <remarks>
     /// LimeTorrents publishes a hashed <c>.torrent</c> address on the listing,
     /// which is a route to the torrent and an info hash in one — so the generic
     /// reader handles it, and a source gets that reader by naming none.
@@ -149,6 +103,49 @@ public class ReaderTests
         Assert.Empty(new GenericReader().Read("<html><body><tr><td>a header</td></tr></body></html>", from));
     }
 
+
+    /// <remarks>
+    /// <strong>The seed count this site prints, which was hard-coded to
+    /// null.</strong> Every copy EZTV answered with therefore sorted below every
+    /// copy from anywhere that published a number — and on the capture of
+    /// 22 August 2026 this site is printing six thousand seeders against the
+    /// release the owner's library was missing.
+    ///
+    /// The last cell and not a numbered one: a row whose links cell is
+    /// rowspanned has one column more than its neighbours, so counting from the
+    /// left reads the age off one row and the count off the next.
+    /// </remarks>
+    [Fact]
+    public void TheEztvListingReadsTheSeedCountItPrints()
+    {
+        IReadOnlyList<SourceRow> rows = new EztvReader().Read(
+            Fixture("eztv-show"),
+            new("https://eztvx.to/search/silo"));
+
+        SourceRow best = rows.First(row => row.Title == "Silo S03E08 1080p HEVC x265-MeGusta");
+
+        Assert.Equal(6092, best.Seeders);
+
+        // And the row whose links cell pushes every column along by one, which
+        // is the row that made this the last cell rather than the fifth.
+        Assert.Equal(243, rows.First(row => row.Title == "Silo S03E08 XviD-AFG").Seeders);
+    }
+
+    /// <remarks>
+    /// A count the page does not give is not nought. The capture of 14 August
+    /// 2026 prints a dash in that column for every row, and a nought there
+    /// would refuse all of them against any minimum the owner set.
+    /// </remarks>
+    [Fact]
+    public void ADashWhereTheSeedCountGoesIsUnknownAndNeverNought()
+    {
+        IReadOnlyList<SourceRow> rows = new EztvReader().Read(
+            Fixture("eztv"),
+            new("https://eztvx.to/search/Silo+S03E06"));
+
+        Assert.All(rows, row => Assert.Null(row.Seeders));
+    }
+
     private static string Fixture(string name)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);
@@ -161,10 +158,7 @@ public class ReaderTests
 
         return File.ReadAllText(Path.Combine(directory!.FullName, "tests", "fixtures", $"{name}.html"));
     }
-}
 
-public class ReaderRegistryTests
-{
     /// <remarks>
     /// <strong>C4.</strong> Two readers were missing from 0.3.4's registry and
     /// both fell through to the generic one, which answers rows on some pages —

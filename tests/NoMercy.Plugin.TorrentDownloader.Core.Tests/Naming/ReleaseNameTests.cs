@@ -460,8 +460,6 @@ public class ReleaseNameTests
     [
         ("1337x.html", "1337x"),
         ("eztv.html", "eztv"),
-        ("kickasstorrents.html", "kickass"),
-        ("kickasstorrents-full-name.html", "kickass"),
         ("limetorrents.html", "site"),
         ("torrentbay.html", "torrentbay"),
         ("torrentdownloads.html", "torrentdownloads"),

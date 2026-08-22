@@ -55,7 +55,6 @@ public sealed class Readers
             new GenericReader(),
             new X1337Reader(),
             new EztvReader(),
-            new KickassReader(),
             new TorrentBayReader(),
             new TorrentGalaxyReader(),
             new Torrentz2Reader(),
