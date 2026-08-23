@@ -207,6 +207,16 @@ public static class Upnp
     public const int SearchPort = 1900;
 
     /// <summary>The two kinds of gateway worth asking.</summary>
+    /// <summary>
+    /// How long a mapping is asked for.
+    /// </summary>
+    /// <remarks>
+    /// Two hours, the same as NAT-PMP's, and renewed while the client runs. A
+    /// mapping asked for permanently outlives the plugin and stays in the
+    /// router's list after the server is turned off.
+    /// </remarks>
+    public static TimeSpan Lifetime { get; } = TimeSpan.FromHours(2);
+
     public static IReadOnlyList<string> Gateways { get; } =
     [
         "urn:schemas-upnp-org:service:WANIPConnection:1",

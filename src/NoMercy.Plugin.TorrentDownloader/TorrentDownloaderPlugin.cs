@@ -879,6 +879,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     new SeedLimit(settings.Client.SeedRatio, TimeSpan.FromHours(settings.Client.SeedHours)),
                     settings.Client.MaxDownloadRate,
                     settings.Client.MaxUploadRate,
+
+                    // The owner's choice. Off is off: no search goes out and no
+                    // datagram is sent to the gateway.
+                    settings.Client.PortMapping
+                        ? new PortMapping([new UpnpMapper(_trackerHttp), new NatPmpMapper()])
+                        : null,
                     _journal,
                     Context.Logger,
                     new SocketTrackerTransport(_trackerHttp),
@@ -931,7 +937,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 return SettingsView.Render(
                     await Settings.LoadAsync(ct),
                     await Settings.SecretsSetAsync(ct),
-                    []);
+                    [],
+
+                    // What the router said, when there is a client to have
+                    // asked it. Read off the field rather than through Engine():
+                    // opening the Settings page must not start a torrent client
+                    // that is not running.
+                    _engine?.Mapped);
 
             case Pages.ShowsRoute:
                 return ShowsView.Render(ShowSummaries.Summarise(await Tracked(ct)));

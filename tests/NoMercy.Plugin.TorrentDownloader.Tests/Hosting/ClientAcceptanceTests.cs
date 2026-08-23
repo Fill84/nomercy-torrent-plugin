@@ -149,6 +149,7 @@ public class ClientAcceptanceTests : IDisposable
             Seeding,
             0,
             0,
+            null,
             new ActivityJournal(),
             new CapturingLogger(),
             trackers,

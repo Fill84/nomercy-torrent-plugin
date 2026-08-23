@@ -34,6 +34,7 @@ public sealed class BittorrentEngine(
     SeedLimit seeding,
     long maxDownloadRate,
     long maxUploadRate,
+    PortMapping? mapping,
     IActivityJournal journal,
     ILogger logger,
     ITrackerTransport transport,
@@ -64,6 +65,17 @@ public sealed class BittorrentEngine(
 
     /// <summary>The port it is really listening on, or null before it starts.</summary>
     public int? Port => _sockets?.Port;
+
+    /// <summary>
+    /// What became of the attempt to have the router open the port.
+    /// </summary>
+    /// <remarks>
+    /// Null when the owner turned port mapping off. Said on the Settings page
+    /// either way: a router that refuses is not a fault — the client still
+    /// dials out — but it is the difference between meeting half a swarm and
+    /// meeting all of it, and the owner can forward the port by hand.
+    /// </remarks>
+    public PortMapResult? Mapped { get; private set; }
 
     /// <summary>Why it is not listening, when it is not.</summary>
     /// <remarks>
@@ -105,6 +117,12 @@ public sealed class BittorrentEngine(
                 // never seeds to a peer that found it and never meets the half
                 // of a swarm that is behind a router of its own.
                 _ = AcceptingAsync(_sockets.Tcp, _stopping.Token);
+
+                // Discarded on purpose: a router takes seconds to answer and
+                // nothing may wait on it. The client is perfectly usable while
+                // it is being asked, and the answer only changes what the
+                // Settings page says.
+                _ = MappingAsync(_sockets.Port, _stopping.Token);
             }
             catch (PortInUseException refused)
             {
@@ -116,6 +134,49 @@ public sealed class BittorrentEngine(
                 logger.LogWarning("{Reason}", refused.Message);
                 journal.Failed(ActivityStage.Download, $"port {refused.Port}", refused.Message);
             }
+        }
+    }
+
+    /// <summary>
+    /// Asks the router to open the listening port.
+    /// </summary>
+    /// <remarks>
+    /// <c>PortMapping</c> from settings, UPnP first and then NAT-PMP. Both were
+    /// written and tested in Sprint 6 and neither had a socket behind it, so
+    /// the setting said the port would be opened and no port was ever opened —
+    /// which is every peer in a public swarm refusing this client's connection
+    /// because they are behind their own routers too.
+    /// </remarks>
+    private async Task MappingAsync(int port, CancellationToken ct)
+    {
+        if (mapping is null)
+        {
+            return;
+        }
+
+        try
+        {
+            PortMapResult result = await mapping.MapAsync(port, ct).ConfigureAwait(false);
+
+            Mapped = result;
+
+            if (result.Mapped)
+            {
+                logger.LogInformation("The router opened port {Port} over {How}.", result.Port, result.By);
+
+                return;
+            }
+
+            // Not a failure of the client. Said once, in the router's own words,
+            // so the owner knows whether to change a setting on the router or
+            // to forward the port by hand.
+            logger.LogWarning("Port {Port} could not be opened: {Reason}", port, result.Reason);
+        }
+        catch (Exception refused) when (refused is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            Mapped = new(MappedBy.Nothing, port, refused.Message);
+
+            logger.LogWarning(refused, "Port {Port} could not be opened.", port);
         }
     }
 
@@ -367,6 +428,29 @@ public sealed class BittorrentEngine(
         foreach (Held held in holding)
         {
             held.Run.Dispose();
+        }
+
+        if (mapping is not null && Mapped?.Mapped == true)
+        {
+            // Taken away on the way out, and waited for: a mapping left behind
+            // sits in the router's list pointing at a machine that is no longer
+            // listening, and the owner finds it there months later.
+            //
+            // Its own token, because the client's has just been cancelled.
+            using CancellationTokenSource leaving = new(TimeSpan.FromSeconds(10));
+
+            try
+            {
+                mapping.UnmapAsync(Mapped.Port, leaving.Token).GetAwaiter().GetResult();
+            }
+            catch (Exception refused) when (refused is not OperationCanceledException)
+            {
+                logger.LogWarning(refused, "The port mapping could not be taken away.");
+            }
+            catch (OperationCanceledException)
+            {
+                logger.LogWarning("The router did not answer in time to take the port mapping away.");
+            }
         }
 
         _stopping.Dispose();
