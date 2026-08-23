@@ -20,9 +20,19 @@ namespace NoMercy.MediaProcessing.Jobs.MediaJobs
     /// <summary>The job the dashboard's <em>Add content</em> button dispatches.</summary>
     public sealed class VideoEncodeJob
     {
-        public string LibraryId { get; set; } = string.Empty;
+        /// <summary>
+        /// A <c>Ulid</c> on the real server, not a string.
+        /// </summary>
+        /// <remarks>
+        /// Every id on <c>AbstractEncoderJob</c> is one, and the plugin's own
+        /// contract carries ids as text — so something has to convert, and
+        /// until 23 August 2026 nothing did. Writing a string into it throws,
+        /// the dispatch catches it and answers "refused", and no encode was
+        /// ever queued. This fake said string, so every test agreed with it.
+        /// </remarks>
+        public Ulid LibraryId { get; set; }
 
-        public string FolderId { get; set; } = string.Empty;
+        public Ulid FolderId { get; set; }
 
         /// <summary>Looked up with <c>Id.ToInt()</c>, which is why it is a string.</summary>
         public string Id { get; set; } = string.Empty;
@@ -31,11 +41,11 @@ namespace NoMercy.MediaProcessing.Jobs.MediaJobs
 
         public string? SourceDriverId { get; set; }
 
-        public string? PresetId { get; set; }
+        public Ulid? PresetId { get; set; }
 
         public string QueueName => "encoder";
 
-        public int Priority => 5;
+        public int Priority => 4;
     }
 }
 
@@ -51,10 +61,28 @@ namespace NoMercy.Data.Repositories
     /// </remarks>
     public interface ILibraryRepository
     {
-        Task<object?> GetLibraryByIdAsync(string libraryId);
+        /// <summary>
+        /// The one the plugin wants, and it is not alone.
+        /// </summary>
+        /// <remarks>
+        /// The real repository has a second method of this name taking six more
+        /// arguments, so asking for it by name alone is ambiguous and throws
+        /// before anything is called. The fake had one, so every test passed
+        /// while no encode had ever been dispatched on the owner's server.
+        /// </remarks>
+        Task<object?> GetLibraryByIdAsync(Ulid id);
+
+        Task<object?> GetLibraryByIdAsync(
+            Ulid libraryId,
+            Guid userId,
+            string language,
+            string country,
+            int take,
+            int page,
+            CancellationToken ct = default);
 
         /// <summary>The variant that must not be used: it includes no folders.</summary>
-        Task<object?> GetLibraryByIdLiteAsync(string libraryId);
+        Task<object?> GetLibraryByIdLiteAsync(Ulid id, CancellationToken ct = default);
     }
 }
 

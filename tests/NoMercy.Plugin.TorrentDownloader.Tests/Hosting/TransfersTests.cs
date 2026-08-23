@@ -19,6 +19,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Hosting;
 /// </remarks>
 public class TransfersTests : IDisposable
 {
+    private const string TelevisionLibrary = "01KZGKX2G0966V80H26EKGG5T0";
+
     private readonly string _root = Path.Combine(
         Path.GetTempPath(),
         "nomercy-transfers-" + Guid.NewGuid().ToString("n")[..8]);
@@ -181,8 +183,11 @@ public class TransfersTests : IDisposable
     private static Transfers Transfers(StandingEngine engine, GrabRepository grabs, FakeProvider server)
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
-            .Library("library-tv", "Television", "tv")
-            .Show(41, "Silo", "library-tv");
+            // A real Ulid, because the server's library id is one and the
+            // encode job will not take anything else. "library-tv" made every
+            // test here agree with a plugin that could never dispatch.
+            .Library(TelevisionLibrary, "Television", "tv")
+            .Show(41, "Silo", TelevisionLibrary);
 
         return new(
             engine,

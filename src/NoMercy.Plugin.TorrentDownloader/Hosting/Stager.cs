@@ -54,6 +54,31 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         return results;
     }
 
+    /// <summary>Takes the download away, if anything will let it.</summary>
+    /// <remarks>
+    /// A file the torrent client has open cannot be deleted on Windows, and
+    /// that is the ordinary case rather than a fault: staging happens the
+    /// moment a torrent finishes, and the client is holding every file of it.
+    /// </remarks>
+    private bool Removed(string source)
+    {
+        try
+        {
+            File.Delete(source);
+
+            return true;
+        }
+        catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+        {
+            logger.LogInformation(
+                "{File} was staged and could not be deleted yet: {Reason}",
+                Path.GetFileName(source),
+                held.Message);
+
+            return false;
+        }
+    }
+
     private async Task<StagedResult> OneAsync(Staged file, string from, string into, CancellationToken ct)
     {
         string source = Path.Combine(from, file.Path.Replace('/', Path.DirectorySeparatorChar));
@@ -66,7 +91,14 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         {
             Directory.CreateDirectory(into);
 
-            await using (FileStream reading = new(source, FileMode.Open, FileAccess.Read, FileShare.Read))
+            // Shared both ways, because the torrent client is still holding
+            // it: it keeps every file of a running torrent open for reading and
+            // writing and shares it both ways, since it seeds out of the same
+            // handle it downloaded into. A copy asking to share it for reading
+            // alone is refused by Windows before a byte is read — the share
+            // mode has to allow what the existing handle already has — and that
+            // is why nothing had ever reached the owner's library.
+            await using (FileStream reading = new(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             await using (FileStream writing = new(destination, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 await reading.CopyToAsync(writing, ct).ConfigureAwait(false);
@@ -83,9 +115,23 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
                 throw new IOException($"copied {copied} bytes of {file.Length}");
             }
 
-            File.Delete(source);
+            // The copy is the staging, and it is done. What happens to the
+            // download afterwards cannot undo it: the torrent client is still
+            // holding that file open and may still be seeding out of it, so
+            // deleting it is an attempt and never a condition.
+            //
+            // It used to be neither. The delete threw, the whole staging was
+            // reported as a failure, and the episode sat in the intake folder
+            // with its grab marked as though nothing had happened — which is
+            // why the owner's library never received one.
+            bool held = !Removed(source);
 
-            journal.Finished(ActivityStage.Download, Path.GetFileName(source), $"staged into {into}");
+            journal.Finished(
+                ActivityStage.Download,
+                Path.GetFileName(source),
+                held
+                    ? $"staged into {into}; the download is still held by the client and goes when the torrent does"
+                    : $"staged into {into}");
 
             return new(file, destination, null);
         }

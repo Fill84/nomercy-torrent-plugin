@@ -76,6 +76,24 @@ public sealed record TorrentMetadata(
     /// that wrote it to one file would corrupt both.
     /// </remarks>
     /// <summary>
+    /// Where this file sits under the folder a torrent was downloaded into.
+    /// </summary>
+    /// <remarks>
+    /// A torrent of one file puts it straight in the folder; a torrent of
+    /// several puts them in a folder of its own name, and the paths inside the
+    /// metadata are relative to that folder rather than to the download folder.
+    /// <c>TorrentDisk</c> has always known this and nothing else did, so
+    /// staging looked for the episode straight in the download folder while the
+    /// file was in the torrent's own folder inside it. Every scene release
+    /// failed that way: they ship with a Sample folder beside the episode and
+    /// are therefore never single-file torrents.
+    /// </remarks>
+    public string PathUnderFolder(TorrentFileEntry file)
+    {
+        return Files.Count > 1 ? System.IO.Path.Combine(Name, file.Path) : file.Path;
+    }
+
+    /// <summary>
     /// Which pieces hold any part of these files.
     /// </summary>
     /// <remarks>

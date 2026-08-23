@@ -81,6 +81,37 @@ public class TorrentMetadataTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>Where a file really sits under the download folder.</strong> A
+    /// torrent of one file puts it straight in the folder; a torrent of several
+    /// puts them in a folder of its own name, and the paths in the metadata are
+    /// relative to that folder rather than to the download folder.
+    /// </para>
+    /// <para>
+    /// <c>TorrentDisk</c> knew it and nothing else did, so staging looked for
+    /// the episode straight in the download folder and answered
+    /// "could not find file" 276 times on the owner's server. Every scene
+    /// release fails that way: they ship with a Sample folder beside the
+    /// episode and are therefore never single-file torrents.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AFileOfAMultiFileTorrentSitsInTheTorrentsOwnFolder()
+    {
+        TorrentMetadata several = Read("archive-multifile.torrent");
+
+        Assert.Equal(
+            Path.Combine("principleofrelat00eins", "__ia_thumb.jpg"),
+            several.PathUnderFolder(several.Files[0]));
+
+        // And one file is where it says it is, with no folder invented for it.
+        TorrentMetadata single = Read("ubuntu-desktop.torrent");
+
+        Assert.Equal(single.Files[0].Path, single.PathUnderFolder(single.Files[0]));
+        Assert.Single(single.Files);
+    }
+
+    /// <remarks>
     /// A piece is a range of the whole stream and pays no attention to where
     /// one file ends and the next begins. The first piece of this torrent
     /// covers the end of a thumbnail and the start of a nine-megabyte scan, and

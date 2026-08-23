@@ -9,6 +9,21 @@ edited. If something the plugin needs is not in the contract, note it under **Bl
 
 The full exported surface is in `docs/reference/plugin-abi-10.1.txt`.
 
+## Ids are Ulids, and this plugin carries them as text
+
+`VideoEncodeJob.LibraryId`, `FolderId` and `PresetId` are `Ulid`, and
+`ILibraryRepository.GetLibraryByIdAsync` takes one. The plugin contract spells every id as a string,
+so the dispatch converts through the target type's own `Parse` — never through a `Ulid` this plugin
+names, because that would be a different type to the runtime however identically it is spelled.
+
+`GetLibraryByIdAsync` also has **two overloads**: one taking an id, one taking an id and six more
+arguments. `GetMethod(name)` throws `AmbiguousMatchException` on that, so the method is chosen by
+how many arguments it takes.
+
+Both were found on 23 August 2026, when the plugin had never dispatched an encode: every attempt
+ended in "No encode was dispatched: Ambiguous match found". The test fakes had one overload and
+string ids, so every test agreed with the plugin instead of with the server.
+
 ## `IPluginContext`
 
 ```

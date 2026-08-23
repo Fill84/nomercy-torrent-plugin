@@ -24,6 +24,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Hosting;
 /// </remarks>
 public class EncodeDispatchTests : IDisposable
 {
+    /// <summary>The library every test asks for unless it says otherwise.</summary>
+    private const string Wanted = "01KZGKX2G0966V80H26EKGG5T0";
+
     private readonly string _folder = Path.Combine(
         Path.GetTempPath(),
         "nomercy-dispatch-" + Guid.NewGuid().ToString("n")[..8]);
@@ -48,15 +51,15 @@ public class EncodeDispatchTests : IDisposable
         Assert.Equal("4417", job.Id);
 
         Assert.Equal(Path.GetFullPath(Staged()), job.InputFile);
-        Assert.Equal("folder-one", job.FolderId);
-        Assert.Equal("preset-9", job.PresetId);
+        Assert.Equal(FakeLibraries.FirstFolder, job.FolderId);
+        Assert.Equal(FakeLibraries.Preset, job.PresetId);
 
         // A finished download is on this machine.
         Assert.Null(job.SourceDriverId);
 
         // The three-argument overload of Dispatch.
         Assert.Equal("encoder", server.Dispatcher.Queue);
-        Assert.Equal(5, server.Dispatcher.Priority);
+        Assert.Equal(4, server.Dispatcher.Priority);
     }
 
     /// <remarks>
@@ -105,16 +108,20 @@ public class EncodeDispatchTests : IDisposable
     /// it rather than choosing.
     /// </remarks>
     [Theory]
-    [InlineData("library-tv", "tv")]
-    [InlineData("library-anime", "anime")]
+    [InlineData("01KZGKX2G0966V80H26EKGG5T0", "tv")]
+    [InlineData("01KZGKX2G0966V80H26EKGG5A0", "anime")]
     public async Task TheEpisodeGoesToTheShowsOwnLibrary(string libraryId, string libraryType)
     {
         FakeProvider server = Server();
 
         Assert.True(await Dispatch(server, libraryType, libraryId));
 
-        Assert.Equal(libraryId, Assert.IsType<VideoEncodeJob>(server.Dispatcher.Job).LibraryId);
-        Assert.Equal(libraryId, server.Libraries.Asked);
+        // As a Ulid, which is what the server's job carries. The plugin's own
+        // contract spells every id as text, so something has to convert it —
+        // and until 23 August 2026 nothing did, so writing the string threw and
+        // every encode was refused.
+        Assert.Equal(Ulid.Parse(libraryId), Assert.IsType<VideoEncodeJob>(server.Dispatcher.Job).LibraryId);
+        Assert.Equal(Ulid.Parse(libraryId), server.Libraries.Asked);
         Assert.Equal(libraryType, server.Files.AskedType);
     }
 
@@ -130,12 +137,12 @@ public class EncodeDispatchTests : IDisposable
         FakeProvider server = Server();
 
         server.Libraries.Library = new(
-            "preset-9",
-            [new("folder-one", string.Empty), new("folder-two", "D:\\tv")]);
+            FakeLibraries.Preset,
+            [new(FakeLibraries.FirstFolder, string.Empty), new(FakeLibraries.SecondFolder, "D:\\tv")]);
 
         await Dispatch(server, "tv");
 
-        Assert.Equal("folder-one", Assert.IsType<VideoEncodeJob>(server.Dispatcher.Job).FolderId);
+        Assert.Equal(FakeLibraries.FirstFolder, Assert.IsType<VideoEncodeJob>(server.Dispatcher.Job).FolderId);
     }
 
     /// <remarks>
@@ -199,7 +206,7 @@ public class EncodeDispatchTests : IDisposable
         noLibrary.Libraries.Library = null;
 
         Assert.False(await Dispatch(noLibrary, "tv"));
-        Assert.Contains(noLibrary.Log.Lines, one => one.Contains("library-tv", StringComparison.Ordinal));
+        Assert.Contains(noLibrary.Log.Lines, one => one.Contains(Wanted, StringComparison.Ordinal));
 
         FakeProvider angry = Server();
 
@@ -210,7 +217,7 @@ public class EncodeDispatchTests : IDisposable
 
         FakeProvider folderless = Server();
 
-        folderless.Libraries.Library = new("preset-9", []);
+        folderless.Libraries.Library = new(FakeLibraries.Preset, []);
 
         Assert.False(await Dispatch(folderless, "tv"));
     }
@@ -239,7 +246,7 @@ public class EncodeDispatchTests : IDisposable
         return path;
     }
 
-    private Task<bool> Dispatch(FakeProvider server, string libraryType, string libraryId = "library-tv")
+    private Task<bool> Dispatch(FakeProvider server, string libraryType, string libraryId = Wanted)
     {
         return new EncodeDispatch(server, server.Journal, server.Log)
             .DispatchAsync(Staged(), libraryId, libraryType, CancellationToken.None);

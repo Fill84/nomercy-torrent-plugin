@@ -398,8 +398,8 @@ public sealed class BittorrentEngine(
             // Empty while the metadata has not arrived, never a guess from the
             // name: inventing a file list is how the wrong file gets staged.
             return Task.FromResult<IReadOnlyList<TorrentFile>>(
-                _torrents.TryGetValue(infoHash, out Held? held)
-                    ? [.. held.Run.Files.Select(file => new TorrentFile(file.Path, file.Length))]
+                _torrents.TryGetValue(infoHash, out Held? held) && held.Run.Torrent is TorrentMetadata torrent
+                    ? [.. torrent.Files.Select(file => new TorrentFile(torrent.PathUnderFolder(file), file.Length))]
                     : []);
         }
     }
@@ -841,7 +841,16 @@ public sealed class BittorrentEngine(
 
         if (held.Run.Paused)
         {
-            return held.Queued ? TorrentState.Queued : TorrentState.Paused;
+            if (held.Queued)
+            {
+                return TorrentState.Queued;
+            }
+
+            // Complete and stopped is finished, not paused. Paused is the owner
+            // having stopped something, and reading "paused" against a row at a
+            // hundred per cent says the owner has to do something about it when
+            // what it is waiting for is staging.
+            return progress.Complete ? TorrentState.Finished : TorrentState.Paused;
         }
 
         if (!progress.HasMetadata)

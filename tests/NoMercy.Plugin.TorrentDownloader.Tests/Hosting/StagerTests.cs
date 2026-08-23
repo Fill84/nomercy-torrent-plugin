@@ -232,6 +232,47 @@ public class StagerTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>The torrent client is still holding the file.</strong> It keeps
+    /// every file of a running torrent open for reading and writing and shares
+    /// it both ways, because it seeds out of the same handle it downloaded
+    /// into. A copy that asks to share the file for reading alone is refused by
+    /// Windows before a byte is read: the share mode has to allow what the
+    /// existing handle already has.
+    /// </para>
+    /// <para>
+    /// That is why nothing had ever reached the owner's library. On
+    /// 23 August 2026 four finished episodes sat in the download folder with
+    /// their grabs marked failed, the intake folder held nothing but empty
+    /// folders from the previous plugin, and no grab had ever been marked done.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFileTheClientIsStillHoldingIsStagedAnyway()
+    {
+        byte[] content = Content(2 * 1024 * 1024);
+        string from = Folder("incomplete-held");
+        string into = Path.Combine(_root, "intake-held");
+        string path = Path.Combine(from, "Silo.S03E07.mkv");
+
+        await File.WriteAllBytesAsync(path, content);
+
+        // Exactly how TorrentDisk holds it while the torrent is running.
+        await using FileStream held = new(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+
+        IReadOnlyList<StagedResult> results = await new Stager(new ActivityJournal(), new CapturingLogger()).MoveAsync(
+            [new("Silo.S03E07.mkv", Episode(7), content.Length)],
+            from,
+            into,
+            CancellationToken.None);
+
+        StagedResult one = Assert.Single(results);
+
+        Assert.True(one.Moved, one.Reason);
+        Assert.Equal(content, await File.ReadAllBytesAsync(Path.Combine(into, "Silo.S03E07.mkv")));
+    }
+
     private string Folder(string name)
     {
         string path = Path.Combine(_root, name);

@@ -7,9 +7,9 @@ using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 
 /// <summary>A library, as the repository hands one over.</summary>
-public sealed record FakeLibrary(string? EncodePresetId, IReadOnlyList<FakeFolderLibrary> FolderLibraries);
+public sealed record FakeLibrary(Ulid? EncodePresetId, IReadOnlyList<FakeFolderLibrary> FolderLibraries);
 
-public sealed record FakeFolderLibrary(string FolderId, string Path);
+public sealed record FakeFolderLibrary(Ulid FolderId, string Path);
 
 /// <summary>One file the server knows about, with its media match.</summary>
 public sealed record FakeFile(string Path, FakeMatch Match);
@@ -18,32 +18,59 @@ public sealed record FakeMatch(int Id);
 
 public sealed class FakeLibraries : ILibraryRepository
 {
+    /// <summary>The library's preset, a Ulid because the server's is one.</summary>
+    public static Ulid Preset { get; } = Ulid.Parse("01KZGKX2G0966V80H26EKGG5JA");
+
+    /// <summary>The folder an encode is expected to be sent to.</summary>
+    public static Ulid FirstFolder { get; } = Ulid.Parse("01KZGKX2G0966V80H26EKGG5JB");
+
+    public static Ulid SecondFolder { get; } = Ulid.Parse("01KZGKX2G0966V80H26EKGG5JC");
+
     public FakeLibrary? Library { get; set; } =
-        new("preset-9", [new("folder-one", "D:\\tv"), new("folder-two", "E:\\tv")]);
+        new(Preset, [new(FirstFolder, "D:\\tv"), new(SecondFolder, "E:\\tv")]);
 
     public bool Throw { get; set; }
 
-    public string? Asked { get; private set; }
+    public Ulid? Asked { get; private set; }
 
     public List<string> Called { get; } = [];
 
-    public Task<object?> GetLibraryByIdAsync(string libraryId)
+    public Task<object?> GetLibraryByIdAsync(Ulid id)
     {
         Called.Add(nameof(GetLibraryByIdAsync));
-        Asked = libraryId;
+        Asked = id;
 
         return Throw
             ? throw new InvalidOperationException("the database went away")
             : Task.FromResult<object?>(Library);
     }
 
-    public Task<object?> GetLibraryByIdLiteAsync(string libraryId)
+    /// <summary>
+    /// The overload that makes the name ambiguous. Never called, and that is
+    /// the point: it exists so that asking for the name alone throws here as it
+    /// does on the real server.
+    /// </summary>
+    public Task<object?> GetLibraryByIdAsync(
+        Ulid libraryId,
+        Guid userId,
+        string language,
+        string country,
+        int take,
+        int page,
+        CancellationToken ct = default)
+    {
+        Called.Add(nameof(GetLibraryByIdAsync) + " (the long one)");
+
+        return Task.FromResult<object?>(Library);
+    }
+
+    public Task<object?> GetLibraryByIdLiteAsync(Ulid id, CancellationToken ct = default)
     {
         Called.Add(nameof(GetLibraryByIdLiteAsync));
 
         // Folderless, exactly as the real one is: a plugin that used this
         // would be refused for having nowhere to put the file.
-        return Task.FromResult<object?>(new FakeLibrary("preset-9", []));
+        return Task.FromResult<object?>(new FakeLibrary(Preset, []));
     }
 }
 

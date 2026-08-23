@@ -21,6 +21,18 @@ public enum TorrentState
 
     Seeding,
 
+    /// <summary>
+    /// Every wanted byte is here and the client has stopped.
+    /// </summary>
+    /// <remarks>
+    /// Not <see cref="Paused"/>, which is the owner having stopped it, and not
+    /// <see cref="Seeding"/>, which is still giving something back. A public
+    /// torrent reaches this the moment it completes, because nothing is ever
+    /// uploaded on a public swarm. What it is waiting for is staging, and once
+    /// that has happened the grab is done and the row leaves the page.
+    /// </remarks>
+    Finished,
+
     /// <summary>No progress <em>and</em> no peers. Progress without peers is not this.</summary>
     Stalled,
 

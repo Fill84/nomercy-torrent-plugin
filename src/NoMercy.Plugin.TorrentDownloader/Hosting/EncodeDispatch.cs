@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Globalization;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -206,9 +207,79 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
         return false;
     }
 
+    /// <summary>
+    /// One method by name, chosen by how many arguments it takes.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>GetMethod(name)</c> throws <c>AmbiguousMatchException</c> the moment
+    /// the server has two methods of that name, and it has:
+    /// <c>GetLibraryByIdAsync</c> takes either an id or an id and six more
+    /// arguments. So every dispatch ended in the catch below and answered
+    /// "No encode was dispatched: Ambiguous match found" — which is why, on
+    /// 23 August 2026, not one encode had ever been queued.
+    /// </para>
+    /// <para>
+    /// The arguments are converted to what the method actually takes. Ids cross
+    /// this boundary as text, because that is how the plugin's own contract
+    /// spells them, and arrive at a server that deals in <c>Ulid</c>.
+    /// </para>
+    /// </remarks>
     private static object? Call(object instance, string method, params object?[] arguments)
     {
-        return instance.GetType().GetMethod(method)?.Invoke(instance, arguments);
+        MethodInfo? wanted = instance.GetType()
+            .GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .FirstOrDefault(one =>
+                string.Equals(one.Name, method, StringComparison.Ordinal)
+                && one.GetParameters().Length == arguments.Length);
+
+        if (wanted is null)
+        {
+            return null;
+        }
+
+        ParameterInfo[] takes = wanted.GetParameters();
+
+        return wanted.Invoke(
+            instance,
+            [.. arguments.Select((object? argument, int at) => Converted(argument, takes[at].ParameterType))]);
+    }
+
+    /// <summary>
+    /// A value as the type it is being handed to wants it.
+    /// </summary>
+    /// <remarks>
+    /// Through the target type's own <c>Parse</c>, never through a type this
+    /// plugin names: the server's <c>Ulid</c> and any this plugin referenced
+    /// would be two different types to the runtime however identically they are
+    /// spelled, and assigning one to the other fails in a way no message
+    /// explains.
+    /// </remarks>
+    private static object? Converted(object? value, Type wanted)
+    {
+        if (value is null || wanted.IsInstanceOfType(value))
+        {
+            return value;
+        }
+
+        Type bare = Nullable.GetUnderlyingType(wanted) ?? wanted;
+
+        if (value is string text)
+        {
+            MethodInfo? parse = bare.GetMethod(
+                "Parse",
+                BindingFlags.Public | BindingFlags.Static,
+                null,
+                [typeof(string)],
+                null);
+
+            if (parse is not null)
+            {
+                return parse.Invoke(null, [text]);
+            }
+        }
+
+        return Convert.ChangeType(value, bare, CultureInfo.InvariantCulture);
     }
 
     private static async Task<object?> Awaited(object? returned)
@@ -230,7 +301,9 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
 
     private static void Write(object instance, string property, object? value)
     {
-        instance.GetType().GetProperty(property)?.SetValue(instance, value);
+        PropertyInfo? target = instance.GetType().GetProperty(property);
+
+        target?.SetValue(instance, Converted(value, target.PropertyType));
     }
 
     private static object? First(object? items)
