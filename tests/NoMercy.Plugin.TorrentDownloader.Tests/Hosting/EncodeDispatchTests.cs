@@ -165,6 +165,41 @@ public class EncodeDispatchTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>Which of the two it is.</strong> The server skips a file its own
+    /// parser cannot read a title out of, so it never appears in the listing at
+    /// all — and a file that is missing from the listing is a different problem
+    /// from a file that is listed and could not be identified. One is a name
+    /// this plugin chose, the other is a show the server does not know.
+    /// </para>
+    /// <para>
+    /// Both used to say "the server matched nothing to this file", which named
+    /// the file and explained neither.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ItSaysWhetherTheFileWasListedAtAll()
+    {
+        FakeProvider missing = Server();
+
+        // The folder has a file in it, and it is not ours.
+        missing.Files.Matches = [(Path.Combine(_folder, "Something.Else.mkv"), "9")];
+
+        Assert.False(await Dispatch(missing, "tv"));
+        Assert.Contains(missing.Log.Lines, one => one.Contains("not among them", StringComparison.Ordinal));
+
+        FakeProvider unidentified = Server();
+
+        // Ours is listed, with no media matched to it.
+        unidentified.Files.Matches = [(Staged(), "0")];
+
+        Assert.False(await Dispatch(unidentified, "tv"));
+        Assert.Contains(
+            unidentified.Log.Lines,
+            one => one.Contains("matched no media to it", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
     /// A file the server knows nothing about is not the file next to it in the
     /// same folder. Matching on anything looser than the full path would
     /// dispatch an encode for somebody else's episode.

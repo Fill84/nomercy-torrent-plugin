@@ -116,11 +116,26 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
             // From the server, never from the filename. A job whose id matches
             // no media is dropped in silence: the queue counter moves and the
             // encode never runs.
-            if (await MatchIdAsync(files, Path.GetDirectoryName(full)!, libraryType, full).ConfigureAwait(false)
-                is not string id)
+            Matched matched = await MatchedAsync(files, Path.GetDirectoryName(full)!, libraryType, full)
+                .ConfigureAwait(false);
+
+            if (matched.Id is not string id)
             {
-                logger.LogWarning("The server matched nothing to {File}, so no encode was dispatched.", full);
-                journal.Failed(ActivityStage.Download, Path.GetFileName(full), "the server matched no media to this file");
+                // What the server listed, not only that it listed nothing for
+                // us: it skips a file its own parser cannot read a title out
+                // of, so a file that is not in the listing at all and a file
+                // it listed but could not identify are two different problems
+                // with two different answers.
+                string why = matched.Listed switch
+                {
+                    null => "the server would not list the folder at all",
+                    0 => "the server listed no files in that folder",
+                    int listed when !matched.Ours => $"the server listed {listed} file(s) in that folder and this was not among them",
+                    _ => "the server listed this file but matched no media to it",
+                };
+
+                logger.LogWarning("No encode was dispatched for {File}: {Reason}.", full, why);
+                journal.Failed(ActivityStage.Download, Path.GetFileName(full), why);
 
                 return false;
             }
@@ -186,7 +201,7 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
     /// it is dropped by the encoder in silence while the queue counter moves.
     /// </para>
     /// </remarks>
-    private static async Task<string?> MatchIdAsync(object files, string folder, string libraryType, string full)
+    private static async Task<Matched> MatchedAsync(object files, string folder, string libraryType, string full)
     {
         // The two-argument overload. The three-argument one takes a storage
         // driver and is for a folder on a remote share.
@@ -196,34 +211,49 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
 
         if (walk is null)
         {
-            return null;
+            return new(null, false, null);
         }
 
         if (await Awaited(walk.Invoke(files, [folder, libraryType])).ConfigureAwait(false) is not IEnumerable found)
         {
-            return null;
+            return new(null, false, null);
         }
+
+        int listed = 0;
+        bool ours = false;
 
         foreach (object? item in found)
         {
+            listed++;
+
             if (item is null || Read(item, "Path") is not string path)
             {
                 continue;
             }
 
-            if (!string.Equals(Path.GetFullPath(path), full, StringComparison.OrdinalIgnoreCase)
-                || Read(item, "Match") is not object match)
+            if (!string.Equals(Path.GetFullPath(path), full, StringComparison.OrdinalIgnoreCase))
             {
                 continue;
             }
 
-            string? id = Read(match, "Id")?.ToString();
+            ours = true;
 
-            return string.IsNullOrWhiteSpace(id) || id == "0" ? null : id;
+            string? id = Read(item, "Match") is object match ? Read(match, "Id")?.ToString() : null;
+
+            if (!string.IsNullOrWhiteSpace(id) && id != "0")
+            {
+                return new(listed, true, id);
+            }
         }
 
-        return null;
+        return new(listed, ours, null);
     }
+
+    /// <summary>What the server said about the folder this file is in.</summary>
+    /// <param name="Listed">How many files it listed, or null when it would not answer.</param>
+    /// <param name="Ours">Whether ours was among them.</param>
+    /// <param name="Id">The server's own id for it, when it has one.</param>
+    private sealed record Matched(int? Listed, bool Ours, string? Id);
 
     private bool Refused(string reason)
     {
