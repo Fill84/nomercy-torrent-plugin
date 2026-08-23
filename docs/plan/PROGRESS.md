@@ -1002,7 +1002,10 @@ Kept here so no slice re-discovers them.
 - **The owner stops and starts the server.** Never do it.
 - The .NET 10 SDK is user-local: use `~/.dotnet/dotnet.exe`. Bare `dotnet` is 8.0 and cannot build
   this.
-- The plugin contract is packed from the media-server checkout on branch **`dev`**, not `master`.
+- The plugin contract is packed from the **released** server, never from `dev`. `0.1.404` is the dev
+  version and never moves; the released one does. Reading `dev` for it is how the contract sat at
+  `0.1.404` while the server shipped `0.1.478`, and every contract added in between — the table
+  action cell among them — was invisible here.
   Clear the NuGet cache after repacking the same version.
 - The media-server checkout may be a sparse checkout; `git sparse-checkout disable` gets the whole
   tree when something needs looking up.

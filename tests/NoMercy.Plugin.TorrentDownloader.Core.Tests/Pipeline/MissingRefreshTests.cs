@@ -12,47 +12,40 @@ public class MissingRefreshTests
 
     /// <remarks>
     /// <para>
-    /// A show the owner has none of is not a show they have. The server keeps
-    /// rows for shows it has only ever recommended — related titles, things
-    /// nobody asked for — in the same table, against the same library id, with
-    /// a folder and a full episode list. Nothing in the row says which is
-    /// which.
+    /// <strong>Every show in a television or anime library is in scope</strong>,
+    /// whatever it has on disk. The owner's rule, given on 24 August 2026.
     /// </para>
     /// <para>
-    /// The server's own library page settles it, and this is its query:
-    /// <c>Episodes.Any(e =&gt; e.VideoFiles.Any(v =&gt; v.Folder != null))</c>.
-    /// One episode with a file, or the show is not in the library.
-    /// </para>
-    /// <para>
-    /// Read as "every show in the library", it put twelve shows the owner had
-    /// never seen on the page — one of them alone claiming 456 missing
-    /// episodes — and set the plugin looking for all of them.
+    /// It used to take one episode with a file to put a show in scope at all,
+    /// which made the ordinary case the one case nothing happened for: a show
+    /// just added has nothing on disk, and that is exactly when the plugin is
+    /// worth having.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AShowWithNotOneEpisodeOnDiskIsNotOneTheOwnerHas()
+    public async Task AShowWithNothingOnDiskIsStillFilledIn()
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
             .Episode(1, 1, 1, hasFile: true, airDate: new DateOnly(2020, 1, 1))
             .Episode(1, 1, 2, airDate: new DateOnly(2020, 1, 8))
-            .Show(2, "Recommended, never watched")
+            .Show(2, "Just added")
             .Episode(2, 1, 1, airDate: new DateOnly(2020, 1, 1))
             .Episode(2, 1, 2, airDate: new DateOnly(2020, 1, 8));
 
         IReadOnlyList<TrackedEpisode> tracked = await Derive(library);
 
-        Assert.All(tracked, episode => Assert.Equal("Silo", episode.ShowTitle));
+        // Both of the new show's episodes, and the one the other is missing.
+        Assert.Equal(2, tracked.Count(one => one.ShowTitle == "Just added"));
+        Assert.Single(tracked, one => one.ShowTitle == "Silo");
     }
 
     /// <remarks>
-    /// The one on disk is what puts the show in scope; it is not itself
-    /// something to look for. A show is either the owner's or it is not, and
-    /// deciding that per episode would track the whole of a show they have one
-    /// episode of and none of one they have none.
+    /// An episode that is on disk is not a gap. Every other episode of the same
+    /// show is, and that is the whole of the rule now.
     /// </remarks>
     [Fact]
-    public async Task TheEpisodeThatPutsAShowInScopeIsStillNotTracked()
+    public async Task AnEpisodeAlreadyOnDiskIsNotTracked()
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")

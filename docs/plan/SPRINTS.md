@@ -1066,3 +1066,104 @@ rather than awaiting it.
 5. **Done.** The owner asked on 20 August 2026 and `v0.4.0` is tagged and pushed. It names a commit
    that had not then run on a server; if the owner would rather it named the one that passes step 4,
    it moves.
+
+# Sprint 9 · Finishing it
+
+**The one thing that decides this sprint:** an episode the library is missing goes all the way to
+being an episode the library has, without the owner doing anything but installing the plugin.
+
+Everything up to staging is proved on the owner's own server. The step it exists for — asking the
+encoder, and knowing what became of that — has never once succeeded there. Until it does, nothing
+else is worth releasing.
+
+## S9-01 · Build against the contract that ships
+
+**Read first:** `Directory.Build.props`, `docs/09-host-contract.md`.
+
+The plugin builds against `0.1.404`. That is the **dev** version and it never moves; the released
+server is on **0.1.478**. So every contract added since — `PluginTableCellType.Actions` and
+`PluginTableAction` among them — is invisible here.
+
+1. Correct the fact in `PROGRESS.md`: the contract is packed from the **released** server, not from
+   `dev`. It has said `dev` since S0 and that is why this was missed.
+2. Move `NoMercyContractVersion` to the released version, clear the NuGet cache, build.
+3. Refresh `docs/reference/plugin-abi-*.txt` from the package that is really referenced, so the next
+   reader sees what exists rather than what existed in July.
+4. Anything the compiler now objects to is a contract that moved. Fix it here, and write what moved
+   into `docs/09-host-contract.md`.
+
+**Done when** the build is clean against the released contract and the ABI dump matches it.
+
+## S9-02 · The buttons live in the table
+
+**Read first:** `src/.../Views/DownloadsView.cs`, the new `PluginTableAction` in the contract.
+
+The Downloads page draws every row twice — once as a table, once as a strip of Pause and Cancel
+buttons underneath — because a row could carry one action and no more. The contract now has an
+`Actions` cell, and the web client renders it.
+
+1. One column after **Destination**, of cell type `Actions`, carrying Pause or Resume and a
+   destructive Cancel.
+2. Delete `Ui.List("downloads-controls", …)` and everything that fed it.
+3. The page test asserts one listing and both buttons in the row.
+
+**Done when** the page has a single table and the two buttons sit in it.
+
+## S9-03 · Every show in a library is in scope
+
+**Read first:** `src/.../Core/Pipeline/MissingRefresh.cs`.
+
+A show is skipped unless at least one of its episodes already has a file:
+
+```csharp
+if (!episodes.Any(episode => episode.HasFile)) continue;
+```
+
+The owner's rule is simpler and is the one that holds: **a show in a television or anime library is
+in scope, whatever it has on disk.** A newly added show is the ordinary case — nothing on disk is
+exactly when the plugin is most use — and today it is the one case that does nothing at all.
+
+1. Delete the rule and the test that pins it; write the owner's rule in its place, dated.
+2. `MaxSearchAttempts` is what stops a show nothing can be found for, and it already works. Nothing
+   new is needed to bound the work.
+3. The refresh test covers a show with no files at all: every aired episode becomes a gap.
+
+**Done when** a show with nothing on disk produces gaps, and `dotnet test` is green.
+
+## S9-04 · Prove the encode end to end
+
+**Read first:** `src/.../Hosting/Transfers.cs`, `src/.../Hosting/EncodeDispatch.cs`.
+
+Everything here is written and none of it has ever run to the end on a real server. This slice is
+not code first: it is evidence first, and code for whatever the evidence shows.
+
+1. Deploy, let the cadence run on its own, and read three things: the grab reaching `dispatched`,
+   the encoder taking the job, and the episode appearing in the library.
+2. Whatever refuses it, the reason is already in the log by name — the folder, the file, the library,
+   or the match. Fix that, with a test that fails first.
+3. When the library has the episode, the staged copy and the download are deleted and the grab is
+   `done`. Watch that happen once rather than trusting it.
+
+**Done when** one episode has gone from missing to in the library with nothing done by hand, and the
+folders it passed through are empty afterwards.
+
+## S9-05 · What was left behind
+
+**Read first:** the intake folder on the owner's server.
+
+Three episodes were staged before any of this bookkeeping existed. Their grabs say `done`, so
+nothing will ever come back to them, and they will sit in the intake folder for ever.
+
+1. Decide with the owner: import them by hand, or delete them. It is their disk.
+2. Whichever it is, nothing in the plugin changes — the fault that made them is already fixed. This
+   slice exists so they are not forgotten.
+
+**Done when** the intake folder holds only what the plugin put there this week.
+
+## S9-06 · Release 0.4.0
+
+1. `PROGRESS.md` says what 0.4.0 does and what it does not.
+2. The tag names the commit that passed **S9-04**, not one before it.
+3. Only when the owner asks.
+
+**Done when** the owner says so.

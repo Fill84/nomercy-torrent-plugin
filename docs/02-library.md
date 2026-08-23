@@ -78,28 +78,17 @@ an episode that aired two years ago counts exactly as much as one that aired las
 
 ### One episode on disk, or it is not the owner's show
 
-**Corrected 22 August 2026, against the server.** This document said "every show in those libraries
-is in scope". It is not what the server means by a library.
+**Every show in a television or anime library is in scope, whatever it has on disk.** The owner's
+rule, given on 24 August 2026.
 
-`Tvs` holds a row for every show the server knows *about*, including ones it has only ever
-recommended — related titles, things nobody asked for. They carry the library's id, a folder and a
-full episode list, and nothing in the row tells them apart from a show the owner actually has.
+It read differently between 22 and 24 August: a show counted only once at least one of its episodes
+had a file, taken from the query behind the server's own library page
+(`Episodes.Any(e => e.VideoFiles.Any(v => v.Folder != null))`). That made the ordinary case the one
+case the plugin did nothing about — a show just added has nothing on disk, and that is exactly when
+it is worth having.
 
-The server settles it in the query behind its own library page, and this is that query:
-
-```csharp
-.Where(tv => tv.Library.Id == libraryId)
-.Where(tv => tv.Episodes.Any(e => e.VideoFiles.Any(v => v.Folder != null)))
-```
-
-One episode with a file, or the show is not in the library. `HasFile` on the contract's episode is
-that same `VideoFiles.Any()`, so the plugin applies the rule with what it already has and makes no
-extra call.
-
-**What reading it the other way cost.** On the owner's server, twelve of sixty-seven rows had no
-file at all. The Shows page listed all twelve — one of them claiming 456 missing episodes on its own
-— and the plugin was set looking for 1,497 episodes where the true figure was 388. The owner saw a
-page full of shows they had never watched.
+`MaxSearchAttempts` is what stops a show nothing can be found for, and it needs no help from the
+library rule.
 
 ### Three corrections, each measured
 
