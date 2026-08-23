@@ -9,6 +9,18 @@ edited. If something the plugin needs is not in the contract, note it under **Bl
 
 The full exported surface is in `docs/reference/plugin-abi-10.1.txt`.
 
+## The file listing is a task
+
+`IFileListService.GetFilesInDirectory` answers `Task<List<FileItem>>`. Walking the returned object
+as a list walks the `Task` and finds nothing, which reads exactly like a server that knows of no
+such file — so every staged episode was answered with "the server matched no media to this file"
+and no encode was ever dispatched.
+
+`FileItem.Match` is a `MovieOrEpisode` whose `Id` is a `dynamic` starting as an empty string:
+identification is enrichment, and every video file is listed whether or not it could be resolved. An
+empty id is therefore **no match**, and a job carrying one is dropped by the encoder in silence
+while the queue counter moves.
+
 ## Ids are Ulids, and this plugin carries them as text
 
 `VideoEncodeJob.LibraryId`, `FolderId` and `PresetId` are `Ulid`, and

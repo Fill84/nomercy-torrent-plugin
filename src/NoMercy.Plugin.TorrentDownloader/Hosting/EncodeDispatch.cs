@@ -116,7 +116,8 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
             // From the server, never from the filename. A job whose id matches
             // no media is dropped in silence: the queue counter moves and the
             // encode never runs.
-            if (MatchId(files, Path.GetDirectoryName(full)!, libraryType, full) is not string id)
+            if (await MatchIdAsync(files, Path.GetDirectoryName(full)!, libraryType, full).ConfigureAwait(false)
+                is not string id)
             {
                 logger.LogWarning("The server matched nothing to {File}, so no encode was dispatched.", full);
                 journal.Failed(ActivityStage.Download, Path.GetFileName(full), "the server matched no media to this file");
@@ -170,7 +171,22 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
     }
 
     /// <summary>The server's own id for this file, or null when it knows of none.</summary>
-    private static string? MatchId(object files, string folder, string libraryType, string full)
+    /// <remarks>
+    /// <para>
+    /// <strong>The listing is a task.</strong> The server answers
+    /// <c>Task&lt;List&lt;FileItem&gt;&gt;</c>, and walking the returned object
+    /// as a list walks the <c>Task</c> and finds nothing — so every staged
+    /// episode was answered with "the server matched no media to this file" and
+    /// no encode was ever dispatched. It is awaited now.
+    /// </para>
+    /// <para>
+    /// An id of nothing is no match. <c>MovieOrEpisode.Id</c> is a
+    /// <c>dynamic</c> that starts as an empty string, so a file the server
+    /// listed but could not identify comes back with one — and a job carrying
+    /// it is dropped by the encoder in silence while the queue counter moves.
+    /// </para>
+    /// </remarks>
+    private static async Task<string?> MatchIdAsync(object files, string folder, string libraryType, string full)
     {
         // The two-argument overload. The three-argument one takes a storage
         // driver and is for a folder on a remote share.
@@ -178,7 +194,12 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
             .GetMethods()
             .FirstOrDefault(one => one.Name == "GetFilesInDirectory" && one.GetParameters().Length == 2);
 
-        if (walk is null || walk.Invoke(files, [folder, libraryType]) is not IEnumerable found)
+        if (walk is null)
+        {
+            return null;
+        }
+
+        if (await Awaited(walk.Invoke(files, [folder, libraryType])).ConfigureAwait(false) is not IEnumerable found)
         {
             return null;
         }
@@ -190,10 +211,15 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
                 continue;
             }
 
-            if (Path.GetFullPath(path) == full && Read(item, "Match") is object match)
+            if (!string.Equals(Path.GetFullPath(path), full, StringComparison.OrdinalIgnoreCase)
+                || Read(item, "Match") is not object match)
             {
-                return Read(match, "Id")?.ToString();
+                continue;
             }
+
+            string? id = Read(match, "Id")?.ToString();
+
+            return string.IsNullOrWhiteSpace(id) || id == "0" ? null : id;
         }
 
         return null;

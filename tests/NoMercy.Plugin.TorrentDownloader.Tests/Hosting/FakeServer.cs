@@ -91,10 +91,20 @@ namespace NoMercy.MediaProcessing.Files
     /// <summary>What knows the server's own id for a file on disk.</summary>
     public interface IFileListService
     {
-        /// <summary>The two-argument overload, for a folder on this machine.</summary>
-        IEnumerable<object> GetFilesInDirectory(string folder, string libraryType);
+        /// <summary>
+        /// The two-argument overload, for a folder on this machine.
+        /// </summary>
+        /// <remarks>
+        /// <strong>It is a task.</strong> The real one answers
+        /// <c>Task&lt;List&lt;FileItem&gt;&gt;</c>, and a caller that walked the
+        /// returned object as a list walked a <c>Task</c> and found nothing —
+        /// so every staged episode was answered with "the server matched no
+        /// media to this file" and no encode was ever dispatched. This fake
+        /// said <c>IEnumerable</c>, so every test agreed with the plugin.
+        /// </remarks>
+        Task<List<object>> GetFilesInDirectory(string folder, string libraryType);
 
         /// <summary>The three-argument one, for a folder on a remote share.</summary>
-        IEnumerable<object> GetFilesInDirectory(string folder, string libraryType, string storageDriverId);
+        Task<List<object>> GetFilesInDirectory(string folder, string libraryType, object storage);
     }
 }

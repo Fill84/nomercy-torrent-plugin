@@ -80,14 +80,15 @@ public sealed class FakeFiles : IFileListService
 
     public string? AskedType { get; private set; }
 
-    public IEnumerable<object> GetFilesInDirectory(string folder, string libraryType)
+    public Task<List<object>> GetFilesInDirectory(string folder, string libraryType)
     {
         AskedType = libraryType;
 
-        return Matches.Select(one => (object)new FakeFile(one.Path, new(int.Parse(one.Id))));
+        return Task.FromResult<List<object>>(
+            [.. Matches.Select(one => (object)new FakeFile(one.Path, new(int.Parse(one.Id))))]);
     }
 
-    public IEnumerable<object> GetFilesInDirectory(string folder, string libraryType, string storageDriverId)
+    public Task<List<object>> GetFilesInDirectory(string folder, string libraryType, object storage)
     {
         // The overload for a folder on a remote share. Reaching it from
         // here would mean the wrong one was chosen by parameter count.
