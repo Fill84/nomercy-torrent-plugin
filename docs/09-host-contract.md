@@ -7,7 +7,7 @@ its own identity (`docs/01-plugin.md`).
 edited. If something the plugin needs is not in the contract, note it under **Blocked** in
 `PROGRESS.md` and ask — do not work around it and do not change the server.
 
-The full exported surface is in `docs/reference/plugin-abi-10.1.txt`.
+The full exported surface is in `docs/reference/plugin-abi-0.1.478.txt`.
 
 ## The file listing is a task
 

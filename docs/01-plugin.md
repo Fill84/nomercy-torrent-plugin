@@ -116,7 +116,7 @@ server (sparse, shallow, branch **`dev`**) and packs the contract locally into `
 repacking the same version number, clear that package's NuGet cache entry or the old one is used
 and nothing says so.
 
-The full exported surface is in `docs/reference/plugin-abi-10.1.txt`.
+The full exported surface is in `docs/reference/plugin-abi-0.1.478.txt`.
 
 ## Deploying
 
