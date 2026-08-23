@@ -39,7 +39,7 @@
       own version, read from its Directory.Build.props on branch dev; when that
       moves, this moves with it and the script says so.
     -->
-    <NoMercyContractVersion>0.1.404</NoMercyContractVersion>
+    <NoMercyContractVersion>0.1.478</NoMercyContractVersion>
 
     <!--
       The version, in the one place every project shares it. PluginIdentity and

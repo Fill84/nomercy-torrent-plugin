@@ -8,7 +8,7 @@
     Neither package is published anywhere, and the alternative — copying a DLL
     out of somebody's build — is how a plugin ends up compiled against a
     contract nobody can name. So the media server is cloned (shallow, sparse,
-    branch dev) into _server/ and the two projects are packed locally.
+    branch master) into _server/ and the two projects are packed locally.
 
     Only five projects are checked out: the two packable ones, the two they
     reference, and the analyzer every project in that repository inherits.
@@ -21,9 +21,17 @@
 #>
 [CmdletBinding()]
 param(
-    # Branch of the media server to pack from. dev, always, unless somebody is
-    # deliberately testing against a contract that has not landed yet.
-    [string] $Branch = 'dev',
+    # Branch of the media server to pack from. master, always, unless somebody
+    # is testing against something else.
+    #
+    # Never dev. Its Directory.Build.props carries a fixed <Version>0.1.404</Version>
+    # that has not moved since July and never will, so packing from it produces
+    # a package NuGet believes it already has however much the contract changed.
+    # This repository sat on 0.1.404 while the server shipped 0.1.478, and every
+    # contract added in between was invisible here — the table action cell among
+    # them, which is why the Downloads page still drew its buttons in a second
+    # list under the table.
+    [string] $Branch = 'master',
 
     # Throw away _server/ and clone again.
     [switch] $Fresh
@@ -80,7 +88,13 @@ if ($Fresh -and (Test-Path $serverPath)) {
 
 if (Test-Path (Join-Path $serverPath '.git')) {
     Write-Host "Updating _server to origin/$Branch ..."
-    Invoke-Checked 'git' @('-C', $serverPath, 'fetch', '--depth', '1', 'origin', $Branch)
+    # With the refspec spelled out. A single-branch clone tracks only the branch
+    # it was made from, so fetching another by name lands in FETCH_HEAD and
+    # leaves origin/<branch> missing — and the checkout below then fails saying
+    # it is not a commit.
+    Invoke-Checked 'git' @(
+        '-C', $serverPath, 'fetch', '--depth', '1', 'origin',
+        "+refs/heads/$Branch`:refs/remotes/origin/$Branch")
     Invoke-Checked 'git' (@('-C', $serverPath, 'sparse-checkout', 'set') + $sparsePaths)
     Invoke-Checked 'git' @('-C', $serverPath, 'checkout', '-B', $Branch, "origin/$Branch")
 }
@@ -109,7 +123,16 @@ if ($declared -ne $version) {
 
 New-Item -ItemType Directory -Force -Path $packagePath | Out-Null
 
-foreach ($project in @('NoMercy.Plugins.Abstractions', 'NoMercy.Plugins.Mvc')) {
+# All four, because the two packable ones declare the other two as package
+# dependencies rather than carrying their types. Packing only the first two
+# left a restore that could resolve the contract and nothing it referenced —
+# it worked for as long as the global cache still had yesterday's copies, and
+# stopped the moment the version moved.
+foreach ($project in @(
+    'NoMercy.Plugins.Abstractions',
+    'NoMercy.Plugins.Mvc',
+    'NoMercy.Design',
+    'NoMercy.Events')) {
     # The cache entry goes first. Restore prefers an already-extracted folder of
     # the same version over the file in _nupkgs, however new that file is.
     $cached = Join-Path $HOME ".nuget/packages/$($project.ToLowerInvariant())/$version"
