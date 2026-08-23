@@ -73,6 +73,9 @@ public sealed class Transfers(
             await StageAsync(finished, incompleteFolder, intakeFolder, ct);
         }
 
+        await AskAgainAsync(stored, ct);
+        await FinishAsync(stored, ct);
+
         foreach (StoredDownload carrying in plan.Carry)
         {
             if (carrying.State != GrabState.Downloading)
@@ -188,12 +191,19 @@ public sealed class Transfers(
                 return;
             }
 
+            // Staged, and said so before the encode is asked for. The copy has
+            // happened and must not happen again; whether the encode is taken
+            // is a separate question with its own answer, and a grab that
+            // claimed to be done the moment the file was copied forgot every
+            // encode that was refused.
+            StagedResult first = moved.First(one => one.Moved);
+
+            await grabs.StagedAsync(finished.InfoHash, first.Path!, ct);
+
             foreach (StagedResult one in moved.Where(one => one.Moved))
             {
-                await DispatchAsync(one, ct);
+                await DispatchAsync(finished.InfoHash, one.File.Episode, one.Path!, ct);
             }
-
-            await grabs.StateAsync(finished.InfoHash, GrabState.Done, ct);
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
@@ -208,36 +218,139 @@ public sealed class Transfers(
     /// library and a television one to the tv library. This plugin never picks
     /// a library: it reads the one the show is already in.
     /// </remarks>
-    private async Task DispatchAsync(StagedResult one, CancellationToken ct)
+    private async Task DispatchAsync(string infoHash, EpisodeKey episode, string staged, CancellationToken ct)
     {
         Show? show = (await library.GetShowsAsync(ct))
-            .FirstOrDefault(candidate => candidate.Id == one.File.Episode.ShowId);
+            .FirstOrDefault(candidate => candidate.Id == episode.ShowId);
 
         if (show is null)
         {
             logger.LogWarning(
                 "{File} was staged and show {Show} is in no library the server offered, so no encode was asked for.",
-                one.Path,
-                one.File.Episode.ShowId);
+                staged,
+                episode.ShowId);
 
             return;
         }
 
         bool queued = await dispatch.DispatchAsync(
-            one.Path!,
+            staged,
             show.LibraryId,
             show.Kind == LibraryKind.Anime ? "anime" : "tv",
             ct);
 
-        if (queued)
+        if (!queued)
         {
-            await grabs.DispatchedAsync(
-                one.File.Episode,
-                show.Title,
-                Path.GetFileName(one.Path!),
-                show.LibraryId,
-                DateTimeOffset.UtcNow,
-                ct);
+            // Left staged, so the next tick asks again without copying the file
+            // a second time. An encode refused because the server could not yet
+            // identify the file is refused for a reason that can change.
+            return;
+        }
+
+        await grabs.DispatchedAsync(
+            episode,
+            show.Title,
+            Path.GetFileName(staged),
+            show.LibraryId,
+            DateTimeOffset.UtcNow,
+            ct);
+
+        await grabs.StateAsync(infoHash, GrabState.Dispatched, ct);
+    }
+
+    /// <summary>
+    /// Asks again for every encode that was staged and never taken.
+    /// </summary>
+    /// <remarks>
+    /// The file is already in the intake folder, so nothing is copied. An
+    /// encode is refused for reasons that change — a server still starting up,
+    /// a show it has not finished importing — and a grab that gave up on the
+    /// first refusal left the episode in a folder nobody is watching, which is
+    /// where three of the owner's were found.
+    /// </remarks>
+    private async Task AskAgainAsync(IReadOnlyList<StoredDownload> stored, CancellationToken ct)
+    {
+        foreach (StoredDownload staged in stored.Where(one => one.State == GrabState.Staged))
+        {
+            if (staged.StagedPath is not string path || !File.Exists(path))
+            {
+                // Staged by a version that did not record where, or the owner
+                // moved it. Nothing to ask about and nothing to delete.
+                continue;
+            }
+
+            foreach (EpisodeKey episode in staged.Covers)
+            {
+                await DispatchAsync(staged.InfoHash, episode, path, ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clears up after an encode that has landed in the library.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The library having the episode is the only proof that the encode
+    /// finished — the plugin cannot see the server's queue, and the file
+    /// appearing is what it was all for.
+    /// </para>
+    /// <para>
+    /// Then the copy in the intake folder goes, and so does the torrent and
+    /// what it downloaded. Left behind they are two more copies of an episode
+    /// the owner already has, re-checked on every start for ever.
+    /// </para>
+    /// </remarks>
+    private async Task FinishAsync(IReadOnlyList<StoredDownload> stored, CancellationToken ct)
+    {
+        foreach (StoredDownload sent in stored.Where(one => one.State == GrabState.Dispatched))
+        {
+            bool landed = true;
+
+            foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
+            {
+                IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Key, ct);
+
+                landed &= show.All(wanted => episodes.Any(one =>
+                    one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile));
+            }
+
+            if (!landed)
+            {
+                continue;
+            }
+
+            if (sent.StagedPath is string path)
+            {
+                Delete(path);
+            }
+
+            // The torrent and its download with it. A public one uploads
+            // nothing and a private one has been seeding since it finished, so
+            // by the time the library has the episode there is nothing left for
+            // either to give.
+            await engine.RemoveAsync(sent.InfoHash, deleteFiles: true, ct);
+            await grabs.StateAsync(sent.InfoHash, GrabState.Done, ct);
+
+            journal.Finished(ActivityStage.Dispatch, sent.ReleaseTitle, "encoded into the library, and the copies deleted");
+        }
+    }
+
+    /// <summary>Takes a file away, and never takes the caller down with it.</summary>
+    private void Delete(string path)
+    {
+        try
+        {
+            if (File.Exists(path))
+            {
+                File.Delete(path);
+            }
+        }
+        catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+        {
+            // Something still has it open. It is one file left behind, which is
+            // not worth stopping the tick for; the next one tries again.
+            logger.LogInformation("{File} could not be deleted: {Reason}", Path.GetFileName(path), held.Message);
         }
     }
 }

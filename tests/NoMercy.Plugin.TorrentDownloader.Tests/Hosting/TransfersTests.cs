@@ -1,4 +1,5 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Storage;
@@ -121,6 +122,114 @@ public class TransfersTests : IDisposable
         Assert.False(stopped.DeleteFiles);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>An encode that was refused is asked for again.</strong> A grab
+    /// used to be marked done the moment its file was copied, whether or not
+    /// the encode was ever taken — so a refusal was forgotten and the episode
+    /// sat in the intake folder for ever, with the plugin never coming back to
+    /// it. Three of the owner's were found there on 24 August 2026.
+    /// </para>
+    /// <para>
+    /// And it is asked for without copying anything again: the file is already
+    /// where it belongs, and re-staging it every minute is gigabytes of
+    /// nothing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEncodeThatWasRefusedIsAskedForAgainWithoutStagingTwice()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        string staged = Path.Combine(Intake, Path.GetFileName(episode));
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        // The server knows nothing about it yet, so the encode is refused.
+        server.Files.Matches = [];
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(staged), "It was never staged.");
+        Assert.Null(server.Dispatcher.Job);
+
+        StoredDownload waiting = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.Equal(GrabState.Staged, waiting.State);
+        Assert.Equal(staged, waiting.StagedPath);
+
+        // The download is gone from the incomplete folder, so a tick that tried
+        // to stage again would have nothing to copy and would say so.
+        Assert.False(File.Exists(episode));
+
+        // Now the server knows it, and the next tick asks again.
+        server.Files.Matches = [(staged, "4417")];
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.NotNull(server.Dispatcher.Job);
+        Assert.Equal(
+            GrabState.Dispatched,
+            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The library having the episode is the end of it.</strong> That
+    /// is the only proof the encode finished — the plugin cannot see the
+    /// server's queue — and it is what everything was for.
+    /// </para>
+    /// <para>
+    /// Then the copy in the intake folder goes, and the torrent and what it
+    /// downloaded with it. Left behind they are two more copies of an episode
+    /// the owner already has, re-checked on every start for ever.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WhenTheLibraryHasTheEpisodeEveryCopyOfItIsDeleted()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        string staged = Path.Combine(Intake, Path.GetFileName(episode));
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(staged, "4417")];
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(
+            GrabState.Dispatched,
+            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+
+        // Still there while the encoder is working, because the library does
+        // not have the episode yet.
+        Assert.True(File.Exists(staged));
+
+        await Transfers(engine, grabs, server, encoded: true)
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.False(File.Exists(staged), "The staged copy was left behind.");
+
+        (string InfoHash, bool DeleteFiles) removed = Assert.Single(engine.Removed);
+
+        Assert.Equal(Hash, removed.InfoHash);
+        Assert.True(removed.DeleteFiles, "The download was left on the disk.");
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);
@@ -180,14 +289,22 @@ public class TransfersTests : IDisposable
         return new();
     }
 
-    private static Transfers Transfers(StandingEngine engine, GrabRepository grabs, FakeProvider server)
+    private static Transfers Transfers(
+        StandingEngine engine,
+        GrabRepository grabs,
+        FakeProvider server,
+        bool encoded = false)
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
             // A real Ulid, because the server's library id is one and the
             // encode job will not take anything else. "library-tv" made every
             // test here agree with a plugin that could never dispatch.
             .Library(TelevisionLibrary, "Television", "tv")
-            .Show(41, "Silo", TelevisionLibrary);
+            .Show(41, "Silo", TelevisionLibrary)
+
+            // Whether the encode has landed. It is the only thing the plugin
+            // can see that says the job finished.
+            .Episode(41, 3, 6, hasFile: encoded);
 
         return new(
             engine,

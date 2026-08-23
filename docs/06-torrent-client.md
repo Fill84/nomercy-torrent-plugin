@@ -281,7 +281,8 @@ line, an error message, a page, or the activity journal.
 Initialize  → sockets bound, port mapped, DHT bootstrapped, resume loaded
 Grab        → AddAsync(...) → info hash
 Transfers   → StatusAsync() → one row per torrent
-Complete    → the largest video staged, the encode dispatched, seeding continues
+Complete    → the largest video staged, the encode dispatched
+Encoded     → the library has the episode, so every copy of it is deleted
 Dispose     → announce stopped, resume written, sockets closed, mapping removed
 ```
 

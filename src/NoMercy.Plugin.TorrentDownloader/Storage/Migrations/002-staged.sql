@@ -1,0 +1,11 @@
+-- Where a grab's episode was staged to.
+--
+-- A grab used to go straight to "done" the moment its file was copied into the
+-- intake folder, whether or not the encode was ever asked for. So an encode
+-- that could not be dispatched was forgotten: the episode sat in the intake
+-- folder for ever, the plugin never came back to it, and nothing said so.
+--
+-- With the path recorded, a dispatch that failed is tried again on the next
+-- tick without copying the file a second time, and the file is deleted once the
+-- library has the episode instead of being re-checked on every start.
+ALTER TABLE grabs ADD COLUMN staged_path TEXT NULL;

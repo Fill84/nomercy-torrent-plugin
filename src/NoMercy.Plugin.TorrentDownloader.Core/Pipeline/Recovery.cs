@@ -11,7 +11,27 @@ public enum GrabState
 
     Downloading,
 
-    /// <summary>Finished, staged and dispatched.</summary>
+    /// <summary>
+    /// The file is in the intake folder and the encode has not been asked for.
+    /// </summary>
+    /// <remarks>
+    /// Its own state because a dispatch can fail on its own: the copy
+    /// succeeded, so staging must not be done again, and the encode must be
+    /// asked for again until it is taken. A grab used to go straight to
+    /// <see cref="Done"/> the moment the file was copied, so an encode that was
+    /// refused was forgotten and the episode sat in the intake folder for ever.
+    /// </remarks>
+    Staged,
+
+    /// <summary>
+    /// The encode has been asked for, and the library does not have the episode
+    /// yet.
+    /// </summary>
+    Dispatched,
+
+    /// <summary>
+    /// The library has the episode and everything downloaded for it is gone.
+    /// </summary>
     Done,
 
     Failed,
@@ -39,6 +59,16 @@ public sealed record StoredDownload(string InfoHash, string Magnet, string Relea
     /// and neither can be worked out from anything else the store holds.
     /// </remarks>
     public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
+
+    /// <summary>
+    /// Where its episode was copied to, once it has been.
+    /// </summary>
+    /// <remarks>
+    /// So a dispatch that failed can be asked for again without copying
+    /// gigabytes a second time, and so the file can be deleted once the library
+    /// has the episode rather than left to be found again on every start.
+    /// </remarks>
+    public string? StagedPath { get; init; }
 }
 
 /// <summary>
@@ -101,11 +131,17 @@ public static class Recovery
 
         foreach (StoredDownload download in stored)
         {
-            if (download.State is GrabState.Done or GrabState.Failed)
+            if (download.State is GrabState.Done or GrabState.Failed
+                or GrabState.Staged or GrabState.Dispatched)
             {
-                // Finished with, either way. A torrent still seeding after it
-                // was staged is in the client on purpose and is not something
-                // to stop.
+                // Nothing here to plan. Done and failed are finished with
+                // either way, and a torrent still in the client after it was
+                // staged is there on purpose and is not something to stop.
+                //
+                // Staged and dispatched have their own step: the file is
+                // already in the intake folder, so copying it again every
+                // minute — which is what this used to plan, because the torrent
+                // stays complete in the client — is gigabytes of nothing.
                 continue;
             }
 

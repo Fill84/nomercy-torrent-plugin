@@ -94,7 +94,7 @@ public sealed class GrabRepository(Database database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed');
             """;
 
@@ -111,10 +111,37 @@ public sealed class GrabRepository(Database database)
                 Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState state) ? state : GrabState.Grabbed)
             {
                 Covers = Covered(reader.GetString(4)),
+                StagedPath = reader.IsDBNull(5) ? null : reader.GetString(5),
             });
         }
 
         return open;
+    }
+
+    /// <summary>
+    /// Records that a grab's episode is now in the intake folder.
+    /// </summary>
+    /// <remarks>
+    /// The path with the state, in one write. A grab that said it was staged
+    /// without saying where would have the file looked for by name on every
+    /// tick, and a grab that said where without saying so would be staged all
+    /// over again.
+    /// </remarks>
+    public async Task StagedAsync(string infoHash, string path, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            UPDATE grabs SET state = 'staged', staged_path = $path
+            WHERE info_hash = $hash AND state <> 'done';
+            """;
+
+        command.Parameters.AddWithValue("$path", path);
+        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>
@@ -131,7 +158,13 @@ public sealed class GrabRepository(Database database)
         await using SqliteConnection connection = await database.OpenAsync(ct);
         await using SqliteCommand command = connection.CreateCommand();
 
-        command.CommandText = "UPDATE grabs SET state = $state WHERE info_hash = $hash;";
+        // Never a grab that is done. State is written by info hash and one
+        // release could have several rows under one — so a later failure of the
+        // same torrent used to drag the finished one back with it, put the
+        // episode to missing and have it searched for again though its file was
+        // already staged. It took the owner's finished grabs from twenty-three
+        // to eleven overnight.
+        command.CommandText = "UPDATE grabs SET state = $state WHERE info_hash = $hash AND state <> 'done';";
         command.Parameters.AddWithValue("$state", state.ToString().ToLowerInvariant());
         command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
 
@@ -185,7 +218,7 @@ public sealed class GrabRepository(Database database)
         await using (SqliteCommand marking = connection.CreateCommand())
         {
             marking.Transaction = transaction;
-            marking.CommandText = "UPDATE grabs SET state = 'failed' WHERE info_hash = $hash;";
+            marking.CommandText = "UPDATE grabs SET state = 'failed' WHERE info_hash = $hash AND state <> 'done';";
             marking.Parameters.AddWithValue("$hash", hash);
 
             await marking.ExecuteNonQueryAsync(ct);

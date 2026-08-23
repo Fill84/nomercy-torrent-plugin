@@ -1,3 +1,4 @@
+using Microsoft.Data.Sqlite;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
@@ -122,6 +123,53 @@ public class GrabRepositoryTests : IDisposable
         // And it is not open any more, so recovery will not re-add the very
         // thing that just failed.
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A grab that is done is finished with.</strong> State is written
+    /// by info hash, and until 23 August 2026 every cycle recorded a fresh grab
+    /// for an episode it was already downloading — so one release could have
+    /// four rows under one hash. When a later one failed, it dragged the
+    /// finished ones back with it: the episode went to missing and was searched
+    /// for again, though its file was already staged into the library.
+    /// </para>
+    /// <para>
+    /// It is what took the owner's finished grabs from twenty-three to eleven
+    /// overnight.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AGrabThatIsDoneIsNotDraggedBackByALaterFailure()
+    {
+        Database database = Database();
+        GrabRepository grabs = new(database);
+
+        await Record(grabs, Hash, [Episode(1)]);
+        await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
+
+        // The same torrent, grabbed again before the duplicate was stopped.
+        await Record(grabs, Hash, [Episode(1)]);
+
+        await grabs.FailedAsync(Hash, "the swarm went quiet", DateTimeOffset.UtcNow, CancellationToken.None);
+
+        Assert.Equal(1, await Done(database));
+
+        // And it does not come back to life either.
+        await grabs.StateAsync(Hash, GrabState.Downloading, CancellationToken.None);
+
+        Assert.Equal(1, await Done(database));
+    }
+
+    /// <summary>How many rows are done, which no reading of the store answers.</summary>
+    private static async Task<long> Done(Database database)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(CancellationToken.None);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText = "SELECT count(*) FROM grabs WHERE state = 'done';";
+
+        return (long)(await command.ExecuteScalarAsync(CancellationToken.None))!;
     }
 
     /// <remarks>

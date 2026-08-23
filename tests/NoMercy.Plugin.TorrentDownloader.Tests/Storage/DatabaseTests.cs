@@ -21,10 +21,18 @@ public class DatabaseTests : IDisposable
         Database database = new(_folder);
 
         await database.MigrateAsync(CancellationToken.None);
+
+        // Whatever ships, rather than a number that has to be edited every time
+        // one is added — the fault this is watching for is a version that grows
+        // on a second run, not a version of any particular size.
+        long once = await Version(database);
+
+        Assert.InRange(once, 1, long.MaxValue);
+
         await database.MigrateAsync(CancellationToken.None);
         await database.MigrateAsync(CancellationToken.None);
 
-        Assert.Equal(1, await Version(database));
+        Assert.Equal(once, await Version(database));
         Assert.Equal(0, await Count(database, "episodes"));
     }
 
