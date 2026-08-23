@@ -81,13 +81,21 @@ public static class TitleMatcher
 
     /// <summary>Whoever reposted it, in brackets at the end.</summary>
     /// <remarks>
-    /// <c>[EZTVx to]</c>, <c>[EZTVx.to]</c>, <c>[TGx]</c>, <c>[eztv]</c>. A
-    /// bracketed group anywhere else in a name is left alone: anime writes its
-    /// own group that way at the front, and that is part of the name.
+    /// <para>
+    /// <c>[EZTVx to]</c>, <c>[EZTVx.to]</c>, <c>[TGx]</c>, <c>[eztv]</c>. Named
+    /// sites only, exactly as the bare rule below.
+    /// </para>
+    /// <para>
+    /// It used to take any bracketed group of twenty characters or fewer, and
+    /// that is wrong twice over on the shape anime is published in:
+    /// <c>[SubsPlease] Rilakkuma - 20 (1080p) [A830B1C2]</c> loses its checksum
+    /// and then loses <c>(1080p)</c> as well, which leaves a release that does
+    /// not say what resolution it is and is refused for it.
+    /// </para>
     /// </remarks>
     private static readonly Regex SiteTag = new(
-        @"[\[(][^\[\]()]{1,20}[\])]\s*$",
-        RegexOptions.Compiled);
+        @"[\[(]\s*(?:eztvx?(?:[\s.]+to)?|tgx|rarbg|ettv)\s*[\])]\s*$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private static readonly Regex Punctuation = new(
         @"[^\p{L}\p{N}]+",
@@ -250,6 +258,28 @@ public static class TitleMatcher
     /// </remarks>
     public static string Release(string title)
     {
+        return Normalised(Clean(title));
+    }
+
+    /// <summary>
+    /// The name as the group published it: the reposter's tag and the file type
+    /// taken off, and nothing else touched.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What a person reads. <see cref="Release"/> answers a comparison key —
+    /// lower case, punctuation gone — which is right for deciding that two rows
+    /// are one torrent and wrong for anything shown or written down.
+    /// </para>
+    /// <para>
+    /// On 22 August 2026 the Downloads page said
+    /// <c>Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV</c>: the site's name was
+    /// written against the grab, shown to the owner, and carried into staging,
+    /// where a file is looked for by the name the grab carries.
+    /// </para>
+    /// </remarks>
+    public static string Clean(string title)
+    {
         string trimmed = (title ?? string.Empty).Trim();
 
         // The extension first: the tag usually sits in front of it.
@@ -269,7 +299,7 @@ public static class TitleMatcher
 
         Match bare = BareTag.Match(trimmed);
 
-        return Normalised(bare.Success ? trimmed[..bare.Index] : trimmed);
+        return (bare.Success ? trimmed[..bare.Index] : trimmed).TrimEnd();
     }
 
     /// <summary>

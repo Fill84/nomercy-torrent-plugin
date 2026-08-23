@@ -286,6 +286,11 @@ public sealed class Find(
 
         return best with
         {
+            // The release as its group published it, not as a site printed it.
+            // The site's own name on the end travels no further than this: it
+            // is written against the grab, shown on every page, and matched
+            // against the finished file by staging.
+            Title = TitleMatcher.Clean(best.Title),
             Seeders = rows.Any(copy => copy.Seeders is not null) ? seeders : null,
             Source = rows
                 .OrderByDescending(copy => copy.Seeders ?? -1)

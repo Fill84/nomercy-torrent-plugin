@@ -121,6 +121,43 @@ public class TitleMatcherTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>What the owner reads is the release, not the site.</strong>
+    /// <c>Release</c> answers a comparison key — lower case, punctuation gone —
+    /// which is right for deciding that two rows are one torrent and wrong for
+    /// anything a person looks at. On 22 August 2026 the Downloads page said
+    /// <c>Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV</c>, and that name was
+    /// written against the grab and carried into staging.
+    /// </para>
+    /// <para>
+    /// The name as the group published it, with the reposter's tag and the file
+    /// type taken off and nothing else touched: the case, the dots and the
+    /// dashes are the release's own.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV", "Sugar 2024 S02E04 1080p WEB H264-CAKES")]
+    [InlineData("Silo.S03E08.1080p.WEB.H264-CAKES [TGx]", "Silo.S03E08.1080p.WEB.H264-CAKES")]
+    [InlineData("Sugar 2024 S02E08 1080p WEB H264-CAKES[EZTVx.to].mkv", "Sugar 2024 S02E08 1080p WEB H264-CAKES")]
+    [InlineData("Silo S03E04 1080p WEB H264-CAKES EZTVx to", "Silo S03E04 1080p WEB H264-CAKES")]
+
+    // Untouched: there is nothing on the end of it but the group.
+    [InlineData("Lucky 2026 S01E02 1080p WEB h264-ETHEL", "Lucky 2026 S01E02 1080p WEB h264-ETHEL")]
+    [InlineData("Greek S01E01 HR HDTV XviD-2HD", "Greek S01E01 HR HDTV XviD-2HD")]
+
+    // Anime, where brackets are part of the name at both ends: the group at the
+    // front and the checksum at the back. Taking any bracketed group off the
+    // end costs the checksum and then costs (1080p) as well, and a release that
+    // does not say its resolution is refused for it.
+    [InlineData(
+        "[SubsPlease] Rilakkuma - 20 (1080p) [A830B1C2]",
+        "[SubsPlease] Rilakkuma - 20 (1080p) [A830B1C2]")]
+    public void TheNameTheOwnerReadsIsTheReleaseAndNotTheSite(string printed, string published)
+    {
+        Assert.Equal(published, TitleMatcher.Clean(printed));
+    }
+
+    /// <remarks>
     /// Two different releases stay different, whatever is stuck on the end of
     /// them. Dropping a tag must not drop the group with it.
     /// </remarks>
