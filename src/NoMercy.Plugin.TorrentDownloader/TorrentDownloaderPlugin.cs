@@ -347,7 +347,24 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // on a full pass.
             tracked = [.. tracked.Where(one => one.Key == wanted)];
         }
+
         GrabRepository grabs = await GrabsAsync(ct);
+
+        if (only is null)
+        {
+            // An episode something is already downloading is not a gap. It
+            // stays missing until a file for it is in the library — which is
+            // right — and without this the cycle read that as work and grabbed
+            // the same release again: on 23 August 2026 three episodes of Sugar
+            // had four identical grabs each, one per cycle.
+            //
+            // Never when the owner asked for one episode by hand. That is a
+            // decision they have made about that episode, and refusing it
+            // because a grab is open is refusing the thing they asked for.
+            tracked = OpenGrabs.Excluding(
+                tracked,
+                [.. (await grabs.OpenAsync(ct)).SelectMany(one => one.Covers)]);
+        }
 
         try
         {
