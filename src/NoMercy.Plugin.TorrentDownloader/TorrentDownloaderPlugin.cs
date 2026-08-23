@@ -876,10 +876,20 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     TimeSpan.FromMinutes(settings.Client.MetadataTimeoutMinutes),
                     TimeSpan.FromMinutes(settings.Client.StallMinutes),
                     settings.Client.MaxConcurrentDownloads,
+                    new SeedLimit(settings.Client.SeedRatio, TimeSpan.FromHours(settings.Client.SeedHours)),
+                    settings.Client.MaxDownloadRate,
+                    settings.Client.MaxUploadRate,
                     _journal,
                     Context.Logger,
                     new SocketTrackerTransport(_trackerHttp),
-                    new SocketPeerDialler(),
+                    new SocketPeerDialler(
+                        SocketPeerDialler.DefaultPatience,
+                        settings.Client.Encryption switch
+                        {
+                            EncryptionPolicy.Required => PeerEncryption.Required,
+                            EncryptionPolicy.Disabled => PeerEncryption.Disabled,
+                            _ => PeerEncryption.Allowed,
+                        }),
                     resume: new ResumeKeeper(
                         settings.IncompleteFolder,
                         TimeSpan.FromSeconds(settings.Client.ResumeIntervalSeconds),

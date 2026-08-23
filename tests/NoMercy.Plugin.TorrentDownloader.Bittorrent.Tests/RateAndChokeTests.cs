@@ -322,7 +322,7 @@ public class RateAndChokeTests
     }
 
     /// <remarks>
-    /// The ratio or the hours, whichever comes first.
+    /// The ratio or the hours, whichever comes first, on a private torrent.
     /// </remarks>
     [Theory]
     [InlineData(0.5, 1, false)]
@@ -334,7 +334,7 @@ public class RateAndChokeTests
     {
         SeedLimit limit = new(Ratio: 1.0, For: TimeSpan.FromHours(48));
 
-        Assert.Equal(stopped, limit.Reached(priv: false, ratio, TimeSpan.FromHours(hours)));
+        Assert.Equal(stopped, limit.Reached(priv: true, ratio, TimeSpan.FromHours(hours)));
     }
 
     /// <remarks>
@@ -346,26 +346,86 @@ public class RateAndChokeTests
     {
         SeedLimit none = new(Ratio: 0, For: TimeSpan.Zero);
 
-        Assert.False(none.Reached(priv: false, ratio: 99, TimeSpan.FromDays(30)));
+        Assert.False(none.Reached(priv: true, ratio: 99, TimeSpan.FromDays(30)));
 
         // And one of the two on its own still works.
-        Assert.True(new SeedLimit(Ratio: 2, For: TimeSpan.Zero).Reached(priv: false, 2.5, TimeSpan.FromMinutes(1)));
-        Assert.True(new SeedLimit(Ratio: 0, For: TimeSpan.FromHours(1)).Reached(priv: false, 0, TimeSpan.FromHours(2)));
+        Assert.True(new SeedLimit(Ratio: 2, For: TimeSpan.Zero).Reached(priv: true, 2.5, TimeSpan.FromMinutes(1)));
+        Assert.True(new SeedLimit(Ratio: 0, For: TimeSpan.FromHours(1)).Reached(priv: true, 0, TimeSpan.FromHours(2)));
     }
 
     /// <remarks>
-    /// A private torrent is never stopped early. Its tracker keeps its own
-    /// account of what every member has given back, and a client that stopped
-    /// at a ratio the owner's tracker had not yet credited would cost the owner
-    /// their account.
+    /// <para>
+    /// A public torrent is finished the moment it is complete, whatever the
+    /// limits say. This client never uploads on a public swarm — the owner's
+    /// rule, docs/06-torrent-client.md § Uploading — so staying in one gives
+    /// nothing to anybody while costing a connection and a slot.
+    /// </para>
+    /// <para>
+    /// A private one is where the limits mean something: there the tracker
+    /// keeps an account of what the owner has given back, and the ratio the
+    /// owner set is the one they want to reach.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void APrivateTorrentIsNeverStoppedEarlyByThatRule()
+    public void APublicTorrentIsFinishedTheMomentItIsComplete()
     {
         SeedLimit limit = new(Ratio: 1.0, For: TimeSpan.FromHours(48));
 
-        Assert.False(limit.Reached(priv: true, ratio: 99, TimeSpan.FromDays(365)));
-        Assert.True(limit.Reached(priv: false, ratio: 99, TimeSpan.FromDays(365)));
+        Assert.True(limit.Reached(priv: false, ratio: 0, TimeSpan.Zero));
+        Assert.False(limit.Reached(priv: true, ratio: 0, TimeSpan.Zero));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A limit that is set is a limit that holds.</strong>
+    /// <c>MaxDownloadRate</c> and <c>MaxUploadRate</c> were on the Settings page
+    /// and read by nothing at all, so a client told to take at most so much a
+    /// second took whatever the line would give.
+    /// </para>
+    /// <para>
+    /// A second's worth goes straight through — that is the burst the bucket
+    /// holds, and without it every block would wait its own turn — and what is
+    /// asked for beyond that waits for the bucket to fill. Measured on a clock
+    /// the test owns, so nothing here sleeps.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task NoMoreThanTheRateGoesThroughInASecond()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 22, 12, 0, 0, TimeSpan.Zero));
+        RateGate gate = new(1000, clock);
+
+        // The first second's worth is the burst, and it does not wait.
+        await gate.PassAsync(1000, CancellationToken.None);
+
+        // The next thousand has to be waited for, and the wait is a second.
+        Task passing = gate.PassAsync(1000, CancellationToken.None);
+
+        Assert.False(passing.IsCompleted);
+
+        clock.Advance(TimeSpan.FromMilliseconds(999));
+
+        Assert.False(passing.IsCompleted);
+
+        clock.Advance(TimeSpan.FromMilliseconds(2));
+
+        await passing;
+    }
+
+    /// <remarks>
+    /// Nought is nobody asking for a limit. A gate that read it as a limit of
+    /// nothing would stop the client dead, which is worse than any rate.
+    /// </remarks>
+    [Fact]
+    public async Task ARateOfNoughtIsNoLimitAtAll()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 22, 12, 0, 0, TimeSpan.Zero));
+        RateGate gate = new(0, clock);
+
+        for (int block = 0; block < 100; block++)
+        {
+            await gate.PassAsync(16 * 1024, CancellationToken.None);
+        }
     }
 
     private const long Megabyte = 1024 * 1024;

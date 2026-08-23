@@ -133,6 +133,12 @@ public class ClientAcceptanceTests : IDisposable
         ]);
     }
 
+    /// <summary>
+    /// Seeding that does not stop, so the acceptance can look at a finished
+    /// torrent. The rule itself is proved in RateAndChokeTests.
+    /// </summary>
+    private static readonly SeedLimit Seeding = new(Ratio: 0, For: TimeSpan.Zero);
+
     private BittorrentEngine Engine(string which, ITrackerTransport trackers)
     {
         return new(
@@ -140,6 +146,9 @@ public class ClientAcceptanceTests : IDisposable
             TimeSpan.FromMinutes(5),
             TimeSpan.FromMinutes(30),
             5,
+            Seeding,
+            0,
+            0,
             new ActivityJournal(),
             new CapturingLogger(),
             trackers,

@@ -181,7 +181,9 @@ verification, not the whole torrent.
 
 Token buckets: one global pair, one pair per torrent, refilled on a timer and drained by every read
 and write. `MaxDownloadRate` and `MaxUploadRate` from settings, live-adjustable, zero meaning
-unlimited. The lower of the global and per-torrent limit wins.
+unlimited. The limit is on the line and not on a torrent, so one bucket for each direction is shared
+between every torrent. It holds one second's worth, so a burst of blocks goes through unharmed while
+the average comes out at the number the owner typed.
 
 ## What is downloaded
 
@@ -234,9 +236,10 @@ what the owner has given back and a client that took without giving would cost t
 
 ## Seeding
 
-A private torrent seeds until `SeedRatio` **or** `SeedHours`, whichever comes first — except that it
-is never stopped early by the ratio, because the ratio its own tracker credits is the one that
-counts. A public torrent has nothing to seed with.
+A private torrent seeds until `SeedRatio` **or** `SeedHours`, whichever comes first. A public one is
+finished the moment it is complete: nothing is ever uploaded on a public swarm, so staying in one
+gives nothing to anybody while costing a connection. It is stopped, not removed — the files stay
+where they are and staging takes them from there.
 
 ## Stalls
 

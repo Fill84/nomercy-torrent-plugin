@@ -479,6 +479,26 @@ public sealed class Rc4Stream(Stream inner, Rc4 outgoing, Rc4 incoming) : Stream
 /// throw away half a swarm; a client that never tried encryption would be
 /// refused by the other half.
 /// </remarks>
+/// <summary>
+/// What this client will agree to when it dials a peer.
+/// </summary>
+/// <remarks>
+/// The owner's <c>Encryption</c> setting, in the engine's own words. It was on
+/// the Settings page and read by nothing at all, so every connection was
+/// negotiated the same way whatever the owner had chosen.
+/// </remarks>
+public enum PeerEncryption
+{
+    /// <summary>Encrypted when the peer will, in the clear when it will not.</summary>
+    Allowed,
+
+    /// <summary>Encrypted or not at all.</summary>
+    Required,
+
+    /// <summary>No negotiation: the handshake goes out as it is.</summary>
+    Disabled,
+}
+
 public static class PeerDial
 {
     /// <summary>Connects, agreeing whatever the peer will agree to.</summary>
@@ -490,27 +510,52 @@ public static class PeerDial
     /// <param name="infoHash">Which torrent.</param>
     /// <param name="handshake">This client's BitTorrent handshake.</param>
     /// <param name="random">Where the key and the padding come from.</param>
+    /// <param name="encryption">What the owner will agree to.</param>
     /// <param name="ct">Cancellation.</param>
     public static async Task<MseLink> ConnectAsync(
         Func<CancellationToken, Task<Stream>> connect,
         byte[] infoHash,
         byte[] handshake,
         RandomNumberGenerator random,
+        PeerEncryption encryption,
         CancellationToken ct)
     {
-        Stream encrypted = await connect(ct).ConfigureAwait(false);
+        if (encryption != PeerEncryption.Disabled)
+        {
+            Stream encrypted = await connect(ct).ConfigureAwait(false);
 
-        try
-        {
-            return await MseNegotiation
-                .InitiateAsync(encrypted, infoHash, handshake, MseMethod.Plaintext | MseMethod.Rc4, random, ct)
-                .ConfigureAwait(false);
-        }
-        catch (Exception refusal) when (refusal is MseRefusedException or PeerProtocolException or IOException
-                                            or EndOfStreamException
-                                        && !ct.IsCancellationRequested)
-        {
-            await encrypted.DisposeAsync().ConfigureAwait(false);
+            try
+            {
+                return await MseNegotiation
+                    .InitiateAsync(
+                        encrypted,
+                        infoHash,
+                        handshake,
+
+                        // Required means the payload is encrypted too. Offering
+                        // plaintext as well lets a peer agree to the
+                        // negotiation and then send everything in the clear,
+                        // which is what the owner asked not to happen.
+                        encryption == PeerEncryption.Required
+                            ? MseMethod.Rc4
+                            : MseMethod.Plaintext | MseMethod.Rc4,
+                        random,
+                        ct)
+                    .ConfigureAwait(false);
+            }
+            catch (Exception refusal) when (refusal is MseRefusedException or PeerProtocolException or IOException
+                                                or EndOfStreamException
+                                            && !ct.IsCancellationRequested)
+            {
+                await encrypted.DisposeAsync().ConfigureAwait(false);
+
+                if (encryption == PeerEncryption.Required)
+                {
+                    // No second try in the clear. A peer that will not encrypt
+                    // is a peer this owner does not talk to.
+                    throw;
+                }
+            }
         }
 
         Stream plain = await connect(ct).ConfigureAwait(false);

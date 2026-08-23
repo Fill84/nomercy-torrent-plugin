@@ -25,7 +25,7 @@ public class BittorrentEngineTests : IDisposable
     {
         // Nought, so the operating system picks the number: what matters is
         // that four ticks leave one port and not four.
-        using BittorrentEngine engine = new(0, Timeout, Stall, Together, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
+        using BittorrentEngine engine = new(0, Timeout, Stall, Together, Seeding, 0, 0, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
 
@@ -48,7 +48,7 @@ public class BittorrentEngineTests : IDisposable
     [Fact]
     public void DisposingItTwiceIsSafe()
     {
-        BittorrentEngine engine = new(0, Timeout, Stall, Together, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
+        BittorrentEngine engine = new(0, Timeout, Stall, Together, Seeding, 0, 0, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
         engine.Dispose();
@@ -75,6 +75,9 @@ public class BittorrentEngineTests : IDisposable
             Timeout,
             Stall,
             Together,
+            Seeding,
+            0,
+            0,
             journal,
             new CapturingLogger(),
             new SilentTrackers(),
@@ -137,6 +140,9 @@ public class BittorrentEngineTests : IDisposable
             Timeout,
             Stall,
             Together,
+            Seeding,
+            0,
+            0,
             new ActivityJournal(),
             new CapturingLogger(),
             trackers,
@@ -170,6 +176,9 @@ public class BittorrentEngineTests : IDisposable
             Timeout,
             Stall,
             Together,
+            Seeding,
+            0,
+            0,
             new ActivityJournal(),
             new CapturingLogger(),
             new SilentTrackers(),
@@ -346,6 +355,9 @@ public class BittorrentEngineTests : IDisposable
             TimeSpan.FromHours(6),
             TimeSpan.FromHours(6),
             3,
+            Seeding,
+            0,
+            0,
             new ActivityJournal(clock),
             new CapturingLogger(),
             new SilentTrackers(),
@@ -399,6 +411,10 @@ public class BittorrentEngineTests : IDisposable
 
     private static readonly int Together = new ClientLimits().MaxConcurrentDownloads;
 
+    private static readonly SeedLimit Seeding = new(
+        new ClientLimits().SeedRatio,
+        TimeSpan.FromHours(new ClientLimits().SeedHours));
+
     private static readonly TorrentRequest Request = new(
         "magnet:?xt=urn:btih:92D8A3F6864911EF292B4BE0DD5286406396D2B3&dn=Silo+S03E06&tr=udp%3A%2F%2Fone.example%3A80",
         ["udp://two.example:80"],
@@ -423,7 +439,7 @@ public class BittorrentEngineTests : IDisposable
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
         ActivityJournal journal = new(clock);
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, Seeding, 0, 0, journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -452,7 +468,7 @@ public class BittorrentEngineTests : IDisposable
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
         ActivityJournal journal = new(clock);
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, Seeding, 0, 0, journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -480,7 +496,7 @@ public class BittorrentEngineTests : IDisposable
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, Seeding, 0, 0, new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -522,6 +538,9 @@ public class BittorrentEngineTests : IDisposable
             TimeSpan.FromHours(6),
             TimeSpan.FromMinutes(30),
             Together,
+            Seeding,
+            0,
+            0,
             new ActivityJournal(clock),
             new CapturingLogger(),
             new SilentTrackers(),
@@ -557,7 +576,7 @@ public class BittorrentEngineTests : IDisposable
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 17, 12, 0, 0, TimeSpan.Zero));
 
-        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+        using BittorrentEngine engine = new(0, TimeSpan.FromMinutes(5), Stall, Together, Seeding, 0, 0, new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
 
         engine.Start();
 
@@ -599,7 +618,7 @@ public class BittorrentEngineTests : IDisposable
 
     private static BittorrentEngine Started()
     {
-        BittorrentEngine engine = new(0, Timeout, Stall, Together, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
+        BittorrentEngine engine = new(0, Timeout, Stall, Together, Seeding, 0, 0, new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers());
 
         engine.Start();
 

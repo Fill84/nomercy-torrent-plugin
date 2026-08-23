@@ -481,6 +481,7 @@ public class EncryptionTests
             Ubuntu,
             Handshake.Write(Ubuntu, PeerId),
             RandomNumberGenerator.Create(),
+            PeerEncryption.Allowed,
             Cancellation);
 
         Assert.Equal(MseMethod.Plaintext, link.Method);
@@ -492,6 +493,86 @@ public class EncryptionTests
         Assert.False(Contains(attempts[0].Sent, Handshake.Protocol.ToArray()));
 
         Assert.Equal(Handshake.Write(Ubuntu, PeerId), attempts[1].Sent);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Required means required.</strong> A peer that will not negotiate
+    /// is not dialled a second time in the clear, and the connection fails
+    /// rather than quietly becoming the thing the owner turned off.
+    /// </para>
+    /// <para>
+    /// The setting was on the Settings page and read by nothing at all, so
+    /// every connection was made the same way whatever the owner had chosen.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task RequiredEncryptionNeverFallsBackToTheClear()
+    {
+        List<PeerWire> attempts = [];
+
+        await Assert.ThrowsAnyAsync<Exception>(async () => await PeerDial.ConnectAsync(
+            _ =>
+            {
+                PeerWire wire = new();
+
+                attempts.Add(wire);
+
+                // A peer of the older sort: it answers anything with its
+                // handshake, which is exactly what MSE cannot be continued
+                // from.
+                Task.Run(async () =>
+                {
+                    await wire.Receiver.WriteAsync(Handshake.Write(Ubuntu, TheirId), Cancellation);
+                    await wire.Receiver.FlushAsync(Cancellation);
+                });
+
+                return Task.FromResult<Stream>(wire.Initiator);
+            },
+            Ubuntu,
+            Handshake.Write(Ubuntu, PeerId),
+            RandomNumberGenerator.Create(),
+            PeerEncryption.Required,
+            Cancellation));
+
+        // Dialled once and given up on, where Allowed dials a second time.
+        PeerWire only = Assert.Single(attempts);
+
+        Assert.False(Contains(only.Sent, Handshake.Protocol.ToArray()));
+    }
+
+    /// <remarks>
+    /// Disabled is no negotiation at all: the handshake goes out as it is, on
+    /// the first and only connection.
+    /// </remarks>
+    [Fact]
+    public async Task DisabledEncryptionSendsTheHandshakeAndNothingElse()
+    {
+        List<PeerWire> attempts = [];
+
+        MseLink link = await PeerDial.ConnectAsync(
+            _ =>
+            {
+                PeerWire wire = new();
+
+                attempts.Add(wire);
+
+                Task.Run(async () =>
+                {
+                    await wire.Receiver.WriteAsync(Handshake.Write(Ubuntu, TheirId), Cancellation);
+                    await wire.Receiver.FlushAsync(Cancellation);
+                });
+
+                return Task.FromResult<Stream>(wire.Initiator);
+            },
+            Ubuntu,
+            Handshake.Write(Ubuntu, PeerId),
+            RandomNumberGenerator.Create(),
+            PeerEncryption.Disabled,
+            Cancellation);
+
+        Assert.Equal(MseMethod.Plaintext, link.Method);
+        Assert.Equal(Handshake.Write(Ubuntu, PeerId), Assert.Single(attempts).Sent);
     }
 
     /// <remarks>

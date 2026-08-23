@@ -126,18 +126,18 @@ public sealed record SeedLimit(double Ratio, TimeSpan For)
     /// Whether this torrent is done seeding.
     /// </summary>
     /// <param name="priv">
-    /// Whether the torrent is private. A private torrent is never stopped early
-    /// by this rule: its tracker keeps its own account of what every member has
-    /// given back, and a client that stopped at a ratio the owner's tracker had
-    /// not credited would cost the owner their account.
+    /// Whether the torrent is private. A public one is finished the moment it
+    /// is complete: this client never uploads on a public swarm — see
+    /// docs/06-torrent-client.md § Uploading — so staying in one gives nothing
+    /// to anybody and costs the owner a connection and a slot.
     /// </param>
     /// <param name="ratio">What has been given back so far.</param>
     /// <param name="seeded">How long it has been seeding.</param>
     public bool Reached(bool priv, double ratio, TimeSpan seeded)
     {
-        if (priv)
+        if (!priv)
         {
-            return false;
+            return true;
         }
 
         // Whichever comes first, from docs/06-torrent-client.md. A limit of

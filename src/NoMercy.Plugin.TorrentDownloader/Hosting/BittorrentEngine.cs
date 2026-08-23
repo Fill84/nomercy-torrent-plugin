@@ -31,6 +31,9 @@ public sealed class BittorrentEngine(
     TimeSpan metadataTimeout,
     TimeSpan stallLimit,
     int maxConcurrent,
+    SeedLimit seeding,
+    long maxDownloadRate,
+    long maxUploadRate,
     IActivityJournal journal,
     ILogger logger,
     ITrackerTransport transport,
@@ -45,6 +48,14 @@ public sealed class BittorrentEngine(
     private readonly byte[] _peerId = PeerIdentity.New();
     private readonly CancellationTokenSource _stopping = new();
     private readonly RandomNumberGenerator _random = RandomNumberGenerator.Create();
+
+    /// <summary>
+    /// The owner's rate limits. One pair for the client and not one per
+    /// torrent: the line is what has a speed.
+    /// </summary>
+    private readonly RateGate _downLimit = new(maxDownloadRate, time ?? TimeProvider.System);
+
+    private readonly RateGate _upLimit = new(maxUploadRate, time ?? TimeProvider.System);
     private ListenSockets? _sockets;
     private bool _started;
     private bool _disposed;
@@ -197,7 +208,9 @@ public sealed class BittorrentEngine(
                     .. Staging
                         .Wanted([.. files.Select(file => new TorrentFile(file.Path, file.Length))])
                         .Select(kept => files.First(file => string.Equals(file.Path, kept.Path, StringComparison.Ordinal))),
-                ]);
+                ],
+                _downLimit,
+                _upLimit);
 
             Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time));
 
@@ -240,6 +253,7 @@ public sealed class BittorrentEngine(
             {
                 Expire(held, now);
                 Stalled(held);
+                Seeded(held, now);
             }
 
             Queue();
@@ -599,6 +613,56 @@ public sealed class BittorrentEngine(
     }
 
     /// <summary>
+    /// Stops seeding a torrent that has given back what was asked of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>SeedRatio</c> and <c>SeedHours</c> were on the Settings page and read
+    /// by nothing, so a finished torrent stayed in its swarm for as long as the
+    /// server ran.
+    /// </para>
+    /// <para>
+    /// A public torrent is finished the moment it is complete: this client
+    /// never uploads on a public swarm, so staying in one gives nothing to
+    /// anybody while costing a connection. A private one seeds to the ratio or
+    /// the hours, whichever comes first, because there the tracker keeps an
+    /// account of what the owner has given back.
+    /// </para>
+    /// <para>
+    /// Stopped rather than removed. The files stay where they are and staging
+    /// takes them from there; removing the torrent would take the row off the
+    /// Downloads page before the owner had seen it finish.
+    /// </para>
+    /// </remarks>
+    private void Seeded(Held held, DateTimeOffset now)
+    {
+        if (held.Error is not null || held.Run.Paused || held.Run.Torrent is null)
+        {
+            return;
+        }
+
+        RunProgress progress = held.Run.Progress();
+
+        if (!progress.Complete)
+        {
+            held.Finished = null;
+
+            return;
+        }
+
+        held.Finished ??= now;
+
+        double ratio = progress.Downloaded > 0 ? progress.Uploaded / (double)progress.Downloaded : 0;
+
+        if (!seeding.Reached(held.Run.Torrent.Private, ratio, now - held.Finished.Value))
+        {
+            return;
+        }
+
+        held.Run.Pause();
+    }
+
+    /// <summary>
     /// Keeps no more than <c>MaxConcurrentDownloads</c> of them running.
     /// </summary>
     /// <remarks>
@@ -766,5 +830,8 @@ public sealed class BittorrentEngine(
 
         /// <summary>Whether it is stopped because the client is full, not because the owner stopped it.</summary>
         public bool Queued { get; set; }
+
+        /// <summary>When it finished downloading, which is when seeding started.</summary>
+        public DateTimeOffset? Finished { get; set; }
     }
 }

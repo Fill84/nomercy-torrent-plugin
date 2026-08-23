@@ -19,7 +19,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 /// rather than throwing, so one dead address costs nothing above it.
 /// </para>
 /// </remarks>
-public sealed class SocketPeerDialler(TimeSpan patience) : IPeerDialler
+public sealed class SocketPeerDialler(TimeSpan patience, PeerEncryption encryption = PeerEncryption.Allowed)
+    : IPeerDialler
 {
     private readonly RandomNumberGenerator _random = RandomNumberGenerator.Create();
 
@@ -55,6 +56,7 @@ public sealed class SocketPeerDialler(TimeSpan patience) : IPeerDialler
                     infoHash,
                     Handshake.Write(infoHash, peerId),
                     _random,
+                    encryption,
                     waiting.Token)
                 .ConfigureAwait(false);
 
