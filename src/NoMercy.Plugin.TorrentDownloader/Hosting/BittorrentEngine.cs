@@ -249,6 +249,13 @@ public sealed class BittorrentEngine(
                 return new(infoHash, already.Run.Torrent?.Name ?? name);
             }
 
+            // What was written down when it last had metadata. A torrent added
+            // from a magnet otherwise asks the swarm for it again after every
+            // restart, and a swarm that has gone quiet cannot answer — so a
+            // torrent already complete on disk is given up on for want of a
+            // file list nobody had to ask for.
+            TorrentMetadata? known = torrent ?? Remembered(infoHash, trackers);
+
             TorrentRun run = new(
                 Convert.FromHexString(infoHash),
 
@@ -260,7 +267,7 @@ public sealed class BittorrentEngine(
                 _peerId,
                 _sockets?.Port ?? listenPort,
                 _time,
-                torrent,
+                known,
                 resume,
 
                 // The owner's rule, handed to an engine that has no idea what a
@@ -799,6 +806,43 @@ public sealed class BittorrentEngine(
                 held.Queued = true;
             }
         }
+    }
+
+    /// <summary>
+    /// A torrent's metadata as it was last written down, or null.
+    /// </summary>
+    /// <remarks>
+    /// Refused rather than trusted when it does not hash to the hash it is
+    /// filed under: it is a file on disk, and the info hash is what the whole
+    /// of BitTorrent's trust rests on.
+    /// </remarks>
+    private TorrentMetadata? Remembered(string infoHash, IReadOnlyList<string> trackers)
+    {
+        if (resume?.Recall(infoHash) is not byte[] info)
+        {
+            return null;
+        }
+
+        try
+        {
+            TorrentMetadata metadata = TorrentMetadata.FromInfo(info, trackers);
+
+            if (string.Equals(metadata.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase))
+            {
+                return metadata;
+            }
+
+            logger.LogWarning(
+                "The metadata kept for {Hash} is for {Other}, so it was ignored.",
+                infoHash,
+                metadata.InfoHash);
+        }
+        catch (TorrentFormatException unreadable)
+        {
+            logger.LogWarning("The metadata kept for {Hash} could not be read: {Reason}", infoHash, unreadable.Message);
+        }
+
+        return null;
     }
 
     /// <summary>One torrent as the pipeline is allowed to see it.</summary>

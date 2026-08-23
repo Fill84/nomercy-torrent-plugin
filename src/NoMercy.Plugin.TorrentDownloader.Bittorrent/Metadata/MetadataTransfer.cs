@@ -245,6 +245,17 @@ public sealed class MetadataFetch
     }
 
     /// <summary>
+    /// The info dictionary itself, once it is whole and hashes to the hash the
+    /// magnet named.
+    /// </summary>
+    /// <remarks>
+    /// Kept so it can be written down: a client that has the metadata should
+    /// never have to ask a swarm for it again, and a swarm that has gone quiet
+    /// cannot answer.
+    /// </remarks>
+    public ReadOnlySpan<byte> Info => Verified ? _bytes : [];
+
+    /// <summary>
     /// The torrent, once it is verified.
     /// </summary>
     /// <param name="trackers">

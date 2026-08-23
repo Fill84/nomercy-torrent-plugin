@@ -684,6 +684,12 @@ public sealed class TorrentRun : IDisposable
             _torrent ??= fetch.Read(_trackers);
         }
 
+        // Written down the moment it is known, so no restart ever asks the
+        // swarm for it again. A swarm that has gone quiet cannot answer, and a
+        // torrent that cannot fetch its metadata is given up on however
+        // complete it is on disk.
+        _resume?.Remember(Convert.ToHexString(_infoHash), fetch.Info);
+
         _metadata.TrySetResult();
     }
 

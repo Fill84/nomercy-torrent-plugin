@@ -405,6 +405,93 @@ public class BittorrentEngineTests : IDisposable
         return new string((char)('A' + which), 40);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A client that has the metadata never asks for it again.</strong>
+    /// Every torrent here is added from a magnet, which carries a hash and no
+    /// file list, so without this the swarm is asked again after every restart
+    /// — and a swarm that has gone quiet cannot answer. The torrent then times
+    /// out and is given up on however complete it is on disk.
+    /// </para>
+    /// <para>
+    /// On 23 August 2026 the owner restarted with twenty-three finished
+    /// downloads on disk, and thirty-three grabs were failed for want of a file
+    /// list for files that were already there.
+    /// </para>
+    /// <para>
+    /// Nothing here has a swarm at all: the peer dialler answers nobody, which
+    /// is the whole point. The file list has to come off the disk or not at
+    /// all.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AMagnetWhoseMetadataWasWrittenDownNeedsNoPeerToKnowItsFiles()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-remembered-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            ResumeKeeper keeping = new(folder, TimeSpan.FromSeconds(1), TimeProvider.System);
+            byte[] file = Fixture("archive-multifile.torrent");
+            TorrentMetadata torrent = TorrentMetadata.Read(file);
+
+            keeping.Remember(torrent.InfoHash, Info(file));
+
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                new SilentTrackers(),
+                new NoPeers(),
+                null,
+                keeping);
+
+            engine.Start();
+
+            await engine.AddAsync(
+                new(
+                    $"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever",
+                    [],
+                    folder,
+                    torrent.TotalLength),
+                CancellationToken.None);
+
+            IReadOnlyList<TorrentFile> files = await engine.FilesAsync(torrent.InfoHash, CancellationToken.None);
+
+            Assert.Equal(torrent.Files.Count, files.Count);
+
+            // And it is never waiting on a swarm for what it already knows.
+            // This fixture is a book rather than an episode, so it is refused
+            // for holding no video — which is a decision that could only be
+            // made because the file list was there.
+            TorrentStatus status = Assert.Single(await engine.StatusAsync(CancellationToken.None));
+
+            Assert.DoesNotContain("metadata", status.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>The info dictionary out of a whole .torrent file.</summary>
+    private static byte[] Info(byte[] file)
+    {
+        BencodeDocument document = Bencode.Read(file);
+
+        return [.. file.AsSpan(document.InfoStart!.Value, document.InfoLength!.Value)];
+    }
+
     /// <summary>
     /// <c>MetadataTimeoutMinutes</c>' own default, five minutes. The tests that
     /// are not about the clock never reach it.

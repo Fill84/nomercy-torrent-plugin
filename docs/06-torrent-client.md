@@ -287,6 +287,16 @@ Dispose     → announce stopped, resume written, sockets closed, mapping remove
 
 Started once when the plugin initialises, stopped once on dispose. Not per cadence.
 
+## Metadata is written down
+
+A torrent's info dictionary is kept beside its resume file as `<HASH>.info`, the moment it is known.
+On the next start it is read from there and the swarm is never asked again — the file is refused if
+it does not hash to the hash it is filed under.
+
+Without it every magnet asks the swarm for its file list after every restart, and a swarm that has
+gone quiet cannot answer: on 23 August 2026 thirty-three grabs were failed for want of a file list
+for files that were already complete on disk.
+
 ## Recovery
 
 | Situation | What happens |
