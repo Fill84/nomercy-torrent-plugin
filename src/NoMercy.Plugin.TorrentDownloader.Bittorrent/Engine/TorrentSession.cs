@@ -57,11 +57,9 @@ public sealed record SessionProgress(
 /// How long a piece may sit unanswered before it is offered to somebody else.
 /// </param>
 /// <param name="time">Where now comes from, so a test can hand in its own.</param>
-/// <param name="down">
-/// The owner's download limit, shared with every other torrent, or null for no
-/// limit.
+/// <param name="limits">
+/// The owner's rate limits, shared with every other torrent, or null for none.
 /// </param>
-/// <param name="up">The same, going out.</param>
 public sealed class TorrentSession(
     TorrentMetadata torrent,
     TorrentDisk disk,
@@ -69,8 +67,7 @@ public sealed class TorrentSession(
     Bitfield? wanted = null,
     TimeSpan? patience = null,
     TimeProvider? time = null,
-    RateGate? down = null,
-    RateGate? up = null) : IDisposable
+    RateLimits? limits = null) : IDisposable
 {
     private readonly PiecePicker _picker = new(torrent.PieceCount, PiecePicker.DefaultEndgamePieces, wanted);
     private readonly Dictionary<int, PieceAssembly> _building = [];
@@ -452,12 +449,12 @@ public sealed class TorrentSession(
             }
         }
 
-        if (down is not null)
+        if (limits is not null)
         {
             // After it has arrived, because a block cannot be un-received. What
             // it buys is the pause before this peer is asked for the next one,
             // which is what a peer reads as "slow down".
-            await down.PassAsync(data.Length, ct).ConfigureAwait(false);
+            await limits.PassAsync(downloading: true, torrent.InfoHash, data.Length, ct).ConfigureAwait(false);
         }
 
         if (outcome == PieceOutcome.Verified)
@@ -521,11 +518,11 @@ public sealed class TorrentSession(
             _uploaded += block.Length;
         }
 
-        if (up is not null)
+        if (limits is not null)
         {
             // Before it goes, not after: a limit applied afterwards has already
             // let the bytes out.
-            await up.PassAsync(block.Length, ct).ConfigureAwait(false);
+            await limits.PassAsync(downloading: false, torrent.InfoHash, block.Length, ct).ConfigureAwait(false);
         }
 
         await peer.SendAsync(PeerMessage.Block(piece, offset, block), ct).ConfigureAwait(false);

@@ -50,12 +50,14 @@ public sealed class BittorrentEngine(
     private readonly RandomNumberGenerator _random = RandomNumberGenerator.Create();
 
     /// <summary>
-    /// The owner's rate limits. One pair for the client and not one per
-    /// torrent: the line is what has a speed.
+    /// The owner's rate limits, shared by every torrent: the line is what has a
+    /// speed, not a torrent.
     /// </summary>
-    private readonly RateGate _downLimit = new(maxDownloadRate, time ?? TimeProvider.System);
-
-    private readonly RateGate _upLimit = new(maxUploadRate, time ?? TimeProvider.System);
+    private readonly RateLimits _limits = new(time ?? TimeProvider.System)
+    {
+        Download = { BytesPerSecond = maxDownloadRate },
+        Upload = { BytesPerSecond = maxUploadRate },
+    };
     private ListenSockets? _sockets;
     private bool _started;
     private bool _disposed;
@@ -209,8 +211,7 @@ public sealed class BittorrentEngine(
                         .Wanted([.. files.Select(file => new TorrentFile(file.Path, file.Length))])
                         .Select(kept => files.First(file => string.Equals(file.Path, kept.Path, StringComparison.Ordinal))),
                 ],
-                _downLimit,
-                _upLimit);
+                _limits);
 
             Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time));
 

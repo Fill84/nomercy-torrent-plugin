@@ -66,6 +66,28 @@ public sealed class TokenBucket(long bytesPerSecond, TimeProvider time)
         return allowed;
     }
 
+    /// <summary>
+    /// How long to wait before that many bytes could be taken.
+    /// </summary>
+    /// <remarks>
+    /// What turns a bucket into a limit a caller can obey. <see cref="Take"/>
+    /// answers how much may go now, and a caller with a whole block in hand
+    /// needs to know how long to hold it rather than how much of it to send.
+    /// </remarks>
+    public TimeSpan Until(long wanted)
+    {
+        if (Unlimited || wanted <= 0)
+        {
+            return TimeSpan.Zero;
+        }
+
+        long allowed = Available(wanted);
+
+        return allowed >= wanted
+            ? TimeSpan.Zero
+            : TimeSpan.FromSeconds((wanted - allowed) / (double)BytesPerSecond);
+    }
+
     private void Refill()
     {
         DateTimeOffset now = time.GetUtcNow();
@@ -117,6 +139,38 @@ public sealed class RateLimits(TimeProvider time)
     }
 
     /// <summary>How much this torrent may send now.</summary>
+    /// <summary>
+    /// Holds the caller until that many bytes may move, and then takes them.
+    /// </summary>
+    /// <remarks>
+    /// The whole block or none of it. A caller with a sixteen-kilobyte block in
+    /// hand cannot send eleven of them, so a limiter that only answers "this
+    /// much may go" cannot be obeyed by one — which is why these buckets were
+    /// written, tested and then wired to nothing at all.
+    /// </remarks>
+    public async Task PassAsync(bool downloading, string infoHash, long bytes, CancellationToken ct)
+    {
+        while (bytes > 0)
+        {
+            long taken = downloading ? TakeDownload(infoHash, bytes) : TakeUpload(infoHash, bytes);
+
+            bytes -= taken;
+
+            if (bytes <= 0)
+            {
+                return;
+            }
+
+            TimeSpan waiting = downloading ? Download.Until(bytes) : Upload.Until(bytes);
+
+            // Never nothing, or a limit that cannot be met this instant becomes
+            // a loop that spins until it can.
+            await Task
+                .Delay(waiting > TimeSpan.Zero ? waiting : TimeSpan.FromMilliseconds(10), time, ct)
+                .ConfigureAwait(false);
+        }
+    }
+
     public long TakeUpload(string infoHash, long wanted)
     {
         return Take(Upload, Bucket(_upload, infoHash), wanted);

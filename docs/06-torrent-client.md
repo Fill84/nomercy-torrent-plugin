@@ -129,8 +129,14 @@ connections try encrypted first and fall back.
 
 ## Choking
 
-Every ten seconds, unchoke the four interested peers with the best download rate. Every thirty
-seconds, optimistically unchoke one at random. While seeding, rank by upload rate.
+**There is none, and that follows from the upload rule.** On a public torrent nothing is ever
+uploaded, so every peer is left choked and there is nothing to decide. On a private one the owner
+wants to give back as much as the tracker will credit, so every peer is unchoked — a round that
+picked four would spread the owner's upload over fewer peers, which is the opposite of what they
+want from it. `MaxUploadRate` is what caps the total.
+
+This replaces tit-for-tat, which was written and tested in Sprint 6 and never wired to anything.
+Decided 22 August 2026, when the owner found their client uploading to a public swarm.
 
 ## DHT
 

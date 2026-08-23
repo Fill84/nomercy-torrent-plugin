@@ -97,9 +97,7 @@ public sealed class TorrentRun : IDisposable
     private readonly Func<IReadOnlyList<TorrentFileEntry>, IReadOnlyList<TorrentFileEntry>>? _choose;
 
     /// <summary>The owner's rate limits, shared with every other torrent.</summary>
-    private readonly RateGate? _downLimit;
-
-    private readonly RateGate? _upLimit;
+    private readonly RateLimits? _limits;
     private readonly RateMeter _down;
     private readonly RateMeter _up;
     private readonly Lock _lock = new();
@@ -148,8 +146,7 @@ public sealed class TorrentRun : IDisposable
         TorrentMetadata? torrent = null,
         ResumeKeeper? resume = null,
         Func<IReadOnlyList<TorrentFileEntry>, IReadOnlyList<TorrentFileEntry>>? choose = null,
-        RateGate? down = null,
-        RateGate? up = null)
+        RateLimits? limits = null)
     {
         _infoHash = infoHash;
         _trackers = [.. trackers];
@@ -162,8 +159,7 @@ public sealed class TorrentRun : IDisposable
         _torrent = torrent;
         _resume = resume;
         _choose = choose;
-        _downLimit = down;
-        _upLimit = up;
+        _limits = limits;
         _down = new(time);
         _up = new(time);
     }
@@ -758,8 +754,7 @@ public sealed class TorrentRun : IDisposable
                 Verified(_torrent, _disk),
                 keeping.Count == _torrent.Files.Count ? null : _torrent.PiecesOf(keeping),
                 time: _time,
-                down: _downLimit,
-                up: _upLimit);
+                limits: _limits);
 
             return _session;
         }

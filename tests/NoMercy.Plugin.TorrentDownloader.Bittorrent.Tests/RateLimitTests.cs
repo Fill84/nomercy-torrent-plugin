@@ -12,7 +12,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests;
 /// that fails on a busy machine and passes on a quiet one, which is worse than
 /// no test at all.
 /// </remarks>
-public class RateAndChokeTests
+public class RateLimitTests
 {
     /// <remarks>
     /// A megabyte a second means a megabyte in a second, and the second one
@@ -187,141 +187,6 @@ public class RateAndChokeTests
     }
 
     /// <remarks>
-    /// The four interested peers sending us the most. Tit for tat is what makes
-    /// a swarm work: a client that unchoked everybody spreads its upload so
-    /// thin that nobody finds it worth reciprocating.
-    /// </remarks>
-    [Fact]
-    public void TheFourBestDownloadersAreUnchokedEveryTenSeconds()
-    {
-        FakeTimeProvider clock = new(Start);
-        ChokeCycle choking = new(clock, new Random(1));
-
-        ChokePeer[] peers =
-        [
-            Peer("a", 100), Peer("b", 900), Peer("c", 500), Peer("d", 700), Peer("e", 300),
-            new("uninterested", Interested: false, 10_000, 0),
-        ];
-
-        IReadOnlySet<string> unchoked = choking.Tick(peers, seeding: false);
-
-        Assert.Contains("b", unchoked);
-        Assert.Contains("d", unchoked);
-        Assert.Contains("c", unchoked);
-        Assert.Contains("e", unchoked);
-
-        // Never one that does not want anything: unchoking a peer that is not
-        // interested is a slot spent on somebody who will not ask.
-        Assert.DoesNotContain("uninterested", unchoked);
-
-        // Four on merit and one being given a chance, which is five in all —
-        // and the fifth is the slowest, because it is the only one left. That
-        // is the optimistic slot doing its job rather than merit failing: the
-        // chance is always somebody the four did not already include.
-        Assert.Equal(ChokeCycle.OnMerit + 1, unchoked.Count);
-        Assert.Equal("a", choking.Chance);
-    }
-
-    /// <remarks>
-    /// Not more often than every ten seconds. A client that worked it out on
-    /// every tick would have peers spend their time re-requesting rather than
-    /// transferring.
-    /// </remarks>
-    [Fact]
-    public void TheRoundIsNotRunAgainWithinTenSeconds()
-    {
-        FakeTimeProvider clock = new(Start);
-        ChokeCycle choking = new(clock, new Random(1));
-
-        choking.Tick([Peer("a", 100), Peer("b", 900)], seeding: false);
-
-        clock.Advance(TimeSpan.FromSeconds(9));
-
-        // The rates have turned over completely, and nothing changes until the
-        // ten seconds are up.
-        IReadOnlySet<string> same = choking.Tick([Peer("a", 5000), Peer("z", 9000)], seeding: false);
-
-        Assert.Contains("a", same);
-        Assert.DoesNotContain("z", same);
-
-        clock.Advance(TimeSpan.FromSeconds(1));
-
-        Assert.Contains("z", choking.Tick([Peer("a", 5000), Peer("z", 9000)], seeding: false));
-    }
-
-    /// <remarks>
-    /// One at random every thirty seconds, whatever its rate. Without it a peer
-    /// that has never been given anything can never prove it would send back,
-    /// and the same four stay unchoked for ever — including four that have
-    /// quietly stopped being the best.
-    /// </remarks>
-    [Fact]
-    public void OneIsUnchokedAtRandomEveryThirtySeconds()
-    {
-        FakeTimeProvider clock = new(Start);
-        ChokeCycle choking = new(clock, new Random(7));
-
-        ChokePeer[] peers =
-        [
-            Peer("a", 900), Peer("b", 800), Peer("c", 700), Peer("d", 600),
-            Peer("slow-1", 1), Peer("slow-2", 2), Peer("slow-3", 3),
-        ];
-
-        choking.Tick(peers, seeding: false);
-
-        string? first = choking.Chance;
-
-        Assert.NotNull(first);
-        Assert.StartsWith("slow-", first!, StringComparison.Ordinal);
-
-        // Twenty seconds on and three rounds later, it is still the same one:
-        // a chance that lasted ten seconds is not long enough to prove
-        // anything.
-        for (int tick = 0; tick < 2; tick++)
-        {
-            clock.Advance(TimeSpan.FromSeconds(10));
-            choking.Tick(peers, seeding: false);
-
-            Assert.Equal(first, choking.Chance);
-        }
-
-        clock.Advance(TimeSpan.FromSeconds(10));
-        choking.Tick(peers, seeding: false);
-
-        Assert.NotEqual(first, choking.Chance);
-        Assert.StartsWith("slow-", choking.Chance!, StringComparison.Ordinal);
-    }
-
-    /// <remarks>
-    /// While seeding there is nothing being downloaded, so the four are ranked
-    /// by what we manage to send them. A client that still ranked by download
-    /// rate would be choosing between seven peers all at nought and would leave
-    /// the fastest of them choked.
-    /// </remarks>
-    [Fact]
-    public void WhileSeedingTheRankingIsByUploadRate()
-    {
-        FakeTimeProvider clock = new(Start);
-        ChokeCycle choking = new(clock, new Random(1));
-
-        ChokePeer[] peers =
-        [
-            new("fast", Interested: true, DownloadRateBytesPerSecond: 0, UploadRateBytesPerSecond: 9000),
-            new("slow", Interested: true, DownloadRateBytesPerSecond: 0, UploadRateBytesPerSecond: 10),
-            new("middling", Interested: true, DownloadRateBytesPerSecond: 0, UploadRateBytesPerSecond: 500),
-            new("stopped", Interested: true, DownloadRateBytesPerSecond: 0, UploadRateBytesPerSecond: 0),
-            new("also-stopped", Interested: true, DownloadRateBytesPerSecond: 0, UploadRateBytesPerSecond: 0),
-            new("third-stopped", Interested: true, DownloadRateBytesPerSecond: 0, UploadRateBytesPerSecond: 0),
-        ];
-
-        IReadOnlySet<string> unchoked = choking.Tick(peers, seeding: true);
-
-        Assert.Contains("fast", unchoked);
-        Assert.Contains("middling", unchoked);
-        Assert.Contains("slow", unchoked);
-    }
-
-    /// <remarks>
     /// The ratio or the hours, whichever comes first, on a private torrent.
     /// </remarks>
     [Theory]
@@ -377,55 +242,54 @@ public class RateAndChokeTests
 
     /// <remarks>
     /// <para>
-    /// <strong>A limit that is set is a limit that holds.</strong>
-    /// <c>MaxDownloadRate</c> and <c>MaxUploadRate</c> were on the Settings page
-    /// and read by nothing at all, so a client told to take at most so much a
-    /// second took whatever the line would give.
+    /// <strong>A whole block or none of it.</strong> A caller holding a
+    /// sixteen-kilobyte block cannot send eleven of them, so a limiter that
+    /// only answers "this much may go" cannot be obeyed by one. That is why
+    /// these buckets were written, tested and then wired to nothing: nothing
+    /// could use them.
     /// </para>
     /// <para>
-    /// A second's worth goes straight through — that is the burst the bucket
-    /// holds, and without it every block would wait its own turn — and what is
-    /// asked for beyond that waits for the bucket to fill. Measured on a clock
-    /// the test owns, so nothing here sleeps.
+    /// Measured on a clock the test owns, so nothing here sleeps.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task NoMoreThanTheRateGoesThroughInASecond()
+    public async Task ABlockWaitsUntilTheWholeOfItMayGo()
     {
-        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 22, 12, 0, 0, TimeSpan.Zero));
-        RateGate gate = new(1000, clock);
+        FakeTimeProvider clock = new(Start);
+        RateLimits limits = new(clock) { Download = { BytesPerSecond = Megabyte } };
 
-        // The first second's worth is the burst, and it does not wait.
-        await gate.PassAsync(1000, CancellationToken.None);
+        clock.Advance(TimeSpan.FromSeconds(1));
 
-        // The next thousand has to be waited for, and the wait is a second.
-        Task passing = gate.PassAsync(1000, CancellationToken.None);
+        // A megabyte is in the bucket, so a megabyte goes at once.
+        await limits.PassAsync(downloading: true, Ubuntu, Megabyte, CancellationToken.None);
+
+        // The next one has to wait for the bucket to fill again, and it waits
+        // for the whole of itself rather than going half now and half later.
+        Task passing = limits.PassAsync(downloading: true, Ubuntu, Megabyte, CancellationToken.None);
 
         Assert.False(passing.IsCompleted);
 
-        clock.Advance(TimeSpan.FromMilliseconds(999));
+        clock.Advance(TimeSpan.FromMilliseconds(500));
 
         Assert.False(passing.IsCompleted);
 
-        clock.Advance(TimeSpan.FromMilliseconds(2));
+        clock.Advance(TimeSpan.FromMilliseconds(600));
 
         await passing;
     }
 
     /// <remarks>
-    /// Nought is nobody asking for a limit. A gate that read it as a limit of
-    /// nothing would stop the client dead, which is worse than any rate.
+    /// No limit is no waiting at all, however much is asked for. A client that
+    /// read nought as a limit of nothing would stop dead.
     /// </remarks>
     [Fact]
-    public async Task ARateOfNoughtIsNoLimitAtAll()
+    public async Task WithNoLimitNothingWaits()
     {
-        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 22, 12, 0, 0, TimeSpan.Zero));
-        RateGate gate = new(0, clock);
+        FakeTimeProvider clock = new(Start);
+        RateLimits limits = new(clock);
 
-        for (int block = 0; block < 100; block++)
-        {
-            await gate.PassAsync(16 * 1024, CancellationToken.None);
-        }
+        await limits.PassAsync(downloading: true, Ubuntu, 64 * Megabyte, CancellationToken.None);
+        await limits.PassAsync(downloading: false, Ubuntu, 64 * Megabyte, CancellationToken.None);
     }
 
     private const long Megabyte = 1024 * 1024;
@@ -435,9 +299,4 @@ public class RateAndChokeTests
     private const string Archive = "E2720161FF77B42E61D15F4958134DEBAE8D0A96";
 
     private static DateTimeOffset Start => new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
-
-    private static ChokePeer Peer(string address, double downloading)
-    {
-        return new(address, Interested: true, downloading, UploadRateBytesPerSecond: 0);
-    }
 }

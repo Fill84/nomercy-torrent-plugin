@@ -548,6 +548,19 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **Nothing is uploaded on a public torrent, and `docs/06-torrent-client.md` is corrected.** The
+  owner's rule, given on 22 August 2026 when they found their own client at a ratio of 0.17 on a
+  public swarm. The spec had said to seed everything to a ratio of 1.0 or 48 hours. A peer on a
+  public torrent is never unchoked and never served; only `info.private` uploads. It costs download
+  speed, because a swarm reciprocates — that is the trade the owner chose.
+- **There is no choking round, and the spec is corrected.** It follows from the rule above: a public
+  torrent has nothing to choke and a private one wants every peer unchoked. `ChokeCycle` was written
+  and tested in Sprint 6, wired to nothing, and is now deleted rather than connected.
+- **Only video files are downloaded, not merely staged.** The whitelist ran after the whole torrent
+  had arrived, so a 1.2 GB executable named after an episode downloaded to completion on
+  22 August 2026. It now decides which pieces are ever asked for, and a torrent with no video in it
+  is refused without a byte being fetched.
+
 - **A3 is wrong and `docs/10-known-failures.md` is corrected.** It said an indexer is asked the full
   release name and nothing else. Measured against the sites on 22 August 2026, apibay answers
   `Silo S03E08 1080p WEB H264 CAKES` with "No results returned" and `Silo S03E08` with twelve rows,
