@@ -95,6 +95,69 @@ public class ClientAcceptanceTests : IDisposable
     /// other end. A resume over files that really are the right length is how a
     /// client that has already finished starts up.
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// <strong>The bytes on disk are the truth, and nothing had ever written
+    /// the claim about them.</strong> <c>ResumeKeeper</c> was read on every add
+    /// and its <c>Tick</c> and <c>Stop</c> were called by nothing at all, so no
+    /// resume file has ever existed outside this test — and a torrent with no
+    /// resume file was taken to have nothing on disk at all.
+    /// </para>
+    /// <para>
+    /// So every restart re-downloaded everything. On 23 August 2026 the owner
+    /// restarted with twenty-three finished episodes on disk and watched them
+    /// go back to 54.8%, 15.2% and 14.5%, fetching gigabytes they already had —
+    /// and none of them could ever be staged, because none of them was ever
+    /// complete again.
+    /// </para>
+    /// <para>
+    /// A torrent with no resume file is now hashed off the disk. That costs a
+    /// pass over the files once; believing there is nothing there costs the
+    /// download.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WhatIsAlreadyOnDiskIsFoundWithoutAResumeFile()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(60));
+
+        byte[] content = Fixture("archive-multifile.torrent");
+        TorrentMetadata torrent = Synthetic(content, pieceLength: 2048);
+
+        string file = Path.Combine(_root, "on-disk.torrent");
+
+        Directory.CreateDirectory(_root);
+        File.WriteAllBytes(file, Torrent(content, torrent.PieceLength));
+
+        // The files, whole, and no resume file beside them.
+        using (TorrentDisk disk = new(torrent, Folder("ondisk")))
+        {
+            disk.Create();
+
+            for (int piece = 0; piece < torrent.PieceCount; piece++)
+            {
+                disk.Write(piece, content.AsSpan((int)(piece * torrent.PieceLength), (int)torrent.LengthOfPiece(piece)));
+            }
+        }
+
+        Assert.Empty(Directory.GetFiles(Folder("ondisk"), "*.resume"));
+
+        using BittorrentEngine engine = Engine("ondisk", new SilentTrackers());
+
+        engine.Start();
+
+        await engine.AddAsync(new(file, [], Folder("ondisk"), torrent.TotalLength), stopping.Token);
+
+        TorrentStatus status = Assert.Single(await engine.StatusAsync(stopping.Token));
+
+        Assert.Equal(torrent.TotalLength, status.BytesDone);
+
+        // And it is written down this time, so the next start costs nothing at
+        // all. Nothing called ResumeKeeper.Tick, so no resume file had ever
+        // been written by anything but a test.
+        Assert.NotEmpty(Directory.GetFiles(Folder("ondisk"), "*.resume"));
+    }
+
     private static void Seeded(TorrentMetadata torrent, byte[] content, string folder)
     {
         using (TorrentDisk disk = new(torrent, folder))

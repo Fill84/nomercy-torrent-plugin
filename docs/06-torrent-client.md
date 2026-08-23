@@ -287,6 +287,18 @@ Dispose     → announce stopped, resume written, sockets closed, mapping remove
 
 Started once when the plugin initialises, stopped once on dispose. Not per cadence.
 
+## Resume
+
+The resume file is written every `ResumeIntervalSeconds` and on a clean stop. Nothing called for it
+at all until 23 August 2026: it was read on every add and written by nothing, so no resume file ever
+existed outside a test.
+
+**A torrent with no resume file is hashed off the disk**, not taken to have nothing. Believing there
+is nothing there costs the whole download — the owner restarted with twenty-three finished episodes
+on disk and watched them go back to 54.8%, 15.2% and 14.5%, fetching gigabytes they already had, and
+none of them could ever be staged because none of them was ever complete again. A folder with
+nothing in it is not read, so a fresh torrent pays nothing for this.
+
 ## Metadata is written down
 
 A torrent's info dictionary is kept beside its resume file as `<HASH>.info`, the moment it is known.

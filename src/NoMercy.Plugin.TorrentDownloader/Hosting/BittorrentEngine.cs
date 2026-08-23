@@ -327,6 +327,12 @@ public sealed class BittorrentEngine(
 
             Queue();
 
+            // Written down at the owner's own interval, which ResumeKeeper
+            // decides for itself. Nothing called this at all, so no resume file
+            // ever existed and every restart re-downloaded every torrent from
+            // nothing — see docs/06-torrent-client.md § Resume.
+            resume?.Tick(_torrents.Values.Select(one => one.Run.Resuming()).OfType<ResumeData>());
+
             return Task.FromResult<IReadOnlyList<TorrentStatus>>([.. _torrents.Select(one => Status(one.Key, one.Value))]);
         }
     }
@@ -431,6 +437,12 @@ public sealed class BittorrentEngine(
         // The loops stop before the runs go, or one of them announces to a
         // tracker on behalf of a torrent that has been disposed.
         _stopping.Cancel();
+
+        // What every torrent had verified, and before the runs go: a disposed
+        // run has nothing left to say. A clean stop is the one moment this can
+        // be written with no piece of it in flight, and the whole point of it
+        // is that the next start believes it instead of downloading it again.
+        resume?.Stop(holding.Select(one => one.Run.Resuming()).OfType<ResumeData>());
 
         foreach (Held held in holding)
         {

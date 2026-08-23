@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 
 /// <summary>
@@ -767,6 +769,87 @@ public sealed class TorrentRun : IDisposable
     }
 
     /// <summary>
+    /// What is on disk, hashed, when there is no resume file to go by.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The bytes are the truth. A torrent with no resume file used to be taken
+    /// to have nothing at all — so a download already finished on disk went
+    /// back to nought on the next restart and fetched every byte again. On
+    /// 23 August 2026 twenty-three finished episodes did exactly that, and none
+    /// of them could ever be staged because none of them was ever complete
+    /// again.
+    /// </para>
+    /// <para>
+    /// It costs one pass over the files, once, on a torrent that has any of
+    /// them. A folder with nothing in it is not read at all: a fresh torrent
+    /// pays nothing for this.
+    /// </para>
+    /// </remarks>
+    private static Bitfield Hashed(TorrentMetadata torrent, TorrentDisk disk)
+    {
+        Bitfield have = new(torrent.PieceCount);
+
+        if (!torrent.Files.Any(file => File.Exists(disk.PathOf(file)) && new FileInfo(disk.PathOf(file)).Length > 0))
+        {
+            return have;
+        }
+
+        for (int piece = 0; piece < torrent.PieceCount; piece++)
+        {
+            try
+            {
+                byte[] bytes = disk.Read(piece * torrent.PieceLength, (int)torrent.LengthOfPiece(piece));
+
+                if (SHA1.HashData(bytes).AsSpan().SequenceEqual(torrent.Pieces[piece]))
+                {
+                    have.Set(piece);
+                }
+            }
+            catch (IOException)
+            {
+                // A file shorter than the torrent says, or one that cannot be
+                // read. That piece is simply not here, which is what an empty
+                // bit means.
+            }
+        }
+
+        return have;
+    }
+
+    /// <summary>
+    /// What this torrent would write down to be picked up again.
+    /// </summary>
+    /// <remarks>
+    /// Null until there is something to say: a torrent with no metadata has no
+    /// piece count and a torrent with no session has verified nothing.
+    /// </remarks>
+    public ResumeData? Resuming()
+    {
+        lock (_lock)
+        {
+            if (_session is null || _torrent is null || _disk is null)
+            {
+                return null;
+            }
+
+            SessionProgress progress = _session.Progress();
+
+            return new(
+                _torrent.InfoHash,
+                _session.Verified,
+                progress.Uploaded,
+                progress.Downloaded,
+                [
+                    .. _torrent.Files
+                        .Select(file => new FileInfo(_disk.PathOf(file)))
+                        .Zip(_torrent.Files, (FileInfo now, TorrentFileEntry file) =>
+                            new ResumeFile(file.Path, now.Exists ? now.Length : 0, now.Exists ? now.LastWriteTimeUtc : default)),
+                ]);
+        }
+    }
+
+    /// <summary>
     /// What is already on disk and can be believed.
     /// </summary>
     /// <remarks>
@@ -786,7 +869,7 @@ public sealed class TorrentRun : IDisposable
     {
         if (_resume?.Load(torrent.InfoHash) is not ResumeData stored)
         {
-            return new(torrent.PieceCount);
+            return Hashed(torrent, disk);
         }
 
         Dictionary<string, ResumeFile> onDisk = new(StringComparer.Ordinal);
