@@ -47,14 +47,25 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
         {
             IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
 
-            // Every show in a television or anime library is in scope, whatever
-            // it has on disk. The owner's rule, given on 24 August 2026.
+            // One episode on disk, or this is not a show the owner has.
             //
-            // It used to need one episode on disk before a show counted at all,
-            // which made the ordinary case — a show just added, with nothing
-            // downloaded yet — the one case the plugin did nothing about.
-            // MaxSearchAttempts is what stops a show nothing can be found for,
-            // and it needs no help from here.
+            // Taking every show in the library instead — tried on
+            // 24 August 2026, because a show just added has nothing on disk and
+            // is exactly the case worth having — put the owner's plugin on 479
+            // grabs within the hour. Family Guy alone claimed 456 missing
+            // episodes, and it is a row the server keeps for a show they have
+            // never watched.
+            //
+            // Nothing in such a row tells it apart from a show they added: it
+            // carries the library's id, a folder and a full episode list, the
+            // same as the rest. Having a file is the only thing that does, and
+            // until the server marks the difference this is the rule. A show
+            // just added is therefore still not searched for, and that is
+            // known and unsolved rather than overlooked.
+            if (!episodes.Any(episode => episode.HasFile))
+            {
+                continue;
+            }
 
             // Built from the list already fetched, so it costs no extra call —
             // and built from all of it, before anything is filtered out, because

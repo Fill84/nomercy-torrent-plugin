@@ -48,6 +48,11 @@ public sealed class Transfers(
         // it in either pile would have recovery re-add it every minute.
         IReadOnlyList<string> failed = await FailedAsync(running, stored, ct);
 
+        // Before the plan, and counted with the failures: a grab cancelled here
+        // that was still in the plan would be carried on the same tick and put
+        // straight back to downloading.
+        failed = [.. failed, .. await NotOursAsync(stored, ct)];
+
         RecoveryPlan plan = Recovery.Plan(
             [.. stored.Where(one => !failed.Contains(one.InfoHash, StringComparer.OrdinalIgnoreCase))],
             [.. running.Where(one => !failed.Contains(one.InfoHash, StringComparer.OrdinalIgnoreCase))]);
@@ -258,6 +263,74 @@ public sealed class Transfers(
             ct);
 
         await grabs.StateAsync(infoHash, GrabState.Dispatched, ct);
+    }
+
+    /// <summary>
+    /// Cancels a grab for a show the owner does not have, and deletes what it
+    /// downloaded.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// On 24 August 2026 the library rule was widened to every show in a
+    /// library, and within the hour the plugin was on 479 grabs: the server
+    /// keeps rows for shows nobody asked for, and Family Guy alone claimed 456
+    /// missing episodes.
+    /// </para>
+    /// <para>
+    /// Putting the rule back stops more being made and does nothing about the
+    /// ones already running. Leaving those to finish would fill the owner's
+    /// disk with shows they have never watched, so they go, and take their
+    /// bytes with them.
+    /// </para>
+    /// <para>
+    /// One episode on disk is what says a show is theirs, which is the same
+    /// rule the refresh uses. A grab that has already staged its episode is
+    /// left alone: it is past this point and its show now has a file either
+    /// way.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<string>> NotOursAsync(IReadOnlyList<StoredDownload> stored, CancellationToken ct)
+    {
+        Dictionary<int, bool> owned = [];
+        List<string> cancelled = [];
+
+        foreach (StoredDownload open in stored)
+        {
+            if (open.State is GrabState.Staged or GrabState.Dispatched)
+            {
+                continue;
+            }
+
+            bool theirs = true;
+
+            foreach (int show in open.Covers.Select(one => one.ShowId).Distinct())
+            {
+                if (!owned.TryGetValue(show, out bool has))
+                {
+                    has = (await library.GetEpisodesAsync(show, ct)).Any(one => one.HasFile);
+                    owned[show] = has;
+                }
+
+                theirs &= has;
+            }
+
+            if (theirs)
+            {
+                continue;
+            }
+
+            string reason = "it is not a show the owner has, so it was cancelled and its download deleted";
+
+            await engine.RemoveAsync(open.InfoHash, deleteFiles: true, ct);
+            await grabs.FailedAsync(open.InfoHash, reason, DateTimeOffset.UtcNow, ct);
+
+            logger.LogWarning("{Release}: {Reason}", open.ReleaseTitle, reason);
+            journal.Failed(ActivityStage.Download, open.ReleaseTitle, reason);
+
+            cancelled.Add(open.InfoHash);
+        }
+
+        return cancelled;
     }
 
     /// <summary>

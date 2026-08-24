@@ -12,32 +12,34 @@ public class MissingRefreshTests
 
     /// <remarks>
     /// <para>
-    /// <strong>Every show in a television or anime library is in scope</strong>,
-    /// whatever it has on disk. The owner's rule, given on 24 August 2026.
+    /// <strong>A show the owner has none of is not a show they have.</strong>
+    /// The server keeps rows for shows nobody asked for, in the same table,
+    /// against the same library id, with a folder and a full episode list.
+    /// Nothing in the row says which is which; having a file does.
     /// </para>
     /// <para>
-    /// It used to take one episode with a file to put a show in scope at all,
-    /// which made the ordinary case the one case nothing happened for: a show
-    /// just added has nothing on disk, and that is exactly when the plugin is
-    /// worth having.
+    /// Taking every show in the library instead was tried on 24 August 2026,
+    /// because a show just added has nothing on disk and is exactly the case
+    /// worth having. Within the hour the owner's plugin was on 479 grabs —
+    /// Family Guy alone claimed 456 missing episodes, and it is a show they
+    /// have never watched. It was already solved and the rule was already
+    /// here; removing it undid that.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AShowWithNothingOnDiskIsStillFilledIn()
+    public async Task AShowWithNotOneEpisodeOnDiskIsNotOneTheOwnerHas()
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
             .Episode(1, 1, 1, hasFile: true, airDate: new DateOnly(2020, 1, 1))
             .Episode(1, 1, 2, airDate: new DateOnly(2020, 1, 8))
-            .Show(2, "Just added")
+            .Show(2, "Family Guy")
             .Episode(2, 1, 1, airDate: new DateOnly(2020, 1, 1))
             .Episode(2, 1, 2, airDate: new DateOnly(2020, 1, 8));
 
         IReadOnlyList<TrackedEpisode> tracked = await Derive(library);
 
-        // Both of the new show's episodes, and the one the other is missing.
-        Assert.Equal(2, tracked.Count(one => one.ShowTitle == "Just added"));
-        Assert.Single(tracked, one => one.ShowTitle == "Silo");
+        Assert.All(tracked, episode => Assert.Equal("Silo", episode.ShowTitle));
     }
 
     /// <remarks>

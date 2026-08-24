@@ -367,6 +367,46 @@ public class TransfersTests : IDisposable
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A grab for a show the owner does not have is cancelled and its
+    /// download deleted.</strong> On 24 August 2026 the library rule was
+    /// widened to every show in a library, and within the hour the plugin was
+    /// on 479 grabs: the server keeps rows for shows nobody asked for, and
+    /// Family Guy alone claimed 456 missing episodes.
+    /// </para>
+    /// <para>
+    /// Putting the rule back stops more being made. It does nothing about the
+    /// ones already running, and leaving those to finish would fill the owner's
+    /// disk with a show they have never watched. So a grab whose show is not
+    /// one they have goes, and takes its bytes with it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AGrabForAShowTheOwnerDoesNotHaveIsCancelled()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        StandingEngine engine = new StandingEngine().Holding(Downloading());
+
+        // The show has no episode on disk, so it is not one the owner has.
+        await Transfers(engine, grabs, Server(), owned: false)
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        (string InfoHash, bool DeleteFiles) removed = Assert.Single(engine.Removed);
+
+        Assert.Equal(Hash, removed.InfoHash);
+        Assert.True(removed.DeleteFiles, "Its download was left on the disk.");
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
+    /// <summary>A torrent that is still going, so nothing else in the tick acts on it.</summary>
+    private static TorrentStatus Downloading()
+    {
+        return Finished() with { State = TorrentState.Downloading, BytesDone = 10_000 };
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);
@@ -430,7 +470,8 @@ public class TransfersTests : IDisposable
         StandingEngine engine,
         GrabRepository grabs,
         FakeProvider server,
-        bool encoded = false)
+        bool encoded = false,
+        bool owned = true)
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
             // A real Ulid, because the server's library id is one and the
@@ -441,7 +482,12 @@ public class TransfersTests : IDisposable
 
             // Whether the encode has landed. It is the only thing the plugin
             // can see that says the job finished.
-            .Episode(41, 3, 6, hasFile: encoded);
+            .Episode(41, 3, 6, hasFile: encoded)
+
+            // Whether the owner has this show at all: one episode on disk is
+            // what says so, and a show with none is one the server keeps a row
+            // for that nobody asked for.
+            .Episode(41, 1, 1, hasFile: owned);
 
         return new(
             engine,
