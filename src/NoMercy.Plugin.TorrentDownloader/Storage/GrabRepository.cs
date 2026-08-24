@@ -657,6 +657,38 @@ public sealed class GrabRepository(Database database)
     /// answered only the event and the reason would have the page inventing the
     /// other two.
     /// </remarks>
+    /// <summary>
+    /// How many lines of history a page is given.
+    /// </summary>
+    /// <remarks>
+    /// Enough to see a night's work and few enough to draw. A refusal is
+    /// written for every release every cycle considered and did not take, which
+    /// on a library this size is thousands a day.
+    /// </remarks>
+    public const int Recent = 500;
+
+    /// <summary>
+    /// Throws away history nobody will read again.
+    /// </summary>
+    /// <remarks>
+    /// A refusal is written for every release every cycle considered and did
+    /// not take, which on the owner's library is thousands a day: 65,878 of
+    /// their 66,149 lines were refusals. What is worth keeping is what became
+    /// of a grab — decided, dispatched, failed — and the refusals of the last
+    /// few days, which are what an owner reads when a release they expected did
+    /// not arrive.
+    /// </remarks>
+    public async Task<int> PruneHistoryAsync(DateTimeOffset before, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText = "DELETE FROM history WHERE event = 'skipped' AND at < $before;";
+        command.Parameters.AddWithValue("$before", before.ToString("O", CultureInfo.InvariantCulture));
+
+        return await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task<IReadOnlyList<HistoryRow>> HistoryAsync(CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);
@@ -665,8 +697,13 @@ public sealed class GrabRepository(Database database)
         command.CommandText =
             """
             SELECT event, at, show_id, season, episode, show_title, release_title, source, detail
-            FROM history ORDER BY id DESC;
+            FROM history ORDER BY id DESC LIMIT $limit;
             """;
+
+        // The newest, not all of them. The owner's history had 66,149 lines —
+        // 65,878 of them refusals — and the page fetched every one, which is
+        // why it stopped answering and nothing on it could be clicked.
+        command.Parameters.AddWithValue("$limit", Recent);
 
         List<HistoryRow> lines = [];
 

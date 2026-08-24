@@ -781,6 +781,20 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         IReadOnlyList<TrackedEpisode> derived = await refresh.DeriveAsync(settings.Profile, ct);
 
         await (await EpisodesAsync(ct)).ReplaceAsync(derived, ct);
+
+        // And the refusals nobody will read again. One is written for every
+        // release every cycle considered and did not take: the owner's history
+        // held 66,149 lines, 65,878 of them refusals, and the page stopped
+        // answering. A fortnight is long enough to look back at why something
+        // did not arrive.
+        int gone = await (await GrabsAsync(ct)).PruneHistoryAsync(
+            DateTimeOffset.UtcNow.AddDays(-14),
+            ct);
+
+        if (gone > 0)
+        {
+            Context.Logger.LogInformation("{Count} old refusals were cleared from the history.", gone);
+        }
     }
 
     /// <summary>What the last cycle decided about each episode it looked at.</summary>

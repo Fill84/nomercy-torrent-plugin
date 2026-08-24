@@ -104,8 +104,16 @@ public sealed class FakeDispatcher : IJobDispatcher
 
     public int Priority { get; private set; }
 
+    /// <summary>How many times anything was dispatched at all.</summary>
+    /// <remarks>
+    /// Counted, not just kept: one release with eight grab rows dispatched
+    /// eight identical jobs and the last one looked exactly like the first.
+    /// </remarks>
+    public int Dispatches { get; private set; }
+
     public void Dispatch(object job, string queue, int priority)
     {
+        Dispatches++;
         Job = job;
         Queue = queue;
         Priority = priority;

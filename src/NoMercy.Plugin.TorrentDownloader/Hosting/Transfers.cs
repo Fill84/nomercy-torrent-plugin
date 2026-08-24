@@ -41,7 +41,17 @@ public sealed class Transfers(
     public async Task TickAsync(string incompleteFolder, string intakeFolder, CancellationToken ct)
     {
         IReadOnlyList<TorrentStatus> running = await engine.StatusAsync(ct);
-        IReadOnlyList<StoredDownload> stored = await grabs.OpenAsync(ct);
+        // One row per torrent. Every cycle used to record a fresh grab for an
+        // episode it was already downloading, so one release could have eight
+        // rows under one info hash — and every step here walked rows: eight
+        // encode jobs for one file, on every tick, which is how the owner's
+        // History page filled with the same episode dispatched over and over.
+        IReadOnlyList<StoredDownload> stored =
+        [
+            .. (await grabs.OpenAsync(ct))
+                .GroupBy(one => one.InfoHash, StringComparer.OrdinalIgnoreCase)
+                .Select(same => same.First()),
+        ];
 
         // Failures first, and out of the way: a torrent the client has given up
         // on is neither something to carry nor something to stage, and leaving
@@ -80,7 +90,7 @@ public sealed class Transfers(
         }
 
         await AskAgainAsync(stored, ct);
-        await LeftBehindAsync(stored, intakeFolder, ct);
+        await LeftBehindAsync(intakeFolder, ct);
         await FinishAsync(stored, running, ct);
 
         foreach (StoredDownload carrying in plan.Carry)
@@ -403,18 +413,19 @@ public sealed class Transfers(
     /// what it did not make.
     /// </para>
     /// </remarks>
-    private async Task LeftBehindAsync(
-        IReadOnlyList<StoredDownload> stored,
-        string intakeFolder,
-        CancellationToken ct)
+    private async Task LeftBehindAsync(string intakeFolder, CancellationToken ct)
     {
         if (!Directory.Exists(intakeFolder))
         {
             return;
         }
 
+        // Read again rather than taken from the top of the tick. Staging has
+        // happened since, and a file staged a moment ago would be read as one
+        // nothing is waiting on — so it was dispatched a second time, on every
+        // tick, for every episode that had just been staged.
         HashSet<string> waited = new(
-            stored.Select(one => one.StagedPath).OfType<string>(),
+            (await grabs.OpenAsync(ct)).Select(one => one.StagedPath).OfType<string>(),
             StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyList<StoredDownload>? every = null;

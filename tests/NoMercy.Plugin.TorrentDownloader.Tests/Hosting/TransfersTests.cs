@@ -407,6 +407,45 @@ public class TransfersTests : IDisposable
         return Finished() with { State = TorrentState.Downloading, BytesDone = 10_000 };
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Eight rows of one torrent are one torrent.</strong> Every cycle
+    /// used to record a fresh grab for an episode it was already downloading,
+    /// because an episode stays missing until the library has a file for it. So
+    /// one release ended up with eight rows under one info hash — and every
+    /// step here walked rows.
+    /// </para>
+    /// <para>
+    /// Eight encode jobs for one file, on every tick. The owner's History page
+    /// showed Lucky S01E07 dispatched five times inside twenty seconds, and
+    /// carried 167 dispatches for a handful of episodes.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ManyRowsOfOneTorrentAreDispatchedOnce()
+    {
+        GrabRepository grabs = await Grabs();
+
+        // The same torrent, recorded three times, as the cycle used to.
+        await Grabbed(grabs);
+        await Grabbed(grabs);
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(Path.Combine(Intake, Path.GetFileName(episode)), "4417")];
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(1, server.Dispatcher.Dispatches);
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);
