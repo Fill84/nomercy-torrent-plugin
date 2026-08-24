@@ -1,4 +1,5 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Naming;
@@ -155,6 +156,37 @@ public class TitleMatcherTests
     public void TheNameTheOwnerReadsIsTheReleaseAndNotTheSite(string printed, string published)
     {
         Assert.Equal(published, TitleMatcher.Clean(printed));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>One list of video types, and it is the whitelist.</strong> There
+    /// were three of them in this plugin — the whitelist that decides what is
+    /// downloaded, and two regular expressions here — and they agreed only
+    /// because somebody kept them agreeing. One had already drifted: it carried
+    /// <c>iso</c>, <c>rar</c> and <c>zip</c> as though they were video.
+    /// </para>
+    /// <para>
+    /// A type added to the whitelist is recognised here without anything else
+    /// being touched, and this fails if the two are ever written out
+    /// separately again.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryVideoTypeTheWhitelistAllowsIsReadAsOne()
+    {
+        foreach (string extension in Staging.VideoExtensions)
+        {
+            string type = extension.TrimStart('.');
+            string named = $"Silo.S03E06.1080p.WEB.H264-CAKES{extension}";
+
+            // Read as a file type at all...
+            Assert.Equal(type, TitleMatcher.FileType(named), StringComparer.OrdinalIgnoreCase);
+
+            // ...and taken off the name, whole. A shorter type matching first
+            // would leave the tail of a longer one behind: .m2ts answering "ts".
+            Assert.Equal("Silo.S03E06.1080p.WEB.H264-CAKES", TitleMatcher.Clean(named));
+        }
     }
 
     /// <remarks>

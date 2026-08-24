@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using System.Text.RegularExpressions;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Naming;
 
@@ -24,33 +25,65 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Naming;
 /// </remarks>
 public static class TitleMatcher
 {
-    /// <summary>A file type at the very end, which is the file and not the release.</summary>
+    /// <summary>
+    /// Types that are a file and not a release, beyond the video ones.
+    /// </summary>
+    /// <remarks>
+    /// A lexicon and not a policy. What may be downloaded is
+    /// <c>Staging.VideoExtensions</c>, which is a whitelist; this answers a
+    /// different question — whether the last word of a name is a file type at
+    /// all, or the release group.
+    /// </remarks>
+    private static readonly string[] OtherTypes =
+    [
+        "exe", "scr", "msi", "bat", "cmd", "com", "vbs", "ps1", "jar", "apk",
+        "dmg", "pkg", "deb", "rpm", "lnk", "iso", "img", "bin",
+        "rar", "zip", "7z", "gz", "tar",
+        "nfo", "txt", "url", "html", "htm", "srt", "sub", "idx", "jpg", "jpeg", "png",
+    ];
+
+    /// <summary>A video file type at the very end, which is the file and not the release.</summary>
+    /// <remarks>
+    /// Built from <c>Staging.VideoExtensions</c> rather than written out again.
+    /// There were three lists of video types in this plugin and they agreed
+    /// only by hand — which is how a list starts disagreeing with itself, and
+    /// this one already carried <c>iso</c>, <c>rar</c> and <c>zip</c> as though
+    /// they were video.
+    /// </remarks>
     private static readonly Regex Extension = new(
-        @"[.\s](?:mkv|mp4|avi|m4v|mov|wmv|ts|iso|rar|zip)\s*$",
+        $@"[.\s](?:{Alternation(Staging.VideoExtensions.Select(one => one.TrimStart('.')))})\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     /// <summary>
     /// Words that are a file type when a name ends in one.
     /// </summary>
     /// <remarks>
-    /// <para>
-    /// A lexicon and not a policy. What may be downloaded is decided by
-    /// <c>Staging.VideoExtensions</c>, which is a whitelist; this list
-    /// answers a different question — whether the last word of a name is a file
-    /// type at all, or the release group.
-    /// </para>
-    /// <para>
     /// It has to be asked, because most names end in the group:
     /// <c>H264-CAKES</c>, <c>XviD-2HD</c>, <c>FQM</c>. Reading one of those as a
     /// file type takes the group off the name or throws the release away for
     /// having a type nobody recognises, and both were measured happening.
-    /// </para>
     /// </remarks>
     private static readonly Regex Type = new(
-        @"[.\s](mkv|mp4|avi|m4v|mov|wmv|mpg|mpeg|m2ts|mts|ts|vob|webm|ogm|divx|m2v"
-        + @"|exe|scr|msi|bat|cmd|com|vbs|ps1|jar|apk|dmg|pkg|deb|rpm|lnk|iso|img|bin"
-        + @"|rar|zip|7z|gz|tar|nfo|txt|url|html|htm|srt|sub|idx|jpg|jpeg|png)\s*$",
+        $@"[.\s]({Alternation(Staging.VideoExtensions.Select(one => one.TrimStart('.')).Concat(OtherTypes))})\s*$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// The types as a regular expression's alternation, longest first.
+    /// </summary>
+    /// <remarks>
+    /// Longest first because a regular expression takes the first branch that
+    /// matches: with <c>ts</c> before <c>m2ts</c>, a name ending in
+    /// <c>.m2ts</c> answers <c>ts</c> and two characters of the name are left
+    /// behind.
+    /// </remarks>
+    private static string Alternation(IEnumerable<string> types)
+    {
+        return string.Join(
+            "|",
+            types.Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(one => one.Length)
+                .ThenBy(one => one, StringComparer.Ordinal));
+    }
 
     /// <summary>
     /// The file type a name ends in, or null when it ends in anything else.

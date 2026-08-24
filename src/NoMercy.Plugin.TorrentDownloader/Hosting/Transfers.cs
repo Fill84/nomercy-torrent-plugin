@@ -182,7 +182,7 @@ public sealed class Transfers(
                     "no file in the torrent answers for it, so it is still missing");
             }
 
-            IReadOnlyList<StagedResult> moved = await stager.MoveAsync(chosen, incompleteFolder, intakeFolder, ct);
+            IReadOnlyList<StagedResult> moved = await stager.MoveAsync(chosen, incompleteFolder, intakeFolder, finished.ReleaseTitle, ct);
 
             if (!moved.Any(one => one.Moved))
             {
