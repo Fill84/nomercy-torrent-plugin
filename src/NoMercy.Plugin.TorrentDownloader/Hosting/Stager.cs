@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
@@ -38,28 +39,28 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
     /// <param name="staged">What <see cref="Staging.Choose"/> decided.</param>
     /// <param name="from">The download's own folder.</param>
     /// <param name="into">The intake folder.</param>
-    /// <param name="release">
-    /// What the plugin decided this release is called. One file takes it as its
-    /// name; several are a pack, and keep their own.
+    /// <param name="show">
+    /// The show these episodes are of, so each file can be named after the
+    /// episode it holds. Null when the server offered no show for it, and then
+    /// each file keeps the name the torrent gave it.
     /// </param>
+    /// <param name="resolution">As the release writes it: <c>1080p</c>.</param>
     /// <param name="ct">Cancellation.</param>
     public async Task<IReadOnlyList<StagedResult>> MoveAsync(
         IReadOnlyList<Staged> staged,
         string from,
         string into,
-        string? release,
+        Show? show,
+        string? resolution,
         CancellationToken ct)
     {
         List<StagedResult> results = [];
 
         foreach (Staged file in staged)
         {
-            // A pack is several episodes under one release name, so naming
-            // every file after it would have them overwrite each other. Their
-            // own names carry the episode and are what staging matched them by.
-            string? named = staged.Count == 1 ? release : null;
-
-            results.Add(await OneAsync(file, from, into, named, ct).ConfigureAwait(false));
+            // Each file after its own episode, so a pack needs no special case:
+            // its files differ by episode and therefore by name.
+            results.Add(await OneAsync(file, from, into, show, resolution, ct).ConfigureAwait(false));
         }
 
         return results;
@@ -67,31 +68,27 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
 
     /// <summary>What the staged file is called.</summary>
     /// <remarks>
-    /// The file's own name when nothing better was decided, and never a name
-    /// with a character a file system will not take: a release title is text
-    /// off a web page, and one colon in it would fail the copy rather than the
-    /// naming.
+    /// <para>
+    /// The show, its year, the episode and the quality. Two releases of one
+    /// episode at one quality therefore come to the same name and the same
+    /// path, so a second copy of an episode cannot exist — there is nowhere
+    /// for it to be.
+    /// </para>
+    /// <para>
+    /// It used to be the release title, which is the uploader's text off a web
+    /// page. The owner's intake folder held ten files for five episodes, in
+    /// pairs differing only by the site's tag on the end.
+    /// </para>
+    /// <para>
+    /// With no show there is nothing to name it from, and the torrent's own
+    /// name is kept rather than a name being made up out of what is to hand.
+    /// </para>
     /// </remarks>
-    private static string Named(string source, string? release)
+    private static string Named(string source, Staged file, Show? show, string? resolution)
     {
-        if (string.IsNullOrWhiteSpace(release))
-        {
-            return Path.GetFileName(source);
-        }
-
-        // Through Clean first. The indexer's own title for a release ends in
-        // the site's tag — "Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV" — so
-        // the tag taken off the torrent's file went straight back on here.
-        //
-        // Two things came of that. The owner's intake folder held two files for
-        // one episode, one under each spelling, because two rows of the same
-        // torrent carried the indexer's title and the plugin's. And the server
-        // parses this name to work out what the file is: it strips a tracker's
-        // address, which has dots in it, and a bare word like EZTV is not one.
-        string clean = string.Concat(
-            TitleMatcher.Clean(release).Where(one => !Path.GetInvalidFileNameChars().Contains(one))).Trim();
-
-        return clean.Length == 0 ? Path.GetFileName(source) : clean + Path.GetExtension(source);
+        return show is null
+            ? Path.GetFileName(source)
+            : EpisodeName.For(show.Title, show.Year, file.Episode, resolution, Path.GetExtension(source));
     }
 
     /// <summary>Takes the download away, if anything will let it.</summary>
@@ -123,7 +120,8 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         Staged file,
         string from,
         string into,
-        string? release,
+        Show? show,
+        string? resolution,
         CancellationToken ct)
     {
         string source = Path.Combine(from, file.Path.Replace('/', Path.DirectorySeparatorChar));
@@ -131,12 +129,10 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         // Flat into the intake folder: the encoder takes a path and has no
         // interest in the folders a torrent came in.
         //
-        // Under the release's name rather than the uploader's spelling of it.
-        // Everything else already carries what the plugin chose — the grab, the
-        // pages, the match staging made — and the file was the one place a
-        // site's own tag still travelled: silo.s03e04...[EZTVx.to].mkv. It is
-        // also the name the server parses to work out what the file is.
-        string destination = Path.Combine(into, Named(source, release));
+        // Under the episode's own name rather than the release's. It is the
+        // name the server parses to work out what the file is, and it is what
+        // makes a second copy of one episode impossible.
+        string destination = Path.Combine(into, Named(source, file, show, resolution));
 
         try
         {

@@ -54,14 +54,6 @@ public sealed class Transfers(
     /// </remarks>
     private readonly Dictionary<string, DateTimeOffset> _waiting = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>Second copies already said once, so they are not said again.</summary>
-    /// <remarks>
-    /// Said once rather than on every tick: this loop runs on the fastest
-    /// cadence, and a leftover file nobody has binned would otherwise fill the
-    /// owner's log with the same line a minute for as long as it sits there.
-    /// </remarks>
-    private readonly HashSet<string> _leftovers = new(StringComparer.OrdinalIgnoreCase);
-
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
     /// <param name="intakeFolder">Where a finished episode is put for the encoder.</param>
@@ -227,7 +219,18 @@ public sealed class Transfers(
                     "no file in the torrent answers for it, so it is still missing");
             }
 
-            IReadOnlyList<StagedResult> moved = await stager.MoveAsync(chosen, incompleteFolder, intakeFolder, finished.ReleaseTitle, ct);
+            // The show and the quality are what the episode is named after, and
+            // both are known here: the show from the library, the quality from
+            // the release the plugin chose. A show the server does not offer
+            // leaves the file under the torrent's own name rather than under a
+            // name made up from what is to hand.
+            Show? show = (await library.GetShowsAsync(ct))
+                .FirstOrDefault(candidate => candidate.Id == finished.Covers.FirstOrDefault().ShowId);
+
+            string? resolution = ReleaseName.Parse(finished.ReleaseTitle).Resolution;
+
+            IReadOnlyList<StagedResult> moved =
+                await stager.MoveAsync(chosen, incompleteFolder, intakeFolder, show, resolution, ct);
 
             if (!moved.Any(one => one.Moved))
             {
@@ -467,9 +470,20 @@ public sealed class Transfers(
 
         IReadOnlyList<StoredDownload>? every = null;
 
-        foreach (string file in Directory.EnumerateFiles(intakeFolder))
+        foreach (string entry in Directory.EnumerateFileSystemEntries(intakeFolder))
         {
-            if (!Staging.IsVideo(file) || waited.Contains(file))
+            // A folder is never something this plugin put here: staging copies
+            // the video out flat, because the encoder takes a path and has no
+            // interest in the folders a torrent came in. The owner's intake
+            // folder held six left by 0.3.4, still carrying the tracker's name.
+            if (Directory.Exists(entry))
+            {
+                Discard(entry, "a folder no download of this plugin's uses");
+
+                continue;
+            }
+
+            if (waited.Contains(entry))
             {
                 continue;
             }
@@ -478,58 +492,74 @@ public sealed class Transfers(
 
             // By the release, so the uploader's spelling of it and the name the
             // plugin chose come to the same thing.
-            string named = TitleMatcher.Release(Path.GetFileNameWithoutExtension(file));
+            string named = TitleMatcher.Release(Path.GetFileNameWithoutExtension(entry));
 
             StoredDownload? put = every.FirstOrDefault(one =>
                 string.Equals(TitleMatcher.Release(one.ReleaseTitle), named, StringComparison.Ordinal));
 
+            // Nothing needs it. Cleared rather than left, which is what the
+            // owner asked for on 24 August 2026: the plugin used to leave
+            // whatever it could not account for, and the folder only ever grew
+            // — twenty-two things for five episodes, read again on every tick.
+            //
+            // A grab that already knows where its file is is being waited on,
+            // so another file matching it is a second copy. That cannot happen
+            // any more, since an episode's name comes from the episode, but the
+            // ones already on the owner's disk are still there.
             if (put is null)
             {
-                logger.LogInformation(
-                    "{File} is in the intake folder and no grab of this plugin's put it there, so it was left alone.",
-                    Path.GetFileName(file));
+                Discard(entry, "no grab of this plugin's is waiting on it");
 
                 continue;
             }
 
-            // A grab that already knows where its file is is being waited on,
-            // and another file matching it is a second copy of the same
-            // episode, never new work.
-            //
-            // The owner's intake folder held two files for Sugar S02E04: one
-            // under the uploader's release, one under the same release with the
-            // site's tag on it. A grab records one staged path, so whichever of
-            // the two it was not holding read as a file nothing was waiting on
-            // — and the release is compared with the site tag stripped, so it
-            // matched that very grab. Its staged path was overwritten with the
-            // other file and an encode asked for; the next tick found the first
-            // file unwaited-on and did the same in reverse. One dispatch a
-            // minute, alternating between two names, until the owner stopped
-            // the server.
-            //
-            // On the recorded path and not on the state, because the case this
-            // whole method exists for is a grab an older version marked done
-            // the moment it copied the file, without ever writing down where.
-            // Those have no path, whatever their state, and are picked up.
             if (put.StagedPath is not null)
             {
-                if (_leftovers.Add(file))
-                {
-                    logger.LogInformation(
-                        "{File} is a second copy of {Release}, which is already being waited on, so it was left alone.",
-                        Path.GetFileName(file),
-                        put.ReleaseTitle);
-                }
+                Discard(entry, $"a second copy of {put.ReleaseTitle}");
 
                 continue;
             }
 
-            await grabs.StagedAsync(put.InfoHash, file, ct);
+            await grabs.StagedAsync(put.InfoHash, entry, ct);
 
             foreach (EpisodeKey episode in put.Covers)
             {
-                await DispatchAsync(put.InfoHash, episode, file, ct);
+                await DispatchAsync(put.InfoHash, episode, entry, ct);
             }
+        }
+    }
+
+    /// <summary>Takes something out of the intake folder and says why.</summary>
+    /// <remarks>
+    /// Said every time rather than once, because this deletes the owner's files
+    /// and a deletion nobody can account for afterwards is worse than the
+    /// clutter it cleared. Nothing throws: a file the encoder has open comes
+    /// round again on the next tick.
+    /// </remarks>
+    private void Discard(string entry, string why)
+    {
+        try
+        {
+            if (Directory.Exists(entry))
+            {
+                Directory.Delete(entry, recursive: true);
+            }
+            else
+            {
+                File.Delete(entry);
+            }
+
+            logger.LogInformation(
+                "{Entry} was cleared from the intake folder: {Why}.",
+                Path.GetFileName(entry),
+                why);
+        }
+        catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+        {
+            logger.LogInformation(
+                "{Entry} could not be cleared from the intake folder and was left: {Reason}",
+                Path.GetFileName(entry),
+                held.Message);
         }
     }
 

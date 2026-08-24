@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -49,11 +50,11 @@ public class TransfersTests : IDisposable
 
         // The server knows the staged file once it is there, which is what the
         // dispatch asks it for: the id is the server's own, never the filename.
-        server.Files.Matches = [(Path.Combine(Intake, Path.GetFileName(episode)), "4417")];
+        server.Files.Matches = [(Staged, "4417")];
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.True(File.Exists(Path.Combine(Intake, Path.GetFileName(episode))), "It was never staged.");
+        Assert.True(File.Exists(Staged), "It was never staged.");
         Assert.False(File.Exists(episode), "The download was left where it was.");
         Assert.NotNull(server.Dispatcher.Job);
     }
@@ -144,7 +145,7 @@ public class TransfersTests : IDisposable
         await Grabbed(grabs);
 
         string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
-        string staged = Path.Combine(Intake, Path.GetFileName(episode));
+        string staged = Staged;
 
         StandingEngine engine = new StandingEngine().Holding(
             Finished(),
@@ -199,7 +200,7 @@ public class TransfersTests : IDisposable
         await Grabbed(grabs);
 
         string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
-        string staged = Path.Combine(Intake, Path.GetFileName(episode));
+        string staged = Staged;
 
         StandingEngine engine = new StandingEngine().Holding(
             Finished(),
@@ -259,7 +260,7 @@ public class TransfersTests : IDisposable
         await Grabbed(grabs);
 
         string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
-        string staged = Path.Combine(Intake, Path.GetFileName(episode));
+        string staged = Staged;
 
         StandingEngine engine = new StandingEngine().Holding(
             Finished(),
@@ -314,7 +315,8 @@ public class TransfersTests : IDisposable
         GrabRepository grabs = await Grabs();
         await Grabbed(grabs);
 
-        // Staged and marked done by a version that asked for no encode.
+        // Staged and marked done by a version that asked for no encode — and
+        // under the release's name, because that is what that version wrote.
         Directory.CreateDirectory(Intake);
 
         string staged = Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv");
@@ -361,7 +363,7 @@ public class TransfersTests : IDisposable
         await Grabbed(grabs);
 
         // Staged, the encode refused, and then the file taken away.
-        await grabs.StagedAsync(Hash, Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv"), CancellationToken.None);
+        await grabs.StagedAsync(Hash, Staged, CancellationToken.None);
 
         await Transfers(new StandingEngine(), grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -440,7 +442,7 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(Path.Combine(Intake, Path.GetFileName(episode)), "4417")];
+        server.Files.Matches = [(Staged, "4417")];
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -470,7 +472,7 @@ public class TransfersTests : IDisposable
         await Grabbed(grabs);
 
         string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
-        string staged = Path.Combine(Intake, Path.GetFileName(episode));
+        string staged = Staged;
 
         StandingEngine engine = new StandingEngine().Holding(
             Finished() with { State = TorrentState.Finished },
@@ -537,7 +539,7 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(Path.Combine(Intake, Path.GetFileName(episode)), "4417")];
+        server.Files.Matches = [(Staged, "4417")];
 
         Transfers transfers = Transfers(engine, grabs, server);
 
@@ -548,13 +550,64 @@ public class TransfersTests : IDisposable
         // The same release under the site's name for it, as a second staging
         // left behind. It is a copy of what was already dispatched.
         File.Copy(
-            Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv"),
+            Staged,
             Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES EZTV.mkv"));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
         Assert.Equal(1, server.Dispatcher.Dispatches);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The intake folder holds what is needed and nothing else.</strong>
+    /// The owner's held twenty-two things: five episodes in pairs, six folders
+    /// left by 0.3.4 with the tracker's name still on them, and loose files
+    /// from releases long since dealt with. Every tick read the lot.
+    /// </para>
+    /// <para>
+    /// Anything a grab is waiting on stays. Everything else goes, folders
+    /// included, and each deletion is said. The owner asked for this on
+    /// 24 August 2026: the plugin used to leave what it had not put there, and
+    /// the folder only ever grew.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WhatTheIntakeFolderDoesNotNeedIsCleared()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(Staged, "4417")];
+
+        Transfers transfers = Transfers(engine, grabs, server);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "It was never staged.");
+
+        // A folder 0.3.4 left, a stray from a release long since dealt with,
+        // and a second copy of the episode being waited on.
+        Directory.CreateDirectory(Path.Combine(Intake, "Rick.and.Morty.S06E03.1080p.WEB.H264-GLHF[TGx]"));
+        await File.WriteAllBytesAsync(
+            Path.Combine(Intake, "Rick.and.Morty.S06E03.1080p.WEB.H264-GLHF[TGx]", "rick.mkv"),
+            new byte[2048]);
+        await File.WriteAllBytesAsync(Path.Combine(Intake, "something.nobody.grabbed.mkv"), new byte[2048]);
+        File.Copy(Staged, Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES EZTV.mkv"));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "What is waited on was cleared.");
+        Assert.Equal([Staged], Directory.EnumerateFileSystemEntries(Intake).Order());
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
@@ -564,6 +617,14 @@ public class TransfersTests : IDisposable
     private string Incomplete => Path.Combine(_root, "incomplete");
 
     private string Intake => Path.Combine(_root, "intake");
+
+    /// <summary>
+    /// Where the episode ends up: its show, its year, its number and its
+    /// quality, which is what a staged file is named after. Built from the same
+    /// rule the plugin uses rather than written out, so a change to the rule
+    /// shows up here as a failure rather than as agreement.
+    /// </summary>
+    private string Staged => Path.Combine(Intake, EpisodeName.For("Silo", 2023, Episode, "1080p", ".mkv"));
 
     private static TorrentStatus Finished()
     {
@@ -629,7 +690,7 @@ public class TransfersTests : IDisposable
             // encode job will not take anything else. "library-tv" made every
             // test here agree with a plugin that could never dispatch.
             .Library(TelevisionLibrary, "Television", "tv")
-            .Show(41, "Silo", TelevisionLibrary)
+            .Show(41, "Silo", TelevisionLibrary, year: 2023)
 
             // Whether the encode has landed. It is the only thing the plugin
             // can see that says the job finished.

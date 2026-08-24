@@ -546,9 +546,26 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
-- **Every show in a television or anime library is in scope, whatever it has on disk.** The owner's
-  rule, 24 August 2026. It used to take one episode with a file, which made a show just added the
-  one case the plugin did nothing about. `docs/02-library.md` is corrected.
+- **A show is the owner's when it has an episode on disk, and only then.** Reversed on 24 August
+  2026, the same day it was written the other way round. Taking every show a library holds put the
+  plugin on 479 grabs in one afternoon — Family Guy alone claimed 456 episodes nobody had asked
+  for. A row in a library is not a show the owner added; one episode on disk is the only thing that
+  says so, and it is the same rule the server's own card query uses. `docs/02-library.md` is
+  corrected back. A show newly added with nothing on disk is genuinely invisible to a plugin, which
+  is a gap in the host contract and is media-server issue #34, not something to work around here.
+- **An episode's staged name comes from the episode, never from the release.** The owner's rule,
+  24 August 2026: `Sugar.2024.S02E02.1080p.mkv` — show, year, number, quality, and nothing else.
+  Two releases of one episode at one quality therefore come to one path, so a second copy cannot
+  exist rather than merely being tidied away afterwards. The name is decided at the grab, not on
+  the disk the torrent client writes to: that client is proven and is not to be touched.
+- **The intake folder holds what is needed and nothing else.** The owner's rule, 24 August 2026.
+  Anything a grab is waiting on stays; everything else is cleared, folders included, and each
+  deletion is written to the log. This reverses "this plugin does not delete what it did not make":
+  the folder only ever grew, to twenty-two entries for five episodes, all of them read on every
+  tick.
+- **Duplicate grab rows are cleared on every start, not once as a migration.** A migration clears
+  what existed when it ran. The owner's ran, and seven pairs made later that same day were still
+  there afterwards.
 - **A grab is done when the library has the episode, not when the file is copied.** Staged and
   dispatched are states of their own, so a refused encode is asked for again rather than forgotten,
   and the copies are deleted only once the encode has landed.

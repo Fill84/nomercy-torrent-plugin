@@ -40,7 +40,8 @@ public class StagerTests : IDisposable
             from,
             into,
             // No release name, so the file keeps its own.
-            release: null,
+            show: null,
+            resolution: null,
             CancellationToken.None);
 
         StagedResult result = Assert.Single(results);
@@ -71,7 +72,8 @@ public class StagerTests : IDisposable
             from,
             into,
             // No release name, so the file keeps its own.
-            release: null,
+            show: null,
+            resolution: null,
             CancellationToken.None);
 
         Assert.True(File.Exists(Path.Combine(into, "Silo.S03E01.mkv")));
@@ -112,7 +114,8 @@ public class StagerTests : IDisposable
             into,
 
             // No release name, so the file keeps its own.
-            release: null,
+            show: null,
+            resolution: null,
             CancellationToken.None));
 
         Assert.False(result.Moved);
@@ -147,7 +150,8 @@ public class StagerTests : IDisposable
             into,
 
             // No release name, so the file keeps its own.
-            release: null,
+            show: null,
+            resolution: null,
             CancellationToken.None));
 
         Assert.False(result.Moved);
@@ -177,7 +181,8 @@ public class StagerTests : IDisposable
             from,
             into,
             // No release name, so the file keeps its own.
-            release: null,
+            show: null,
+            resolution: null,
             CancellationToken.None);
 
         Assert.Equal([true, false, true], results.Select(one => one.Moved));
@@ -224,7 +229,8 @@ public class StagerTests : IDisposable
                 into,
 
                 // No release name, so the file keeps its own.
-                release: null,
+                show: null,
+                resolution: null,
                 CancellationToken.None));
 
             Assert.True(result.Moved);
@@ -281,7 +287,8 @@ public class StagerTests : IDisposable
             from,
             into,
             // No release name, so the file keeps its own.
-            release: null,
+            show: null,
+            resolution: null,
             CancellationToken.None);
 
         StagedResult one = Assert.Single(results);
@@ -304,7 +311,7 @@ public class StagerTests : IDisposable
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AStagedFileIsNamedAfterTheRelease()
+    public async Task AStagedFileIsNamedAfterTheEpisodeItHolds()
     {
         byte[] content = Content(1024 * 1024);
         string from = Folder("incomplete-named");
@@ -318,66 +325,78 @@ public class StagerTests : IDisposable
             [new("silo.s03e06.1080p.web.h264-cakes[EZTVx.to].mkv", Episode(6), content.Length)],
             from,
             into,
-            "Silo.S03E06.1080p.WEB.H264-CAKES",
+            Silo,
+            "1080p",
             CancellationToken.None);
 
         StagedResult one = Assert.Single(results);
 
         Assert.True(one.Moved, one.Reason);
-        Assert.Equal(Path.Combine(into, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv"), one.Path);
+        Assert.Equal(Path.Combine(into, "Silo.2023.S03E06.1080p.mkv"), one.Path);
         Assert.Equal(content, await File.ReadAllBytesAsync(one.Path!));
     }
 
     /// <remarks>
     /// <para>
-    /// <strong>The site's tag is off the name the grab carries too.</strong>
-    /// The tag was taken off the file the torrent held, and then the release
-    /// the grab recorded was written on in its place — and the indexer's own
-    /// title for it ends in the tag: <c>Sugar 2024 S02E04 1080p WEB
-    /// H264-CAKES EZTV</c>. So the tag went straight back on.
+    /// <strong>Two releases of one episode are one file.</strong> The owner's
+    /// intake folder held ten files for five episodes — Lucky S01E07, Sugar
+    /// S02E02, E04, E05 and E08 — in pairs identical in size and differing
+    /// only by the site's tag on the end of the name.
     /// </para>
     /// <para>
-    /// Two things came of it. The owner's intake folder held two files for one
-    /// episode, one under each spelling, because two grab rows of the same
-    /// torrent carried the indexer's title and the plugin's. And the server
-    /// parses this name to work out what the file is: it strips a tracker's
-    /// address, which has dots in it, and a bare word like <c>EZTV</c> is not
-    /// one, so it stayed on.
+    /// They came from two rows of one torrent, one carrying the indexer's
+    /// spelling of the release and one the plugin's, and the file was named
+    /// after whichever row staged it. Named after the episode instead, both
+    /// come to one path: there is nowhere for a second copy to be.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AReleaseTitleThatCarriesTheSitesTagIsStagedWithout()
+    public async Task TwoReleasesOfOneEpisodeComeToOneFile()
     {
         byte[] content = Content(1024 * 1024);
-        string from = Folder("incomplete-tagged");
-        string into = Path.Combine(_root, "intake-tagged");
+        string from = Folder("incomplete-twice");
+        string into = Path.Combine(_root, "intake-twice");
 
-        await File.WriteAllBytesAsync(
-            Path.Combine(from, "Sugar.2024.S02E04.1080p.WEB.H264-CAKES.mkv"),
-            content);
+        foreach (string name in new[]
+        {
+            "Sugar.2024.S02E04.1080p.WEB.H264-CAKES.mkv",
+            "Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV.mkv",
+        })
+        {
+            await File.WriteAllBytesAsync(Path.Combine(from, name), content);
+        }
 
-        IReadOnlyList<StagedResult> results = await new Stager(new ActivityJournal(), new CapturingLogger()).MoveAsync(
+        Stager stager = new(new ActivityJournal(), new CapturingLogger());
+
+        StagedResult first = Assert.Single(await stager.MoveAsync(
             [new("Sugar.2024.S02E04.1080p.WEB.H264-CAKES.mkv", Episode(4), content.Length)],
             from,
             into,
-            "Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV",
-            CancellationToken.None);
+            Silo,
+            "1080p",
+            CancellationToken.None));
 
-        StagedResult one = Assert.Single(results);
+        StagedResult second = Assert.Single(await stager.MoveAsync(
+            [new("Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV.mkv", Episode(4), content.Length)],
+            from,
+            into,
+            Silo,
+            "1080p",
+            CancellationToken.None));
 
-        Assert.True(one.Moved, one.Reason);
-        Assert.Equal(
-            Path.Combine(into, "Sugar 2024 S02E04 1080p WEB H264-CAKES.mkv"),
-            one.Path);
+        Assert.True(first.Moved, first.Reason);
+        Assert.True(second.Moved, second.Reason);
+        Assert.Equal(first.Path, second.Path);
+        Assert.Single(Directory.EnumerateFiles(into));
     }
 
     /// <remarks>
-    /// A pack is several episodes under one release name, so naming every file
-    /// after it would have them overwrite each other. Their own names carry the
-    /// episode and are what staging matched them by.
+    /// A pack is several episodes under one release name. Named after the
+    /// release they would overwrite each other; named after the episode each
+    /// holds, they cannot — which is why a pack needs no special case any more.
     /// </remarks>
     [Fact]
-    public async Task EveryFileOfAPackKeepsItsOwnName()
+    public async Task EveryFileOfAPackIsNamedAfterItsOwnEpisode()
     {
         byte[] content = Content(512 * 1024);
         string from = Folder("incomplete-pack");
@@ -395,12 +414,13 @@ public class StagerTests : IDisposable
             ],
             from,
             into,
-            "Silo.S03.1080p.WEB.H264-CAKES",
+            Silo,
+            "1080p",
             CancellationToken.None);
 
         Assert.All(results, one => Assert.True(one.Moved, one.Reason));
-        Assert.True(File.Exists(Path.Combine(into, "Silo.S03E06.mkv")));
-        Assert.True(File.Exists(Path.Combine(into, "Silo.S03E07.mkv")));
+        Assert.True(File.Exists(Path.Combine(into, "Silo.2023.S03E06.1080p.mkv")));
+        Assert.True(File.Exists(Path.Combine(into, "Silo.2023.S03E07.1080p.mkv")));
     }
 
     private string Folder(string name)
@@ -423,6 +443,10 @@ public class StagerTests : IDisposable
 
         return content;
     }
+
+    /// <summary>The show the staged episodes are of, as a library has it.</summary>
+    private static Show Silo { get; } =
+        new(42, "Silo", 2023, "01KZGKX2G0966V80H26EKGG5JA", LibraryKind.Television, "Silo");
 
     private static EpisodeKey Episode(int number)
     {
