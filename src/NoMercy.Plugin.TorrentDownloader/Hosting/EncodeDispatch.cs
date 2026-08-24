@@ -119,25 +119,38 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
             Matched matched = await MatchedAsync(files, Path.GetDirectoryName(full)!, libraryType, full)
                 .ConfigureAwait(false);
 
-            if (matched.Id is not string id)
+            if (matched.Listed is null)
             {
-                // What the server listed, not only that it listed nothing for
-                // us: it skips a file its own parser cannot read a title out
-                // of, so a file that is not in the listing at all and a file
-                // it listed but could not identify are two different problems
-                // with two different answers.
-                string why = matched.Listed switch
-                {
-                    null => "the server would not list the folder at all",
-                    0 => "the server listed no files in that folder",
-                    int listed when !matched.Ours => $"the server listed {listed} file(s) in that folder and this was not among them",
-                    _ => "the server listed this file but matched no media to it",
-                };
+                return Refused($"the server would not list the folder {full} is in");
+            }
 
-                logger.LogWarning("No encode was dispatched for {File}: {Reason}.", full, why);
-                journal.Failed(ActivityStage.Download, Path.GetFileName(full), why);
+            if (!matched.Ours)
+            {
+                // Not in the listing means the server skips it, and it skips a
+                // file its own parser cannot read a title out of. Dispatching
+                // then would queue a job for a file the encoder will not find.
+                return Refused(
+                    $"the server listed {matched.Listed} file(s) in that folder and {full} was not among them");
+            }
 
-                return false;
+            if (matched.Id is null)
+            {
+                // Listed, and matched to no media. The dashboard's own Add
+                // content dispatches this case anyway — where the id is empty
+                // it lets the file through — so this does too. Being stricter
+                // than the server's own interface is not a safety: it made a
+                // file the owner could add by hand one the plugin would not.
+                //
+                // Said out loud, because a job the encoder can do nothing with
+                // is not something to discover from a library that stays empty.
+                logger.LogWarning(
+                    "{File} was listed and matched no media, and was dispatched anyway, as Add content does.",
+                    full);
+
+                journal.Failed(
+                    ActivityStage.Dispatch,
+                    Path.GetFileName(full),
+                    "the server matched no media to it, and it was dispatched anyway");
             }
 
             object job = Activator.CreateInstance(jobType)
@@ -145,7 +158,9 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
 
             Write(job, "LibraryId", libraryId);
             Write(job, "FolderId", Read(folder, "FolderId"));
-            Write(job, "Id", id);
+            // Whatever the listing gave, empty included: that is what the
+            // dashboard sends and the server is what decides.
+            Write(job, "Id", matched.Id ?? string.Empty);
             Write(job, "InputFile", full);
 
             // SourceDriverId is left unset: a finished download is on this

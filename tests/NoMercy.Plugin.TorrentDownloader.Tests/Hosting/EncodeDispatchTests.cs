@@ -166,6 +166,41 @@ public class EncodeDispatchTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>The same thing the dashboard's own Add content does.</strong> It
+    /// builds a VideoEncodeJob out of the id the file listing gave it and
+    /// dispatches it — and where that id is empty it dispatches anyway:
+    /// <c>if (claim.Key.Length == 0) { selected.AddRange(claim); continue; }</c>
+    /// </para>
+    /// <para>
+    /// This refused instead, so a file the owner could add by hand was one the
+    /// plugin would not. Being stricter than the server's own interface is not
+    /// a safety: it is the plugin deciding it knows better about a call it does
+    /// not own.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFileTheServerMatchedNothingToIsStillDispatched()
+    {
+        FakeProvider server = Server();
+
+        // Listed, with no media matched to it.
+        server.Files.Matches = [(Staged(), "0")];
+
+        Assert.True(await Dispatch(server, "tv"));
+
+        VideoEncodeJob job = Assert.IsType<VideoEncodeJob>(server.Dispatcher.Job);
+
+        Assert.Equal(Path.GetFullPath(Staged()), job.InputFile);
+
+        // And it is said, because a job the encoder can do nothing with is not
+        // something to discover from a library that stays empty.
+        Assert.Contains(
+            server.Log.Lines,
+            one => one.Contains("matched no media", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>Which of the two it is.</strong> The server skips a file its own
     /// parser cannot read a title out of, so it never appears in the listing at
     /// all — and a file that is missing from the listing is a different problem
@@ -188,15 +223,9 @@ public class EncodeDispatchTests : IDisposable
         Assert.False(await Dispatch(missing, "tv"));
         Assert.Contains(missing.Log.Lines, one => one.Contains("not among them", StringComparison.Ordinal));
 
-        FakeProvider unidentified = Server();
-
-        // Ours is listed, with no media matched to it.
-        unidentified.Files.Matches = [(Staged(), "0")];
-
-        Assert.False(await Dispatch(unidentified, "tv"));
-        Assert.Contains(
-            unidentified.Log.Lines,
-            one => one.Contains("matched no media to it", StringComparison.Ordinal));
+        // Ours listed but matched to nothing is a third case and is dispatched
+        // anyway, as the dashboard does — see
+        // AFileTheServerMatchedNothingToIsStillDispatched.
     }
 
     /// <remarks>
