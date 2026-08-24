@@ -25,8 +25,14 @@ What is proved on real data:
   and the resume file that was read on every start and written by nothing at all, so every restart
   re-downloaded everything.
 
-**What has never happened: one `encode dispatched` on the real server.** Sprint 9 is that, and the
-five things around it. Until it has, 0.4.0 does not go out.
+**What has never happened: one `encode dispatched` on the real server.** That is the whole of what is
+left. Sprint 9's other five slices are done — the contract moved to the released version, the
+buttons live in the table row, every show in a library is in scope whatever it has on disk, an
+episode left in the intake folder is dispatched anyway, and a torrent still seeding is not cleared
+up under it.
+
+Until one episode has gone from missing to in the library with nothing done by hand, 0.4.0 does not
+go out.
 
 ## Blocked
 

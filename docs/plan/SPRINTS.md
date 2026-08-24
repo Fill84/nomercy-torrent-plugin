@@ -1076,7 +1076,7 @@ Everything up to staging is proved on the owner's own server. The step it exists
 encoder, and knowing what became of that — has never once succeeded there. Until it does, nothing
 else is worth releasing.
 
-## S9-01 · Build against the contract that ships
+## S9-01 · Build against the contract that ships — **done**
 
 **Read first:** `Directory.Build.props`, `docs/09-host-contract.md`.
 
@@ -1094,7 +1094,7 @@ server is on **0.1.478**. So every contract added since — `PluginTableCellType
 
 **Done when** the build is clean against the released contract and the ABI dump matches it.
 
-## S9-02 · The buttons live in the table
+## S9-02 · The buttons live in the table — **done**
 
 **Read first:** `src/.../Views/DownloadsView.cs`, the new `PluginTableAction` in the contract.
 
@@ -1109,7 +1109,7 @@ buttons underneath — because a row could carry one action and no more. The con
 
 **Done when** the page has a single table and the two buttons sit in it.
 
-## S9-03 · Every show in a library is in scope
+## S9-03 · Every show in a library is in scope — **done**
 
 **Read first:** `src/.../Core/Pipeline/MissingRefresh.cs`.
 
@@ -1147,18 +1147,20 @@ not code first: it is evidence first, and code for whatever the evidence shows.
 **Done when** one episode has gone from missing to in the library with nothing done by hand, and the
 folders it passed through are empty afterwards.
 
-## S9-05 · What was left behind
+## S9-05 · What was left behind — **done**
 
-**Read first:** the intake folder on the owner's server.
+Three episodes were staged before any of this bookkeeping existed. Their grabs said `done`, so
+nothing would ever come back to them.
 
-Three episodes were staged before any of this bookkeeping existed. Their grabs say `done`, so
-nothing will ever come back to them, and they will sit in the intake folder for ever.
+The plan was to ask the owner to import them by hand or delete them. That is not what this plugin is
+for: **every tick reads the intake folder itself**, and anything no open grab is waiting on is
+matched to the grab that put it there — by the release both carry — and asked for again. It then
+joins the ordinary path: dispatched, then the library, then deleted.
 
-1. Decide with the owner: import them by hand, or delete them. It is their disk.
-2. Whichever it is, nothing in the plugin changes — the fault that made them is already fixed. This
-   slice exists so they are not forgotten.
+A file no grab can be found for is left where it is and said once. It may be the owner's own, and
+this plugin does not delete what it did not make.
 
-**Done when** the intake folder holds only what the plugin put there this week.
+**Done when** they are gone from the intake folder without anyone touching them. That is the deploy.
 
 ## S9-06 · Release 0.4.0
 
