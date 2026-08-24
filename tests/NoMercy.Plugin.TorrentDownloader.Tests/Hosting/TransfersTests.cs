@@ -339,6 +339,34 @@ public class TransfersTests : IDisposable
         Assert.Equal(staged, waiting.StagedPath);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A staged episode whose file has gone is not delivered.</strong>
+    /// The encode was never taken and the file is no longer there to offer, so
+    /// there is nothing left to wait for — and waiting is what it used to do,
+    /// silently and for ever, with the episode neither in the library nor being
+    /// looked for.
+    /// </para>
+    /// <para>
+    /// It goes back to missing so the next cycle can find it again. The plugin
+    /// cannot tell whether the owner moved it or something deleted it, and
+    /// either way the library does not have it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AStagedEpisodeWhoseFileHasGoneIsLookedForAgain()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        // Staged, the encode refused, and then the file taken away.
+        await grabs.StagedAsync(Hash, Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv"), CancellationToken.None);
+
+        await Transfers(new StandingEngine(), grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);

@@ -274,10 +274,29 @@ public sealed class Transfers(
     {
         foreach (StoredDownload staged in stored.Where(one => one.State == GrabState.Staged))
         {
-            if (staged.StagedPath is not string path || !File.Exists(path))
+            if (staged.StagedPath is not string path)
             {
-                // Staged by a version that did not record where, or the owner
-                // moved it. Nothing to ask about and nothing to delete.
+                // Staged by a version that did not record where. The folder is
+                // read directly for those, which is LeftBehindAsync.
+                continue;
+            }
+
+            if (!File.Exists(path))
+            {
+                // Gone. The encode was never taken and there is nothing left to
+                // offer, so there is nothing to wait for — and waiting is what
+                // this used to do, silently and for ever, with the episode
+                // neither in the library nor being looked for.
+                //
+                // Whether the owner moved it or something deleted it cannot be
+                // told from here, and either way the library does not have it.
+                string reason = $"{Path.GetFileName(path)} was staged and is no longer there";
+
+                await grabs.FailedAsync(staged.InfoHash, reason, DateTimeOffset.UtcNow, ct);
+
+                logger.LogWarning("{Release}: {Reason}", staged.ReleaseTitle, reason);
+                journal.Failed(ActivityStage.Dispatch, staged.ReleaseTitle, reason);
+
                 continue;
             }
 
