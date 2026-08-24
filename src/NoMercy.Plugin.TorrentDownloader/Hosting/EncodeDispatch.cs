@@ -68,7 +68,17 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
     /// </param>
     /// <param name="libraryType">The library's type, as the file list service wants it.</param>
     /// <param name="ct">Cancellation.</param>
-    public async Task<bool> DispatchAsync(string stagedFile, string libraryId, string libraryType, CancellationToken ct)
+    /// <param name="existing">
+    /// A path where this show's episodes already are, when it has any. A
+    /// library can have more than one folder and an encode has to go to the one
+    /// the show really lives in.
+    /// </param>
+    public async Task<bool> DispatchAsync(
+        string stagedFile,
+        string libraryId,
+        string libraryType,
+        string? existing,
+        CancellationToken ct)
     {
         try
         {
@@ -106,7 +116,7 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
             // The first folder, with no preference between them. Preferring one
             // whose path is non-empty is wrong: a real library's second folder
             // is a drive whose location lives on its storage driver.
-            if (First(Read(library, "FolderLibraries")) is not object folder)
+            if (Where(Read(library, "FolderLibraries"), existing) is not object folder)
             {
                 return Refused($"library {libraryId} has no folder to put anything in");
             }
@@ -375,6 +385,62 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
         PropertyInfo? target = instance.GetType().GetProperty(property);
 
         target?.SetValue(instance, Converted(value, target.PropertyType));
+    }
+
+    /// <summary>
+    /// The library folder this show's episodes really live in.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A library can have several, on different drives. The owner's has two,
+    /// and taking the first sent every encode to a drive the server could not
+    /// reach: every job failed with "could not find a part of the path". The
+    /// dashboard's own Add content does not guess — it sends the folder the
+    /// person browsing chose.
+    /// </para>
+    /// <para>
+    /// So the folder is the one an episode of this show is already in. Falling
+    /// back to the first is only for a show with nothing on disk, which is not
+    /// a show this plugin downloads for.
+    /// </para>
+    /// </remarks>
+    private static object? Where(object? folders, string? existing)
+    {
+        if (folders is not IEnumerable list)
+        {
+            return null;
+        }
+
+        object? first = null;
+
+        foreach (object? entry in list)
+        {
+            first ??= entry;
+
+            if (entry is null || string.IsNullOrWhiteSpace(existing))
+            {
+                continue;
+            }
+
+            if (Read(entry, "Folder") is object folder
+                && Read(folder, "Path") is string path
+                && !string.IsNullOrWhiteSpace(path)
+                && Under(existing, path))
+            {
+                return entry;
+            }
+        }
+
+        return first;
+    }
+
+    /// <summary>Whether a file sits under a folder, however either spells its separators.</summary>
+    private static bool Under(string file, string folder)
+    {
+        string one = file.Replace('\\', '/');
+        string other = folder.Replace('\\', '/').TrimEnd('/');
+
+        return one.StartsWith(other + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static object? First(object? items)

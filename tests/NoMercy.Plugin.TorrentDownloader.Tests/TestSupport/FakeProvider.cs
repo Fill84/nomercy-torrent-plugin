@@ -9,7 +9,25 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 /// <summary>A library, as the repository hands one over.</summary>
 public sealed record FakeLibrary(Ulid? EncodePresetId, IReadOnlyList<FakeFolderLibrary> FolderLibraries);
 
-public sealed record FakeFolderLibrary(Ulid FolderId, string Path);
+/// <summary>
+/// One folder of a library, in the server's own shape.
+/// </summary>
+/// <remarks>
+/// The path hangs off a <c>Folder</c> and not off the link, because
+/// <c>FolderLibrary.Folder.Path</c> is what the server has. Carrying the path
+/// on the link itself made a test agree with a plugin that read the wrong
+/// place, and every encode went to the library's first folder — a drive the
+/// server could not reach.
+/// </remarks>
+public sealed record FakeFolderLibrary(Ulid FolderId, FakeFolder Folder)
+{
+    public FakeFolderLibrary(Ulid folderId, string path)
+        : this(folderId, new FakeFolder(path))
+    {
+    }
+}
+
+public sealed record FakeFolder(string Path);
 
 /// <summary>One file the server knows about, with its media match.</summary>
 public sealed record FakeFile(string Path, FakeMatch Match);

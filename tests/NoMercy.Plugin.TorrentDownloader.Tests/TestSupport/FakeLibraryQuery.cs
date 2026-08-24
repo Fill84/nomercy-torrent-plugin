@@ -96,10 +96,21 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
         throw new NotSupportedException("Films are out of scope; GetMoviesAsync is never called.");
     }
 
+    private readonly List<PluginLibraryFile> _files = [];
+
+    /// <summary>One file a show already has, with the folder it really lives in.</summary>
+    public FakeLibraryQuery File(int showId, int season, int episode, string path)
+    {
+        _files.Add(new(showId, season, episode, path, "1080p"));
+
+        return this;
+    }
+
     public Task<IReadOnlyList<PluginLibraryFile>> GetShowFilesAsync(
         int showId,
         CancellationToken ct = default)
     {
-        return Task.FromResult<IReadOnlyList<PluginLibraryFile>>([]);
+        return Task.FromResult<IReadOnlyList<PluginLibraryFile>>(
+            [.. _files.Where(one => one.ShowId == showId)]);
     }
 }

@@ -102,6 +102,41 @@ public class EncodeDispatchTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The folder this show already lives in.</strong> A library can
+    /// have several, on different drives — the owner's has two — and taking the
+    /// first sent every encode to a drive the server could not reach: every job
+    /// failed with "could not find a part of the path".
+    /// </para>
+    /// <para>
+    /// The dashboard's own Add content does not guess either; it sends the
+    /// folder the person browsing chose.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheEncodeGoesToTheFolderTheShowIsAlreadyIn()
+    {
+        FakeProvider server = Server();
+
+        // Two folders, and the show's episodes are in the second.
+        server.Libraries.Library = new(
+            FakeLibraries.Preset,
+            [
+                new(FakeLibraries.FirstFolder, @"Y:\nomercy\media"),
+                new(FakeLibraries.SecondFolder, @"Z:\nomercy\TV.Shows"),
+            ]);
+
+        Assert.True(await Dispatch(
+            server,
+            "tv",
+            existing: @"Z:\nomercy\TV.Shows\Silo.(2023)\Silo.S03E01.mkv"));
+
+        Assert.Equal(
+            FakeLibraries.SecondFolder,
+            Assert.IsType<VideoEncodeJob>(server.Dispatcher.Job).FolderId);
+    }
+
+    /// <remarks>
     /// The library is the show's own, which is what puts an anime episode in
     /// the anime library and a television one in the tv library. The server
     /// decided the media type when the show was filed and this plugin follows
@@ -310,10 +345,14 @@ public class EncodeDispatchTests : IDisposable
         return path;
     }
 
-    private Task<bool> Dispatch(FakeProvider server, string libraryType, string libraryId = Wanted)
+    private Task<bool> Dispatch(
+        FakeProvider server,
+        string libraryType,
+        string libraryId = Wanted,
+        string? existing = null)
     {
         return new EncodeDispatch(server, server.Journal, server.Log)
-            .DispatchAsync(Staged(), libraryId, libraryType, CancellationToken.None);
+            .DispatchAsync(Staged(), libraryId, libraryType, existing, CancellationToken.None);
     }
 
     private FakeProvider Server()

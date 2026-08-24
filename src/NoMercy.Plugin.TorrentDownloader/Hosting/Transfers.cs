@@ -270,10 +270,15 @@ public sealed class Transfers(
             return;
         }
 
+        // Where this show's episodes already are, so the encode goes to the
+        // folder it really lives in. A library can have several.
+        string? existing = (await library.GetShowFilesAsync(episode.ShowId, ct)).FirstOrDefault();
+
         bool queued = await dispatch.DispatchAsync(
             staged,
             show.LibraryId,
             show.Kind == LibraryKind.Anime ? "anime" : "tv",
+            existing,
             ct);
 
         if (!queued)
