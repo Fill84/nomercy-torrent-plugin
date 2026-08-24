@@ -4,37 +4,29 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**The plugin picks the right release now, and that is proved against pages four sites really served
-rather than promised. What has never run is everything after the choice.**
+**Everything up to staging is proved on the owner's own server. The step the plugin exists for —
+asking the encoder, and knowing what became of that — has never once succeeded there.**
 
-0.4.0 loaded on `beast-unit` on 22 August 2026 and two cycles were watched end to end. Ten faults
-came out of it, each fixed with a test seen to fail first and each recorded under **Decisions**. The
-last four were found by the owner watching the pages rather than by any test:
+Between 22 and 24 August 2026 the plugin ran on `beast-unit` through several restarts and the whole
+of the chain was watched rather than trusted. It picks the right release, refuses what it should,
+downloads at full speed, stages the episode into the intake folder, and gives nothing back to a
+public swarm. Twenty-three grabs reached `done`, the first that had ever existed.
 
-- **A3 was wrong.** Asking for the full release name is a question search engines cannot answer.
-- **An episode with no pooled name was never searched**, and two of the owner's Silo gaps had none.
-- **Copies for the cycle's other gaps were thrown away** and recorded as refusals against the wrong
-  episode, which is what filled the Skipped page.
-- **The best copy was tried and no other**, so a site that names no torrent stopped the episode.
-- **TorrentBay's signed POST was never written.** It is now, and the site was seen to answer it.
-- **Nothing counted a search**, so `MaxSearchAttempts` and the queue's order were both dead.
-- **Two callers shared one browser tab**, so every gated name database aborted itself.
-- **Nothing ever pushed to an open page.** `LiveSnapshot.Changed` was called by no code at all.
-- **One ordinary word matched five other programmes.** *Lucky* collected *Lucky Hank*, *Lucky Dog*,
-  *Lucky 7*, *Lucky Bastards* and *Lucky 13*.
-- **A leftover from another episode's search settled an episode**, so the release everybody was
-  seeding was never fetched. This one was mine, added the same day as a saving, and it is the fault
-  the owner had been describing from the start.
+What is proved on real data:
 
-`TheRightReleaseTests` is what stops the tenth coming back: two episodes of one programme, over what
-The Pirate Bay, LimeTorrents, TorrentGalaxy and TorrentDownloads really answered, through the real
-readers, profile and decision. S02E08 answers CAKES at 458 seeders; S02E01 has no CAKES release at
-all and answers playWEB at 247. Both were confirmed by the owner.
+- The right release, from the name sources rather than an indexer's rendering.
+- h265, 2160p and foreign audio refused, each with a reason on the Skipped page.
+- A 1.2 GB executable named after an episode **refused before a byte of it was fetched**.
+- Downloads at 7.2 MB/s where they had sat at nought, and no upload at all on a public torrent.
+- Five faults that each alone stopped the episode ever reaching the library, all found by watching:
+  the stager asking for a share mode Windows refuses while the client holds the file; the delete
+  afterwards counted as a failure of the copy; a multi-file torrent's video looked for in the wrong
+  folder; the encode dispatch resolving an ambiguous overload and writing a string into a `Ulid`;
+  and the resume file that was read on every start and written by nothing at all, so every restart
+  re-downloaded everything.
 
-**Waiting on the owner to stop the media server.** Then `scripts/deploy-to-server.ps1 -Build`, and
-start it. What is still unproven is everything after the choice: the grab, the download completing,
-only the video being staged, no sample, and the encoder being handed the file. Every test of that
-runs against fakes, and none of it has been watched once.
+**What has never happened: one `encode dispatched` on the real server.** Sprint 9 is that, and the
+five things around it. Until it has, 0.4.0 does not go out.
 
 ## Blocked
 
@@ -547,6 +539,16 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
+
+- **Every show in a television or anime library is in scope, whatever it has on disk.** The owner's
+  rule, 24 August 2026. It used to take one episode with a file, which made a show just added the
+  one case the plugin did nothing about. `docs/02-library.md` is corrected.
+- **A grab is done when the library has the episode, not when the file is copied.** Staged and
+  dispatched are states of their own, so a refused encode is asked for again rather than forgotten,
+  and the copies are deleted only once the encode has landed.
+- **The contract is packed from the released server.** `dev` carries a fixed `0.1.404`, so packing
+  from it produced a package NuGet believed it already had. This repository sat on it while the
+  server shipped `0.1.478`.
 
 - **Nothing is uploaded on a public torrent, and `docs/06-torrent-client.md` is corrected.** The
   owner's rule, given on 22 August 2026 when they found their own client at a ratio of 0.17 on a
