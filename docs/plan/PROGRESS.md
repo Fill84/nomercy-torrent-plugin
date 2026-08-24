@@ -553,6 +553,16 @@ and note it here.
   says so, and it is the same rule the server's own card query uses. `docs/02-library.md` is
   corrected back. A show newly added with nothing on disk is genuinely invisible to a plugin, which
   is a gap in the host contract and is media-server issue #34, not something to work around here.
+- **The has-a-file rule is a workaround, and it goes when media-server #36 lands.** A show is the
+  owner's when it has an episode on disk, because nothing else distinguishes one. The reason is
+  media-server #36: identification imported a whole show into the library on a guess about a
+  filename, before confirming anything, and again on four alternatives it was unsure about — 13
+  shows and 1,604 episode rows on the owner's server, The Simpsons at 887 and Family Guy at 483.
+  Those 12 were detached by hand on 25 August 2026, X-Men '97 kept because the owner added it.
+  Once #36 removes those two call sites, only the add-show button and a file on disk can attach a
+  show, so **membership of a library becomes the rule** and this plugin should use it: it is right
+  on the day a show is added, which is the day it matters. Do not make that change before #36 is
+  in — the library looking tidy today is not the same as the cause being gone.
 - **An episode's staged name comes from the episode, never from the release.** The owner's rule,
   24 August 2026: `Sugar.2024.S02E02.1080p.mkv` — show, year, number, quality, and nothing else.
   Two releases of one episode at one quality therefore come to one path, so a second copy cannot
