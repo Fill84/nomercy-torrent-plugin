@@ -218,6 +218,13 @@ public class TransfersTests : IDisposable
         // not have the episode yet.
         Assert.True(File.Exists(staged));
 
+        // Finished rather than seeding: a public torrent stops the moment it is
+        // complete, because nothing is ever uploaded on a public swarm. One
+        // that is still seeding is left alone, which is its own test.
+        engine.Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
         await Transfers(engine, grabs, server, encoded: true)
             .TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -227,6 +234,61 @@ public class TransfersTests : IDisposable
 
         Assert.Equal(Hash, removed.InfoHash);
         Assert.True(removed.DeleteFiles, "The download was left on the disk.");
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent still seeding is not cleared up.</strong> The library
+    /// having the episode says the encode finished; it says nothing about what
+    /// the torrent still owes. A private torrent seeds to the owner's ratio or
+    /// hours, and the library can have the episode long before either — so
+    /// deleting then costs the owner exactly the account the seeding rules were
+    /// written to protect.
+    /// </para>
+    /// <para>
+    /// Nothing is lost by waiting: the episode is already in the library. The
+    /// tick after the seed limit stops it finishes the job.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentThatIsStillSeedingIsLeftAlone()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        string staged = Path.Combine(Intake, Path.GetFileName(episode));
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(staged, "4417")];
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // Finished() is seeding, and the library now has the episode.
+        await Transfers(engine, grabs, server, encoded: true)
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(staged), "The staged copy went while the torrent was still seeding.");
+        Assert.Empty(engine.Removed);
+
+        Assert.Equal(
+            GrabState.Dispatched,
+            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+
+        // The seed limit stops it, and the next tick clears up.
+        engine.Holding(Finished() with { State = TorrentState.Finished }, new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        await Transfers(engine, grabs, server, encoded: true)
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.False(File.Exists(staged));
+        Assert.Single(engine.Removed);
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
     }
 

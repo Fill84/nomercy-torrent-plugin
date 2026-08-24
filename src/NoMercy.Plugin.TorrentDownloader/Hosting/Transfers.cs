@@ -74,7 +74,7 @@ public sealed class Transfers(
         }
 
         await AskAgainAsync(stored, ct);
-        await FinishAsync(stored, ct);
+        await FinishAsync(stored, running, ct);
 
         foreach (StoredDownload carrying in plan.Carry)
         {
@@ -301,10 +301,29 @@ public sealed class Transfers(
     /// the owner already has, re-checked on every start for ever.
     /// </para>
     /// </remarks>
-    private async Task FinishAsync(IReadOnlyList<StoredDownload> stored, CancellationToken ct)
+    private async Task FinishAsync(
+        IReadOnlyList<StoredDownload> stored,
+        IReadOnlyList<TorrentStatus> running,
+        CancellationToken ct)
     {
         foreach (StoredDownload sent in stored.Where(one => one.State == GrabState.Dispatched))
         {
+            if (running.Any(one =>
+                    string.Equals(one.InfoHash, sent.InfoHash, StringComparison.OrdinalIgnoreCase)
+                    && one.State == TorrentState.Seeding))
+            {
+                // Still giving something back. The library having the episode
+                // says the encode finished; it says nothing about what the
+                // torrent still owes — a private one seeds to the owner's ratio
+                // or hours, and the library can have the episode long before
+                // either. Deleting then costs the owner the account the seeding
+                // rules exist to protect.
+                //
+                // Nothing is lost by waiting: the episode is already in the
+                // library. The tick after the seed limit stops it finishes this.
+                continue;
+            }
+
             bool landed = true;
 
             foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
@@ -325,10 +344,8 @@ public sealed class Transfers(
                 Delete(path);
             }
 
-            // The torrent and its download with it. A public one uploads
-            // nothing and a private one has been seeding since it finished, so
-            // by the time the library has the episode there is nothing left for
-            // either to give.
+            // The torrent and its download with it, now that it is not seeding
+            // any more.
             await engine.RemoveAsync(sent.InfoHash, deleteFiles: true, ct);
             await grabs.StateAsync(sent.InfoHash, GrabState.Done, ct);
 
