@@ -190,6 +190,59 @@ public class TitleMatcherTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The six files really in the owner's intake folder, against the
+    /// grabs that really put them there</strong>, read off both on
+    /// 24 August 2026. They were staged before the file was named after its
+    /// release, so each carries the uploader's spelling and its grab carries
+    /// the plugin's — and matching them is the whole of how those episodes get
+    /// their encode asked for at last.
+    /// </para>
+    /// <para>
+    /// Written out rather than reasoned about. "It should normalise to the
+    /// same thing" is exactly the kind of claim that has been wrong here
+    /// before.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(
+        "Sugar.2024.S02E07.1080p.WEB.h264-ETHEL[EZTVx.to]",
+        "Sugar 2024 S02E07 1080p WEB h264-ETHEL EZTV")]
+    [InlineData(
+        "silo.s03e04.1080p.web.h264-cakes[EZTVx.to]",
+        "Silo S03E04 1080p WEB H264-CAKES")]
+    [InlineData(
+        "lioness.2023.s03e04.1080p.web.h264-cakes[EZTVx.to]",
+        "Lioness 2023 S03E04 1080p WEB H264-CAKES")]
+    [InlineData(
+        "Sugar 2024 S02E03 Watch Face 1080p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB[EZTVx.to]",
+        "Sugar 2024 S02E03 Watch Face 1080p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB EZTV")]
+    [InlineData(
+        "Rick and Morty S09E10 Field of Dreams REPACK 1080p AMZN WEB-DL DDP5 1 H 264-playWEB",
+        "Rick and Morty S09E10 Field of Dreams REPACK 1080p AMZN WEB-DL DDP5 1 H 264-playWEB")]
+    [InlineData(
+        "Sugar 2024 S02E06 Cautionary Tale 1080p ATVP WEB-DL DDP5 1 Atmos H 264-FLUX[EZTVx.to]",
+        "Sugar 2024 S02E06 Cautionary Tale 1080p ATVP WEB-DL DDP5 1 Atmos H 264-FLUX EZTV")]
+    public void AFileLeftInTheIntakeFolderIsFoundByTheGrabThatStagedIt(string onDisk, string grabbed)
+    {
+        Assert.Equal(TitleMatcher.Release(grabbed), TitleMatcher.Release(onDisk));
+    }
+
+    /// <remarks>
+    /// And a different release of the same episode is not it. The owner's
+    /// Lioness S03E04 was grabbed twice — once as an executable wearing the
+    /// name, once as CAKES — and matching on the episode rather than the
+    /// release would hand the encode of one to the other.
+    /// </remarks>
+    [Fact]
+    public void AnotherReleaseOfTheSameEpisodeIsNotAMatch()
+    {
+        Assert.NotEqual(
+            TitleMatcher.Release("Lioness 2023 S03E04 1080p WEB h264-ETHEL.exe"),
+            TitleMatcher.Release("lioness.2023.s03e04.1080p.web.h264-cakes[EZTVx.to]"));
+    }
+
+    /// <remarks>
     /// Two different releases stay different, whatever is stuck on the end of
     /// them. Dropping a tag must not drop the group with it.
     /// </remarks>
