@@ -563,6 +563,13 @@ and note it here.
   deletion is written to the log. This reverses "this plugin does not delete what it did not make":
   the folder only ever grew, to twenty-two entries for five episodes, all of them read on every
   tick.
+- **The episode's own id is read from the server's database, past the contract.** `EncodeDispatch`
+  resolves `NoMercy.Database.MediaContext` by name and asks `Episodes` for the row matching the
+  show, season and number the plugin itself chose. The contract carries no episode id, and without
+  one the encode job looks up media 0, registers nothing, and leaves the library empty while the
+  queue counter moves. Deliberate and temporary: media-server issue #35 adds `PluginLibraryEpisode.Id`,
+  and #30 as amended moves the folder decision server-side. Between them the five server types
+  `EncodeDispatch` names by hand all go, and that file keeps no reflection.
 - **Duplicate grab rows are cleared on every start, not once as a migration.** A migration clears
   what existed when it ran. The owner's ran, and seven pairs made later that same day were still
   there afterwards.
