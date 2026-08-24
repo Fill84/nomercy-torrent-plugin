@@ -714,7 +714,7 @@ public class TransfersTests : IDisposable
 
     private async Task<GrabRepository> Grabs()
     {
-        Database database = new(_root);
+        Store database = new(_root);
 
         await database.MigrateAsync(CancellationToken.None);
 

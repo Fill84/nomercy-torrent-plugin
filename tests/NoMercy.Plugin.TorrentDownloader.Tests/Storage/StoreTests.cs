@@ -5,7 +5,7 @@ using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Storage;
 
-public class DatabaseTests : IDisposable
+public class StoreTests : IDisposable
 {
     private readonly string _folder =
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
@@ -18,7 +18,7 @@ public class DatabaseTests : IDisposable
     [Fact]
     public async Task MigratingTwiceIsMigratingOnce()
     {
-        Database database = new(_folder);
+        Store database = new(_folder);
 
         await database.MigrateAsync(CancellationToken.None);
 
@@ -43,7 +43,7 @@ public class DatabaseTests : IDisposable
     [Fact]
     public async Task MigratingAgainKeepsWhatWasThere()
     {
-        Database database = new(_folder);
+        Store database = new(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         await using (SqliteConnection connection = await database.OpenAsync(CancellationToken.None))
@@ -76,7 +76,7 @@ public class DatabaseTests : IDisposable
     [InlineData("name_pool")]
     public async Task TheDocumentedSchemaIsWhatGetsCreated(string table)
     {
-        Database database = new(_folder);
+        Store database = new(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         Assert.Equal(0, await Count(database, table));
@@ -91,12 +91,12 @@ public class DatabaseTests : IDisposable
     {
         string missing = Path.Combine(_folder, "not", "there", "yet");
 
-        await new Database(missing).MigrateAsync(CancellationToken.None);
+        await new Store(missing).MigrateAsync(CancellationToken.None);
 
-        Assert.True(File.Exists(Path.Combine(missing, Database.FileName)));
+        Assert.True(File.Exists(Path.Combine(missing, Store.FileName)));
     }
 
-    private static async Task<long> Version(Database database)
+    private static async Task<long> Version(Store database)
     {
         await using SqliteConnection connection = await database.OpenAsync(CancellationToken.None);
         await using SqliteCommand command = connection.CreateCommand();
@@ -105,7 +105,7 @@ public class DatabaseTests : IDisposable
         return Convert.ToInt64(await command.ExecuteScalarAsync(CancellationToken.None));
     }
 
-    private static async Task<long> Count(Database database, string table)
+    private static async Task<long> Count(Store database, string table)
     {
         await using SqliteConnection connection = await database.OpenAsync(CancellationToken.None);
         await using SqliteCommand command = connection.CreateCommand();

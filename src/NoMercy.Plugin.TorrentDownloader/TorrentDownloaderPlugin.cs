@@ -22,7 +22,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ActivityJournal _journal = new();
     private readonly SemaphoreSlim _migrating = new(1, 1);
-    private Database? _database;
+    private Store? _database;
     private EpisodeRepository? _episodes;
     private GrabRepository? _grabs;
     private bool _migrated;
@@ -148,7 +148,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>The database, migrated up to date before anything opens it.</summary>
-    private async Task<Database> DatabaseAsync(CancellationToken ct)
+    private async Task<Store> DatabaseAsync(CancellationToken ct)
     {
         await EpisodesAsync(ct);
 
@@ -853,7 +853,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // is no exception and no log line — the tick simply never returns, and
         // because no cadence may overlap itself that one never runs again for
         // as long as the server is up.
-        Database database = await DatabaseAsync(ct);
+        Store database = await DatabaseAsync(ct);
         SourceLedgerRepository ledger = await LedgerAsync(ct);
 
         await _migrating.WaitAsync(ct);

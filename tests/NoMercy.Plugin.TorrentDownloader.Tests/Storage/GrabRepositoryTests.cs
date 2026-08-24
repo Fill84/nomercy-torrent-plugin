@@ -89,7 +89,7 @@ public class GrabRepositoryTests : IDisposable
     [Fact]
     public async Task AFailedDownloadBlacklistsItsHashAndReturnsEveryEpisodeItCoveredToMissing()
     {
-        Database database = Database();
+        Store database = Store();
         GrabRepository grabs = new(database);
         EpisodeRepository episodes = new(database);
 
@@ -142,7 +142,7 @@ public class GrabRepositoryTests : IDisposable
     [Fact]
     public async Task AGrabThatIsDoneIsNotDraggedBackByALaterFailure()
     {
-        Database database = Database();
+        Store database = Store();
         GrabRepository grabs = new(database);
 
         await Record(grabs, Hash, [Episode(1)]);
@@ -162,7 +162,7 @@ public class GrabRepositoryTests : IDisposable
     }
 
     /// <summary>How many rows are done, which no reading of the store answers.</summary>
-    private static async Task<long> Done(Database database)
+    private static async Task<long> Done(Store database)
     {
         await using SqliteConnection connection = await database.OpenAsync(CancellationToken.None);
         await using SqliteCommand command = connection.CreateCommand();
@@ -253,15 +253,15 @@ public class GrabRepositoryTests : IDisposable
     /// One database in a folder of its own, migrated once.
     /// </summary>
     /// <remarks>
-    /// The same file for every repository in a test: two <c>Database</c> objects
+    /// The same file for every repository in a test: two <c>Store</c> objects
     /// pointing at one folder are one database, which is what they are on a
     /// real server too.
     /// </remarks>
-    private Database Database()
+    private Store Store()
     {
         Directory.CreateDirectory(_folder);
 
-        Database database = new(_folder);
+        Store database = new(_folder);
 
         database.MigrateAsync(CancellationToken.None).GetAwaiter().GetResult();
 
@@ -270,7 +270,7 @@ public class GrabRepositoryTests : IDisposable
 
     private GrabRepository Repository()
     {
-        return new(Database());
+        return new(Store());
     }
 
     private static EpisodeKey Episode(int number)

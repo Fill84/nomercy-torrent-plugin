@@ -16,7 +16,7 @@ public class EpisodeRepositoryTests : IAsyncLifetime
     private readonly string _folder =
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
 
-    private Database _database = null!;
+    private Store _database = null!;
     private EpisodeRepository _episodes = null!;
 
     public async Task InitializeAsync()

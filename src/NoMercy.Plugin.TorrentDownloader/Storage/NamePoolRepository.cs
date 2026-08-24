@@ -14,7 +14,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Storage;
 /// feed all over again — and a name harvested last week still answers for the
 /// episode nobody has found yet.
 /// </remarks>
-public sealed class NamePoolRepository(Database database) : INamePool
+public sealed class NamePoolRepository(Store database) : INamePool
 {
     public async Task AddAsync(IReadOnlyList<PooledName> names, CancellationToken ct)
     {

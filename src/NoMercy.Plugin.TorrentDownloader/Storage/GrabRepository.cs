@@ -42,7 +42,7 @@ public sealed record HistoryRow(
 /// which is why blacklisting a failed hash lives here and not in the client.
 /// </para>
 /// </remarks>
-public sealed class GrabRepository(Database database)
+public sealed class GrabRepository(Store database)
 {
     /// <summary>Records a grab, with every episode it answers for.</summary>
     public async Task RecordAsync(

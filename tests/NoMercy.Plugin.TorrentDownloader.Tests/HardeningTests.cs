@@ -87,7 +87,7 @@ public class HardeningTests : IDisposable
                 DateTimeOffset.UtcNow,
                 CancellationToken.None);
 
-            await new NamePoolRepository(new Database(_folder)).AddAsync(
+            await new NamePoolRepository(new Store(_folder)).AddAsync(
                 [new("silos03e06", "Silo.S03E06.1080p.WEB.H264-CAKES", "PreDB", DateTimeOffset.UtcNow)],
                 CancellationToken.None);
         }
@@ -107,7 +107,7 @@ public class HardeningTests : IDisposable
         Assert.Single(await (await after.GrabsAsync(CancellationToken.None)).OpenAsync(CancellationToken.None));
 
         // And the names it harvested are still known.
-        Assert.NotEmpty(await new NamePoolRepository(new Database(_folder))
+        Assert.NotEmpty(await new NamePoolRepository(new Store(_folder))
             .ForAsync(["silos03e06"], CancellationToken.None));
     }
 

@@ -108,3 +108,51 @@ namespace NoMercy.MediaProcessing.Files
         Task<List<object>> GetFilesInDirectory(string folder, string libraryType, object storage);
     }
 }
+
+namespace NoMercy.Database.Models.TvShows
+{
+    /// <summary>
+    /// One episode row, as the server's own table holds it.
+    /// </summary>
+    /// <remarks>
+    /// The four columns this plugin reads, with the names and types the real
+    /// entity has: <c>Id</c>, <c>TvId</c>, <c>SeasonNumber</c> and
+    /// <c>EpisodeNumber</c>, all <c>int</c>. The server indexes
+    /// (TvId, SeasonNumber, EpisodeNumber) together, so looking one up this way
+    /// is the way the table was built to be asked.
+    /// </remarks>
+    public class Episode
+    {
+        public int Id { get; set; }
+
+        public int TvId { get; set; }
+
+        public int SeasonNumber { get; set; }
+
+        public int EpisodeNumber { get; set; }
+    }
+}
+
+namespace NoMercy.Database
+{
+    using System.Linq;
+    using NoMercy.Database.Models.TvShows;
+
+    /// <summary>The server's database, as far as this plugin needs it.</summary>
+    /// <remarks>
+    /// <para>
+    /// <c>Episodes</c> is a <c>DbSet&lt;Episode&gt;</c> on the real context and
+    /// an <c>IQueryable&lt;Episode&gt;</c> here, because a <c>DbSet</c> is one
+    /// and the plugin never treats it as anything more: it filters and takes
+    /// the first, which the database answers rather than this process.
+    /// </para>
+    /// <para>
+    /// Loading the set and searching it here would pass this test and read
+    /// every episode the owner has on the real server.
+    /// </para>
+    /// </remarks>
+    public class MediaContext
+    {
+        public virtual IQueryable<Episode> Episodes { get; init; } = Enumerable.Empty<Episode>().AsQueryable();
+    }
+}

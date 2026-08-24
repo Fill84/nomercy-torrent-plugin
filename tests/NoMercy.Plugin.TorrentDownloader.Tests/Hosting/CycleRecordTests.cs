@@ -281,7 +281,7 @@ public class CycleRecordTests : IDisposable
     /// </summary>
     private async Task<(GrabRepository Grabs, EpisodeRepository Episodes)> Both(int attempts = 0)
     {
-        Database database = new(_folder);
+        Store database = new(_folder);
 
         await database.MigrateAsync(CancellationToken.None);
 
@@ -302,7 +302,7 @@ public class CycleRecordTests : IDisposable
 
     private async Task<GrabRepository> Repository()
     {
-        Database database = new(_folder);
+        Store database = new(_folder);
 
         await database.MigrateAsync(CancellationToken.None);
 

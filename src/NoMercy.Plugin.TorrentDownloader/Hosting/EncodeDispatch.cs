@@ -1,9 +1,11 @@
 using System.Collections;
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Reflection;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
@@ -49,6 +51,16 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
     /// <summary>What knows the server's own id for a file.</summary>
     public const string FilesType = "NoMercy.MediaProcessing.Files.IFileListService";
 
+    /// <summary>The server's own database, where the episode rows are.</summary>
+    /// <remarks>
+    /// Asked directly because the plugin knows which episode it downloaded and
+    /// the server does not: the file list identifies a file by searching a
+    /// catalogue for the title it reads out of the name, which came back empty
+    /// for every episode the owner staged on 24 August 2026 — while the row it
+    /// wanted was in this table the whole time.
+    /// </remarks>
+    public const string ContextType = "NoMercy.Database.MediaContext";
+
     /// <summary>
     /// Queues an encode for one staged file, and says whether it went.
     /// </summary>
@@ -73,11 +85,16 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
     /// library can have more than one folder and an encode has to go to the one
     /// the show really lives in.
     /// </param>
+    /// <param name="episode">
+    /// Which episode this file is. The encode job is registered against the
+    /// server's own row for it, and this is what finds that row.
+    /// </param>
     public async Task<bool> DispatchAsync(
         string stagedFile,
         string libraryId,
         string libraryType,
         string? existing,
+        EpisodeKey episode,
         CancellationToken ct)
     {
         try
@@ -143,7 +160,13 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
                     $"the server listed {matched.Listed} file(s) in that folder and {full} was not among them");
             }
 
-            if (matched.Id is null)
+            // The plugin's own answer first. It knows the show, the season and
+            // the number it went and downloaded; the listing works the same
+            // thing out backwards from the file's name and can be wrong about
+            // it, and on the owner's server it was wrong about every one.
+            string? id = EpisodeId(scope.ServiceProvider, episode) ?? matched.Id;
+
+            if (id is null)
             {
                 // Listed, and matched to no media. The dashboard's own Add
                 // content dispatches this case anyway — where the id is empty
@@ -154,8 +177,9 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
                 // Said out loud, because a job the encoder can do nothing with
                 // is not something to discover from a library that stays empty.
                 logger.LogWarning(
-                    "{File} was listed and matched no media, and was dispatched anyway, as Add content does.",
-                    full);
+                    "{File} was listed and matched no media, and was dispatched anyway, as Add content does — {Said}.",
+                    full,
+                    matched.Said ?? "and said nothing about it");
 
                 journal.Failed(
                     ActivityStage.Dispatch,
@@ -170,7 +194,7 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
             Write(job, "FolderId", Read(folder, "FolderId"));
             // Whatever the listing gave, empty included: that is what the
             // dashboard sends and the server is what decides.
-            Write(job, "Id", matched.Id ?? string.Empty);
+            Write(job, "Id", id ?? string.Empty);
             Write(job, "InputFile", full);
 
             // SourceDriverId is left unset: a finished download is on this
@@ -246,6 +270,7 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
 
         int listed = 0;
         bool ours = false;
+        string? said = null;
 
         foreach (object? item in found)
         {
@@ -269,16 +294,45 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
             {
                 return new(listed, true, id);
             }
+
+            // What the server made of it, in its own words. Without this a
+            // dispatch that matched nothing says only that it matched nothing,
+            // and the reason — the title it read, the season and episode it
+            // took from the name — is nowhere. Two days were spent inferring
+            // it from a log that already had everything but this.
+            said = Said(item);
         }
 
-        return new(listed, ours, null);
+        return new(listed, ours, null, said);
     }
 
     /// <summary>What the server said about the folder this file is in.</summary>
     /// <param name="Listed">How many files it listed, or null when it would not answer.</param>
     /// <param name="Ours">Whether ours was among them.</param>
     /// <param name="Id">The server's own id for it, when it has one.</param>
-    private sealed record Matched(int? Listed, bool Ours, string? Id);
+    /// <param name="Said">What it parsed out of a file it could not match.</param>
+    private sealed record Matched(int? Listed, bool Ours, string? Id, string? Said = null);
+
+    /// <summary>What the server parsed out of a file it could not match.</summary>
+    /// <remarks>
+    /// Read off its own parse rather than worked out again here: the point is
+    /// to say what the server believed, which is the only thing that explains
+    /// why it matched nothing.
+    /// </remarks>
+    private static string Said(object item)
+    {
+        if (Read(item, "Parsed") is not object parsed)
+        {
+            return "the server offered no parse of it";
+        }
+
+        return string.Create(
+            System.Globalization.CultureInfo.InvariantCulture,
+            $"it read title {Read(parsed, "Title") ?? "nothing"}, "
+            + $"year {Read(parsed, "Year") ?? "nothing"}, "
+            + $"season {Read(parsed, "Season") ?? "nothing"}, "
+            + $"episode {Read(parsed, "Episode") ?? "nothing"}");
+    }
 
     private bool Refused(string reason)
     {
@@ -373,6 +427,83 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
         await waiting.ConfigureAwait(false);
 
         return waiting.GetType().GetProperty("Result")?.GetValue(waiting);
+    }
+
+    /// <summary>The server's own id for one episode, from its own table.</summary>
+    /// <remarks>
+    /// <para>
+    /// The encode job carries a media id and does <c>Id.ToInt()</c> with it to
+    /// find the row to register the encode against. An empty id becomes 0,
+    /// matches nothing, and the job ends with "Post-encode registration found
+    /// 0 files": the queue counter moves and the library stays empty. That is
+    /// what happened to every episode the owner staged on 24 August 2026.
+    /// </para>
+    /// <para>
+    /// It used to come from the file list, which identifies a file by searching
+    /// a catalogue for the title it reads out of the name. The plugin does not
+    /// need to be told: it chose the show, the season and the number, so it
+    /// asks for that row by those three.
+    /// </para>
+    /// <para>
+    /// Filtered by the database and not here. The set is every episode the
+    /// owner has, tens of thousands of rows, and the server indexes exactly
+    /// this triple — so it is the question the table was built to answer.
+    /// </para>
+    /// <para>
+    /// Null when the server has no such row or does not hand the database over
+    /// at all, and then the listing's answer is used as before. This reaches
+    /// past the plugin contract, which carries no episode id; the contract
+    /// ought to, and that is media-server issue territory rather than a reason
+    /// to leave the owner's library empty.
+    /// </para>
+    /// </remarks>
+    private static string? EpisodeId(IServiceProvider scope, EpisodeKey episode)
+    {
+        if (Named(ContextType) is not Type contextType
+            || scope.GetService(contextType) is not object context
+            || Read(context, "Episodes") is not IQueryable rows)
+        {
+            return null;
+        }
+
+        ParameterExpression one = Expression.Parameter(rows.ElementType, "episode");
+        Expression? same = null;
+
+        foreach ((string column, int value) in new[]
+                 {
+                     ("TvId", episode.ShowId),
+                     ("SeasonNumber", episode.Season),
+                     ("EpisodeNumber", episode.Number),
+                 })
+        {
+            if (rows.ElementType.GetProperty(column) is not PropertyInfo held)
+            {
+                return null;
+            }
+
+            BinaryExpression equal = Expression.Equal(
+                Expression.Property(one, held),
+                Expression.Constant(value));
+
+            same = same is null ? equal : Expression.AndAlso(same, equal);
+        }
+
+        // The overload that takes a predicate. There is a second two-argument
+        // one taking a default value, and picking by count alone chose that —
+        // which answers "cannot convert Expression to Episode" rather than
+        // asking the database anything.
+        MethodInfo first = typeof(Queryable)
+            .GetMethods()
+            .First(method => method.Name == nameof(Queryable.FirstOrDefault)
+                             && method.GetParameters().Length == 2
+                             && method.GetParameters()[1].ParameterType.IsGenericType
+                             && method.GetParameters()[1].ParameterType.GetGenericTypeDefinition()
+                             == typeof(Expression<>))
+            .MakeGenericMethod(rows.ElementType);
+
+        object? found = first.Invoke(null, [rows, Expression.Lambda(same!, one)]);
+
+        return found is null ? null : Read(found, "Id")?.ToString();
     }
 
     private static object? Read(object instance, string property)

@@ -13,7 +13,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Storage;
 /// is what a site did <em>last</em>, because that is what decides whether to
 /// ask it again.
 /// </remarks>
-public sealed class SourceLedgerRepository(Database database) : ISourceLedger
+public sealed class SourceLedgerRepository(Store database) : ISourceLedger
 {
     public async Task RecordAsync(SourceAnswer answer, CancellationToken ct)
     {

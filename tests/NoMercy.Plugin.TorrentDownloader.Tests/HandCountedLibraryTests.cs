@@ -73,7 +73,7 @@ public class HandCountedLibraryTests : IDisposable
 
         // Counted by hand: Silo 2 missing 1 waiting, Frieren 1 missing,
         // Lioness 1 missing. Three shows, four missing, one waiting.
-        Database database = new(_folder);
+        Store database = new(_folder);
         await database.MigrateAsync(CancellationToken.None);
         EpisodeRepository episodes = new(database);
 

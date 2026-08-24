@@ -1,5 +1,6 @@
 using NoMercy.MediaProcessing.Jobs.MediaJobs;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using Xunit;
@@ -80,6 +81,11 @@ public class EncodeDispatchTests : IDisposable
         Assert.Equal(
             [
                 "NoMercy.Data.Repositories.ILibraryRepository",
+
+                // The database among them: the episode's own id is read from
+                // the server's own table, and a context asked of the root
+                // provider is the same fault as a repository asked of it.
+                "NoMercy.Database.MediaContext",
                 "NoMercy.MediaProcessing.Files.IFileListService",
                 "NoMercy.MediaProcessing.Jobs.IJobDispatcher",
             ],
@@ -345,14 +351,65 @@ public class EncodeDispatchTests : IDisposable
         return path;
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>The plugin knows which episode this is; the server was left to
+    /// guess.</strong> The encode job carries a media id, and the job does
+    /// <c>Id.ToInt()</c> with it to find the row to register the encode
+    /// against. An empty id becomes 0, matches nothing, and the job ends with
+    /// "Post-encode registration found 0 files" — the queue counter moves and
+    /// the library stays empty.
+    /// </para>
+    /// <para>
+    /// That id used to come from asking the server to identify the file all
+    /// over again from its name, a text search against a catalogue. On the
+    /// owner's server on 24 August 2026 that came back empty for every episode
+    /// the plugin staged, while the row it wanted — Sugar S02E08, 6900394 —
+    /// was sitting in the server's own table the whole time.
+    /// </para>
+    /// <para>
+    /// So it is looked up by what the plugin already knows for certain: the
+    /// show, the season and the number it went and downloaded.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheEpisodesOwnIdIsLookedUpRatherThanGuessedFromTheName()
+    {
+        FakeProvider server = Server();
+
+        // The server lists the file and matches it to nothing, which is what it
+        // did for every episode the owner staged.
+        server.Files.Matches = [(Staged(), "0")];
+
+        server.Media = new()
+        {
+            Episodes = new NoMercy.Database.Models.TvShows.Episode[]
+            {
+                new() { Id = 6900393, TvId = 203744, SeasonNumber = 2, EpisodeNumber = 7 },
+                new() { Id = 6900394, TvId = 203744, SeasonNumber = 2, EpisodeNumber = 8 },
+                new() { Id = 5551234, TvId = 60625, SeasonNumber = 2, EpisodeNumber = 8 },
+            }.AsQueryable(),
+        };
+
+        Assert.True(await Dispatch(server, "tv", episode: new(203744, 2, 8)), string.Join(" | ", server.Log.Lines));
+
+        Assert.Equal("6900394", Assert.IsType<VideoEncodeJob>(server.Dispatcher.Job).Id);
+    }
+
     private Task<bool> Dispatch(
         FakeProvider server,
         string libraryType,
         string libraryId = Wanted,
-        string? existing = null)
+        string? existing = null,
+        EpisodeKey? episode = null)
     {
-        return new EncodeDispatch(server, server.Journal, server.Log)
-            .DispatchAsync(Staged(), libraryId, libraryType, existing, CancellationToken.None);
+        return new EncodeDispatch(server, server.Journal, server.Log).DispatchAsync(
+            Staged(),
+            libraryId,
+            libraryType,
+            existing,
+            episode ?? new(203744, 2, 8),
+            CancellationToken.None);
     }
 
     private FakeProvider Server()

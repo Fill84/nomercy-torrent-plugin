@@ -12,7 +12,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Storage;
 /// <c>last_search_at</c> is rewritten from the library on every maintenance
 /// pass, and a row for an episode the library no longer has is deleted.
 /// </remarks>
-public sealed class EpisodeRepository(Database database)
+public sealed class EpisodeRepository(Store database)
 {
     /// <summary>
     /// Makes the table say exactly what <paramref name="derived"/> says, while

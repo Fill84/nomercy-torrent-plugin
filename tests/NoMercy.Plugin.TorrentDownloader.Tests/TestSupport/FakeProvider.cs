@@ -147,6 +147,9 @@ public sealed class FakeProvider : IServiceProvider, IServiceScopeFactory, IServ
 
     public FakeDispatcher Dispatcher { get; } = new();
 
+    /// <summary>The server's own database, holding the owner's episode rows.</summary>
+    public NoMercy.Database.MediaContext Media { get; set; } = new();
+
     public ActivityJournal Journal { get; } = new();
 
     public CapturingLogger Log { get; } = new();
@@ -198,6 +201,11 @@ public sealed class FakeProvider : IServiceProvider, IServiceScopeFactory, IServ
         if (serviceType == typeof(IFileListService))
         {
             return Files;
+        }
+
+        if (serviceType == typeof(NoMercy.Database.MediaContext))
+        {
+            return Media;
         }
 
         return serviceType == typeof(IJobDispatcher) ? Dispatcher : null;

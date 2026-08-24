@@ -11,7 +11,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Storage;
 /// everything, two cadences writing at once lose each other's work, and asking
 /// what is still missing means loading all of it.
 /// </remarks>
-public sealed class Database
+public sealed class Store
 {
     /// <summary>The file, inside the plugin's own data folder.</summary>
     public const string FileName = "torrent-downloader.db";
@@ -26,7 +26,7 @@ public sealed class Database
     /// allowed to do I/O — the folder is made when the database is first
     /// actually opened.
     /// </remarks>
-    public Database(string dataFolderPath)
+    public Store(string dataFolderPath)
     {
         _dataFolderPath = dataFolderPath;
 
@@ -106,7 +106,7 @@ public sealed class Database
     /// </summary>
     private static IEnumerable<(long Number, string Sql)> Migrations()
     {
-        Assembly assembly = typeof(Database).Assembly;
+        Assembly assembly = typeof(Store).Assembly;
 
         return assembly
             .GetManifestResourceNames()

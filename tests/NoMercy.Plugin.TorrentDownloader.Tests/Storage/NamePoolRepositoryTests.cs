@@ -19,7 +19,7 @@ public class NamePoolRepositoryTests : IAsyncLifetime
     private readonly string _folder =
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
 
-    private Database _database = null!;
+    private Store _database = null!;
     private NamePoolRepository _pool = null!;
 
     public async Task InitializeAsync()

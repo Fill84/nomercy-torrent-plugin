@@ -290,6 +290,7 @@ public sealed class Transfers(
             show.LibraryId,
             show.Kind == LibraryKind.Anime ? "anime" : "tv",
             existing,
+            episode,
             ct);
 
         if (!queued)
