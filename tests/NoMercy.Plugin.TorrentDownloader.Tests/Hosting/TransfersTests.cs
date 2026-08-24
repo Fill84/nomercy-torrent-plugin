@@ -610,6 +610,52 @@ public class TransfersTests : IDisposable
         Assert.Equal([Staged], Directory.EnumerateFileSystemEntries(Intake).Order());
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>An encode dispatched before a restart is asked for once
+    /// more.</strong> The owner's queue was empty while eleven grabs sat
+    /// waiting on jobs the encoder had already thrown away, and the plugin
+    /// cannot see the queue to tell a job that died from one still running.
+    /// </para>
+    /// <para>
+    /// Waiting six hours and then giving up would put the episode back to
+    /// missing and download it a second time, with the file already staged the
+    /// whole time. So it is asked for again on the first tick after a start,
+    /// and then waited on properly.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEncodeDispatchedBeforeARestartIsAskedForOnceMore()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        Directory.CreateDirectory(Intake);
+        await File.WriteAllBytesAsync(Staged, new byte[2048]);
+
+        // Dispatched by the run before this one, which is all the store keeps.
+        await grabs.StagedAsync(Hash, Staged, CancellationToken.None);
+        await grabs.StateAsync(Hash, GrabState.Dispatched, CancellationToken.None);
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(Staged, "4417")];
+
+        // A fresh instance, as a restart gives: how long an encode has been
+        // waited on is held in memory and nowhere else.
+        Transfers transfers = Transfers(new StandingEngine(), grabs, server);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(1, server.Dispatcher.Dispatches);
+
+        // Once, and then waited on: this is recovery from a restart, not a
+        // second chance on every tick.
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(1, server.Dispatcher.Dispatches);
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);

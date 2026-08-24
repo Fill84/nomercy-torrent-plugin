@@ -655,10 +655,29 @@ public sealed class Transfers(
 
         if (!_waiting.TryGetValue(sent.InfoHash, out DateTimeOffset since))
         {
-            // Dispatched by a previous run of the plugin. A restart is a good
-            // enough reason to start the clock again rather than give up on
-            // something that may be minutes from finishing.
+            // Dispatched by a run of the plugin that is over. Its job is very
+            // likely over with it: the owner's queue was empty while eleven
+            // grabs waited on jobs the encoder had already thrown away, and
+            // nothing here can see the queue to tell one that died from one
+            // still running.
+            //
+            // So it is asked for once more and then waited on properly. The
+            // file is already staged, so it costs one dispatch; the other way
+            // round is six hours of waiting, the episode back to missing, and
+            // the same gigabytes downloaded a second time.
+            //
+            // If the old job did survive the restart this makes a second one.
+            // That is the lesser fault, and the one the plugin can undo — the
+            // library having the episode ends both.
             _waiting[sent.InfoHash] = now;
+
+            if (sent.StagedPath is string staged && File.Exists(staged))
+            {
+                foreach (EpisodeKey episode in sent.Covers)
+                {
+                    await DispatchAsync(sent.InfoHash, episode, staged, ct);
+                }
+            }
 
             return;
         }
