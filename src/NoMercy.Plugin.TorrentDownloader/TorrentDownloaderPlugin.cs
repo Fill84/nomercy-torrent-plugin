@@ -33,6 +33,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private BittorrentEngine? _engine;
     private HttpClient? _trackerHttp;
     private Transfers? _transfers;
+    private bool _refreshed;
     private SourceLedgerRepository? _ledger;
     private IReadOnlyList<SourceDefinition>? _shipped;
 
@@ -283,6 +284,19 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         if (await ConfiguredAsync(ct) is not Settings settings)
         {
             return;
+        }
+
+        if (!_refreshed)
+        {
+            // Once, on the first tick after a start. What the library holds is
+            // derived, not stored, and a plugin that only re-derived it on its
+            // six-hourly cycle carried whatever the last run left behind —
+            // including, on 24 August 2026, shows a broken build had put there
+            // that the owner does not have. A restart should settle that within
+            // the minute rather than by tea time.
+            _refreshed = true;
+
+            await RefreshAsync(settings, ct);
         }
 
         BittorrentEngine engine = await EngineAsync(settings, ct);

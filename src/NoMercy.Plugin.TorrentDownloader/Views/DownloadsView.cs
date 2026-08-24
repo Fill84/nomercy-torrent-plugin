@@ -180,7 +180,16 @@ public static class DownloadsView
     {
         if (row.Transfer is null)
         {
-            return $"grabbed, not started ({row.Grab.State.ToString().ToLowerInvariant()})";
+            // A grab past the download is not one the client has not started.
+            // It has finished and is waiting on the encoder, and reading
+            // "grabbed, not started (staged)" against it says the opposite of
+            // what is happening.
+            return row.Grab.State switch
+            {
+                GrabState.Staged => "waiting for the encoder to take it",
+                GrabState.Dispatched => "encoding",
+                _ => $"grabbed, not started ({row.Grab.State.ToString().ToLowerInvariant()})",
+            };
         }
 
         return row.Transfer.Error is string wrong

@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
@@ -446,6 +447,61 @@ public class TransfersTests : IDisposable
         Assert.Equal(1, server.Dispatcher.Dispatches);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>An encode that never arrives is said, not waited on.</strong>
+    /// The library having the episode is the only proof the encode finished,
+    /// and a job that failed looks exactly like one still running: both are
+    /// "the library does not have it yet", for ever.
+    /// </para>
+    /// <para>
+    /// So after long enough it is given up on and the episode goes back to
+    /// missing, with the reason on the History page. It is not dispatched a
+    /// second time: a second job for a file the encoder may still be working on
+    /// is the one thing worse than waiting.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEncodeThatNeverArrivesIsGivenUpOn()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
+
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        string staged = Path.Combine(Intake, Path.GetFileName(episode));
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(staged, "4417")];
+
+        // One instance across both ticks, as the plugin keeps one: how long an
+        // encode has been waited on is held in memory, and a restart is a good
+        // enough reason to start that clock again.
+        Transfers transfers = Transfers(engine, grabs, server, clock: clock);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(
+            GrabState.Dispatched,
+            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+
+        // Six hours later the library still does not have it.
+        clock.Advance(TimeSpan.FromHours(6));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+
+        // Once, and not dispatched again on the way out.
+        Assert.Equal(1, server.Dispatcher.Dispatches);
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);
@@ -510,7 +566,8 @@ public class TransfersTests : IDisposable
         GrabRepository grabs,
         FakeProvider server,
         bool encoded = false,
-        bool owned = true)
+        bool owned = true,
+        TimeProvider? clock = null)
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
             // A real Ulid, because the server's library id is one and the
@@ -535,7 +592,8 @@ public class TransfersTests : IDisposable
             new Stager(server.Journal, server.Log),
             new EncodeDispatch(server, server.Journal, server.Log),
             server.Journal,
-            server.Log);
+            server.Log,
+            clock ?? TimeProvider.System);
     }
 
     private async Task<GrabRepository> Grabs()

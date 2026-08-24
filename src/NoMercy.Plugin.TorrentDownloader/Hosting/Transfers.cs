@@ -32,8 +32,28 @@ public sealed class Transfers(
     Stager stager,
     EncodeDispatch dispatch,
     IActivityJournal journal,
-    ILogger logger)
+    ILogger logger,
+    TimeProvider? time = null)
 {
+    /// <summary>
+    /// How long an encode is given before it is given up on.
+    /// </summary>
+    /// <remarks>
+    /// The library having the episode is the only proof it finished, and a job
+    /// that failed looks exactly like one still running. Six hours is longer
+    /// than any episode takes and short enough that an owner is not left
+    /// waiting on something that will never arrive.
+    /// </remarks>
+    public static TimeSpan Patience { get; } = TimeSpan.FromHours(6);
+
+    /// <summary>Since when each dispatched grab has been waited on.</summary>
+    /// <remarks>
+    /// Held rather than written down: a restart is a good enough reason to
+    /// start the clock again, and it saves a column for something the plugin
+    /// only needs while it is running.
+    /// </remarks>
+    private readonly Dictionary<string, DateTimeOffset> _waiting = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
     /// <param name="intakeFolder">Where a finished episode is put for the encoder.</param>
@@ -273,6 +293,10 @@ public sealed class Transfers(
             ct);
 
         await grabs.StateAsync(infoHash, GrabState.Dispatched, ct);
+
+        // The clock starts here, not on the tick that next looks at it: an
+        // encode is waited on from the moment it was asked for.
+        _waiting[infoHash] = (time ?? TimeProvider.System).GetUtcNow();
     }
 
     /// <summary>
@@ -514,6 +538,8 @@ public sealed class Transfers(
 
             if (!landed)
             {
+                await StillWaitingAsync(sent, ct);
+
                 continue;
             }
 
@@ -529,6 +555,52 @@ public sealed class Transfers(
 
             journal.Finished(ActivityStage.Dispatch, sent.ReleaseTitle, "encoded into the library, and the copies deleted");
         }
+    }
+
+    /// <summary>
+    /// Gives up on an encode the library never received.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Not dispatched a second time. A second job for a file the encoder may
+    /// still be working on is the one thing worse than waiting, and nothing
+    /// here can tell a job that failed from one still running — the plugin
+    /// cannot see the queue.
+    /// </para>
+    /// <para>
+    /// The episode goes back to missing so it can be found again, and the
+    /// staged file is left where it is: if the encode does land later, the
+    /// refresh sees the file and the episode stops being missing on its own.
+    /// </para>
+    /// </remarks>
+    private async Task StillWaitingAsync(StoredDownload sent, CancellationToken ct)
+    {
+        DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();
+
+        if (!_waiting.TryGetValue(sent.InfoHash, out DateTimeOffset since))
+        {
+            // Dispatched by a previous run of the plugin. A restart is a good
+            // enough reason to start the clock again rather than give up on
+            // something that may be minutes from finishing.
+            _waiting[sent.InfoHash] = now;
+
+            return;
+        }
+
+        if (now - since < Patience)
+        {
+            return;
+        }
+
+        _waiting.Remove(sent.InfoHash);
+
+        string reason =
+            $"the encode was asked for {Patience.TotalHours:0} hours ago and the library still does not have it";
+
+        await grabs.FailedAsync(sent.InfoHash, reason, now, ct);
+
+        logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, reason);
+        journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, reason);
     }
 
     /// <summary>Takes a file away, and never takes the caller down with it.</summary>
