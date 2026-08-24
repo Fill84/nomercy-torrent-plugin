@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -78,7 +79,17 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
             return Path.GetFileName(source);
         }
 
-        string clean = string.Concat(release.Where(one => !Path.GetInvalidFileNameChars().Contains(one))).Trim();
+        // Through Clean first. The indexer's own title for a release ends in
+        // the site's tag — "Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV" — so
+        // the tag taken off the torrent's file went straight back on here.
+        //
+        // Two things came of that. The owner's intake folder held two files for
+        // one episode, one under each spelling, because two rows of the same
+        // torrent carried the indexer's title and the plugin's. And the server
+        // parses this name to work out what the file is: it strips a tracker's
+        // address, which has dots in it, and a bare word like EZTV is not one.
+        string clean = string.Concat(
+            TitleMatcher.Clean(release).Where(one => !Path.GetInvalidFileNameChars().Contains(one))).Trim();
 
         return clean.Length == 0 ? Path.GetFileName(source) : clean + Path.GetExtension(source);
     }

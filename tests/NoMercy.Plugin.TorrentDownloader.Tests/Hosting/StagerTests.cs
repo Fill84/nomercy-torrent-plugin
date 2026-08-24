@@ -329,6 +329,49 @@ public class StagerTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The site's tag is off the name the grab carries too.</strong>
+    /// The tag was taken off the file the torrent held, and then the release
+    /// the grab recorded was written on in its place — and the indexer's own
+    /// title for it ends in the tag: <c>Sugar 2024 S02E04 1080p WEB
+    /// H264-CAKES EZTV</c>. So the tag went straight back on.
+    /// </para>
+    /// <para>
+    /// Two things came of it. The owner's intake folder held two files for one
+    /// episode, one under each spelling, because two grab rows of the same
+    /// torrent carried the indexer's title and the plugin's. And the server
+    /// parses this name to work out what the file is: it strips a tracker's
+    /// address, which has dots in it, and a bare word like <c>EZTV</c> is not
+    /// one, so it stayed on.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AReleaseTitleThatCarriesTheSitesTagIsStagedWithout()
+    {
+        byte[] content = Content(1024 * 1024);
+        string from = Folder("incomplete-tagged");
+        string into = Path.Combine(_root, "intake-tagged");
+
+        await File.WriteAllBytesAsync(
+            Path.Combine(from, "Sugar.2024.S02E04.1080p.WEB.H264-CAKES.mkv"),
+            content);
+
+        IReadOnlyList<StagedResult> results = await new Stager(new ActivityJournal(), new CapturingLogger()).MoveAsync(
+            [new("Sugar.2024.S02E04.1080p.WEB.H264-CAKES.mkv", Episode(4), content.Length)],
+            from,
+            into,
+            "Sugar 2024 S02E04 1080p WEB H264-CAKES EZTV",
+            CancellationToken.None);
+
+        StagedResult one = Assert.Single(results);
+
+        Assert.True(one.Moved, one.Reason);
+        Assert.Equal(
+            Path.Combine(into, "Sugar 2024 S02E04 1080p WEB H264-CAKES.mkv"),
+            one.Path);
+    }
+
+    /// <remarks>
     /// A pack is several episodes under one release name, so naming every file
     /// after it would have them overwrite each other. Their own names carry the
     /// episode and are what staging matched them by.
