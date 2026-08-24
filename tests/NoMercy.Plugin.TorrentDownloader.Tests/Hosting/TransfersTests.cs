@@ -502,6 +502,61 @@ public class TransfersTests : IDisposable
         Assert.Equal(1, server.Dispatcher.Dispatches);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A second copy of an episode is not a second episode.</strong>
+    /// The owner's intake folder held two files for Sugar S02E04 — one named
+    /// after the uploader's release, one after the same release with the site's
+    /// tag on it. A grab records one staged path, so whichever of the two it
+    /// was not holding read as a file nothing was waiting on.
+    /// </para>
+    /// <para>
+    /// It was matched back to that same grab, because the release is compared
+    /// with the site tag stripped, its staged path was overwritten with the
+    /// other file, and an encode was asked for. The next tick found the first
+    /// file unwaited-on and did the same in reverse: one dispatch a minute,
+    /// alternating between two names, from 15:52 until the owner stopped the
+    /// server.
+    /// </para>
+    /// <para>
+    /// A grab that is already staged or dispatched has its file and is being
+    /// waited on. Another file that matches it is a copy, never new work.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASecondCopyOfADispatchedEpisodeIsNotDispatchedAgain()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(Path.Combine(Intake, Path.GetFileName(episode)), "4417")];
+
+        Transfers transfers = Transfers(engine, grabs, server);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(1, server.Dispatcher.Dispatches);
+
+        // The same release under the site's name for it, as a second staging
+        // left behind. It is a copy of what was already dispatched.
+        File.Copy(
+            Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv"),
+            Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES EZTV.mkv"));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(1, server.Dispatcher.Dispatches);
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);

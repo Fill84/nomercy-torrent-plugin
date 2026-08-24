@@ -54,6 +54,14 @@ public sealed class Transfers(
     /// </remarks>
     private readonly Dictionary<string, DateTimeOffset> _waiting = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Second copies already said once, so they are not said again.</summary>
+    /// <remarks>
+    /// Said once rather than on every tick: this loop runs on the fastest
+    /// cadence, and a leftover file nobody has binned would otherwise fill the
+    /// owner's log with the same line a minute for as long as it sits there.
+    /// </remarks>
+    private readonly HashSet<string> _leftovers = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
     /// <param name="intakeFolder">Where a finished episode is put for the encoder.</param>
@@ -480,6 +488,38 @@ public sealed class Transfers(
                 logger.LogInformation(
                     "{File} is in the intake folder and no grab of this plugin's put it there, so it was left alone.",
                     Path.GetFileName(file));
+
+                continue;
+            }
+
+            // A grab that already knows where its file is is being waited on,
+            // and another file matching it is a second copy of the same
+            // episode, never new work.
+            //
+            // The owner's intake folder held two files for Sugar S02E04: one
+            // under the uploader's release, one under the same release with the
+            // site's tag on it. A grab records one staged path, so whichever of
+            // the two it was not holding read as a file nothing was waiting on
+            // — and the release is compared with the site tag stripped, so it
+            // matched that very grab. Its staged path was overwritten with the
+            // other file and an encode asked for; the next tick found the first
+            // file unwaited-on and did the same in reverse. One dispatch a
+            // minute, alternating between two names, until the owner stopped
+            // the server.
+            //
+            // On the recorded path and not on the state, because the case this
+            // whole method exists for is a grab an older version marked done
+            // the moment it copied the file, without ever writing down where.
+            // Those have no path, whatever their state, and are picked up.
+            if (put.StagedPath is not null)
+            {
+                if (_leftovers.Add(file))
+                {
+                    logger.LogInformation(
+                        "{File} is a second copy of {Release}, which is already being waited on, so it was left alone.",
+                        Path.GetFileName(file),
+                        put.ReleaseTitle);
+                }
 
                 continue;
             }

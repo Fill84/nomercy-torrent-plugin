@@ -296,6 +296,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // the minute rather than by tea time.
             _refreshed = true;
 
+            int extra = await (await GrabsAsync(ct)).DeduplicateAsync(ct);
+
+            if (extra > 0)
+            {
+                Context.Logger.LogInformation(
+                    "{Count} duplicate grab row(s) were cleared: one torrent is one grab.",
+                    extra);
+            }
+
             await RefreshAsync(settings, ct);
         }
 

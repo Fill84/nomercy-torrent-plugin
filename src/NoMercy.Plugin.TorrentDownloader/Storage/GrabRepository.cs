@@ -119,6 +119,42 @@ public sealed class GrabRepository(Database database)
     }
 
     /// <summary>
+    /// Keeps one row per torrent and deletes the rest.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Every cycle used to record a fresh grab for an episode it was already
+    /// downloading, so one release ended up with several rows under one info
+    /// hash — and every step that walked grabs walked all of them.
+    /// </para>
+    /// <para>
+    /// On every start rather than once as a migration. A migration runs at the
+    /// moment the database is brought up to date and can only clear what
+    /// existed then: the owner's ran, and seven pairs made later that same day
+    /// were still there afterwards. This costs one statement and cannot be
+    /// outrun.
+    /// </para>
+    /// <para>
+    /// The oldest row of each hash survives, because its grabbed_at is when the
+    /// torrent was really taken on.
+    /// </para>
+    /// </remarks>
+    public async Task<int> DeduplicateAsync(CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            DELETE FROM grabs
+            WHERE info_hash IS NOT NULL
+              AND id NOT IN (SELECT MIN(id) FROM grabs WHERE info_hash IS NOT NULL GROUP BY info_hash);
+            """;
+
+        return await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
     /// Every grab there has ever been, whatever became of it.
     /// </summary>
     /// <remarks>

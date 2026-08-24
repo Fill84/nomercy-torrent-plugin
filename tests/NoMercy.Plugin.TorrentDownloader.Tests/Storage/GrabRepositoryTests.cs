@@ -244,6 +244,9 @@ public class GrabRepositoryTests : IDisposable
 
     private const string Hash = "92D8A3F6864911EF292B4BE0DD5286406396D2B3";
 
+    /// <summary>A second torrent, so a clean-up cannot pass by taking everything.</summary>
+    private const string Other = "A1B2C3D4E5F60718293A4B5C6D7E8F9012345678";
+
     private static DateTimeOffset When => new(2026, 8, 18, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>
@@ -299,5 +302,33 @@ public class GrabRepositoryTests : IDisposable
             covers,
             When,
             CancellationToken.None);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>One torrent is one grab.</strong> Seven info hashes on the
+    /// owner's server carried two rows each, and every step that walked grabs
+    /// walked both — so one episode was staged twice and dispatched twice.
+    /// </para>
+    /// <para>
+    /// The oldest row of a hash is the real one: its grabbed_at is when the
+    /// torrent was really taken on.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task DuplicateRowsForOneTorrentAreClearedAndTheOldestKept()
+    {
+        GrabRepository grabs = Repository();
+
+        await Record(grabs, Hash, [Episode(1)]);
+        await Record(grabs, Hash, [Episode(1)]);
+        await Record(grabs, Other, [Episode(2)]);
+
+        int cleared = await grabs.DeduplicateAsync(CancellationToken.None);
+
+        IReadOnlyList<StoredDownload> left = await grabs.OpenAsync(CancellationToken.None);
+
+        Assert.Equal(1, cleared);
+        Assert.Equal([Hash, Other], left.Select(one => one.InfoHash).Order());
     }
 }
