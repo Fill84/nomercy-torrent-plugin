@@ -33,13 +33,14 @@ public class ControlsOnPagesTests
     {
         PluginView page = DownloadsView.Render([Row(state)]);
 
-        PluginComponent button = Rendered.ById(page, $"downloads-pause-{Hash}");
+        PluginTableAction button = Buttons(page)[0];
+
+        Assert.Equal(label, button.Label);
 
         // The path the client posts to, spelled out. Asserting the constant
         // against itself is what let every one of these name a route that does
         // not exist.
-        Assert.Equal($"downloads/{Hash}/{verb}", Called(button));
-        Assert.Contains(label, string.Join(" ", Rendered.Words(page)), StringComparison.Ordinal);
+        Assert.Equal($"downloads/{Hash}/{verb}", Assert.IsType<string>(button.Action!.Payload["method"]));
     }
 
     /// <remarks>
@@ -53,9 +54,11 @@ public class ControlsOnPagesTests
     {
         PluginView page = DownloadsView.Render([Row(TorrentState.Downloading)]);
 
-        PluginComponent button = Rendered.ById(page, $"downloads-cancel-{Hash}");
+        PluginTableAction button = Buttons(page)[1];
 
-        Assert.Equal($"downloads/{Hash}/cancel", Called(button));
+        Assert.Equal("Cancel", button.Label);
+        Assert.Equal("danger", button.Variant);
+        Assert.Equal($"downloads/{Hash}/cancel", Assert.IsType<string>(button.Action!.Payload["method"]));
 
         PluginConfirmation confirm = Assert.IsType<PluginConfirmation>(button.Action!.Confirm);
 
@@ -111,6 +114,22 @@ public class ControlsOnPagesTests
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     /// <summary>Which plugin method a control asks for.</summary>
+    /// <summary>
+    /// The buttons in the one row the page drew, out of its actions cell.
+    /// </summary>
+    /// <remarks>
+    /// In the row, not in a second list beneath the table. That is the whole
+    /// point of the cell: the page used to draw every release twice, and the
+    /// list of buttons pushed the table off the screen.
+    /// </remarks>
+    private static IReadOnlyList<PluginTableAction> Buttons(PluginView page)
+    {
+        PluginComponent table = Rendered.ById(page, DownloadsView.TableId);
+        PluginComponent row = Assert.Single(table.Items);
+
+        return Assert.IsAssignableFrom<IReadOnlyList<PluginTableAction>>(row.Props["controls"]);
+    }
+
     private static string Called(PluginComponent control)
     {
         return Assert.IsType<string>(

@@ -51,39 +51,41 @@ public static class DownloadsView
             [
                 Ui.Text("downloads-heading", "Downloads", "title"),
                 Table(rows),
-
-                // The controls sit under the table rather than in it: a table
-                // cell holds a value and not a button, so a row can carry one
-                // action and these are three. Each strip names its release, or
-                // an owner with four downloads cannot tell which Cancel is
-                // which.
-                Ui.List("downloads-controls", [.. rows.Select(Controls)]),
                 Add(),
             ],
         };
     }
 
-    /// <summary>The three things an owner can do to one download.</summary>
-    private static PluginComponent Controls(DownloadRow row)
+    /// <summary>
+    /// What an owner can do to one download, in the row itself.
+    /// </summary>
+    /// <remarks>
+    /// A row used to carry one action and no more, so these were drawn as a
+    /// second list under the table: every release twice, the two lists to be
+    /// read against each other by eye, and the table squeezed off the screen by
+    /// the length of the second one. The contract has an actions cell now.
+    /// </remarks>
+    private static IReadOnlyList<PluginTableAction> Controls(DownloadRow row)
     {
         bool paused = row.Transfer?.State == TorrentState.Paused;
 
-        return Ui.Row(
-            $"downloads-controls-{row.Grab.InfoHash}",
-            Ui.Text($"downloads-controls-{row.Grab.InfoHash}-name", row.Grab.ReleaseTitle),
-            Ui.Button(
-                $"downloads-pause-{row.Grab.InfoHash}",
-                paused ? "Resume" : "Pause",
-                PluginActionIntent.CallPlugin(
+        return
+        [
+            new()
+            {
+                Label = paused ? "Resume" : "Pause",
+                Action = PluginActionIntent.CallPlugin(
                     // In the path, not the payload: that is where the route
                     // takes it, and a body beside it would be read by nothing.
                     paused ? ResumeAction(row.Grab.InfoHash) : PauseAction(row.Grab.InfoHash),
                     null,
-                    PluginActionTransport.Rest)),
-            Ui.Button(
-                $"downloads-cancel-{row.Grab.InfoHash}",
-                "Cancel",
-                PluginActionIntent.CallPlugin(
+                    PluginActionTransport.Rest),
+            },
+            new()
+            {
+                Label = "Cancel",
+                Variant = "danger",
+                Action = PluginActionIntent.CallPlugin(
                     CancelAction(row.Grab.InfoHash),
                     null,
                     PluginActionTransport.Rest,
@@ -101,7 +103,9 @@ public static class DownloadsView
                         ConfirmLabel = "Cancel the download",
                         CancelLabel = "Leave it running",
                         Destructive = true,
-                    })));
+                    }),
+            },
+        ];
     }
 
     /// <summary>Adding a torrent by hand.</summary>
@@ -138,6 +142,7 @@ public static class DownloadsView
                 new() { Key = "seeds", Label = "Seeds" },
                 new() { Key = "ratio", Label = "Ratio" },
                 new() { Key = "destination", Label = "Destination" },
+                new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
             ],
             [
                 .. rows.Select(row => Ui.Row(
@@ -157,6 +162,7 @@ public static class DownloadsView
                             ? ratio.ToString("0.00", CultureInfo.InvariantCulture)
                             : Unknown,
                         ["destination"] = row.Destination,
+                        ["controls"] = Controls(row),
                     })),
             ],
             "Nothing has been grabbed.");
