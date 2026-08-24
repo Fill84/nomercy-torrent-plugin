@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Storage;
@@ -74,6 +75,7 @@ public sealed class Transfers(
         }
 
         await AskAgainAsync(stored, ct);
+        await LeftBehindAsync(stored, intakeFolder, ct);
         await FinishAsync(stored, running, ct);
 
         foreach (StoredDownload carrying in plan.Carry)
@@ -282,6 +284,79 @@ public sealed class Transfers(
             foreach (EpisodeKey episode in staged.Covers)
             {
                 await DispatchAsync(staged.InfoHash, episode, path, ct);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Asks for an encode for anything in the intake folder nothing is waiting
+    /// on.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Before a grab recorded where it staged its episode, it was marked done
+    /// the moment the file was copied — whether or not the encode had been
+    /// taken. Three of the owner's episodes were left in the intake folder that
+    /// way, with nothing in the plugin that would ever come back to them.
+    /// </para>
+    /// <para>
+    /// So the folder itself is read. Anything no open grab is waiting on is
+    /// matched to the grab that put it there, by the release both carry, and
+    /// asked for again — after which it is on the ordinary path: dispatched,
+    /// then the library, then deleted.
+    /// </para>
+    /// <para>
+    /// A file no grab can be found for is left alone and said once. It may be
+    /// something the owner put there by hand, and this plugin does not delete
+    /// what it did not make.
+    /// </para>
+    /// </remarks>
+    private async Task LeftBehindAsync(
+        IReadOnlyList<StoredDownload> stored,
+        string intakeFolder,
+        CancellationToken ct)
+    {
+        if (!Directory.Exists(intakeFolder))
+        {
+            return;
+        }
+
+        HashSet<string> waited = new(
+            stored.Select(one => one.StagedPath).OfType<string>(),
+            StringComparer.OrdinalIgnoreCase);
+
+        IReadOnlyList<StoredDownload>? every = null;
+
+        foreach (string file in Directory.EnumerateFiles(intakeFolder))
+        {
+            if (!Staging.IsVideo(file) || waited.Contains(file))
+            {
+                continue;
+            }
+
+            every ??= await grabs.EveryAsync(ct);
+
+            // By the release, so the uploader's spelling of it and the name the
+            // plugin chose come to the same thing.
+            string named = TitleMatcher.Release(Path.GetFileNameWithoutExtension(file));
+
+            StoredDownload? put = every.FirstOrDefault(one =>
+                string.Equals(TitleMatcher.Release(one.ReleaseTitle), named, StringComparison.Ordinal));
+
+            if (put is null)
+            {
+                logger.LogInformation(
+                    "{File} is in the intake folder and no grab of this plugin's put it there, so it was left alone.",
+                    Path.GetFileName(file));
+
+                continue;
+            }
+
+            await grabs.StagedAsync(put.InfoHash, file, ct);
+
+            foreach (EpisodeKey episode in put.Covers)
+            {
+                await DispatchAsync(put.InfoHash, episode, file, ct);
             }
         }
     }

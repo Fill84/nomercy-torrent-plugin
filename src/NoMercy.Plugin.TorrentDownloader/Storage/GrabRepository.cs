@@ -119,6 +119,46 @@ public sealed class GrabRepository(Database database)
     }
 
     /// <summary>
+    /// Every grab there has ever been, whatever became of it.
+    /// </summary>
+    /// <remarks>
+    /// For matching a file in the intake folder back to what put it there. A
+    /// grab that was marked done before it recorded where it staged its episode
+    /// is finished as far as <see cref="OpenAsync"/> is concerned, and is the
+    /// only thing that knows which show the file belongs to.
+    /// </remarks>
+    public async Task<IReadOnlyList<StoredDownload>> EveryAsync(CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            SELECT info_hash, magnet, release_title, state, covers, staged_path FROM grabs
+            WHERE info_hash IS NOT NULL;
+            """;
+
+        List<StoredDownload> all = [];
+
+        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
+
+        while (await reader.ReadAsync(ct))
+        {
+            all.Add(new(
+                reader.GetString(0),
+                reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
+                reader.GetString(2),
+                Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState state) ? state : GrabState.Grabbed)
+            {
+                Covers = Covered(reader.GetString(4)),
+                StagedPath = reader.IsDBNull(5) ? null : reader.GetString(5),
+            });
+        }
+
+        return all;
+    }
+
+    /// <summary>
     /// Records that a grab's episode is now in the intake folder.
     /// </summary>
     /// <remarks>
@@ -132,10 +172,16 @@ public sealed class GrabRepository(Database database)
         await using SqliteConnection connection = await database.OpenAsync(ct);
         await using SqliteCommand command = connection.CreateCommand();
 
+        // Done is not spared here, and it is the only write that does not spare
+        // it. A grab marked done before it recorded where it staged its episode
+        // was never really finished — the encode may never have been asked for
+        // — and this is the deliberate correction of that. Every other write
+        // leaves a finished grab alone, because there the danger is a later
+        // failure dragging it back.
         command.CommandText =
             """
             UPDATE grabs SET state = 'staged', staged_path = $path
-            WHERE info_hash = $hash AND state <> 'done';
+            WHERE info_hash = $hash;
             """;
 
         command.Parameters.AddWithValue("$path", path);

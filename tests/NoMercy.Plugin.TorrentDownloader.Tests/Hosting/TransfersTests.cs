@@ -292,6 +292,53 @@ public class TransfersTests : IDisposable
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A file in the intake folder that nothing is waiting on is still
+    /// dispatched.</strong> Before a grab recorded where it staged its episode,
+    /// it was marked done the moment the file was copied — whether or not the
+    /// encode had been taken. Three of the owner's episodes were left in the
+    /// intake folder that way, with nothing that would ever come back to them.
+    /// </para>
+    /// <para>
+    /// So every tick looks at what is really in the folder, and anything no
+    /// open grab is waiting on is matched to the grab that put it there and
+    /// asked for again. It then joins the ordinary path: dispatched, then the
+    /// library, then deleted.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeLeftInTheIntakeFolderIsDispatchedAnyway()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        // Staged and marked done by a version that asked for no encode.
+        Directory.CreateDirectory(Intake);
+
+        string staged = Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv");
+
+        await File.WriteAllBytesAsync(staged, new byte[2048]);
+        await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(staged, "4417")];
+
+        await Transfers(new StandingEngine(), grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.NotNull(server.Dispatcher.Job);
+
+        // And it is being waited on now, so the copies go when the library has
+        // it rather than being left for ever.
+        StoredDownload waiting = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.Equal(GrabState.Dispatched, waiting.State);
+        Assert.Equal(staged, waiting.StagedPath);
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);
