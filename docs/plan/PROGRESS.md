@@ -28,7 +28,8 @@ and it waits on media-server #30, #34, #35, #36 and #37 — none of them this re
 S10-06 and S10-01 exist so that day is two additions rather than surgery. **S10-09**, and only when
 the owner asks.
 
-The `v0.4.0` tag that stood in the way is gone. It named `ecc0241` of 21 August — 74 commits behind,
+**0.3.9 is published**: `NoMercy.Plugin.TorrentDownloader-0.3.9.zip`, on GitHub, on the owner's ask
+of 25 August 2026. The `v0.4.0` tag that stood in the way is gone. It named `ecc0241` of 21 August — 74 commits behind,
 older than every fix of the week that followed, and never published as a release; only `v0.1.0` ever
 was.
 
@@ -191,6 +192,17 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   both remotes; it named `ecc0241` of 21 August and had never been published as a release, so
   nothing was withdrawn from anybody. `v0.3.9` names the commit that carries the number. What ships
   is the audited plugin, not the plugin that was about to be audited.
+
+  **Released on GitHub on the owner's ask**, with
+  `NoMercy.Plugin.TorrentDownloader-0.3.9.zip` — 44 files, 20 MB, sha256 `b7fd7c54…`, the digest
+  GitHub recorded matching the one built here. It carries every assembly the plugin needs and SQLite
+  for all twenty-one platforms, because a plugin folder missing its dependencies loads as nothing at
+  all with nothing to say why: that is what happened on 21 August, when twelve assemblies were named
+  and three were there. Symbols and documentation are left out; nothing at runtime reads them.
+  **Not released on forgejo** — that needs a token this session does not have.
+
+  The release notes say what it does not do as plainly as what it does: it still reaches into the
+  server by name, and a show just added is still invisible to it.
 - `S10-07` **E1, E2.** Every slice marked done now describes what really happened. **S9-03** was the
   dangerous one: marked done, reverted the same afternoon, and left reading as instructions — a
   reader following the plan would have put the 479 grabs back. It now says what it cost, why the
