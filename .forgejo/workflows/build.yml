@@ -16,8 +16,10 @@ on:
   pull_request:
   workflow_dispatch:
 
-permissions:
-  contents: write
+# No `permissions:` block. It is GitHub Actions syntax, Forgejo ignores it, and
+# it warns on every single run that it has — a warning that is always there is a
+# warning nobody reads, and it would hide a real one. What the run may do is
+# granted on the repository, under Settings → Actions, not asked for here.
 
 env:
   PLUGIN: NoMercy.Plugin.TorrentDownloader
