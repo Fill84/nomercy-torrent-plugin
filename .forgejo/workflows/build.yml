@@ -10,9 +10,12 @@ name: build
 # the trigger and scripts/publish-release.sh is the only thing that publishes.
 
 on:
+  # No branch or tag filters. `branches: ['**']` beside `tags: ['v*']` was
+  # accepted, ran on every branch push, and silently never fired for a tag —
+  # so a tag could be pushed to both forges and no release was ever built.
+  # An unfiltered push fires for both, and the one step that must only run for
+  # a version says so itself, further down, where it can be read.
   push:
-    branches: ['**']
-    tags: ['v*']
   pull_request:
   workflow_dispatch:
 
