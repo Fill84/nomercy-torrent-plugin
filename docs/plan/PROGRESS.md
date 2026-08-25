@@ -28,7 +28,26 @@ and it waits on media-server #30, #34, #35, #36 and #37 — none of them this re
 S10-06 and S10-01 exist so that day is two additions rather than surgery. **S10-09**, and only when
 the owner asks.
 
-**0.3.9 is published on GitHub**: `NoMercy.Plugin.TorrentDownloader-0.3.9.zip`, on the owner's ask of
+**0.3.9 is on both forges, built by CI from the tag.** The same package, the same bytes, published
+by `.forgejo/workflows/build.yml` on the `v0.3.9` tag — forgejo builds it and writes the release to
+forgejo and to GitHub. Nothing about a release is made by hand any more.
+
+Getting the first CI this repository has ever had to green found four faults, three of them real:
+`fetch-abstractions.sh` packed two of the contract's four packages and defaulted to a branch pinned
+at a version that never moves — both invisible on a machine whose `_nupkgs` was already warm;
+`EpisodeName` asked the operating system which characters a file name may not carry, so a Linux
+server wrote names no Windows client could open; and the workflow's own `on.push` carried
+`branches: ['**']` beside `tags: ['v*']`, which ran on every branch and silently never fired for a
+tag, so a tag could be pushed with CI green and no release built anywhere.
+
+**The branch is `master`.** The refactor was `full-clean-refactor` until 25 August 2026; the old
+plugin's `master` is kept by the `v0.2.0` tag alone, which is what a tag is for.
+
+**Still to do, and neither is this repository's code.** Forgejo does not push refs to GitHub by
+itself — a push mirror has to be set on the repository, or the two only stay level because a person
+pushes to both. And the plugin has never been built or run on Linux beyond CI.
+
+**0.3.9 was published on GitHub by hand first**: `NoMercy.Plugin.TorrentDownloader-0.3.9.zip`, on the owner's ask of
 25 August 2026. **Not yet on forgejo, which is where the releases live** — see the S10-08 entry. The `v0.4.0` tag that stood in the way is gone. It named `ecc0241` of 21 August — 74 commits behind,
 older than every fix of the week that followed, and never published as a release; only `v0.1.0` ever
 was.

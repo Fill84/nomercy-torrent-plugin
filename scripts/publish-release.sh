@@ -78,16 +78,20 @@ publish() {
 
     echo "$forge: looking for $tag"
 
-    local existing
-    existing="$(curl -K "$config" -o - -w '\n%{http_code}' \
-        "$api/repos/$repo/releases/tags/$tag" || true)"
+    # Every release, matched on the tag here, rather than asking the forge for
+    # the release of a tag. "Get a release by tag name" does not return drafts —
+    # so against a drafted release it answered "no such thing", this made a
+    # second release of the same version, and the repository ended up with two
+    # v0.3.9 entries carrying different packages.
+    #
+    # A release becomes a draft on its own: GitHub demotes one whenever its tag
+    # stops existing, which is what a moved tag does. So the drafted case is not
+    # unusual and must be found.
+    local id
+    id="$(curl -K "$config" -fsS "$api/repos/$repo/releases?limit=100&per_page=100" \
+          | jq -r --arg tag "$tag" 'map(select(.tag_name == $tag)) | first | .id // empty' || true)"
 
-    local status="${existing##*$'\n'}"
-    local found="${existing%$'\n'*}"
-    local id=""
-
-    if [ "$status" = "200" ]; then
-        id="$(printf '%s' "$found" | jq -r '.id')"
+    if [ -n "$id" ]; then
         echo "$forge: $tag is already there as $id, updating it"
 
         curl -K "$config" -fsS -X PATCH \
