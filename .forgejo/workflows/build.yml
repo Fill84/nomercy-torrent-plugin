@@ -161,6 +161,11 @@ jobs:
           (cd "$out" && find . -type f ! -name '*.pdb' ! -name '*.xml' \
               -exec cp --parents {} "$OLDPWD/$stage/" \;)
 
+          # The licence travels with the software, because the licence says it
+          # must: "included in all copies or substantial portions". A package
+          # anyone can download is a copy.
+          cp LICENSE "$stage/"
+
           zip_name="$PLUGIN-$version.zip"
           (cd _stage && zip -qr "../$zip_name" "$PLUGIN")
 
