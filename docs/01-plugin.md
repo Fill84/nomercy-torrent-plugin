@@ -41,7 +41,18 @@ Plus its own REST endpoints through `NoMercy.Plugins.Mvc`, and live pushes throu
 | `transfers` | `* * * * *` | watch what is downloading; stage and dispatch what finished |
 | `feed` | `*/15 * * * *` | read every feed into the name pool |
 | `search` | `0 */6 * * *` | resolve names for missing episodes, find copies, grab |
-| `maintenance` | `0 4 * * *` | re-derive the missing list from the library, prune, re-verify |
+| `maintenance` | `0 4 * * *` | re-derive the missing list, prune old refusals, clear duplicate grab rows |
+
+**Every piece of periodic housekeeping is in `maintenance`.** Not because it is tidy, but because
+housekeeping spread across the cadence that happened to be running when somebody needed it is
+housekeeping nobody can find. `search` re-derives the missing list of its own accord as well — a
+cycle needs a fresh one and must not wait for four in the morning — and that is the only overlap.
+
+**A start settles once, whichever cadence ticks first.** What the library holds is derived rather
+than stored, so a plugin that only re-derived it on its six-hourly cycle carried whatever the last
+run left behind. On 24 August 2026 that was shows a broken build had put there that the owner does
+not have. A restart settles within the minute instead. It runs the maintenance work, so no cadence
+has a first tick unlike its others.
 
 **Cadences are registered once, when the server starts.** A plugin loads a minute or two after the
 server, and changing a cron at runtime re-registers nothing — only a server restart applies a new

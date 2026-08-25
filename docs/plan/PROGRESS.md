@@ -4,11 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-04 — maintenance does maintenance.** The maintenance cadence runs at four in the morning and
-its whole body is a refresh the search cadence already does before each of its four daily cycles.
-The real housekeeping is elsewhere: history is pruned as a side effect of that refresh, and duplicate
-grab rows are cleared on the first transfers tick behind a `_refreshed` flag. Three pieces of
-periodic work, none of them in the cadence named for it.
+**S10-05 — nothing that nothing reaches.** `Ui.List`, `Ui.Container` and `Ui.EmptyState` have no
+caller. The last one matters: pages draw their empty states by hand while a helper for it sits
+unused, which is where a design system starts to drift. The three unused members in the BitTorrent
+client are not touched — it is proven and out of scope, and the audit records them so they are not
+lost.
 
 The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded, staged, dispatched with its own
 episode id and encoded into the owner's library at 22:33 — the first episode this plugin has
@@ -154,7 +154,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S10-01` One rule for whose show it is
 - [x] `S10-02` One question, one answer, per tick
 - [x] `S10-03` A connection costs a connection
-- [ ] `S10-04` Maintenance does maintenance
+- [x] `S10-04` Maintenance does maintenance
 - [ ] `S10-05` Nothing that nothing reaches
 - [ ] `S10-06` A port for the encode
 - [ ] `S10-07` The plan says what happened
@@ -165,6 +165,13 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- `S10-04` **C1.** The maintenance cadence does the maintenance: re-derive the missing list, prune
+  old refusals, clear duplicate grab rows. `RefreshAsync` refreshes and nothing else, and search
+  keeps its own refresh because a cycle needs a fresh missing list and must not wait for four in the
+  morning. The `_refreshed` flag did **not** simply go, and the slice was corrected to say so — see
+  **Decisions**. Each of the three pieces has a test that fails when that piece is deleted.
+  `docs/01-plugin.md` § The four cadences now says what the cadences really do, and the slice's
+  "Read first" pointed at `docs/04-domain.md` § Cadences, which has never existed.
 - `S10-03` **B4, B5.** The data folder and `journal_mode` are done once per database file rather than
   on every call — per store, not static, because another store is another file whose journal mode
   nothing here has set; the plugin has one store, so once per store is once per run. `foreign_keys`
@@ -617,6 +624,17 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **A start settles once, whichever cadence ticks first — the flag moved rather than went.**
+  S10-04 as written said the first-tick flag "goes, and with it the special case that made a start
+  different from a tick". Carried out literally that would have deleted a fix rather than moved it:
+  the flag exists because what the library holds is derived rather than stored, so a restart that
+  waited for the six-hourly cycle carried whatever the last run left behind — on 24 August 2026,
+  shows a broken build had put there that the owner does not have. What was wrong was never that a
+  start is special; it was that one tick of one cadence was. So the start runs the maintenance work
+  once, in `ExecuteAsync`, whichever cadence ticks first, and no cadence has a first pass unlike its
+  others. If that first tick happens to be maintenance, the housekeeping runs twice that once; every
+  part of it is idempotent, and a special case to save the second pass would be the special case
+  this removed. The slice and `docs/01-plugin.md` both say this now.
 - **A show is the owner's when it has an episode on disk, and only then.** Reversed on 24 August
   2026, the same day it was written the other way round. Taking every show a library holds put the
   plugin on 479 grabs in one afternoon — Family Guy alone claimed 456 episodes nobody had asked

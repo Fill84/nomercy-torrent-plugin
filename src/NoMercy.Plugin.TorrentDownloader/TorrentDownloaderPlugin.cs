@@ -33,7 +33,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private BittorrentEngine? _engine;
     private HttpClient? _trackerHttp;
     private Transfers? _transfers;
-    private bool _refreshed;
+    private int _settled;
     private SourceLedgerRepository? _ledger;
     private IReadOnlyList<SourceDefinition>? _shipped;
 
@@ -247,6 +247,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // plugin and a cadence tick that returns must not take it down with it.
         using CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(Lifetime);
 
+        await SettleOnceAsync(work.Token);
+
         switch (jobName)
         {
             case JobNames.Feed:
@@ -262,7 +264,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 break;
 
             case JobNames.Maintenance:
-                await RefreshAsync(work.Token);
+                await MaintainAsync(work.Token);
                 break;
 
             default:
@@ -284,28 +286,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         if (await ConfiguredAsync(ct) is not Settings settings)
         {
             return;
-        }
-
-        if (!_refreshed)
-        {
-            // Once, on the first tick after a start. What the library holds is
-            // derived, not stored, and a plugin that only re-derived it on its
-            // six-hourly cycle carried whatever the last run left behind —
-            // including, on 24 August 2026, shows a broken build had put there
-            // that the owner does not have. A restart should settle that within
-            // the minute rather than by tea time.
-            _refreshed = true;
-
-            int extra = await (await GrabsAsync(ct)).DeduplicateAsync(ct);
-
-            if (extra > 0)
-            {
-                Context.Logger.LogInformation(
-                    "{Count} duplicate grab row(s) were cleared: one torrent is one grab.",
-                    extra);
-            }
-
-            await RefreshAsync(settings, ct);
         }
 
         BittorrentEngine engine = await EngineAsync(settings, ct);
@@ -804,20 +784,110 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         IReadOnlyList<TrackedEpisode> derived = await refresh.DeriveAsync(settings.Profile, ct);
 
         await (await EpisodesAsync(ct)).ReplaceAsync(derived, ct);
+    }
 
-        // And the refusals nobody will read again. One is written for every
-        // release every cycle considered and did not take: the owner's history
-        // held 66,149 lines, 65,878 of them refusals, and the page stopped
+    /// <summary>
+    /// The periodic housekeeping, in the cadence named for it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// It used to be scattered: this cadence's whole body was a refresh the
+    /// search cadence already did before each of its four daily cycles, old
+    /// refusals were pruned as a side effect of that refresh, and duplicate
+    /// grab rows were cleared on the first transfers tick after a start behind
+    /// a flag. Three pieces of periodic work, none of them here.
+    /// </para>
+    /// <para>
+    /// The refresh stays, because it is what makes the pages true overnight
+    /// without waiting on a search. Search keeps its own: a cycle needs a fresh
+    /// missing list and must not wait for four in the morning.
+    /// </para>
+    /// </remarks>
+    private async Task MaintainAsync(CancellationToken ct)
+    {
+        if (await ConfiguredAsync(ct) is not Settings settings)
+        {
+            return;
+        }
+
+        await MaintainAsync(settings, ct);
+    }
+
+    private async Task MaintainAsync(Settings settings, CancellationToken ct)
+    {
+        await RefreshAsync(settings, ct);
+
+        GrabRepository grabs = await GrabsAsync(ct);
+
+        // The refusals nobody will read again. One is written for every release
+        // every cycle considered and did not take: the owner's history held
+        // 66,149 lines, 65,878 of them refusals, and the page stopped
         // answering. A fortnight is long enough to look back at why something
         // did not arrive.
-        int gone = await (await GrabsAsync(ct)).PruneHistoryAsync(
-            DateTimeOffset.UtcNow.AddDays(-14),
-            ct);
+        int gone = await grabs.PruneHistoryAsync(DateTimeOffset.UtcNow.AddDays(-14), ct);
 
         if (gone > 0)
         {
             Context.Logger.LogInformation("{Count} old refusals were cleared from the history.", gone);
         }
+
+        // One torrent is one grab. Seven info hashes on the owner's server
+        // carried two rows each and every step that walked grabs walked both,
+        // so one episode was staged twice and dispatched twice. Nothing makes
+        // such a row any more; these are the ones already there.
+        int extra = await grabs.DeduplicateAsync(ct);
+
+        if (extra > 0)
+        {
+            Context.Logger.LogInformation(
+                "{Count} duplicate grab row(s) were cleared: one torrent is one grab.",
+                extra);
+        }
+    }
+
+    /// <summary>
+    /// The housekeeping a start owes, done once, whichever cadence ticks first.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What the library holds is derived rather than stored, and a plugin that
+    /// only re-derived it on its six-hourly cycle carried whatever the last run
+    /// left behind — including, on 24 August 2026, shows a broken build had put
+    /// there that the owner does not have. A restart settles that within the
+    /// minute rather than by tea time.
+    /// </para>
+    /// <para>
+    /// It used to be the first transfers tick that did this, which made one
+    /// tick of one cadence unlike all the others. What is special is the start,
+    /// not the tick, so it is done here — and if the first tick after a start
+    /// happens to be maintenance, the housekeeping runs twice that once. Every
+    /// part of it is idempotent, and a special case to save the second pass
+    /// would be the special case this removed.
+    /// </para>
+    /// </remarks>
+    private async Task SettleOnceAsync(CancellationToken ct)
+    {
+        if (Volatile.Read(ref _settled) != 0)
+        {
+            return;
+        }
+
+        if (await ConfiguredAsync(ct) is not Settings settings)
+        {
+            // Not settled, and not marked as settled. A plugin the owner has
+            // not configured yet has nowhere to put anything and nothing to
+            // settle, and it must still do this on the first tick after they
+            // do configure it.
+            return;
+        }
+
+        if (Interlocked.Exchange(ref _settled, 1) != 0)
+        {
+            // Another cadence ticked at the same moment and got there first.
+            return;
+        }
+
+        await MaintainAsync(settings, ct);
     }
 
     /// <summary>What the last cycle decided about each episode it looked at.</summary>

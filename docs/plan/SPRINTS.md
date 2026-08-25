@@ -1254,13 +1254,21 @@ Three pieces of periodic work, none of them in the cadence named for it.
 1. Maintenance owns the housekeeping: prune the history, clear duplicate grab rows, and whatever
    else is periodic and not part of a search.
 2. `RefreshAsync` refreshes and does nothing else.
-3. The first-tick flag goes, and with it the special case that made a start different from a tick.
+3. The first-tick flag stops being about the transfers cadence. **Corrected on 25 August 2026 while
+   doing this slice:** it read "the flag goes, and with it the special case that made a start
+   different from a tick", and that would have thrown away a fix rather than moved it. The flag
+   exists because a restart must settle within the minute instead of carrying whatever the last run
+   left behind until the six-hourly cycle — the 24 August case, where a broken build had left shows
+   the owner does not have. What is wrong is not that a start is special; it is that one tick of one
+   cadence was. So the start settles once, whichever cadence ticks first, and no cadence has a first
+   pass unlike its others.
 4. Search keeps its own refresh: a cycle needs a fresh missing list and must not wait for four in
    the morning.
 
-**Done when** a start behaves exactly like any other tick, and the duplicate-row test still passes
-against the maintenance cadence rather than against the first tick. Read first: `docs/04-domain.md`
-§ Cadences.
+**Done when** no cadence has a first tick unlike its others, and the housekeeping is reached through
+the maintenance cadence rather than through the first transfers tick. Read first: `docs/01-plugin.md`
+§ The four cadences — **not** `docs/04-domain.md` § Cadences, which this slice named and which does
+not exist.
 
 ## S10-05 · Nothing that nothing reaches
 
