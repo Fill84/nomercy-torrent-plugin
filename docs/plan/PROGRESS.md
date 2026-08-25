@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.3.11 is tagged. S10-09 is next, and it is not this repository's to start.**
+**0.3.12 is tagged. S10-09 is next, and it is not this repository's to start.**
 
 **What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
 was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
@@ -206,6 +206,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **0.3.12.** One torrent is one grab, enforced by the schema instead of swept up after the fact.
+  The index on the hash was not unique, and a cycle records a grab per episode it decided, so a pass
+  deciding the same episode twice wrote the hash twice. The rule lived in cleanups — a migration
+  once, the maintenance cadence at every start — which is why three duplicates were cleared at a
+  start on 25 August 2026 and three more were on the page the same evening. The insert now does
+  nothing about a torrent already known, the first row wins, and the periodic sweep is gone because
+  nothing can make a duplicate for it to find. A state of two words also reads as two words: the
+  page said `fetchingmetadata`.
 - **0.3.11.** Two faults that had been there for as long as the plugin worked. The snapshot is
   pushed once a second instead of four times: the floor was set for what a message costs the server,
   but the web app cannot read this plugin's payload — it draws every plugin — so it answers any
