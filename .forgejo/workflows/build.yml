@@ -32,7 +32,11 @@ env:
 
   # The mirror. It is not a backup: it carries the same tags, the same releases
   # and the same bytes, and the release step fails if it cannot.
-  GITHUB_REPO: Fill84/nomercy-torrent-plugin
+  #
+  # Not named GITHUB_ANYTHING. The runner owns that whole prefix and sets a
+  # dozen of them itself; a workflow that puts its own values there is arguing
+  # with the thing running it.
+  MIRROR_REPO: Fill84/nomercy-torrent-plugin
 
 jobs:
   build:
@@ -206,7 +210,7 @@ jobs:
         env:
           FORGEJO_REPO: ${{ github.repository }}
           FORGEJO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.MIRROR_GITHUB_TOKEN }}
+          MIRROR_TOKEN: ${{ secrets.MIRROR_GITHUB_TOKEN }}
           VERSION: ${{ steps.package.outputs.version }}
           ZIP: ${{ steps.package.outputs.zip }}
         run: |

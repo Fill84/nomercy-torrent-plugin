@@ -24,8 +24,11 @@
 #   FORGEJO_URL     https://forgejo.example            (no trailing slash)
 #   FORGEJO_REPO    owner/repo
 #   FORGEJO_TOKEN   a token with write access
-#   GITHUB_REPO     owner/repo
-#   GITHUB_TOKEN    a token with write access
+#   MIRROR_REPO     owner/repo        (the GitHub side)
+#   MIRROR_TOKEN    a token with write access
+#
+# The GitHub pair is not called GITHUB_ANYTHING on purpose: a CI runner owns
+# that prefix and sets a dozen of them itself.
 #
 # Either forge can be skipped by leaving its token empty, and it says so rather
 # than passing over it in silence: a mirror that stopped being written to is the
@@ -146,9 +149,9 @@ publish "forgejo" \
 # between the two that is not this repository's doing.
 publish "github" \
     "https://api.github.com" \
-    "${GITHUB_REPO:?GITHUB_REPO is not set}" \
-    "${GITHUB_TOKEN:-}" \
-    "https://uploads.github.com/repos/${GITHUB_REPO}/releases/{id}/assets" || failed=1
+    "${MIRROR_REPO:?MIRROR_REPO is not set}" \
+    "${MIRROR_TOKEN:-}" \
+    "https://uploads.github.com/repos/${MIRROR_REPO}/releases/{id}/assets" || failed=1
 
 if [ "$failed" != "0" ]; then
     echo >&2
