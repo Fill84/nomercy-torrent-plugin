@@ -60,6 +60,12 @@ public sealed class Transfers(
     /// <param name="ct">The plugin's own lifetime, never a caller's request.</param>
     public async Task TickAsync(string incompleteFolder, string intakeFolder, CancellationToken ct)
     {
+        // Everything the library is asked in this pass, asked once. It lives
+        // for this tick and no longer: the server encodes while the plugin
+        // runs, and an answer kept past the tick that asked for it would be a
+        // decision made on what used to be true.
+        LibraryThisTick thisTick = new(library);
+
         IReadOnlyList<TorrentStatus> running = await engine.StatusAsync(ct);
         // One row per torrent. Every cycle used to record a fresh grab for an
         // episode it was already downloading, so one release could have eight
@@ -81,10 +87,15 @@ public sealed class Transfers(
         // Before the plan, and counted with the failures: a grab cancelled here
         // that was still in the plan would be carried on the same tick and put
         // straight back to downloading.
-        failed = [.. failed, .. await NotOursAsync(stored, ct)];
+        failed = [.. failed, .. await NotOursAsync(stored, thisTick, ct)];
+
+        // What is still open after this tick's failures, which is what the
+        // store would answer if it were asked again.
+        IReadOnlyList<StoredDownload> open =
+            [.. stored.Where(one => !failed.Contains(one.InfoHash, StringComparer.OrdinalIgnoreCase))];
 
         RecoveryPlan plan = Recovery.Plan(
-            [.. stored.Where(one => !failed.Contains(one.InfoHash, StringComparer.OrdinalIgnoreCase))],
+            open,
             [.. running.Where(one => !failed.Contains(one.InfoHash, StringComparer.OrdinalIgnoreCase))]);
 
         foreach (StoredDownload lost in plan.Add)
@@ -104,14 +115,34 @@ public sealed class Transfers(
                 unknown.InfoHash);
         }
 
+        // Staging says what it wrote, because the next step needs to know and
+        // used to read the open grabs a second time to find out.
+        List<string> justStaged = [];
+
         foreach (StoredDownload finished in plan.Stage)
         {
-            await StageAsync(finished, incompleteFolder, intakeFolder, ct);
+            if (await StageAsync(finished, incompleteFolder, intakeFolder, thisTick, ct) is string written)
+            {
+                justStaged.Add(written);
+            }
         }
 
-        await AskAgainAsync(stored, ct);
-        await LeftBehindAsync(intakeFolder, ct);
-        await FinishAsync(stored, running, ct);
+        // Every staged file something is waiting on: what the store knew at the
+        // top of the tick, less what failed during it, plus what staging has
+        // written since. Without the last part a file staged a moment ago reads
+        // as one nothing is waiting on, and it was dispatched a second time on
+        // every tick for every episode that had just been staged.
+        //
+        // A grab that AskAgainAsync fails below is still counted here, and that
+        // costs nothing: it fails precisely because its staged file is no longer
+        // there, so no entry in the folder can match it.
+        HashSet<string> waited = new(
+            open.Select(one => one.StagedPath).OfType<string>().Concat(justStaged),
+            StringComparer.OrdinalIgnoreCase);
+
+        await AskAgainAsync(stored, thisTick, ct);
+        await LeftBehindAsync(intakeFolder, waited, thisTick, ct);
+        await FinishAsync(stored, running, thisTick, ct);
 
         foreach (StoredDownload carrying in plan.Carry)
         {
@@ -200,10 +231,16 @@ public sealed class Transfers(
     /// being marked done: a pack missing an episode is worth saying so about,
     /// and the episode is looked for again.
     /// </remarks>
-    private async Task StageAsync(
+    /// <returns>
+    /// Where it put the episode, or null when it put nothing. The tick needs
+    /// this: a file staged a moment ago is one something is waiting on, and
+    /// reading the open grabs again was the other way of finding that out.
+    /// </returns>
+    private async Task<string?> StageAsync(
         StoredDownload finished,
         string incompleteFolder,
         string intakeFolder,
+        LibraryThisTick thisTick,
         CancellationToken ct)
     {
         try
@@ -224,7 +261,7 @@ public sealed class Transfers(
             // the release the plugin chose. A show the server does not offer
             // leaves the file under the torrent's own name rather than under a
             // name made up from what is to hand.
-            Show? show = (await library.GetShowsAsync(ct))
+            Show? show = (await thisTick.GetShowsAsync(ct))
                 .FirstOrDefault(candidate => candidate.Id == finished.Covers.FirstOrDefault().ShowId);
 
             string? resolution = ReleaseName.Parse(finished.ReleaseTitle).Resolution;
@@ -236,7 +273,7 @@ public sealed class Transfers(
             {
                 // Nothing reached the intake folder, so nothing is done with.
                 // Marking it done would lose the download and the episode.
-                return;
+                return null;
             }
 
             // Staged, and said so before the encode is asked for. The copy has
@@ -250,13 +287,17 @@ public sealed class Transfers(
 
             foreach (StagedResult one in moved.Where(one => one.Moved))
             {
-                await DispatchAsync(finished.InfoHash, one.File.Episode, one.Path!, ct);
+                await DispatchAsync(finished.InfoHash, one.File.Episode, one.Path!, thisTick, ct);
             }
+
+            return first.Path;
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
             logger.LogWarning("{Release} could not be staged: {Reason}", finished.ReleaseTitle, wrong.Message);
             journal.Failed(ActivityStage.Download, finished.ReleaseTitle, wrong.Message);
+
+            return null;
         }
     }
 
@@ -266,9 +307,14 @@ public sealed class Transfers(
     /// library and a television one to the tv library. This plugin never picks
     /// a library: it reads the one the show is already in.
     /// </remarks>
-    private async Task DispatchAsync(string infoHash, EpisodeKey episode, string staged, CancellationToken ct)
+    private async Task DispatchAsync(
+        string infoHash,
+        EpisodeKey episode,
+        string staged,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
     {
-        Show? show = (await library.GetShowsAsync(ct))
+        Show? show = (await thisTick.GetShowsAsync(ct))
             .FirstOrDefault(candidate => candidate.Id == episode.ShowId);
 
         if (show is null)
@@ -283,7 +329,7 @@ public sealed class Transfers(
 
         // Where this show's episodes already are, so the encode goes to the
         // folder it really lives in. A library can have several.
-        string? existing = (await library.GetShowFilesAsync(episode.ShowId, ct)).FirstOrDefault();
+        string? existing = (await thisTick.GetShowFilesAsync(episode.ShowId, ct)).FirstOrDefault();
 
         bool queued = await dispatch.DispatchAsync(
             staged,
@@ -340,9 +386,11 @@ public sealed class Transfers(
     /// point and its show now has a file either way.
     /// </para>
     /// </remarks>
-    private async Task<IReadOnlyList<string>> NotOursAsync(IReadOnlyList<StoredDownload> stored, CancellationToken ct)
+    private async Task<IReadOnlyList<string>> NotOursAsync(
+        IReadOnlyList<StoredDownload> stored,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
     {
-        Dictionary<int, bool> owned = [];
         List<string> cancelled = [];
 
         foreach (StoredDownload open in stored)
@@ -354,15 +402,13 @@ public sealed class Transfers(
 
             bool theirs = true;
 
+            // No cache of its own. This kept one dictionary of which shows have
+            // a file while FinishAsync fetched the same episodes again for its
+            // own purposes: one tick, one question, two answers. The tick's
+            // library remembers it for both.
             foreach (int show in open.Covers.Select(one => one.ShowId).Distinct())
             {
-                if (!owned.TryGetValue(show, out bool has))
-                {
-                    has = Ownership.Theirs(await library.GetEpisodesAsync(show, ct));
-                    owned[show] = has;
-                }
-
-                theirs &= has;
+                theirs &= Ownership.Theirs(await thisTick.GetEpisodesAsync(show, ct));
             }
 
             if (theirs)
@@ -394,7 +440,10 @@ public sealed class Transfers(
     /// first refusal left the episode in a folder nobody is watching, which is
     /// where three of the owner's were found.
     /// </remarks>
-    private async Task AskAgainAsync(IReadOnlyList<StoredDownload> stored, CancellationToken ct)
+    private async Task AskAgainAsync(
+        IReadOnlyList<StoredDownload> stored,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
     {
         foreach (StoredDownload staged in stored.Where(one => one.State == GrabState.Staged))
         {
@@ -426,7 +475,7 @@ public sealed class Transfers(
 
             foreach (EpisodeKey episode in staged.Covers)
             {
-                await DispatchAsync(staged.InfoHash, episode, path, ct);
+                await DispatchAsync(staged.InfoHash, episode, path, thisTick, ct);
             }
         }
     }
@@ -453,21 +502,24 @@ public sealed class Transfers(
     /// something the owner put there by hand, and this plugin does not delete
     /// what it did not make.
     /// </para>
+    /// <para>
+    /// <c>waited</c> is every staged file something is already waiting on,
+    /// worked out by the tick. It used to be a second read of the open grabs,
+    /// made here because staging has happened since the first one — a file
+    /// staged a moment ago would otherwise read as one nothing is waiting on,
+    /// and be dispatched a second time on every tick.
+    /// </para>
     /// </remarks>
-    private async Task LeftBehindAsync(string intakeFolder, CancellationToken ct)
+    private async Task LeftBehindAsync(
+        string intakeFolder,
+        HashSet<string> waited,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
     {
         if (!Directory.Exists(intakeFolder))
         {
             return;
         }
-
-        // Read again rather than taken from the top of the tick. Staging has
-        // happened since, and a file staged a moment ago would be read as one
-        // nothing is waiting on — so it was dispatched a second time, on every
-        // tick, for every episode that had just been staged.
-        HashSet<string> waited = new(
-            (await grabs.OpenAsync(ct)).Select(one => one.StagedPath).OfType<string>(),
-            StringComparer.OrdinalIgnoreCase);
 
         IReadOnlyList<StoredDownload>? every = null;
 
@@ -525,7 +577,7 @@ public sealed class Transfers(
 
             foreach (EpisodeKey episode in put.Covers)
             {
-                await DispatchAsync(put.InfoHash, episode, entry, ct);
+                await DispatchAsync(put.InfoHash, episode, entry, thisTick, ct);
             }
         }
     }
@@ -582,6 +634,7 @@ public sealed class Transfers(
     private async Task FinishAsync(
         IReadOnlyList<StoredDownload> stored,
         IReadOnlyList<TorrentStatus> running,
+        LibraryThisTick thisTick,
         CancellationToken ct)
     {
         foreach (StoredDownload sent in stored.Where(one => one.State == GrabState.Dispatched))
@@ -606,7 +659,7 @@ public sealed class Transfers(
 
             foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
             {
-                IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Key, ct);
+                IReadOnlyList<Episode> episodes = await thisTick.GetEpisodesAsync(show.Key, ct);
 
                 landed &= show.All(wanted => episodes.Any(one =>
                     one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile));
@@ -614,7 +667,7 @@ public sealed class Transfers(
 
             if (!landed)
             {
-                await StillWaitingAsync(sent, ct);
+                await StillWaitingAsync(sent, thisTick, ct);
 
                 continue;
             }
@@ -649,7 +702,7 @@ public sealed class Transfers(
     /// refresh sees the file and the episode stops being missing on its own.
     /// </para>
     /// </remarks>
-    private async Task StillWaitingAsync(StoredDownload sent, CancellationToken ct)
+    private async Task StillWaitingAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
     {
         DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();
 
@@ -675,7 +728,7 @@ public sealed class Transfers(
             {
                 foreach (EpisodeKey episode in sent.Covers)
                 {
-                    await DispatchAsync(sent.InfoHash, episode, staged, ct);
+                    await DispatchAsync(sent.InfoHash, episode, staged, thisTick, ct);
                 }
             }
 

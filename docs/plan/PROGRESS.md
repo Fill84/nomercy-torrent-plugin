@@ -4,10 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-02 — one question, one answer, per tick.** The transfers cadence runs every minute and asks
-the library the same things several times inside it: the shows once per staged file and once per
-dispatch, a show's episodes from two places with two caches, and the open grabs twice. None of it is
-wrong and all of it is work with no behaviour attached.
+**S10-03 — a connection costs a connection.** Every database call makes the data folder and sets
+`journal_mode`. The folder exists after the first call and `journal_mode` is a property of the file
+rather than of the connection: about 21,600 directory creations and 21,600 unnecessary round trips a
+day, for nothing. `foreign_keys` is genuinely per-connection and stays. The settings are re-read from
+the host on every tick and every page, and are worth caching only with invalidation on save.
 
 The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded, staged, dispatched with its own
 episode id and encoded into the owner's library at 22:33 — the first episode this plugin has
@@ -151,7 +152,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 10 — What the audit found
 - [x] `S10-01` One rule for whose show it is
-- [ ] `S10-02` One question, one answer, per tick
+- [x] `S10-02` One question, one answer, per tick
 - [ ] `S10-03` A connection costs a connection
 - [ ] `S10-04` Maintenance does maintenance
 - [ ] `S10-05` Nothing that nothing reaches
@@ -164,6 +165,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- `S10-02` **B1, B2, B3.** One tick asks the library each question once. `LibraryThisTick` wraps the
+  port for the length of one pass and is then thrown away — a tick lasts moments, and an answer kept
+  past it would be a decision made on what used to be true. A tick staging four episodes went from
+  eight round trips for the shows to one, and the two separate caches of "does this show have a
+  file" became one. Staging now returns the path it wrote, so the open grabs are read once a tick
+  instead of twice. Two tests count calls rather than outcomes, which no other test here does, and
+  they do it because the cost is the whole of the fault; dropping the just-staged paths from the
+  waited set fails four existing tests, so the trap that second read existed for is still held.
 - `S10-01` **A1.** The rule that decides whose show it is now exists once, in
   `Core/Pipeline/Ownership.cs`, and both the refresh and the transfers tick call it. It is the rule
   that put the plugin on 479 grabs when it was changed in one place on 24 August, and it is the rule

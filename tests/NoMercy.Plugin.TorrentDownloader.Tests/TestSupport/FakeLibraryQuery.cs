@@ -22,6 +22,26 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
     /// <summary>Every library id the adapter asked about; null when it asked for all of them.</summary>
     public List<string?> Asked { get; } = [];
 
+    /// <summary>
+    /// How many times each call was made, so that one tick can be counted.
+    /// </summary>
+    /// <remarks>
+    /// The transfers cadence runs every minute, and the same question asked
+    /// four times inside it is four round trips to the server for an answer
+    /// that cannot change while the tick is running. Counting is the only way
+    /// to see that from outside, because nothing about it shows in the outcome.
+    /// </remarks>
+    public int Libraries { get; private set; }
+
+    /// <inheritdoc cref="Libraries"/>
+    public int Shows { get; private set; }
+
+    /// <inheritdoc cref="Libraries"/>
+    public int Episodes { get; private set; }
+
+    /// <inheritdoc cref="Libraries"/>
+    public int Files { get; private set; }
+
     public FakeLibraryQuery Library(string id, string title, string type)
     {
         _libraries.Add(new(id, title, type));
@@ -66,6 +86,8 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
 
     public Task<IReadOnlyList<PluginLibrary>> GetLibrariesAsync(CancellationToken ct = default)
     {
+        Libraries++;
+
         return Task.FromResult<IReadOnlyList<PluginLibrary>>([.. _libraries]);
     }
 
@@ -74,6 +96,7 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
         CancellationToken ct = default)
     {
         Asked.Add(libraryId);
+        Shows++;
 
         return Task.FromResult<IReadOnlyList<PluginLibraryShow>>(
             [.. _shows.Where(show => libraryId is null || show.LibraryId == libraryId)]);
@@ -83,6 +106,8 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
         int showId,
         CancellationToken ct = default)
     {
+        Episodes++;
+
         return Task.FromResult<IReadOnlyList<PluginLibraryEpisode>>(
             [.. _episodes.GetValueOrDefault(showId, [])]);
     }
@@ -110,6 +135,8 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
         int showId,
         CancellationToken ct = default)
     {
+        Files++;
+
         return Task.FromResult<IReadOnlyList<PluginLibraryFile>>(
             [.. _files.Where(one => one.ShowId == showId)]);
     }
