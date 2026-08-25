@@ -10,12 +10,27 @@ name: build
 # the trigger and scripts/publish-release.sh is the only thing that publishes.
 
 on:
-  # No branch or tag filters. `branches: ['**']` beside `tags: ['v*']` was
-  # accepted, ran on every branch push, and silently never fired for a tag —
-  # so a tag could be pushed to both forges and no release was ever built.
-  # An unfiltered push fires for both, and the one step that must only run for
-  # a version says so itself, further down, where it can be read.
+  # Master and versions, and nothing else. A run costs two or three minutes of
+  # a machine somebody else may be waiting for, so a push that cannot break
+  # anything should not start one.
+  #
+  # **The branch list is named, never a glob.** `branches: ['**']` beside this
+  # same `tags:` line was accepted, ran on every branch push, and silently never
+  # fired for a tag — so a version could be pushed to both forges with CI green
+  # and no release built anywhere. The named form below is the one this runner
+  # has actually fired a tag from.
+  #
+  # **There are no `paths` filters and there must not be.** A path filter is
+  # evaluated for a tag push too, so a release whose commit touched only
+  # documentation would be skipped without a word. To skip a run deliberately,
+  # put `[skip ci]` in the commit message — said out loud, in the commit, where
+  # the next reader sees it.
   push:
+    branches: [master]
+    tags: ['v*']
+
+  # A branch that is not master is tested when it is proposed, not on every
+  # commit somebody saves.
   pull_request:
   workflow_dispatch:
 
