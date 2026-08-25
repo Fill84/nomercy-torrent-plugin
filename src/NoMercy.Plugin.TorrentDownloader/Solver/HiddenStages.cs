@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace NoMercy.Plugin.TorrentDownloader.Solver;
 
 /// <summary>
@@ -11,7 +13,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Solver;
 /// does not mean a window on a screen, and pretending otherwise is how the
 /// window got there.
 /// </remarks>
-public sealed class HiddenStages : IHiddenStageFactory
+public sealed class HiddenStages(ILogger logger) : IHiddenStageFactory
 {
     /// <summary>What the plugin's desktop is called on Windows.</summary>
     public const string DesktopName = "NoMercyTorrentDownloader";
@@ -52,7 +54,7 @@ public sealed class HiddenStages : IHiddenStageFactory
         // and having it checked is worth the repetition.
         if (OperatingSystem.IsWindows())
         {
-            return new WindowsDesktopStage(DesktopName);
+            return new WindowsDesktopStage(DesktopName, logger);
         }
 
         if (OperatingSystem.IsLinux())

@@ -74,7 +74,7 @@ public class BrowserTests : IDisposable
         Assert.Equal(Hiding.XvfbDisplay, HiddenStages.HidingFor(isWindows: false, isLinux: true));
 
         // And the reason is given exactly when there is one to give.
-        HiddenStages stages = new();
+        HiddenStages stages = new(new CapturingLogger());
         Assert.Equal(stages.CanHideABrowser, stages.WhyNot is null);
     }
 

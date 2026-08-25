@@ -66,7 +66,7 @@ internal static class Program
 
         Browser browser = new(
             new BrowserInstall(Path.Combine(repository, "_capture"), new PuppeteerBrowserDownloader(), logger),
-            new HiddenStages(),
+            new HiddenStages(logger),
             logger);
 
         await using PuppeteerTabs tabs = new(browser, logger);

@@ -78,7 +78,7 @@ public sealed class Chain : IAsyncDisposable
 
         _browser = new(
             new BrowserInstall(Path.Combine(context.DataFolderPath, "browser"), new PuppeteerBrowserDownloader(), _logger),
-            new HiddenStages(),
+            new HiddenStages(_logger),
             _logger);
 
         _tabs = new(_browser, _logger);

@@ -155,7 +155,7 @@ internal static class Program
         string dataFolder = Path.Combine(repository, "_capture");
         Browser browser = new(
             new BrowserInstall(dataFolder, new PuppeteerBrowserDownloader(), logger),
-            new HiddenStages(),
+            new HiddenStages(logger),
             logger);
 
         await using PuppeteerTabs tabs = new(browser, logger);

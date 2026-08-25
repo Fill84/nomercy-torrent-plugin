@@ -3,6 +3,8 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.Versioning;
 
+using Microsoft.Extensions.Logging;
+
 namespace NoMercy.Plugin.TorrentDownloader.Solver;
 
 /// <summary>
@@ -29,12 +31,28 @@ public sealed class WindowsDesktopStage : IHiddenStage
     private const uint GenericAll = 0x10000000;
     private const uint CreateUnicodeEnvironment = 0x00000400;
 
+    /// <summary>
+    /// Started stopped, so that nothing has run before it is in the job.
+    /// </summary>
+    /// <remarks>
+    /// Chrome spawns its renderers within milliseconds of starting. A process
+    /// put in a job after it has already forked leaves those children outside
+    /// it, and they are the ones that hold the memory. Suspended, assigned,
+    /// then resumed, so there is no window in which that can happen.
+    /// </remarks>
+    private const uint CreateSuspended = 0x00000004;
+
     private readonly nint _desktop;
+    private readonly DiesWithTheServer? _job;
     private bool _closed;
 
-    public WindowsDesktopStage(string name)
+    public WindowsDesktopStage(string name, ILogger logger)
     {
         Name = name;
+
+        // Before the desktop, because it costs nothing and there is no order
+        // dependency: a stage that cannot make one still launches.
+        _job = DiesWithTheServer.Create(logger);
 
         // Created here, before anything is launched. That ordering is the whole
         // point of the class.
@@ -70,7 +88,7 @@ public sealed class WindowsDesktopStage : IHiddenStage
                 nint.Zero,
                 nint.Zero,
                 bInheritHandles: false,
-                CreateUnicodeEnvironment,
+                CreateUnicodeEnvironment | CreateSuspended,
                 nint.Zero,
                 null,
                 ref startup,
@@ -79,6 +97,35 @@ public sealed class WindowsDesktopStage : IHiddenStage
             throw new Win32Exception(
                 Marshal.GetLastWin32Error(),
                 $"Could not start the browser on the hidden desktop '{Name}'.");
+        }
+
+        try
+        {
+            // While it is still suspended. The job holds the process rather
+            // than this handle, so closing the handle below changes nothing.
+            _job?.Take(created.HProcess);
+        }
+        catch (Win32Exception)
+        {
+            // The browser is suspended and nothing has run in it, so this is
+            // the one moment it can be taken back cleanly. Leaving it running
+            // outside the job would be the orphan this class exists to prevent.
+            TerminateProcess(created.HProcess, 1);
+            CloseHandle(created.HThread);
+            CloseHandle(created.HProcess);
+
+            throw;
+        }
+
+        if (ResumeThread(created.HThread) == -1)
+        {
+            int why = Marshal.GetLastWin32Error();
+
+            TerminateProcess(created.HProcess, 1);
+            CloseHandle(created.HThread);
+            CloseHandle(created.HProcess);
+
+            throw new Win32Exception(why, "The browser was started but could not be resumed.");
         }
 
         // The handles are the plugin's now. The process is tracked through the
@@ -97,6 +144,11 @@ public sealed class WindowsDesktopStage : IHiddenStage
         }
 
         _closed = true;
+
+        // The job before the desktop: closing it is what stops the browser, and
+        // the desktop cannot close while a window is still on it.
+        _job?.Dispose();
+
         CloseDesktop(_desktop);
     }
 
@@ -116,6 +168,13 @@ public sealed class WindowsDesktopStage : IHiddenStage
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(nint hObject);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern int ResumeThread(nint thread);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool TerminateProcess(nint process, uint exitCode);
 
     [DllImport("kernel32.dll", EntryPoint = "CreateProcessW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
