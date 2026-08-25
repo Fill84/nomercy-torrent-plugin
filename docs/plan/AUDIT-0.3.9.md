@@ -137,9 +137,17 @@ whose whole body is a duplicate.
 
 **D1 — Three unused view helpers.** *Low.*
 
-`Ui.List`, `Ui.Container` and `Ui.EmptyState` have no caller. `EmptyState` is the one that matters:
-pages render their empty states by hand while a helper for it sits unused, which is the beginning of
-the drift the `Ui` file exists to prevent.
+`Ui.List`, `Ui.Container` and `Ui.EmptyState` have no caller.
+
+**Corrected on 25 August 2026 while closing this in S10-05.** This finding also said "pages render
+their empty states by hand while a helper for it sits unused", and that is wrong. Not one page draws
+an empty state by hand: every "nothing here" in the plugin is a table's own empty message, passed
+through the single `Ui.Table` helper, and the two places that could have used an `EmptyState` carry
+a comment saying why they must not — `EmptyState` is for a plugin with nothing configured, and an
+idle plugin with nothing in flight is working correctly. `docs/08-ui.md` has said so all along.
+
+So there was no drift to stop, and `EmptyState` is unused for the same reason as the other two: this
+plugin has no page state that wants one. All three went.
 
 **D2 — Three unused members in the BitTorrent client.** *Report only.*
 

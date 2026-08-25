@@ -1274,19 +1274,24 @@ not exist.
 
 Closes **D1**.
 
-`Ui.List`, `Ui.Container` and `Ui.EmptyState` have no caller. The last one matters: pages draw their
-empty states by hand while a helper for it sits unused, which is where a design system starts to
-drift.
+`Ui.List`, `Ui.Container` and `Ui.EmptyState` have no caller.
 
-1. Every page that draws an empty state uses `Ui.EmptyState`.
-2. `Ui.List` and `Ui.Container` go, unless step 1 finds a use for them.
+1. Find every page that draws an empty state by hand and give it `Ui.EmptyState`. **Done on
+   25 August 2026: there are none.** Every "nothing here" in the plugin is a table's own empty
+   message through the one `Ui.Table` helper, and the two places that could have used an
+   `EmptyState` carry a comment saying why they must not. The audit said otherwise and has been
+   corrected.
+2. `Ui.List` and `Ui.Container` go, unless step 1 finds a use for them. Step 1 found none, so
+   `Ui.EmptyState` goes with them, and so do the three client names only they used — recorded in
+   `docs/08-ui.md` § Components so nothing is lost.
+3. A test that fails when a helper nothing draws is added to `Ui`, or this comes back.
 
 The three unused members in the BitTorrent client — `Dht.BootstrapAsync`, `RequestLedger.Cancelled`,
 `TorrentRun.ResumePoint` — are **not** touched. The client is proven and out of scope; they are
 recorded in the audit so they are not lost.
 
-**Done when** every page's empty state renders through one helper and the pages look exactly as they
-do now. Read first: `docs/08-ui.md`.
+**Done when** `Ui` holds only what a page draws and the pages look exactly as they do now.
+Read first: `docs/08-ui.md`.
 
 ## S10-06 · A port for the encode
 

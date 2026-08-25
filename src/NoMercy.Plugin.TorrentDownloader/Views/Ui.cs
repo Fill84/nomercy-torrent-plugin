@@ -48,16 +48,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 /// </remarks>
 public static class Ui
 {
-    public const string ContainerComponent = "PluginContainer";
     public const string TextComponent = "PluginText";
-    public const string ListComponent = "PluginList";
     public const string RowComponent = "PluginRow";
     public const string DetailComponent = "PluginDetail";
     public const string ButtonComponent = "PluginButton";
     public const string FormComponent = "PluginForm";
     public const string TableComponent = "PluginTable";
     public const string BadgeComponent = "PluginBadge";
-    public const string EmptyStateComponent = "PluginEmptyState";
 
     public static PluginComponent Text(string id, string value, string? variant = null)
     {
@@ -73,17 +70,6 @@ public static class Ui
     public static PluginComponent Row(string id, params PluginComponent[] items)
     {
         return Holder(id, RowComponent, items);
-    }
-
-    /// <summary>Things one under the other.</summary>
-    public static PluginComponent List(string id, params PluginComponent[] items)
-    {
-        return Holder(id, ListComponent, items);
-    }
-
-    public static PluginComponent Container(string id, params PluginComponent[] items)
-    {
-        return Holder(id, ContainerComponent, items);
     }
 
     /// <summary>
@@ -178,16 +164,6 @@ public static class Ui
             Id = id,
             Component = BadgeComponent,
             Props = new() { ["label"] = label, ["variant"] = variant },
-        };
-    }
-
-    public static PluginComponent EmptyState(string id, string title, string? message = null)
-    {
-        return new()
-        {
-            Id = id,
-            Component = EmptyStateComponent,
-            Props = new() { ["title"] = title, ["message"] = message },
         };
     }
 

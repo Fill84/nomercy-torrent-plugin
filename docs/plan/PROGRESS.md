@@ -4,11 +4,12 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-05 — nothing that nothing reaches.** `Ui.List`, `Ui.Container` and `Ui.EmptyState` have no
-caller. The last one matters: pages draw their empty states by hand while a helper for it sits
-unused, which is where a design system starts to drift. The three unused members in the BitTorrent
-client are not touched — it is proven and out of scope, and the audit records them so they are not
-lost.
+**S10-06 — a port for the encode.** Everything this plugin asks of the server sits behind an
+interface in `Core/Ports` except the encode, which is the concrete `EncodeDispatch` handed straight
+to `Transfers` — and it is the one part already scheduled to change, when media-server #30 gives
+plugins `IPluginEncoder` and #35 gives them the episode's id. With a port that day is a new class
+beside the old one and one line of composition; without it, it is surgery on `Transfers` while it is
+the thing keeping the owner's library filling.
 
 The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded, staged, dispatched with its own
 episode id and encoded into the owner's library at 22:33 — the first episode this plugin has
@@ -155,7 +156,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S10-02` One question, one answer, per tick
 - [x] `S10-03` A connection costs a connection
 - [x] `S10-04` Maintenance does maintenance
-- [ ] `S10-05` Nothing that nothing reaches
+- [x] `S10-05` Nothing that nothing reaches
 - [ ] `S10-06` A port for the encode
 - [ ] `S10-07` The plan says what happened
 - [ ] `S10-08` Release 0.3.9
@@ -165,6 +166,16 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- `S10-05` **D1.** `Ui.List`, `Ui.Container` and `Ui.EmptyState` are gone, and so are the three
+  client names only they used — recorded in `docs/08-ui.md` § Components instead, so a page that
+  needs one has them without reading the client again. The finding's *reasoning* was wrong and the
+  audit is corrected: no page draws an empty state by hand. Every "nothing here" is a table's own
+  empty message through the one `Ui.Table` helper, and the two places that could have used an
+  `EmptyState` carry a comment saying why they must not. `EveryHelperOnUiIsDrawnByAPage` fails when
+  a helper nothing draws is added, which is what stops this coming back. `docs/08-ui.md`
+  § Components also said the vocabulary was `PluginComponentType`, which is the one thing the code
+  must never send — corrected while there. The BitTorrent client's three unused members were not
+  touched: it is proven and out of scope.
 - `S10-04` **C1.** The maintenance cadence does the maintenance: re-derive the missing list, prune
   old refusals, clear duplicate grab rows. `RefreshAsync` refreshes and nothing else, and search
   keeps its own refresh because a cycle needs a fresh missing list and must not wait for four in the
