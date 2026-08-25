@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.3.12",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.12/NoMercy.Plugin.TorrentDownloader-0.3.12.zip",
+          "checksum": "12877392d166dae598b0bdf52bf9d189de57b5a95ca97f862a4c3bc39d74ccac",
+          "changelog": "One torrent is one grab, and the database is what says so now rather than a cleanup that ran afterwards.",
+          "timestamp": "2026-08-25T21:54:23Z"
+        },
+        {
           "version": "0.3.11",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.11/NoMercy.Plugin.TorrentDownloader-0.3.11.zip",
