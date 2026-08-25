@@ -42,7 +42,7 @@ internal sealed class RecordingStage(List<string> events) : IHiddenStage
     {
         events.Add("browser launched");
 
-        return Task.FromResult<IBrowserProcess>(new FakeBrowserProcess());
+        return Task.FromResult<IBrowserProcess>(new FakeBrowserProcess(events));
     }
 
     public void Dispose()
@@ -52,15 +52,25 @@ internal sealed class RecordingStage(List<string> events) : IHiddenStage
 }
 
 /// <summary>A browser that is running until a test says it is not.</summary>
-public sealed class FakeBrowserProcess : IBrowserProcess
+public sealed class FakeBrowserProcess(List<string>? events = null) : IBrowserProcess
 {
     public bool IsRunning { get; set; } = true;
 
     public int Port => 9222;
 
+    /// <summary>Whether it was told to go.</summary>
+    /// <remarks>
+    /// Recorded into the stage's own list when there is one, so a test can
+    /// assert the order: the browser goes before the desktop it is standing on,
+    /// or a stray process is left with nowhere to be.
+    /// </remarks>
+    public bool Disposed { get; private set; }
+
     public void Dispose()
     {
         IsRunning = false;
+        Disposed = true;
+        events?.Add("browser disposed");
     }
 }
 

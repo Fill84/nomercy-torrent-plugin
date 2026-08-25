@@ -99,6 +99,82 @@ public class BrowserSolverTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The tab closes when the solve ends, however it ends.</strong>
+    /// Tabs were kept one per host for the life of the plugin, so a browser
+    /// stayed open for days between challenges — and because the plugin's
+    /// cleanup only runs on a graceful shutdown, which a killed server never
+    /// gives it, sixteen chrome processes were found running on the owner's
+    /// machine with the server stopped.
+    /// </para>
+    /// <para>
+    /// Nothing is lost by closing it: the clearance is a cookie and it is read
+    /// into the clearance store before this returns, which is what the first
+    /// assertion is for. A test that only checked the tab had closed would pass
+    /// just as well if the solve had stopped working.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheTabIsClosedWhenTheSolveIsDone()
+    {
+        FakeTimeProvider clock = new();
+        FakeTabs tabs = new();
+        tabs.Tab("predb.me").Shows("<html>the real page</html>");
+        tabs.Tab("predb.me").Clearance = "a cookie";
+
+        Clearance? clearance = await Solver(tabs, clock)
+            .SolveAsync(new("https://predb.me/?search=Silo"), CancellationToken.None);
+
+        Assert.Equal("a cookie", clearance?.Cookie);
+        Assert.Equal(1, tabs.Tab("predb.me").Closed);
+    }
+
+    /// <remarks>
+    /// A challenge that never cleared still leaves no tab behind. This is the
+    /// path that leaked most: a site that keeps refusing is asked again every
+    /// cycle, so a tab left open by a failure is a tab left open for ever.
+    /// </remarks>
+    [Fact]
+    public async Task TheTabIsClosedEvenWhenTheChallengeNeverClears()
+    {
+        FakeTimeProvider clock = new();
+        FakeTabs tabs = new();
+        tabs.Tab("predb.me").Shows(Challenge);
+
+        Task<Clearance?> solving = Solver(tabs, clock)
+            .SolveAsync(new("https://predb.me/?search=Silo"), CancellationToken.None);
+
+        for (int poll = 0; poll < 40; poll++)
+        {
+            clock.Advance(TimeSpan.FromSeconds(1));
+        }
+
+        Assert.Null(await solving.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(1, tabs.Tab("predb.me").Closed);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The tab is closed once and once only. Closing it twice would tell the
+    /// tabs one more has gone than was ever opened, and the count is what
+    /// decides whether the browser may stop — one off and it stops while a
+    /// solve is still running.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheTabIsClosedOnceAndNotTwice()
+    {
+        FakeTimeProvider clock = new();
+        FakeTabs tabs = new();
+        tabs.Tab("predb.me").Shows("<html>the real page</html>");
+        tabs.Tab("predb.me").Clearance = "a cookie";
+
+        await Solver(tabs, clock).SolveAsync(new("https://predb.me/?search=Silo"), CancellationToken.None);
+
+        Assert.Equal(1, tabs.Tab("predb.me").Closed);
+    }
+
+    /// <remarks>
     /// <strong>D2.</strong> A navigation during the poll is the challenge page
     /// doing exactly what it is supposed to do — reloading itself once it has
     /// been satisfied. Treating it as a failure gives up at the moment it

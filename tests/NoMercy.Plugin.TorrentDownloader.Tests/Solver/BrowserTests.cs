@@ -209,6 +209,46 @@ public class BrowserTests : IDisposable
             argument => argument == "--remote-debugging-port=9333");
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Stopping takes the browser and its stage down, in that order,
+    /// and leaves it able to start again.</strong> The browser used to be kept
+    /// for the life of the plugin, so a Chrome sat on a hidden desktop for days
+    /// between challenges — and since the plugin's cleanup only runs on a
+    /// graceful shutdown, which a killed server never gives it, sixteen chrome
+    /// processes were found running with the server already stopped.
+    /// </para>
+    /// <para>
+    /// The order is asserted, not just the fact: closing the desktop out from
+    /// under a window still on it is the one sequence that leaves a stray
+    /// process with nowhere to be.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task StoppingTakesTheBrowserDownAndItStartsAgainAfterwards()
+    {
+        RecordingStages stages = new();
+
+        using Browser browser = Build(new FakeBrowserDownloader(), out _, stages);
+
+        IBrowserProcess? first = await browser.StartAsync(CancellationToken.None);
+
+        Assert.NotNull(first);
+
+        browser.Stop();
+
+        Assert.Equal(
+            ["stage created", "browser launched", "browser disposed", "stage disposed"],
+            stages.Events);
+
+        // And the next challenge gets a browser rather than nothing: stopping
+        // is not the end of it, it is the end of this one.
+        IBrowserProcess? second = await browser.StartAsync(CancellationToken.None);
+
+        Assert.NotNull(second);
+        Assert.NotSame(first, second);
+    }
+
     private Browser Build(
         FakeBrowserDownloader downloader,
         out CapturingLogger log,

@@ -66,8 +66,18 @@ public interface IBrowserTab : IAsyncDisposable
 /// The tabs the browser has, one per host.
 /// </summary>
 /// <remarks>
-/// One per host and kept open: clearance is issued per host, so two tabs on one
-/// host solve the same gate twice and each hold half the answer.
+/// <para>
+/// A tab is opened for one task and closed when that task ends — the caller
+/// owns it and disposes it. When the last one closes the browser is stopped,
+/// so a plugin with nothing to solve has no Chrome running at all.
+/// </para>
+/// <para>
+/// They used to be kept one per host for the life of the plugin, because
+/// clearance is issued per host. It is, but the solver reads that cookie into
+/// the clearance store the moment it has it, so closing the tab that earned it
+/// loses nothing — and keeping them left sixteen chrome processes running on
+/// the owner's machine with the server stopped.
+/// </para>
 /// </remarks>
 public interface IBrowserTabs : IAsyncDisposable
 {

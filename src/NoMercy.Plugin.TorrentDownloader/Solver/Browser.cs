@@ -112,6 +112,36 @@ public sealed class Browser(
         ];
     }
 
+    /// <summary>
+    /// Stops the browser, leaving it able to start again.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Called when the last tab closes. A browser kept for the life of the
+    /// server is a Chrome sitting on a hidden desktop for days between
+    /// challenges, holding its profile open and its memory with it — and on a
+    /// server that is killed rather than shut down, it is a Chrome that outlives
+    /// the plugin. Sixteen of them were found running on the owner's machine
+    /// with the server stopped.
+    /// </para>
+    /// <para>
+    /// <see cref="StartAsync"/> builds the stage and the process again, so
+    /// stopping costs the next challenge the seconds it takes to start one and
+    /// nothing else.
+    /// </para>
+    /// </remarks>
+    public void Stop()
+    {
+        // The process before the stage, always: closing the desktop out from
+        // under a window that is still on it is the one order that can leave a
+        // stray process with nowhere to be.
+        _process?.Dispose();
+        _process = null;
+
+        _stage?.Dispose();
+        _stage = null;
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -121,14 +151,7 @@ public sealed class Browser(
 
         _disposed = true;
 
-        _process?.Dispose();
-        _process = null;
-
-        // After the browser: closing the desktop out from under a window that
-        // is still on it is the one order that can leave a stray process with
-        // nowhere to be.
-        _stage?.Dispose();
-        _stage = null;
+        Stop();
 
         _starting.Dispose();
     }

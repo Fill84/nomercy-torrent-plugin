@@ -17,8 +17,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Solver;
 public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTabs
 {
     private readonly SemaphoreSlim _connecting = new(1, 1);
-    private readonly Dictionary<string, IBrowserTab> _tabs = new(StringComparer.OrdinalIgnoreCase);
     private IBrowser? _connected;
+    private int _open;
 
     public async Task<IBrowserTab?> ForAsync(string host, CancellationToken ct)
     {
@@ -26,11 +26,6 @@ public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTab
 
         try
         {
-            if (_tabs.TryGetValue(host, out IBrowserTab? existing))
-            {
-                return existing;
-            }
-
             IBrowserProcess? process = await browser.StartAsync(ct);
 
             if (process is null)
@@ -47,10 +42,9 @@ public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTab
 
             logger.LogDebug("Opening a tab for {Host}.", host);
 
-            IBrowserTab tab = new PuppeteerTab(await _connected.NewPageAsync());
-            _tabs[host] = tab;
+            _open++;
 
-            return tab;
+            return new PuppeteerTab(await _connected.NewPageAsync(), ClosedAsync);
         }
         finally
         {
@@ -58,31 +52,80 @@ public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTab
         }
     }
 
-    public async ValueTask DisposeAsync()
+    /// <summary>
+    /// A tab has closed. When it was the last one, the browser goes too.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Tabs used to be kept one per host for the life of the plugin, on the
+    /// reasoning that clearance is issued per host. It is — but the solver
+    /// lifts the cookie into the clearance store the moment it has it, so
+    /// nothing is lost by closing the tab that earned it, and a tab per host
+    /// left a Chrome open for days between challenges.
+    /// </para>
+    /// <para>
+    /// Counted rather than asked of the browser: a tab this plugin never opened
+    /// is not this plugin's to close, and asking Chrome how many pages it has
+    /// would find its own.
+    /// </para>
+    /// </remarks>
+    private async ValueTask ClosedAsync()
     {
-        foreach (IBrowserTab tab in _tabs.Values)
+        await _connecting.WaitAsync();
+
+        try
         {
-            await tab.DisposeAsync();
+            if (--_open > 0)
+            {
+                return;
+            }
+
+            if (_connected is not null)
+            {
+                // Disconnected, not closed: the driver would close the browser
+                // out from under the stage, and the stage is this plugin's to
+                // take down in its own order.
+                _connected.Disconnect();
+                _connected.Dispose();
+                _connected = null;
+            }
+
+            logger.LogDebug("The last tab closed, so the browser is stopped.");
+
+            browser.Stop();
         }
+        finally
+        {
+            _connecting.Release();
+        }
+    }
 
-        _tabs.Clear();
-
+    /// <remarks>
+    /// No tabs are closed here. A tab belongs to the task that opened it and is
+    /// closed by it; one still open while this runs is a solve still in flight,
+    /// and closing it from underneath would fail that solve rather than tidy it.
+    /// The browser is taken down by the chain, immediately after this.
+    /// </remarks>
+    public ValueTask DisposeAsync()
+    {
         if (_connected is not null)
         {
-            // Disconnected, not closed. The browser belongs to the plugin's own
-            // lifetime and is shut down with it; closing it here would take it
-            // away from anything still using it.
+            // Disconnected, not closed. Closing from the driver would take the
+            // browser down out of order — the stage is this plugin's to close,
+            // and after the window that sits on it.
             _connected.Disconnect();
             _connected.Dispose();
             _connected = null;
         }
 
         _connecting.Dispose();
+
+        return ValueTask.CompletedTask;
     }
 }
 
 /// <summary>One real tab.</summary>
-internal sealed class PuppeteerTab(IPage page) : IBrowserTab
+internal sealed class PuppeteerTab(IPage page, Func<ValueTask> closed) : IBrowserTab
 {
     public async Task GoToAsync(Uri url, CancellationToken ct)
     {
@@ -169,8 +212,18 @@ internal sealed class PuppeteerTab(IPage page) : IBrowserTab
 
     public async ValueTask DisposeAsync()
     {
-        await page.CloseAsync();
-        page.Dispose();
+        try
+        {
+            await page.CloseAsync();
+            page.Dispose();
+        }
+        finally
+        {
+            // Told even when closing threw. A tab that could not be closed is
+            // still one this plugin is no longer using, and leaving the count
+            // wrong keeps the browser alive for ever.
+            await closed();
+        }
     }
 }
 

@@ -87,7 +87,14 @@ public sealed class BrowserSolver(
 
     private async Task<Clearance?> SolvingAsync(Uri url, CancellationToken ct)
     {
-        IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
+        // The tab is this method's, and it closes when the method ends however
+        // it ends. A tab left open is a Chrome left running: they were kept one
+        // per host for the life of the plugin, and sixteen chrome processes were
+        // found on the owner's machine with the server already stopped.
+        //
+        // Nothing is lost by closing it. The clearance is a cookie, and it is
+        // read out into the clearance store below before this returns.
+        await using IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
 
         if (tab is null)
         {
