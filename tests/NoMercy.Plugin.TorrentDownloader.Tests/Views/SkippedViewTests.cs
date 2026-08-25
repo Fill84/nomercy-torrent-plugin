@@ -1,7 +1,7 @@
-using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
-using NoMercy.Plugin.TorrentDownloader.Storage;
 using System.Text.Json;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
