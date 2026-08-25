@@ -334,10 +334,10 @@ public sealed class Transfers(
     /// bytes with them.
     /// </para>
     /// <para>
-    /// One episode on disk is what says a show is theirs, which is the same
-    /// rule the refresh uses. A grab that has already staged its episode is
-    /// left alone: it is past this point and its show now has a file either
-    /// way.
+    /// Whose show it is comes from <c>Ownership.Theirs</c>, which is where the
+    /// rule and its reasoning live and is the same call the refresh makes. A
+    /// grab that has already staged its episode is left alone: it is past this
+    /// point and its show now has a file either way.
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<string>> NotOursAsync(IReadOnlyList<StoredDownload> stored, CancellationToken ct)
@@ -358,7 +358,7 @@ public sealed class Transfers(
             {
                 if (!owned.TryGetValue(show, out bool has))
                 {
-                    has = (await library.GetEpisodesAsync(show, ct)).Any(one => one.HasFile);
+                    has = Ownership.Theirs(await library.GetEpisodesAsync(show, ct));
                     owned[show] = has;
                 }
 

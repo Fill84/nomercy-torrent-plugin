@@ -4,9 +4,14 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-01 — one rule for whose show it is.** The chain is closed. On 25 August 2026 Sugar S02E04 was
-downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
-22:33 — the first episode this plugin has delivered end to end.
+**S10-02 — one question, one answer, per tick.** The transfers cadence runs every minute and asks
+the library the same things several times inside it: the shows once per staged file and once per
+dispatch, a show's episodes from two places with two caches, and the open grabs twice. None of it is
+wrong and all of it is work with no behaviour attached.
+
+The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded, staged, dispatched with its own
+episode id and encoded into the owner's library at 22:33 — the first episode this plugin has
+delivered end to end.
 
 `docs/plan/AUDIT-0.3.9.md` is a full read of the source made the same day. Sprint 10 closes what it
 found, and none of it changes what the plugin does. **0.3.9 is what that sprint produces**, tagged
@@ -144,10 +149,30 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S8-04` Hardening
 - [ ] `S8-05` Release 0.4.0
 
+### Sprint 10 — What the audit found
+- [x] `S10-01` One rule for whose show it is
+- [ ] `S10-02` One question, one answer, per tick
+- [ ] `S10-03` A connection costs a connection
+- [ ] `S10-04` Maintenance does maintenance
+- [ ] `S10-05` Nothing that nothing reaches
+- [ ] `S10-06` A port for the encode
+- [ ] `S10-07` The plan says what happened
+- [ ] `S10-08` Release 0.3.9
+- [ ] `S10-09` Release 0.4.0 — on the contract, with no reflection left
+
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- `S10-01` **A1.** The rule that decides whose show it is now exists once, in
+  `Core/Pipeline/Ownership.cs`, and both the refresh and the transfers tick call it. It is the rule
+  that put the plugin on 479 grabs when it was changed in one place on 24 August, and it is the rule
+  that changes again when media-server #36 and #34 land — the comment on `Ownership.Theirs` says
+  both. One test asserts both sides against one library: a show with nothing on disk is neither
+  tracked nor left downloading, and the owner's own show is neither skipped nor cancelled. Each half
+  was seen to fail on its own before the extraction, and the whole test fails whichever constant the
+  body degenerates to. `docs/02-library.md` still describes the widened rule that was reverted; that
+  is **S10-07**'s to correct, not this slice's.
 - `S9-04` The encode is proved end to end. The job carried an empty media id, so the encoder threw it
   away in silence — `Id.ToInt()` on an empty string is 0, which matches no row. That id came from
   asking the server to identify the staged file all over again from its name. The plugin chose the
