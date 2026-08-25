@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.3.11",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.11/NoMercy.Plugin.TorrentDownloader-0.3.11.zip",
+          "checksum": "85e6970a87f71d258e5477ee0aefbf10c5a8cf5ddabbabbd39f9d9bb6cfa239a",
+          "changelog": "Two things that were wrong for as long as the plugin was working: the pages flickered while anything was downloading, and a browser could outlive the server that started it.",
+          "timestamp": "2026-08-25T19:42:09Z"
+        },
+        {
           "version": "0.3.10",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.10/NoMercy.Plugin.TorrentDownloader-0.3.10.zip",
