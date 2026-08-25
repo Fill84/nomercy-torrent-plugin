@@ -1047,7 +1047,14 @@ rather than awaiting it.
    over ssh, verifies every file's hash, and now ships `sources.json` — which it never had. The file
    list is checked against the projects the solution really builds.
 
-## S8-05 · Release 0.4.0
+## S8-05 · Ship it: a README, one version, and a deploy that works
+
+Called "Release 0.4.0" until 25 August 2026, which was wrong twice over. It released nothing — step 4
+is still waiting — and 0.4.0 is not a number this plugin had earned. What it really did is above.
+
+The `v0.4.0` tag step 5 left behind is on `ecc0241` of 21 August. **S10-08 deletes it**: it is 74
+commits behind, it predates every fix of the week that followed, and it stands in the way of the real
+0.4.0, which is **S10-09**.
 
 1. **Done.** The README says what it does, how to build, how to deploy — including that the script
    now refuses while the server is running, and that it ships `sources.json` — and how to read the
@@ -1055,14 +1062,16 @@ rather than awaiting it.
 2. **Done.** Three things carry the version: the manifest, `PluginIdentity`, and the compiled file.
    The third was the compiler's default of 1.0.0 for the whole of 0.4.0's development. It is set once
    in `Directory.Build.props` now, and a test holds all three together.
-3. **Deployed once, corrected, waiting on a second stop.** The first install on 21 August 2026 went
+3. **Done.** The first install on 21 August 2026 went
    over with every hash matching and the plugin still could not load: a class library does not copy
    its packages into its output, so twelve assemblies were named and three were there. Three faults
    in all, none of which could show on a server that already had the plugin — the remote path built
    here out of an unexpanded `$LOCALAPPDATA`, the plugin folder never created, and the dependencies
-   never built. All three are fixed and the script no longer keeps a list of filenames.
-4. **Waiting on the deploy.** A missing episode found, downloaded, staged, and an encode queued, with
-   the log and the dashboard as evidence.
+   never built. All three are fixed and the script no longer keeps a list of filenames, and it has
+   deployed cleanly on every stop since.
+4. **Done, on 25 August 2026.** Sugar S02E04 was found, downloaded, staged, dispatched with its own
+   episode id and encoded into the library at 22:33, with the log and the dashboard as evidence. That
+   is **S9-04**, which is where it is written down.
 5. **Done.** The owner asked on 20 August 2026 and `v0.4.0` is tagged and pushed. It names a commit
    that had not then run on a server; if the owner would rather it named the one that passes step 4,
    it moves.
@@ -1109,28 +1118,49 @@ buttons underneath — because a row could carry one action and no more. The con
 
 **Done when** the page has a single table and the two buttons sit in it.
 
-## S9-03 · Every show in a library is in scope — **done**
+## S9-03 · Every show in a library is in scope — **done, and reverted the same day**
 
-**Read first:** `src/.../Core/Pipeline/MissingRefresh.cs`.
+**Do not do this slice.** It was carried out on 24 August 2026 and undone the same afternoon. It is
+kept, rather than deleted, because a reader who worked out the same idea from first principles would
+otherwise do it again — and it costs the owner their disk.
 
-A show is skipped unless at least one of its episodes already has a file:
+**What it said.** A show is skipped unless at least one of its episodes already has a file:
 
 ```csharp
 if (!episodes.Any(episode => episode.HasFile)) continue;
 ```
 
-The owner's rule is simpler and is the one that holds: **a show in a television or anime library is
-in scope, whatever it has on disk.** A newly added show is the ordinary case — nothing on disk is
-exactly when the plugin is most use — and today it is the one case that does nothing at all.
+and the owner's rule is simpler: a show in a television or anime library is in scope, whatever it has
+on disk. A newly added show has nothing on disk, which is exactly when the plugin is most use, and it
+was the one case that did nothing at all.
 
-1. Delete the rule and the test that pins it; write the owner's rule in its place, dated.
-2. `MaxSearchAttempts` is what stops a show nothing can be found for, and it already works. Nothing
-   new is needed to bound the work.
-3. The refresh test covers a show with no files at all: every aired episode becomes a gap.
+**What happened.** Within the hour the plugin was on **479 grabs**, and **456 of them were Family
+Guy** — a show the owner has never watched. The reasoning was sound and the premise was false: a
+library row is not a show the owner added. The server keeps rows for shows nobody asked for, in the
+same table, against the same library id, with a folder and a full episode list. Nothing in such a row
+tells it apart from a show they added. Having a file is the only thing that does.
 
-**Done when** a show with nothing on disk produces gaps, and `dotnet test` is green.
+`MaxSearchAttempts` does not save this. It bounds how long each episode is looked for; it does not
+stop 456 of them being looked for at all.
 
-## S9-04 · Prove the encode end to end
+**What replaces it, and when.** media-server **#36** stops identification importing shows on a guess,
+so a library row means the owner asked for it; **#34** makes a newly added show visible. When both
+land, library membership becomes the discriminator and this slice is right — the newly added show it
+was written for is in scope on the day it is added. Neither is this repository's to close, and until
+they do, the has-a-file rule stands.
+
+**S10-01** is what makes that day one line: the rule is written once, in
+`Core/Pipeline/Ownership.cs`, and both the refresh and the transfers tick ask it. Changing it in one
+of the two places is how this went wrong.
+
+**Done when** #36 and #34 have landed and `Ownership.Theirs` asks about membership. Until then this
+slice is a warning, not work.
+
+## S9-04 · Prove the encode end to end — **done**
+
+Proved on the owner's server on 25 August 2026: Sugar S02E04 downloaded, staged, dispatched with its
+own episode id and encoded into the library at 22:33 — the first episode this plugin has delivered
+end to end.
 
 **Read first:** `src/.../Hosting/Transfers.cs`, `src/.../Hosting/EncodeDispatch.cs`.
 
@@ -1162,13 +1192,14 @@ this plugin does not delete what it did not make.
 
 **Done when** they are gone from the intake folder without anyone touching them. That is the deploy.
 
-## S9-06 · Release 0.4.0
+## S9-06 · Release 0.4.0 — **superseded by S10-09**
 
-1. `PROGRESS.md` says what 0.4.0 does and what it does not.
-2. The tag names the commit that passed **S9-04**, not one before it.
-3. Only when the owner asks.
+Not a slice any more, and not to be done. It is the same release as **S10-09**, written before the
+audit and before it was known what 0.4.0 waits on.
 
-**Done when** the owner says so.
+What it asked for is in S10-09 and is more than it knew: 0.4.0 is not a date but the version where
+this plugin stops reaching into the server by name, and it waits on five media-server issues, none of
+them this repository's to close. What ships before then is **0.3.9**, which is **S10-08**.
 
 # Sprint 10 — What the audit found
 

@@ -128,8 +128,8 @@ src/
     Domain/          episodes, releases, profiles, anime numbering
     Naming/          release-name parsing and matching
     Sources/         catalogue, readers, fetch abstraction, host gate
-    Pipeline/        harvest, resolve, judge, find, grab
-    Transfers/       ITorrentEngine and the transfer state machine
+    Pipeline/        harvest, resolve, judge, find, grab, whose show it is
+    Ports/           the six interfaces the shell fulfils, and nothing else
     Activity/        the journal
   NoMercy.Plugin.TorrentDownloader.Bittorrent/   the protocol: bencode, peers, pieces, trackers, DHT
   NoMercy.Plugin.TorrentDownloader/          the shell: everything touching the host

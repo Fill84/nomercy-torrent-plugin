@@ -78,17 +78,27 @@ an episode that aired two years ago counts exactly as much as one that aired las
 
 ### One episode on disk, or it is not the owner's show
 
-**Every show in a television or anime library is in scope, whatever it has on disk.** The owner's
-rule, given on 24 August 2026.
+**A show is the owner's when at least one of its episodes has a file, and only then.** It is taken
+from the query behind the server's own library page
+(`Episodes.Any(e => e.VideoFiles.Any(v => v.Folder != null))`), and it is written once, in
+`Core/Pipeline/Ownership.cs`, where both the refresh and the transfers tick ask it.
 
-It read differently between 22 and 24 August: a show counted only once at least one of its episodes
-had a file, taken from the query behind the server's own library page
-(`Episodes.Any(e => e.VideoFiles.Any(v => v.Folder != null))`). That made the ordinary case the one
-case the plugin did nothing about — a show just added has nothing on disk, and that is exactly when
-it is worth having.
+**It was widened to every show in a library on 24 August 2026 and put back the same afternoon.**
+Within the hour the plugin was on 479 grabs, 456 of them Family Guy — a show the owner has never
+watched. The reasoning had been sound and the premise was false: a library row is not a show the
+owner added. The server keeps rows for shows nobody asked for, in the same table, against the same
+library id, with a folder and a full episode list, and nothing in such a row tells it apart from a
+show they added. Having a file is the only thing that does.
 
-`MaxSearchAttempts` is what stops a show nothing can be found for, and it needs no help from the
-library rule.
+`MaxSearchAttempts` does not save this. It bounds how long each episode is looked for; it does not
+stop 456 of them being looked for at all.
+
+**It is a workaround and it is known to be one.** A show just added has nothing on disk and is
+therefore invisible to this plugin, which is exactly when it would be most use. That is a gap in the
+host contract rather than something to work around here: media-server **#36** stops identification
+importing shows on a guess, so a library row means the owner asked for it, and **#34** makes a newly
+added show visible. When both land, library membership becomes the rule and this paragraph is
+replaced by one sentence. Neither is this repository's to close.
 
 ### Three corrections, each measured
 

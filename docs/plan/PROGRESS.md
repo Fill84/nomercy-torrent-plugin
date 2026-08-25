@@ -4,16 +4,13 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-07 — the plan says what happened.** S9-03 "Every show in a library is in scope" is marked done
-and was reverted the same day, so a reader following the plan would put the 479 grabs back. S8-05 and
-S9-06 are both called "Release 0.4.0". `docs/02-library.md` still describes the widened rule rather
-than the one the code applies.
+**S10-08 — release 0.3.9.** Every slice above it is done and the plugin does exactly what it did
+before, with less work behind it and one place to change each rule. `v0.4.0` is already a tag, on
+`ecc0241` of 21 August, which is 74 commits behind and predates every fix of the week that followed;
+it was never published, only `v0.1.0` ever was, and it stands in the way of the real 0.4.0. It gets
+deleted, `Directory.Build.props` and `plugin.json` say `0.3.9`, and `v0.3.9` is tagged.
 
-Three more found while doing Sprint 10, all for that slice: `docs/03-architecture.md` § Project
-layout names a `Core/Transfers/` folder that does not exist — the ports live in `Core/Ports/`, and
-there are now six of them; `docs/plan/SPRINTS.md` S10-04 named a **Read first** section that has never
-existed, which is already corrected in place; and the Sprint 9 slices were never added to § Slices
-here at all.
+**Only when the owner asks.** Nothing here is done without that.
 
 The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded, staged, dispatched with its own
 episode id and encoded into the owner's library at 22:33 — the first episode this plugin has
@@ -28,8 +25,9 @@ be audited.
 and it waits on media-server #30, #34, #35, #36 and #37 — none of them this repository's to close.
 S10-06 and S10-01 exist so that day is two additions rather than surgery.
 
-The section below is what was true before that, and is kept because it is what the proving looked
-like.
+The section below is what was true **before 25 August 2026**, and is kept because it is what the
+proving looked like. Read it as a record, not as a statement of what holds now: the encode it says
+has never happened has since happened, and the library rule it lists as done was reverted.
 
 **Everything up to staging is proved on the owner's own server. The step the plugin exists for —
 asking the encoder, and knowing what became of that — has never once succeeded there.**
@@ -54,35 +52,38 @@ What is proved on real data:
 
 **What has never happened: one `encode dispatched` on the real server.** That is the whole of what is
 left. Sprint 9's other five slices are done — the contract moved to the released version, the
-buttons live in the table row, every show in a library is in scope whatever it has on disk, an
-episode left in the intake folder is dispatched anyway, and a torrent still seeding is not cleared
-up under it.
+buttons live in the table row, every show in a library was put in scope whatever it had on disk
+(**reverted the same afternoon — see S9-03 and § Decisions**), an episode left in the intake folder
+is dispatched anyway, and a torrent still seeding is not cleared up under it.
 
 Until one episode has gone from missing to in the library with nothing done by hand, 0.4.0 does not
 go out.
 
 ## Blocked
 
-**Waiting on one more stop of the media server.** The first deploy went over with every hash matching
-and the plugin still could not load; the cause is found and fixed, and the four runs below can be
-watched once the corrected build is on the server and it is started again.
+**Nothing is blocked on a deploy any more.** That paragraph said the first install went over with
+every hash matching and the plugin still could not load. The cause was found and fixed on 21 August
+2026, it has deployed cleanly on every stop since, and on 25 August it delivered an episode end to
+end. What is left below is watching, not fixing — three acceptances that were written to be observed
+on the owner's own library and never have been. Each needs a deploy and a look, and the owner starts
+and stops the server.
 
 - **Sprint 4's acceptance on the real library.** The chain decides end to end and is proven against
-  real captured pages, but "the dashboard shows what it would take for every missing episode" needs the server
-  started with 0.4.0 on it, which is now the only thing missing. It runs with no torrent client and says so per episode,
-  which is exactly what dry run shows; say when, and it can be deployed and watched.
+  real captured pages, but "the dashboard shows what it would take for every missing episode" has not
+  been watched on the owner's library. It runs with no torrent client and says so per episode, which
+  is exactly what dry run shows; say when, and it can be deployed and watched.
 - **Sprint 7's acceptance: a real dry run over the real anime library.** The chain decides for an
   anime episode against a captured Nyaa page and the absolute number is derived from the library
-  itself, but "it works over the owner's own anime library" needs the server started. Dry run
-  hands nothing to the client, so it is the safest of the four to watch first.
+  itself, but "it works over the owner's own anime library" has not been watched. Dry run hands
+  nothing to the client, so it is the safest of the three to watch first.
 - **Sprint 1's acceptance against the real library.** `HandCountedLibraryTests` proves the chain
-  against a library counted by hand, but "the Shows page matches *the* library" needs the
-  server started. Say when, and it can be checked against the
-  ~25 shows and ~42 missing episodes recorded under **Facts**.
+  against a library counted by hand, but "the Shows page matches *the* library" has not been checked
+  against the real one. Say when, and it can be held up to the ~25 shows and ~42 missing episodes
+  recorded under **Facts**.
 
-
-**Both of the owner's outstanding decisions are made.** Trackers are learned (see **Decisions**), and
-`v0.4.0` is tagged.
+**Both of the owner's outstanding decisions are made.** Trackers are learned (see **Decisions**). The
+`v0.4.0` tag was the other, and it is taken back by **S10-08**: it names `ecc0241` of 21 August, 74
+commits behind and older than every fix of the week that followed.
 
 ## Slices
 
@@ -153,7 +154,15 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S8-02` The remaining actions
 - [x] `S8-03` Health automation
 - [x] `S8-04` Hardening
-- [ ] `S8-05` Release 0.4.0
+- [x] `S8-05` Ship it: a README, one version, and a deploy that works
+
+### Sprint 9 — Finishing it
+- [x] `S9-01` Build against the contract that ships
+- [x] `S9-02` The buttons live in the table
+- [x] `S9-03` Every show in a library is in scope — **done and reverted the same day**, see below
+- [x] `S9-04` Prove the encode end to end
+- [x] `S9-05` What was left behind
+- [ ] `S9-06` Release 0.4.0 — **superseded by** `S10-09`
 
 ### Sprint 10 — What the audit found
 - [x] `S10-01` One rule for whose show it is
@@ -162,7 +171,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S10-04` Maintenance does maintenance
 - [x] `S10-05` Nothing that nothing reaches
 - [x] `S10-06` A port for the encode
-- [ ] `S10-07` The plan says what happened
+- [x] `S10-07` The plan says what happened
 - [ ] `S10-08` Release 0.3.9
 - [ ] `S10-09` Release 0.4.0 — on the contract, with no reflection left
 
@@ -170,6 +179,18 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- `S10-07` **E1, E2.** Every slice marked done now describes what really happened. **S9-03** was the
+  dangerous one: marked done, reverted the same afternoon, and left reading as instructions — a
+  reader following the plan would have put the 479 grabs back. It now says what it cost, why the
+  reasoning was sound and the premise false, and what replaces it (media-server #36 and #34, with
+  S10-01 making that one line). `docs/02-library.md` said the reverted rule as well and now says the
+  one the code applies. **S8-05** was called "Release 0.4.0" and released nothing under a number the
+  plugin had not earned; it is "Ship it: a README, one version, and a deploy that works", and its two
+  waiting steps landed on 25 August. **S9-06** is superseded by S10-09 rather than being a second
+  slice of the same name. Also corrected: S9-04 was done and not marked, `docs/03-architecture.md`
+  named a `Core/Transfers/` folder that has never existed (it is `Core/Ports/`, six interfaces), the
+  Sprint 9 slices were never in § Slices at all, and `ILibrary.GetShowsAsync` said every show in
+  those libraries is in scope, which is `Ownership.Theirs`'s question and not that port's.
 - `S10-06` **F1.** `Core/Ports/IEncodeGateway.cs` — a staged file, the episode it is, the show it
   belongs to, where that show's episodes already are, and an answer of taken or not. `EncodeDispatch`
   implements it with nothing inside it moved; the one thing that did move is the `"anime"`/`"tv"`
