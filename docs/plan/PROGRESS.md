@@ -4,11 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-03 — a connection costs a connection.** Every database call makes the data folder and sets
-`journal_mode`. The folder exists after the first call and `journal_mode` is a property of the file
-rather than of the connection: about 21,600 directory creations and 21,600 unnecessary round trips a
-day, for nothing. `foreign_keys` is genuinely per-connection and stays. The settings are re-read from
-the host on every tick and every page, and are worth caching only with invalidation on save.
+**S10-04 — maintenance does maintenance.** The maintenance cadence runs at four in the morning and
+its whole body is a refresh the search cadence already does before each of its four daily cycles.
+The real housekeeping is elsewhere: history is pruned as a side effect of that refresh, and duplicate
+grab rows are cleared on the first transfers tick behind a `_refreshed` flag. Three pieces of
+periodic work, none of them in the cadence named for it.
 
 The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded, staged, dispatched with its own
 episode id and encoded into the owner's library at 22:33 — the first episode this plugin has
@@ -153,7 +153,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 10 — What the audit found
 - [x] `S10-01` One rule for whose show it is
 - [x] `S10-02` One question, one answer, per tick
-- [ ] `S10-03` A connection costs a connection
+- [x] `S10-03` A connection costs a connection
 - [ ] `S10-04` Maintenance does maintenance
 - [ ] `S10-05` Nothing that nothing reaches
 - [ ] `S10-06` A port for the encode
@@ -165,6 +165,17 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- `S10-03` **B4, B5.** The data folder and `journal_mode` are done once per database file rather than
+  on every call — per store, not static, because another store is another file whose journal mode
+  nothing here has set; the plugin has one store, so once per store is once per run. `foreign_keys`
+  is genuinely per connection and did not move. The settings are remembered as the JSON the host
+  last gave, and the memory is dropped by a save that really wrote. Reading the server settled two
+  things the audit only estimated: its `GetConfigurationAsync` is a file check, a full file read and
+  a deserialise, behind a semaphore it shares with every other plugin — so the round trip is worth
+  saving. It also settled the shape: a load hands back a **new object every time**, because the
+  settings page loads, applies what was typed and saves nothing when a field is refused, and one
+  shared object would leave the plugin running on values the owner was told were refused. Nothing in
+  the suite caught that, so `ARefusedEditIsNotLeftBehindInWhatTheNextLoadGives` was written for it.
 - `S10-02` **B1, B2, B3.** One tick asks the library each question once. `LibraryThisTick` wraps the
   port for the length of one pass and is then thrown away — a tick lasts moments, and an answer kept
   past it would be a decision made on what used to be true. A tick staging four episodes went from

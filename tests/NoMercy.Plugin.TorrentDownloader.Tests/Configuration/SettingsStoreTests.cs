@@ -206,6 +206,131 @@ public class SettingsStoreTests : IDisposable
         Assert.Contains(SettingsStore.IndexerApiKey("own-1"), await store.SecretsSetAsync(CancellationToken.None));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>The settings are read from the host once, not on every ask.</strong>
+    /// The transfers cadence runs every minute and every page draws from them,
+    /// so this is a read of data that changes only when an owner presses save,
+    /// asked for at least once a minute for as long as the plugin runs.
+    /// </para>
+    /// <para>
+    /// Nothing about the cost of it shows in an outcome, which is why this
+    /// counts. What the cache must never do is shown by the test below it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheSettingsAreReadFromTheHostOnce()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        await store.SaveAsync(Writable(new Settings()), CancellationToken.None);
+
+        int afterSaving = context.Config.Reads;
+
+        await store.LoadAsync(CancellationToken.None);
+        await store.LoadAsync(CancellationToken.None);
+        await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(afterSaving + 1, context.Config.Reads);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A save is seen by the next load.</strong> A stale settings cache
+    /// is worse than the round trip it saves: an owner who changes the intake
+    /// folder, or turns a source off, and watches the plugin carry on with the
+    /// old answer has no way to tell that from the setting not working at all.
+    /// </para>
+    /// <para>
+    /// So the cache is dropped by the save, and this is the test that says so.
+    /// It is the reason the caching is allowed to exist.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASaveIsSeenByTheNextLoad()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        await store.SaveAsync(Writable(new Settings()), CancellationToken.None);
+
+        // Read once, so anything remembering an answer has one to give.
+        Assert.Equal(5, (await store.LoadAsync(CancellationToken.None)).Client.MaxConcurrentDownloads);
+
+        Settings changed = Writable(new Settings());
+        changed.Client.MaxConcurrentDownloads = 9;
+
+        SaveResult saved = await store.SaveAsync(changed, CancellationToken.None);
+
+        Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+        Assert.Equal(9, (await store.LoadAsync(CancellationToken.None)).Client.MaxConcurrentDownloads);
+    }
+
+    /// <remarks>
+    /// A save that was refused changes nothing, so the answer the next load
+    /// gives is the one that is really stored. A cache dropped by an attempt
+    /// rather than by a write would go and fetch the same thing again; a cache
+    /// left holding what the refused save proposed would be worse still.
+    /// </remarks>
+    [Fact]
+    public async Task ASaveThatWasRefusedLeavesTheStoredSettingsAlone()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        await store.SaveAsync(Writable(new Settings()), CancellationToken.None);
+
+        Settings wrong = Writable(new Settings());
+        wrong.Client.MaxConcurrentDownloads = 9;
+        wrong.Cadences.Transfers = "not a cron";
+
+        Assert.False((await store.SaveAsync(wrong, CancellationToken.None)).Saved);
+
+        Assert.Equal(5, (await store.LoadAsync(CancellationToken.None)).Client.MaxConcurrentDownloads);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>What a load hands back is the caller's own to change.</strong>
+    /// The settings page loads, applies what the owner typed and saves — and
+    /// when any field is refused, nothing is saved at all. That is the whole
+    /// point of refusing: the owner is not left looking at a page where some of
+    /// what they typed took and some did not.
+    /// </para>
+    /// <para>
+    /// A load that handed back one shared object would break that. The refused
+    /// edit would still be sitting in it, so every other part of the plugin
+    /// would run on values the owner was told had not been accepted, until
+    /// something else saved. Nothing would say so and nothing on disk would
+    /// show it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ARefusedEditIsNotLeftBehindInWhatTheNextLoadGives()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        await store.SaveAsync(Writable(new Settings()), CancellationToken.None);
+
+        // The settings page: load, then apply what was typed.
+        Settings typed = await store.LoadAsync(CancellationToken.None);
+
+        IReadOnlyList<string> refused = SettingsEdit.Apply(
+            typed,
+            new Dictionary<string, string?>(StringComparer.Ordinal)
+            {
+                ["client.maxConcurrentDownloads"] = "9",
+                ["there.is.no.such.setting"] = "9",
+            });
+
+        // One field was refused, so the controller saves nothing at all.
+        Assert.NotEmpty(refused);
+
+        Assert.Equal(5, (await store.LoadAsync(CancellationToken.None)).Client.MaxConcurrentDownloads);
+    }
+
     private Settings Writable(Settings settings)
     {
         settings.IncompleteFolder = Folder();

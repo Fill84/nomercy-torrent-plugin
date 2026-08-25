@@ -20,6 +20,17 @@ public sealed class Store
 
     private readonly string _dataFolderPath;
 
+    /// <summary>
+    /// Whether this store has done the file-level setting-up yet.
+    /// </summary>
+    /// <remarks>
+    /// Per store, which is per database file, and not static: another store is
+    /// another file, and that file's <c>journal_mode</c> has not been set by
+    /// anything this one did. The plugin has one store, so once per store is
+    /// once per run.
+    /// </remarks>
+    private bool _prepared;
+
     /// <remarks>
     /// Builds a connection string and touches nothing. The plugin constructs
     /// this while the server is still coming up, and <c>Initialize</c> is not
@@ -43,22 +54,58 @@ public sealed class Store
         }.ToString();
     }
 
+    /// <summary>
+    /// How many times the file-level setting-up has been done.
+    /// </summary>
+    /// <remarks>
+    /// Public because it is the only way to see this from outside: doing the
+    /// same file-level work on every call costs a round trip and changes
+    /// nothing, and nothing about it shows in an outcome. With seventeen store
+    /// methods and roughly fifteen calls in a transfers tick, it was about
+    /// 21,600 needless round trips a day.
+    /// </remarks>
+    public int TimesPrepared { get; private set; }
+
     /// <summary>An open connection, with the pragmas this store depends on set.</summary>
     public async Task<SqliteConnection> OpenAsync(CancellationToken ct)
     {
-        // Here rather than in the constructor: the data folder of a plugin
-        // installed this morning does not exist yet, and making it is I/O.
-        Directory.CreateDirectory(_dataFolderPath);
+        // Once per file, not once per call. Two callers can both find it
+        // undone and both do it, and that costs one extra round trip and
+        // nothing else: making a folder that exists and setting a journal mode
+        // that is already set are both writes that change nothing.
+        bool first = !_prepared;
+
+        if (first)
+        {
+            // Here rather than in the constructor: the data folder of a plugin
+            // installed this morning does not exist yet, and making it is I/O.
+            // Not on every call either — nothing takes the folder away again,
+            // and it was about 21,600 creations a day of a folder that was
+            // already there.
+            Directory.CreateDirectory(_dataFolderPath);
+        }
 
         SqliteConnection connection = new(_connectionString);
         await connection.OpenAsync(ct);
 
-        // WAL, so a read never waits on the write in progress. Set per
-        // connection because it is a property of the file and setting it is
-        // cheap; asking whether it is already set costs the same round trip.
-        await Execute(connection, "PRAGMA journal_mode=WAL;", ct);
+        if (first)
+        {
+            // WAL, so a read never waits on the write in progress. It is a
+            // property of the database file rather than of the connection:
+            // once set it stays set, for every connection that ever opens this
+            // file, so setting it again bought nothing.
+            await Execute(connection, "PRAGMA journal_mode=WAL;", ct);
 
-        // Without this SQLite does not enforce the foreign keys it was given.
+            // After the pragma, never before. A second caller that arrives in
+            // between does the work again rather than carrying on as though
+            // WAL were already in force.
+            TimesPrepared++;
+            _prepared = true;
+        }
+
+        // Genuinely per connection, and it stays: without this SQLite does not
+        // enforce the foreign keys it was given, and it is off again on the
+        // next connection.
         await Execute(connection, "PRAGMA foreign_keys=ON;", ct);
 
         return connection;

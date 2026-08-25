@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugins.Abstractions;
 
@@ -16,6 +18,29 @@ public sealed class SettingsStore
     private readonly IPluginConfiguration _configuration;
     private readonly IPluginSecretStore _secrets;
     private readonly Func<string, string?> _volumeOf;
+
+    /// <summary>
+    /// What the host last said the settings were, as JSON, or null when it has
+    /// not been asked since the last save.
+    /// </summary>
+    /// <remarks>
+    /// The host's read is a file check, a full file read and a deserialise,
+    /// behind a lock it shares with every other plugin on the server — and the
+    /// transfers cadence asks for the settings every minute, as does every page
+    /// the owner opens.
+    /// </remarks>
+    private string? _asRead;
+
+    /// <summary>
+    /// How many saves have gone through. Only ever compared with itself.
+    /// </summary>
+    /// <remarks>
+    /// A load that began before a save must not be remembered after it: the
+    /// answer it is carrying is the one the save replaced, and a settings cache
+    /// holding what the owner has just changed away from is worse than the
+    /// round trip it saves.
+    /// </remarks>
+    private int _saves;
 
     /// <summary>
     /// <c>volumeOf</c> answers which volume a path is on. It is a seam because
@@ -51,7 +76,34 @@ public sealed class SettingsStore
     /// </summary>
     public async Task<Settings> LoadAsync(CancellationToken ct)
     {
-        return await _configuration.GetConfigurationAsync<Settings>(ct) ?? new Settings();
+        string settings;
+
+        if (_asRead is string remembered)
+        {
+            settings = remembered;
+        }
+        else
+        {
+            int before = Volatile.Read(ref _saves);
+
+            settings = JsonSerializer.Serialize(
+                await _configuration.GetConfigurationAsync<Settings>(ct) ?? new Settings());
+
+            // Remembered only if nothing was saved while it was being read.
+            // Otherwise this is an answer the save has already replaced, and
+            // keeping it would leave the plugin running on settings the owner
+            // has changed away from until the next save.
+            if (Volatile.Read(ref _saves) == before)
+            {
+                _asRead = settings;
+            }
+        }
+
+        // A new object every time, never the remembered one. The settings page
+        // loads, applies what was typed and saves — and when a field is
+        // refused, nothing is saved at all. Handing out one shared object would
+        // leave the plugin running on values the owner was told were refused.
+        return JsonSerializer.Deserialize<Settings>(settings) ?? new Settings();
     }
 
     /// <summary>
@@ -91,6 +143,12 @@ public sealed class SettingsStore
         }
 
         await _configuration.SaveConfigurationAsync(settings, ct);
+
+        // Dropped rather than replaced with what was just written, so the next
+        // load is what the host really stored. Only here: a save that was
+        // refused above wrote nothing, and there is nothing to forget.
+        Interlocked.Increment(ref _saves);
+        _asRead = null;
 
         return new(true, errors, warnings);
     }

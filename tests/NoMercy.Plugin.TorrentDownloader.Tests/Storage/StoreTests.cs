@@ -1,3 +1,5 @@
+using System.Data;
+
 using Microsoft.Data.Sqlite;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
@@ -94,6 +96,53 @@ public class StoreTests : IDisposable
         await new Store(missing).MigrateAsync(CancellationToken.None);
 
         Assert.True(File.Exists(Path.Combine(missing, Store.FileName)));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The folder and the file-level pragma are done once, not on every
+    /// call.</strong> <c>journal_mode</c> is a property of the database file:
+    /// once set it stays set, in that file, for every connection that ever
+    /// opens it. The data folder exists after the first call for the same
+    /// reason — nothing takes it away.
+    /// </para>
+    /// <para>
+    /// Doing both again on every call was about 21,600 directory creations and
+    /// 21,600 round trips a day, with seventeen store methods and roughly
+    /// fifteen calls in a transfers tick. It bought nothing, and nothing about
+    /// it showed in an outcome, which is why this counts rather than asserts a
+    /// result.
+    /// </para>
+    /// <para>
+    /// <c>foreign_keys</c> is not here. That one is genuinely per connection —
+    /// it is off again on the next one — and it stays exactly where it was.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheFileIsPreparedOnceHoweverManyTimesItIsOpened()
+    {
+        Store database = new(_folder);
+
+        await database.MigrateAsync(CancellationToken.None);
+
+        await using (SqliteConnection first = await database.OpenAsync(CancellationToken.None))
+        {
+            Assert.Equal(ConnectionState.Open, first.State);
+        }
+
+        await using (SqliteConnection second = await database.OpenAsync(CancellationToken.None))
+        {
+            Assert.Equal(ConnectionState.Open, second.State);
+
+            // Still WAL, because the file kept it. This is the whole reason
+            // setting it again is waste rather than caution.
+            await using SqliteCommand asking = second.CreateCommand();
+            asking.CommandText = "PRAGMA journal_mode;";
+
+            Assert.Equal("wal", Convert.ToString(await asking.ExecuteScalarAsync(CancellationToken.None)));
+        }
+
+        Assert.Equal(1, database.TimesPrepared);
     }
 
     private static async Task<long> Version(Store database)
