@@ -169,7 +169,14 @@ public static class Pages
     [
         new()
         {
-            Section = PluginUiSection.Library,
+            // Dashboard, not library. The section is what the server turns into
+            // the address the client links to, and the plugin never learns its
+            // own prefix — mounted under library, the cog in the dashboard's own
+            // plugin list opened this at /plugins/… while the title beside it
+            // went to /dashboard/plugins/…: two addresses for one plugin, from
+            // one row. It is also what the word means, since settings is where a
+            // plugin is set up and this is where it works.
+            Section = PluginUiSection.Dashboard,
             Label = PluginIdentity.Name,
             Icon = "download",
             Route = DashboardRoute,

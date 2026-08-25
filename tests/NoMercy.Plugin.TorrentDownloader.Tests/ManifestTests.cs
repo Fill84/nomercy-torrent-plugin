@@ -96,6 +96,31 @@ public class ManifestTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The plugin's own page is a dashboard page.</strong> The section a
+    /// mount names is what the server turns into the address the client links
+    /// to, and the plugin never learns its own prefix. Mounted under
+    /// <c>library</c>, the cog beside the plugin in the dashboard's own list
+    /// opened it at <c>/plugins/…</c> while the title beside it went to
+    /// <c>/dashboard/plugins/…</c> — two addresses for one plugin, from one
+    /// row, and only one of them the page the owner was already on.
+    /// </para>
+    /// <para>
+    /// Dashboard is also what the word means: the server's vocabulary calls it
+    /// server administration beside the other owner-only panels, and reserves
+    /// <c>settings</c> for where a plugin is set up rather than where it works.
+    /// This plugin's eight pages are work; only one of them is setup.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ThePluginsOwnPageIsMountedOnTheDashboard()
+    {
+        PluginNavEntry own = Pages.NavEntries.First(entry => entry.Route == Pages.DashboardRoute);
+
+        Assert.Equal(PluginUiSection.Dashboard, own.Section);
+    }
+
+    /// <remarks>
     /// Asked of the contract this build is compiled against rather than against
     /// a number written here, because the failure being prevented is exactly
     /// the two drifting apart. The server enforces this at load and refuses the

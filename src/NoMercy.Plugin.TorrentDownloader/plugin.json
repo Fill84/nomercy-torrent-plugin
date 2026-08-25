@@ -31,7 +31,7 @@
     },
     "ui": {
       "mounts": [
-        { "section": "library", "route": "/", "label": "Torrent Downloader", "icon": "download" },
+        { "section": "dashboard", "route": "/", "label": "Torrent Downloader", "icon": "download" },
         { "section": "settings", "route": "/settings", "label": "Torrent Downloader", "icon": "download" }
       ]
     }
