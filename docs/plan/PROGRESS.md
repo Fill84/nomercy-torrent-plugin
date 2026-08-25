@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.3.12 is tagged. S10-09 is next, and it is not this repository's to start.**
+**0.3.13 is tagged. S10-09 is next, and it is not this repository's to start.**
 
 **What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
 was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
@@ -205,6 +205,17 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **0.3.13.** Downloads that never started. Every name now goes to every indexer before anything is
+  taken — two early exits gone, the shelf answer taken before any indexer was asked and the return
+  from the name loop on the first copy worth taking — because a site only answers about the name it
+  was asked, and one holding the release under another spelling was asked and never found it. The
+  cap and the per-host gate still bound the cost. Merging is by hash as well as by name, so one hash
+  is one torrent whatever a site calls it, carrying the best seeder count and every tracker. A grab
+  that failed can be taken on again, which 0.3.12 had made impossible: its row is hidden from the
+  page but not from the unique index, so a magnet pasted by hand was refused by a row nobody could
+  see. And the plugin's own page is mounted on the dashboard, so Open and the title beside it go to
+  one address rather than two.
 
 - **0.3.12.** One torrent is one grab, enforced by the schema instead of swept up after the fact.
   The index on the hash was not unique, and a cycle records a grab per episode it decided, so a pass

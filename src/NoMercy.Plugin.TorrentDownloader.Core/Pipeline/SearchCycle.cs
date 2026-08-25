@@ -435,28 +435,6 @@ public sealed class SearchCycle(
     }
 
     /// <summary>
-    /// Whether the release a name database published for this episode is
-    /// already among the copies in hand.
-    /// </summary>
-    /// <remarks>
-    /// It is the answer, not a candidate: the ranking puts a published name
-    /// first and seeders do not get a say, so no further search can improve on
-    /// having it. Asking anyway is a request per site per episode spent on a
-    /// question already answered.
-    /// </remarks>
-    private static bool Published(IReadOnlyList<string> names, IReadOnlyList<ReleaseCopy> gathered)
-    {
-        if (names.Count == 0 || gathered.Count == 0)
-        {
-            return false;
-        }
-
-        HashSet<string> known = [.. names.Select(TitleMatcher.Release)];
-
-        return gathered.Any(copy => known.Contains(TitleMatcher.Release(copy.Title)));
-    }
-
-    /// <summary>
     /// The copies this one was taken ahead of, with what each was seeded by.
     /// </summary>
     /// <remarks>
