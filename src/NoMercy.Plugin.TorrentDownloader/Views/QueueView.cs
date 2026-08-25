@@ -31,7 +31,7 @@ public static class QueueView
     {
         return new()
         {
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
             Components =
             [
                 Ui.Text("looking-heading", "Looking", "title"),

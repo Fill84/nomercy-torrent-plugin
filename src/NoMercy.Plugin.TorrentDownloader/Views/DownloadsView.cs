@@ -46,7 +46,7 @@ public static class DownloadsView
     {
         return new()
         {
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
             Components =
             [
                 Ui.Text("downloads-heading", "Downloads", "title"),
@@ -261,7 +261,7 @@ public static class HistoryView
     {
         return new()
         {
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
             Components =
             [
                 Ui.Text("history-heading", "History", "title"),

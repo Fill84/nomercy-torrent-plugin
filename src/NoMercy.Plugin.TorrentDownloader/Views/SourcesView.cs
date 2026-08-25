@@ -50,7 +50,7 @@ public static class SourcesView
     {
         return new()
         {
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
             Components =
             [
                 Ui.Text("sources-heading", "Sources", "title"),

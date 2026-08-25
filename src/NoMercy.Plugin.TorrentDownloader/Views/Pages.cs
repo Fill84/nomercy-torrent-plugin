@@ -115,49 +115,49 @@ public static class Pages
             Path = ShowsRoute,
             Name = "shows",
             Label = "Shows",
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
         },
         new PluginRoute
         {
             Path = QueueRoute,
             Name = "queue",
             Label = "Queue",
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
         },
         new PluginRoute
         {
             Path = DownloadsRoute,
             Name = "downloads",
             Label = "Downloads",
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
         },
         new PluginRoute
         {
             Path = HistoryRoute,
             Name = "history",
             Label = "History",
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
         },
         new PluginRoute
         {
             Path = SkippedRoute,
             Name = "skipped",
             Label = "Skipped",
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
         },
         new PluginRoute
         {
             Path = SourcesRoute,
             Name = "sources",
             Label = "Sources",
-            Layout = PluginLayout.ListDetail,
+            Layout = PluginLayout.Standard,
         },
         new PluginRoute
         {
             Path = SettingsRoute,
             Name = "settings",
             Label = "Settings",
-            Layout = PluginLayout.Form,
+            Layout = PluginLayout.Standard,
         });
 
     /// <summary>

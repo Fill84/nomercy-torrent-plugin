@@ -191,7 +191,7 @@ public class SettingsViewTests
     [Fact]
     public void TheSettingsPageIsAForm()
     {
-        Assert.Equal(PluginLayout.Form, SettingsView.Render(new(), [], []).Layout);
+        Assert.Equal(PluginLayout.Standard, SettingsView.Render(new(), [], []).Layout);
     }
 
     /// <remarks>
