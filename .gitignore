@@ -20,3 +20,4 @@ health/
 # The release package, built by CI and never committed. A zip in the tree is a
 # release nobody can trace to a commit.
 *.zip
+.env

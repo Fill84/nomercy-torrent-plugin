@@ -86,7 +86,16 @@ fi
 
 mkdir -p "$package_path"
 
-for project in NoMercy.Plugins.Abstractions NoMercy.Plugins.Mvc; do
+# All four, not just the two this repository names. NoMercy.Plugins.Abstractions
+# declares NoMercy.Design and NoMercy.Events as dependencies, so a restore needs
+# them in the feed even though nothing here references them directly — and the
+# PowerShell twin of this script has packed all four all along.
+#
+# Packing two was invisible on a developer's machine, where the other two were
+# already in _nupkgs from the last time the PowerShell script ran, and it broke
+# the first CI build there had ever been: NU1101, "no packages exist with this
+# id", naming a package nothing in this repository mentions.
+for project in NoMercy.Plugins.Abstractions NoMercy.Plugins.Mvc NoMercy.Design NoMercy.Events; do
     # The cache entry goes first. Restore prefers an already-extracted folder of
     # the same version over the file in _nupkgs, however new that file is.
     cached="$HOME/.nuget/packages/$(echo "$project" | tr '[:upper:]' '[:lower:]')/$version"
