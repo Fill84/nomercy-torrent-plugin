@@ -251,23 +251,33 @@ jobs:
           chmod +x scripts/publish-release.sh
           ./scripts/publish-release.sh "$VERSION" "$ZIP" "$notes"
 
-      # The catalogue every server reads, updated from the same tag and the
-      # same package. A release nobody can find in the dashboard is a release
-      # nobody has, and a catalogue kept by hand drifts from the releases
-      # exactly as the two forges did.
-      #
-      # After the release, never before: the entry points at a download, and
-      # advertising one that is not there yet fails an install with nothing but
-      # "verification failed".
-      - name: Catalogue
+      # This plugin's own index, which the catalogue reads. Kept here rather
+      # than pushed into the catalogue: writing into somebody else's repository
+      # needs rights on it, and a plugin nobody has heard of must be able to do
+      # this too. An author submits this file's URL once and never again.
+      - name: Index
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           FORGEJO_REPO: ${{ github.repository }}
-          CATALOGUE_TOKEN: ${{ secrets.CATALOGUE_TOKEN }}
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.package.outputs.version }}
           ZIP: ${{ steps.package.outputs.zip }}
         run: |
           set -eu
-          chmod +x scripts/publish-catalogue.sh
-          ./scripts/publish-catalogue.sh \
-            "$VERSION" "$ZIP" "docs/releases/$VERSION.md" "src/$PLUGIN/plugin.json"
+          chmod +x scripts/update-repository-index.sh
+          ./scripts/update-repository-index.sh             "$VERSION" "$ZIP" "docs/releases/$VERSION.md" "src/$PLUGIN/plugin.json"
+
+          git diff --quiet -- repository.json && { echo "index: unchanged"; exit 0; }
+
+          # Onto master, because a tag does not move and the catalogue reads a
+          # branch. [skip ci] so this does not start a run of its own.
+          git config user.name "forgejo-actions"
+          git config user.email "actions@forgejo"
+          git add repository.json
+          git commit -q -m "index: $VERSION [skip ci]"
+
+          umask 077
+          auth="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git config --local http.extraHeader "$auth"
+          git push "${FORGEJO_URL}/${GITHUB_REPOSITORY}.git" HEAD:master
+          git config --local --unset-all http.extraHeader

@@ -1,0 +1,23 @@
+{
+  "name": "Torrent Downloader",
+  "url": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
+  "plugins": [
+    {
+      "id": "1SBQT26FHF98EBRPYVRGD92CZF",
+      "name": "Torrent Downloader",
+      "description": "Downloads every episode missing from a TV or anime library and hands it to the encoder.",
+      "author": "NoMercy Community",
+      "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
+      "versions": [
+        {
+          "version": "0.3.9",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.9/NoMercy.Plugin.TorrentDownloader-0.3.9.zip",
+          "checksum": "0b0de4db2a94b27476252563b218150fbbdd37c6559d5aee47e118add6a0bcf9",
+          "changelog": "Keeps a TV or anime library complete by downloading missing episodes over BitTorrent and handing each one to the server's own encoder.",
+          "timestamp": "2026-08-25T15:20:00Z"
+        }
+      ]
+    }
+  ]
+}
