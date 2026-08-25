@@ -182,11 +182,12 @@ public class SearchCycleTests
     }
 
     /// <remarks>
-    /// An episode has many spellings of its release in the pool, and they are
-    /// tried in turn until one produces a copy worth taking — but never more
-    /// than the owner's own <c>MaxSearchAttempts</c>. Twenty spellings times
-    /// seventeen indexers is a cycle that gets the plugin banned from every
-    /// site it asks.
+    /// An episode has many spellings of its release in the pool, and every one
+    /// of them is searched — but never more than the owner's own
+    /// <c>MaxSearchAttempts</c>. Twenty spellings times seventeen indexers is a
+    /// cycle that gets the plugin banned from every site it asks, so the cap is
+    /// what bounds the cost; nothing is taken until the names within it have all
+    /// been asked.
     /// </remarks>
     [Fact]
     public async Task NoMoreNamesAreSearchedForThanTheOwnerAllowsAttempts()
@@ -362,6 +363,57 @@ public class SearchCycleTests
     /// the library was missing, and every one recorded as refused for not being
     /// S03E08.
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// <strong>Every name goes to every indexer before anything is taken.</strong>
+    /// A site only answers about the name it was asked. An indexer holding the
+    /// release under a spelling the first name did not use is asked and still
+    /// never finds it, so its trackers never reach the magnet — and more
+    /// trackers is the difference between a download that starts and one that
+    /// does not.
+    /// </para>
+    /// <para>
+    /// The cycle used to stop at the first name that produced a copy worth
+    /// taking. On 26 August 2026 two Lioness episodes sat at "fetching
+    /// metadata" with no peer and no seed for hours, while the same release was
+    /// seeding through trackers published only by a site that had it under
+    /// another name.
+    /// </para>
+    /// <para>
+    /// The cost is names times indexers rather than indexers, and the per-host
+    /// gate is what keeps that civil: every request waits its turn behind that
+    /// site's own pace, whoever asked for it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task EveryNameIsSearchedEvenOnceOneOfThemHasFoundSomethingWorthTaking()
+    {
+        FakeFetch fetch = new();
+
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        // Takeable rows, so the cycle really does have something worth taking
+        // before it has finished asking.
+        fetch.Answers(
+            "https://apibay.org/q.php?q=Silo+S03&cat=",
+            Capture.Fixture("the-pirate-bay-show.json"));
+
+        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
+            [Silo(6)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+
+        // More than the one search that produced the copy: the rest were asked
+        // too, which is the whole of the rule.
+        Assert.True(
+            fetch.Asked.Count(address => address.Host == "apibay.org") > 1,
+            "the cycle stopped asking as soon as one name found something worth taking");
+    }
+
     [Fact]
     public async Task ACopyThatAnswersAnotherGapOfThisCycleIsGivenToIt()
     {
@@ -385,12 +437,19 @@ public class SearchCycleTests
         Assert.Equal(4, report.Outcomes.Count);
         Assert.All(report.Outcomes, outcome => Assert.True(outcome.HandedOver, outcome.Detail));
 
-        // One fetch of the season for the four of them. A season is asked for
-        // the whole of itself, so every gap in it is entitled to the answer and
-        // none of them pays again - which is the whole of the saving. An
-        // episode's own search is not shared that way: see
-        // WhatAnEarlierSearchTurnedUpDoesNotStopThisOneBeingMade.
-        Assert.Equal(1, fetch.Asked.Count(address => address.Host == "apibay.org"));
+        // The season is still fetched once for the four of them: a season is
+        // asked for the whole of itself, so every gap in it is entitled to the
+        // answer and none of them pays again. That saving is unchanged.
+        //
+        // What each gap now adds is its own names. Every name goes to every
+        // indexer before anything is taken, because a site only answers about
+        // the name it was asked and the one holding a release under another
+        // spelling is otherwise asked and never finds it — with its trackers
+        // never reaching the magnet. So the four gaps cost their own searches
+        // on top of the two shared shelves.
+        Assert.Equal(
+            6,
+            fetch.Asked.Count(address => address.Host == "apibay.org"));
     }
 
     /// <remarks>

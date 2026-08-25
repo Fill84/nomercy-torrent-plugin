@@ -274,19 +274,6 @@ public sealed class SearchCycle(
             // asked once a cycle - so the second gap of a season costs nothing
             // where the first one paid.
             //
-            // Stopping here is safe only because of what is being looked for:
-            // the release a name database published for this episode. Nothing a
-            // further search could return is better than that, by the same rule
-            // that puts it first in the ranking. Where no name database knows
-            // the episode there is no such copy, nothing stops early, and every
-            // term is asked as before.
-            if (Published(candidates, gathered)
-                && await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, candidates, ct)
-                    is EpisodeOutcome held)
-            {
-                return held with { Searched = true };
-            }
-
             bool searched = false;
 
             foreach ((string term, bool shelf) in Terms(episode, candidates, options.Profile))
@@ -318,14 +305,23 @@ public sealed class SearchCycle(
 
                 gathered.AddRange(copies);
 
-                // Over everything, every time. The best copy of an episode is
-                // the best of all of them, not the best of the last page to
-                // arrive.
-                if (await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, candidates, ct)
-                    is EpisodeOutcome taken)
-                {
-                    return taken;
-                }
+            }
+
+            // Every name, on every indexer, before anything is taken. A site
+            // only answers about the name it was asked, so an indexer holding
+            // the release under a spelling the first term did not use is asked
+            // and still never finds it — and its trackers never reach the
+            // magnet. Two Lioness episodes sat at "fetching metadata" with no
+            // peer and no seed while the same release seeded through trackers
+            // only a later name would have found.
+            //
+            // The cost is names times indexers rather than indexers, and it is
+            // the per-host gate that keeps that civil: every request to a site
+            // waits its turn behind that site's own pace, whoever asked for it.
+            if (await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, candidates, ct)
+                is EpisodeOutcome taken)
+            {
+                return taken with { Searched = searched };
             }
 
             journal.Finished(ActivityStage.Decide, subject, "nobody is serving an acceptable copy");

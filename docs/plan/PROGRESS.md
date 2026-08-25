@@ -1106,9 +1106,18 @@ and note it here.
   files a pack under its season and nothing else would look there, so the pack rules were
   unreachable. It is not an answer because an episode whose season has one gap would otherwise never
   be asked about again.
-- **At most `MaxSearchAttempts` names are searched for per episode per cycle.** Twenty spellings of
-  one release times seventeen indexers is a cycle that gets the plugin banned. The setting already
-  means "how many times an episode is looked for", so it is that number rather than a new one.
+- **At most `MaxSearchAttempts` names are searched for per episode per cycle, and every one of them
+  is searched.** Twenty spellings of one release times seventeen indexers is a cycle that gets the
+  plugin banned, so the setting caps how many names are tried; it already means "how many times an
+  episode is looked for", so it is that number rather than a new one.
+- **Nothing is taken until every one of those names has been asked of every indexer.** The owner's
+  decision, 26 August 2026, replacing the earlier rule that stopped at the first name producing a
+  copy worth taking. A site only answers about the name it was asked, so an indexer holding the
+  release under another spelling was asked and never found it — and its trackers never reached the
+  magnet. Two Lioness episodes sat at "fetching metadata" with no peer and no seed while the same
+  release seeded through trackers only a later name would have found. The cost is names times
+  indexers rather than indexers, and the per-host gate is what keeps that civil: every request waits
+  its turn behind that site's own pace, whoever asked for it.
 - **A magnet is built from a bare info hash when a detail page prints one.** TorrentFunk's page
   carries no magnet at all — the real capture has exactly one forty-hex string on it — and a hash is
   all a magnet needs. The trackers come from whatever else knows the torrent, and from the owner's
