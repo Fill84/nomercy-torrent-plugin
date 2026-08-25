@@ -96,7 +96,7 @@ public class DownloadsViewTests
 
         string row = string.Join(" ", Rendered.EveryValue(view));
 
-        Assert.Contains("fetchingmetadata", row, StringComparison.Ordinal);
+        Assert.Contains("fetching metadata", row, StringComparison.Ordinal);
         Assert.DoesNotContain("%", row, StringComparison.Ordinal);
 
         // And a size reported as nought is the same case: dividing by it gives
@@ -110,6 +110,41 @@ public class DownloadsViewTests
         ]);
 
         Assert.DoesNotContain("%", string.Join(" ", Rendered.EveryValue(empty)), StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// A state made of two words is read as two words. The state is the enum's
+    /// own name lower-cased, which turns <c>FetchingMetadata</c> into
+    /// "fetchingmetadata" on the owner's page — a word that is not a word, on
+    /// the column an owner reads first to know what a download is doing.
+    /// </remarks>
+    [Fact]
+    public void AStateOfTwoWordsIsReadableAsTwoWords()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    null,
+                    TorrentState.FetchingMetadata,
+                    0,
+                    null,
+                    0,
+                    0,
+                    0,
+                    0,
+                    null,
+                    null,
+                    null),
+                @"D:\incomplete"),
+        ]);
+
+        string drawn = string.Join(" ", Rendered.EveryValue(view));
+
+        Assert.Contains("fetching metadata", drawn, StringComparison.Ordinal);
+        Assert.DoesNotContain("fetchingmetadata", drawn, StringComparison.Ordinal);
     }
 
     /// <remarks>

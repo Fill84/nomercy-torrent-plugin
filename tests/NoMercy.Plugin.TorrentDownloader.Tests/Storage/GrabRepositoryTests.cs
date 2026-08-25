@@ -242,6 +242,64 @@ public class GrabRepositoryTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>One torrent is one grab, and the schema is what says so.</strong>
+    /// A cycle records a grab for each episode it decided, so anything that
+    /// decides the same episode twice in one pass — a show reached through two
+    /// libraries, two cadences arriving together — writes the same info hash
+    /// twice. Nothing in the table stopped it: the index on the hash was not
+    /// unique.
+    /// </para>
+    /// <para>
+    /// It was cleaned up rather than prevented: once by a migration, and again
+    /// by the maintenance cadence at every start. Between two of those the
+    /// Downloads page showed each release twice, every step that walked grabs
+    /// walked both, and a failure had two rows to put back. On 25 August 2026
+    /// three duplicates were cleared at a start and three more were on the page
+    /// the same evening.
+    /// </para>
+    /// <para>
+    /// The oldest row wins, which is the rule the migration already chose: its
+    /// <c>grabbed_at</c> is when the torrent was really taken on, and the
+    /// covers it carries are the whole of what that release answers for.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task OneTorrentIsOneGrabHoweverOftenItIsRecorded()
+    {
+        GrabRepository grabs = Repository();
+
+        await grabs.RecordAsync(
+            Episode(1),
+            "Silo",
+            "Silo S03E01 1080p WEB H264-CAKES",
+            "1337x",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode(1)],
+            When,
+            CancellationToken.None);
+
+        // The same torrent again, as a second pass of the same cycle records
+        // it: a different release title and a later time, so that the row that
+        // survives can be told apart from the row that does not.
+        await grabs.RecordAsync(
+            Episode(1),
+            "Silo",
+            "Silo S03E01 2160p WEB H265-OTHER",
+            "LimeTorrents",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode(1)],
+            When.AddMinutes(1),
+            CancellationToken.None);
+
+        StoredDownload only = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.Equal("Silo S03E01 1080p WEB H264-CAKES", only.ReleaseTitle);
+    }
+
     private const string Hash = "92D8A3F6864911EF292B4BE0DD5286406396D2B3";
 
     /// <summary>A second torrent, so a clean-up cannot pass by taking everything.</summary>
@@ -359,31 +417,4 @@ public class GrabRepositoryTests : IDisposable
         Assert.Empty(first.Rows.Select(one => one.Title).Intersect(second.Rows.Select(one => one.Title)));
     }
 
-    /// <remarks>
-    /// <para>
-    /// <strong>One torrent is one grab.</strong> Seven info hashes on the
-    /// owner's server carried two rows each, and every step that walked grabs
-    /// walked both — so one episode was staged twice and dispatched twice.
-    /// </para>
-    /// <para>
-    /// The oldest row of a hash is the real one: its grabbed_at is when the
-    /// torrent was really taken on.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public async Task DuplicateRowsForOneTorrentAreClearedAndTheOldestKept()
-    {
-        GrabRepository grabs = Repository();
-
-        await Record(grabs, Hash, [Episode(1)]);
-        await Record(grabs, Hash, [Episode(1)]);
-        await Record(grabs, Other, [Episode(2)]);
-
-        int cleared = await grabs.DeduplicateAsync(CancellationToken.None);
-
-        IReadOnlyList<StoredDownload> left = await grabs.OpenAsync(CancellationToken.None);
-
-        Assert.Equal(1, cleared);
-        Assert.Equal([Hash, Other], left.Select(one => one.InfoHash).Order());
-    }
 }

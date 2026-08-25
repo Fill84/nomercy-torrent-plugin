@@ -830,19 +830,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             Context.Logger.LogInformation("{Count} old refusals were cleared from the history.", gone);
         }
-
-        // One torrent is one grab. Seven info hashes on the owner's server
-        // carried two rows each and every step that walked grabs walked both,
-        // so one episode was staged twice and dispatched twice. Nothing makes
-        // such a row any more; these are the ones already there.
-        int extra = await grabs.DeduplicateAsync(ct);
-
-        if (extra > 0)
-        {
-            Context.Logger.LogInformation(
-                "{Count} duplicate grab row(s) were cleared: one torrent is one grab.",
-                extra);
-        }
     }
 
     /// <summary>

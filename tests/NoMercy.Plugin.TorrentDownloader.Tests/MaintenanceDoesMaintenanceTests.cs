@@ -35,30 +35,6 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
         "nomercy-maintenance-" + Guid.NewGuid().ToString("n")[..8]);
 
     /// <remarks>
-    /// One torrent is one grab. Seven info hashes on the owner's server carried
-    /// two rows each and every step that walked grabs walked both, so one
-    /// episode was staged twice and dispatched twice. Clearing them is periodic
-    /// work about the store, which is what this cadence is for.
-    /// </remarks>
-    [Fact]
-    public async Task TheMaintenanceCadenceClearsDuplicateGrabRows()
-    {
-        using TorrentDownloaderPlugin plugin = await Configured();
-
-        GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
-
-        await Grabbed(grabs, Hash);
-        await Grabbed(grabs, Hash);
-        await Grabbed(grabs, Other);
-
-        await plugin.ExecuteAsync(JobNames.Maintenance, CancellationToken.None);
-
-        Assert.Equal(
-            [Hash, Other],
-            (await grabs.OpenAsync(CancellationToken.None)).Select(one => one.InfoHash).Order());
-    }
-
-    /// <remarks>
     /// One refusal is written for every release every cycle considered and did
     /// not take: the owner's history held 66,149 lines, 65,878 of them
     /// refusals, and the page stopped answering. A fortnight is long enough to
@@ -93,9 +69,9 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
     /// <para>
     /// It used to be the first transfers tick that did this, which made one
     /// tick of one cadence unlike all the others. What is special is the start,
-    /// not the tick, so the start is where it is done — and the duplicate rows
-    /// cleared here can have come from nowhere else, because a search cycle
-    /// does no housekeeping of its own.
+    /// not the tick, so the start is where it is done — and the refusal pruned
+    /// here can have been pruned by nothing else, because a search cycle does
+    /// no housekeeping of its own.
     /// </para>
     /// </remarks>
     [Fact]
@@ -105,12 +81,18 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
 
         GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
 
-        await Grabbed(grabs, Hash);
-        await Grabbed(grabs, Hash);
+        // A refusal old enough to be pruned, and one that is not. Pruning is
+        // housekeeping the maintenance cadence owes, so a search cadence
+        // clearing it is the start settling rather than the cadence doing
+        // somebody else's work.
+        await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-OLD", DateTimeOffset.UtcNow.AddDays(-30));
+        await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-NEW", DateTimeOffset.UtcNow.AddDays(-1));
 
         await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
 
-        Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+        SkippedRelease left = Assert.Single((await grabs.SkippedAsync(1, 50, CancellationToken.None)).Rows);
+
+        Assert.Equal("Silo.S03E06.2160p.WEB.H265-NEW", left.Title);
     }
 
     private static async Task Grabbed(GrabRepository grabs, string hash)

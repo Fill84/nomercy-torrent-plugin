@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.Text;
+
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugins.Abstractions;
@@ -188,13 +190,39 @@ public static class DownloadsView
             {
                 GrabState.Staged => "waiting for the encoder to take it",
                 GrabState.Dispatched => "encoding",
-                _ => $"grabbed, not started ({row.Grab.State.ToString().ToLowerInvariant()})",
+                _ => $"grabbed, not started ({Words(row.Grab.State.ToString())})",
             };
         }
 
         return row.Transfer.Error is string wrong
-            ? $"{row.Transfer.State.ToString().ToLowerInvariant()}: {wrong}"
-            : row.Transfer.State.ToString().ToLowerInvariant();
+            ? $"{Words(row.Transfer.State.ToString())}: {wrong}"
+            : Words(row.Transfer.State.ToString());
+    }
+
+    /// <summary>A state's own name, as words an owner reads.</summary>
+    /// <remarks>
+    /// The name is lower-cased for the page, and lower-casing on its own ran
+    /// the words together: <c>FetchingMetadata</c> reached the owner's screen
+    /// as "fetchingmetadata", which is not a word, in the column read first to
+    /// know what a download is doing.
+    /// </remarks>
+    private static string Words(string name)
+    {
+        StringBuilder said = new(name.Length + 4);
+
+        foreach (char letter in name)
+        {
+            // Before each capital but the first, which is where one word of a
+            // name in this vocabulary ends and the next begins.
+            if (char.IsUpper(letter) && said.Length > 0)
+            {
+                said.Append(' ');
+            }
+
+            said.Append(char.ToLowerInvariant(letter));
+        }
+
+        return said.ToString();
     }
 
     private static string Progress(TorrentStatus? transfer)

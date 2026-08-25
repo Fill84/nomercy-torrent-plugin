@@ -45,6 +45,15 @@ public sealed record HistoryRow(
 public sealed class GrabRepository(Store database)
 {
     /// <summary>Records a grab, with every episode it answers for.</summary>
+    /// <remarks>
+    /// The second recording of a torrent already known is dropped, and the
+    /// unique index on the hash is what decides that. A grab is recorded for
+    /// each episode the cycle decided, so a pass that decides the same episode
+    /// twice used to write the hash twice — and every step that walked grabs
+    /// then walked both. The first row wins: its <c>grabbed_at</c> is when the
+    /// torrent was really taken on, and the covers it carries are the whole of
+    /// what that release answers for.
+    /// </remarks>
     public async Task RecordAsync(
         EpisodeKey episode,
         string showTitle,
@@ -62,7 +71,8 @@ public sealed class GrabRepository(Store database)
         command.CommandText =
             """
             INSERT INTO grabs (show_id, season, episode, release_title, info_hash, source, magnet, grabbed_at, state, covers)
-            VALUES ($show, $season, $episode, $release, $hash, $source, $magnet, $at, $state, $covers);
+            VALUES ($show, $season, $episode, $release, $hash, $source, $magnet, $at, $state, $covers)
+            ON CONFLICT (info_hash) DO NOTHING;
             """;
 
         command.Parameters.AddWithValue("$show", episode.ShowId);
@@ -118,41 +128,6 @@ public sealed class GrabRepository(Store database)
         return open;
     }
 
-    /// <summary>
-    /// Keeps one row per torrent and deletes the rest.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Every cycle used to record a fresh grab for an episode it was already
-    /// downloading, so one release ended up with several rows under one info
-    /// hash — and every step that walked grabs walked all of them.
-    /// </para>
-    /// <para>
-    /// On every start rather than once as a migration. A migration runs at the
-    /// moment the database is brought up to date and can only clear what
-    /// existed then: the owner's ran, and seven pairs made later that same day
-    /// were still there afterwards. This costs one statement and cannot be
-    /// outrun.
-    /// </para>
-    /// <para>
-    /// The oldest row of each hash survives, because its grabbed_at is when the
-    /// torrent was really taken on.
-    /// </para>
-    /// </remarks>
-    public async Task<int> DeduplicateAsync(CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
-            """
-            DELETE FROM grabs
-            WHERE info_hash IS NOT NULL
-              AND id NOT IN (SELECT MIN(id) FROM grabs WHERE info_hash IS NOT NULL GROUP BY info_hash);
-            """;
-
-        return await command.ExecuteNonQueryAsync(ct);
-    }
 
     /// <summary>
     /// Every grab there has ever been, whatever became of it.
