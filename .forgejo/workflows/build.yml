@@ -250,3 +250,24 @@ jobs:
 
           chmod +x scripts/publish-release.sh
           ./scripts/publish-release.sh "$VERSION" "$ZIP" "$notes"
+
+      # The catalogue every server reads, updated from the same tag and the
+      # same package. A release nobody can find in the dashboard is a release
+      # nobody has, and a catalogue kept by hand drifts from the releases
+      # exactly as the two forges did.
+      #
+      # After the release, never before: the entry points at a download, and
+      # advertising one that is not there yet fails an install with nothing but
+      # "verification failed".
+      - name: Catalogue
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          FORGEJO_REPO: ${{ github.repository }}
+          CATALOGUE_TOKEN: ${{ secrets.CATALOGUE_TOKEN }}
+          VERSION: ${{ steps.package.outputs.version }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          set -eu
+          chmod +x scripts/publish-catalogue.sh
+          ./scripts/publish-catalogue.sh \
+            "$VERSION" "$ZIP" "docs/releases/$VERSION.md" "src/$PLUGIN/plugin.json"
