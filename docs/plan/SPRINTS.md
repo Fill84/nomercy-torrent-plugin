@@ -1183,22 +1183,6 @@ The gate for all of them is the same and it is stricter than usual: `dotnet test
 code is the proof that the behaviour moved. The only edits allowed are to a test's own construction
 — a fake given one more constructor argument — never to what it asserts.
 
-## S10-00 · Release 0.3.9
-
-The plugin as it stands: it downloads, it stages, it encodes, and the episode lands in the library.
-That is worth a number before anything is touched.
-
-`v0.4.0` is already a tag, on `ecc0241` of 21 August, which is 74 commits behind and predates every
-fix of the last four days — the upload policy, the video whitelist, the naming, the duplicate
-grabs, the episode id. It was never published as a release; only `v0.1.0` ever was.
-
-1. Delete the tag, locally and on the remote. It names a build nobody should install.
-2. `Directory.Build.props` and `plugin.json` say `0.3.9`.
-3. Tag `v0.3.9` on the commit that has been running on the owner's server.
-4. `PROGRESS.md` says what 0.3.9 does and what it does not.
-
-**Done when** the owner asks for it. Read first: nothing.
-
 ## S10-01 · One rule for whose show it is
 
 Closes **A1**.
@@ -1337,12 +1321,50 @@ reader following this plan would put the 479 grabs back. **S8-05 and S9-06 are b
 **Done when** every slice marked done describes code that exists. Read first: `docs/plan/PROGRESS.md`
 § Decisions.
 
-## S10-08 · Release 0.4.0
+## S10-08 · Release 0.3.9
 
-1. `Directory.Build.props` and `plugin.json` say `0.4.0`.
-2. `PROGRESS.md` says what changed since 0.3.9: nothing the owner can see, everything the next
-   change needs.
-3. The tag names the commit that passed every slice above.
-4. Only when the owner asks.
+Every slice above is done and the plugin does exactly what it did before, with less work behind it
+and one place to change each rule.
 
-**Done when** the owner says so.
+`v0.4.0` is already a tag, on `ecc0241` of 21 August, which is 74 commits behind and predates every
+fix of the last week — the upload policy, the video whitelist, the naming, the duplicate grabs, the
+episode id. It was never published as a release; only `v0.1.0` ever was. It names a build nobody
+should install and it stands in the way of the real 0.4.0.
+
+1. Delete that tag, locally and on the remote.
+2. `Directory.Build.props` and `plugin.json` say `0.3.9`. They say `0.4.0` today, which is a number
+   this plugin has not earned.
+3. `PROGRESS.md` says what 0.3.9 is: the chain closed, and the audit closed with it.
+4. Tag `v0.3.9`.
+5. Only when the owner asks.
+
+**Done when** the owner says so. Read first: `docs/plan/AUDIT-0.3.9.md`.
+
+## S10-09 · Release 0.4.0 — on the contract, with no reflection left
+
+0.4.0 is not a date. It is the version where this plugin stops reaching into the server by name.
+
+It waits on five media-server issues, and none of them is this repository's to close:
+
+| Issue | What it gives |
+| --- | --- |
+| #30 | `IPluginEncoder` — asking for an encode without `IJobDispatcher` or `VideoEncodeJob` |
+| #35 | `PluginLibraryEpisode.Id` — naming the episode without `MediaContext` |
+| #36 | identification stops importing shows on a guess |
+| #34 | a newly added show is visible, so membership can be the rule |
+| #37 | deleting a show stops leaving its subtree behind |
+
+1. When #30 and #35 land: a second implementation of `IEncodeGateway` that uses the contract, beside
+   the reflecting one. **S10-06** is what makes that an addition rather than surgery.
+2. `EncodeDispatch.cs` and every constant in it go. That file is the only reflection in the plugin;
+   when it goes there is none.
+3. When #36 and #34 land: `Ownership.Theirs` becomes library membership. **S10-01** is what makes
+   that one line rather than two.
+4. `docs/09-host-contract.md` describes the contract that shipped, and the ABI dump is regenerated
+   from the released server.
+5. `Directory.Build.props` and `plugin.json` say `0.4.0`, and the tag names the commit that proved
+   it on the owner's server.
+6. Only when the owner asks.
+
+**Done when** the plugin names no server type it does not get from
+`NoMercy.Plugins.Abstractions` — and the owner says so. Read first: `docs/09-host-contract.md`.

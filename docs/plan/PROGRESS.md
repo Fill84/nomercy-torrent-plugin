@@ -4,11 +4,18 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-00 — release 0.3.9.** The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded,
-staged, dispatched with its own episode id and encoded into the owner's library at 22:33 — the
-first episode this plugin has delivered end to end. `docs/plan/AUDIT-0.3.9.md` is a full read of the
-source made the same day; Sprint 10 closes what it found, and none of it changes what the plugin
-does.
+**S10-01 — one rule for whose show it is.** The chain is closed. On 25 August 2026 Sugar S02E04 was
+downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
+22:33 — the first episode this plugin has delivered end to end.
+
+`docs/plan/AUDIT-0.3.9.md` is a full read of the source made the same day. Sprint 10 closes what it
+found, and none of it changes what the plugin does. **0.3.9 is what that sprint produces**, tagged
+at S10-08 rather than before it: the version is the audited plugin, not the plugin that was about to
+be audited.
+
+**0.4.0 is not a date.** It is the version where this plugin stops reaching into the server by name,
+and it waits on media-server #30, #34, #35, #36 and #37 — none of them this repository's to close.
+S10-06 and S10-01 exist so that day is two additions rather than surgery.
 
 The section below is what was true before that, and is kept because it is what the proving looked
 like.
