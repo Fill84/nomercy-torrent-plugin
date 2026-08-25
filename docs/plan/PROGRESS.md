@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.3.9 is tagged. S10-09 is next, and it is not this repository's to start.**
+**0.3.11 is tagged. S10-09 is next, and it is not this repository's to start.**
 
 **What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
 was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
@@ -205,6 +205,22 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **0.3.11.** Two faults that had been there for as long as the plugin worked. The snapshot is
+  pushed once a second instead of four times: the floor was set for what a message costs the server,
+  but the web app cannot read this plugin's payload — it draws every plugin — so it answers any
+  message by re-reading the whole view over HTTP. A download in flight publishes on every tick, so a
+  quarter of a second was four complete page reads a second. And the browser now dies with the
+  server however the server ends: it is started suspended, put in a Windows job object with
+  kill-on-close and then resumed, because every tidy-up before this one ran on the way out and a
+  killed server runs none of them. Sixteen Chromes were found on the owner's machine with the server
+  stopped.
+- **Three faults in the web app, not here.** Plugin pages are capped at 64rem, so five of the
+  Downloads table's nine columns cannot be reached on any display; a live push blanks the page to a
+  spinner rather than swapping the tree, which is the other half of the flicker; and an undeclared
+  route renders a dangling `nm-plugin-shell--` that matches no rule. Filed as
+  NoMercy-Entertainment/nomercy-app-web#32, #31 and #33. **No version of this plugin can fix any of
+  them** — there is no shape it can ask for that means full width.
 
 - `S10-08` **0.3.9.** All three carriers say `0.3.9` — `Directory.Build.props`, `PluginIdentity` and
   `plugin.json` — and a test holds them together. The stale `v0.4.0` tag is deleted locally and on
