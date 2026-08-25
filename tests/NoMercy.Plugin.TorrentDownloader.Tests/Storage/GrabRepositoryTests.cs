@@ -300,6 +300,63 @@ public class GrabRepositoryTests : IDisposable
         Assert.Equal("Silo S03E01 1080p WEB H264-CAKES", only.ReleaseTitle);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent that failed can be taken on again.</strong> One grab
+    /// per torrent is kept by a unique index on the hash, and the insert was
+    /// told to do nothing about a hash already known — which is right while
+    /// that grab is still open and wrong once it has failed.
+    /// </para>
+    /// <para>
+    /// A failed row stays in the table and is hidden from the Downloads page,
+    /// so the owner sees nothing grabbed, pastes the magnet by hand, and the
+    /// insert is silently dropped against a row they cannot see. Two Lioness
+    /// episodes were dropped for want of a peer on 26 August 2026 and could not
+    /// afterwards be added by hand at all.
+    /// </para>
+    /// <para>
+    /// So a hash already open is still left alone, and a hash that finished or
+    /// failed is taken on again with whatever the new attempt carries.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentThatFailedCanBeTakenOnAgain()
+    {
+        GrabRepository grabs = Repository();
+
+        await grabs.RecordAsync(
+            Episode(1),
+            "Silo",
+            "Silo S03E01 1080p WEB H264-CAKES",
+            "1337x",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode(1)],
+            When,
+            CancellationToken.None);
+
+        await grabs.StateAsync(Hash, GrabState.Failed, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+
+        // The owner pastes the magnet themselves, with every tracker on it.
+        await grabs.RecordAsync(
+            Episode(1),
+            "Silo",
+            "Silo S03E01 1080p WEB H264-CAKES EZTV",
+            "by hand",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}&tr=udp%3A%2F%2Fopen.example%3A1337",
+            [Episode(1)],
+            When.AddHours(1),
+            CancellationToken.None);
+
+        StoredDownload again = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.Equal("Silo S03E01 1080p WEB H264-CAKES EZTV", again.ReleaseTitle);
+        Assert.Contains("open.example", again.Magnet);
+    }
+
     private const string Hash = "92D8A3F6864911EF292B4BE0DD5286406396D2B3";
 
     /// <summary>A second torrent, so a clean-up cannot pass by taking everything.</summary>

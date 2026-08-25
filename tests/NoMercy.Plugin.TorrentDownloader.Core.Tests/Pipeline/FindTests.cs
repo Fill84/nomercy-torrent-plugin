@@ -74,6 +74,40 @@ public class FindTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>One hash is one torrent, whatever a site calls it.</strong> The
+    /// info hash is the identity: two rows carrying it are the same bytes in
+    /// the same swarm, and a site that writes the year in while another leaves
+    /// it out has not found a different file.
+    /// </para>
+    /// <para>
+    /// Merging ran by name first, so rows that named the same hash differently
+    /// stayed apart and their trackers were never put together. On 26 August
+    /// 2026 two Lioness episodes sat at "fetching metadata" with no peer and no
+    /// seed for hours, while the same release was seeding perfectly through a
+    /// tracker only the other row published.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheSameHashUnderTwoDifferentNamesIsStillOneTorrent()
+    {
+        const string Hash = "6C4B2D8A1E5F9037C2A84B16D9E70F3B5A82C41D";
+
+        ReleaseCopy[] copies =
+        [
+            new("Lioness 2023 S03E03 1080p WEB H264-CAKES", "EZTV", 40, Hash,
+                $"magnet:?xt=urn:btih:{Hash}&tr=udp%3A%2F%2Fone.example%3A80", null, 3, 1_000),
+            new("Lioness S03E03 1080p WEB H264-CAKES", "TorrentBay", 30, Hash,
+                $"magnet:?xt=urn:btih:{Hash}&tr=udp%3A%2F%2Ftwo.example%3A80", null, 25, 1_000),
+        ];
+
+        ReleaseCopy merged = Assert.Single(Find.Merge(copies));
+
+        Assert.Equal(["udp://one.example:80", "udp://two.example:80"], merged.Trackers.Order());
+        Assert.Equal(25, merged.Seeders);
+    }
+
+    /// <remarks>
     /// The same torrent on five sites is one torrent with five sets of
     /// trackers. More trackers is a faster download, which is the whole reason
     /// every indexer is asked rather than the first one that answers.

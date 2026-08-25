@@ -46,13 +46,19 @@ public sealed class GrabRepository(Store database)
 {
     /// <summary>Records a grab, with every episode it answers for.</summary>
     /// <remarks>
-    /// The second recording of a torrent already known is dropped, and the
-    /// unique index on the hash is what decides that. A grab is recorded for
-    /// each episode the cycle decided, so a pass that decides the same episode
-    /// twice used to write the hash twice — and every step that walked grabs
-    /// then walked both. The first row wins: its <c>grabbed_at</c> is when the
-    /// torrent was really taken on, and the covers it carries are the whole of
-    /// what that release answers for.
+    /// The second recording of a torrent <em>already open</em> is dropped, and
+    /// the unique index on the hash is what decides that. A grab is recorded
+    /// for each episode the cycle decided, so a pass that decides the same
+    /// episode twice used to write the hash twice — and every step that walked
+    /// grabs then walked both. The first row wins: its <c>grabbed_at</c> is
+    /// when the torrent was really taken on, and the covers it carries are the
+    /// whole of what that release answers for.
+    ///
+    /// A hash that <em>failed</em> is taken on again instead. Its
+    /// row stays in the table and is hidden from the Downloads page, so
+    /// dropping the insert against it left the owner looking at nothing
+    /// grabbed, pasting the magnet by hand, and being refused by a row they
+    /// could not see.
     /// </remarks>
     public async Task RecordAsync(
         EpisodeKey episode,
@@ -72,7 +78,18 @@ public sealed class GrabRepository(Store database)
             """
             INSERT INTO grabs (show_id, season, episode, release_title, info_hash, source, magnet, grabbed_at, state, covers)
             VALUES ($show, $season, $episode, $release, $hash, $source, $magnet, $at, $state, $covers)
-            ON CONFLICT (info_hash) DO NOTHING;
+            ON CONFLICT (info_hash) DO UPDATE SET
+                release_title = excluded.release_title,
+                source        = excluded.source,
+                magnet        = excluded.magnet,
+                grabbed_at    = excluded.grabbed_at,
+                state         = excluded.state,
+                covers        = excluded.covers
+            -- Failed only. A grab that is done has its file in the library,
+            -- and dragging it back would put the episode to missing and search
+            -- for it again — the fault that took the owner's finished grabs
+            -- from twenty-three to eleven.
+            WHERE grabs.state = 'failed';
             """;
 
         command.Parameters.AddWithValue("$show", episode.ShowId);

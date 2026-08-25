@@ -262,7 +262,35 @@ public sealed class Find(
             merged.Add(One(named));
         }
 
-        return merged;
+        // And then by hash, across names. The info hash is the identity: two
+        // rows carrying it are the same bytes in the same swarm, and a site
+        // writing the year in while another leaves it out has not found a
+        // different file. Grouping by name alone kept those apart and their
+        // trackers with them — two Lioness episodes sat at "fetching metadata"
+        // with no peer and no seed while the same release seeded through a
+        // tracker only the row that did not merge had published.
+        //
+        // After the pass above rather than instead of it: a row with no hash
+        // can only be placed by its name, and that is what the name pass is
+        // for. This puts together what the name pass could not see.
+        List<ReleaseCopy> byHash = [];
+
+        foreach (IGrouping<string?, ReleaseCopy> same in merged.GroupBy(copy =>
+                     copy.InfoHash?.ToUpperInvariant()))
+        {
+            if (same.Key is null)
+            {
+                // Nothing identifies these as one another, so they stay as they
+                // are rather than being guessed into a group.
+                byHash.AddRange(same);
+
+                continue;
+            }
+
+            byHash.Add(One(same));
+        }
+
+        return byHash;
     }
 
     /// <summary>One torrent out of every row that named it.</summary>
