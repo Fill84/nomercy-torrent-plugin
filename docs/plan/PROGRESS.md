@@ -28,8 +28,8 @@ and it waits on media-server #30, #34, #35, #36 and #37 — none of them this re
 S10-06 and S10-01 exist so that day is two additions rather than surgery. **S10-09**, and only when
 the owner asks.
 
-**0.3.9 is published**: `NoMercy.Plugin.TorrentDownloader-0.3.9.zip`, on GitHub, on the owner's ask
-of 25 August 2026. The `v0.4.0` tag that stood in the way is gone. It named `ecc0241` of 21 August — 74 commits behind,
+**0.3.9 is published on GitHub**: `NoMercy.Plugin.TorrentDownloader-0.3.9.zip`, on the owner's ask of
+25 August 2026. **Not yet on forgejo, which is where the releases live** — see the S10-08 entry. The `v0.4.0` tag that stood in the way is gone. It named `ecc0241` of 21 August — 74 commits behind,
 older than every fix of the week that followed, and never published as a release; only `v0.1.0` ever
 was.
 
@@ -199,7 +199,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   for all twenty-one platforms, because a plugin folder missing its dependencies loads as nothing at
   all with nothing to say why: that is what happened on 21 August, when twelve assemblies were named
   and three were there. Symbols and documentation are left out; nothing at runtime reads them.
-  **Not released on forgejo** — that needs a token this session does not have.
+  **Not released on forgejo, and that is the one that matters.** `v0.1.0` and `v0.2.0` are both full
+  releases there, with their zips; GitHub only ever carried `v0.1.0`. So forgejo is where this
+  plugin's releases live and `v0.3.9` is missing from it. The tag is pushed; what is missing is the
+  release entry and the asset. It needs a Forgejo token with write access to the repository — the
+  credential stored for that host answers 401 to both basic auth and `Authorization: token`, so it
+  has expired or been revoked.
 
   The release notes say what it does not do as plainly as what it does: it still reaches into the
   server by name, and a show just added is still invisible to it.
