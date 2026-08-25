@@ -38,6 +38,42 @@ public class LiveSnapshotTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A push costs the client a whole page.</strong> The message
+    /// carries the snapshot, but the host that draws a plugin does not read it:
+    /// it treats any message as "something moved" and re-reads the entire view
+    /// over HTTP, translations and all. That is the generic host's only option,
+    /// because a payload is this plugin's own shape and the host draws every
+    /// plugin.
+    /// </para>
+    /// <para>
+    /// So the floor is not a rendering cost, it is a round trip. A download in
+    /// flight moves its byte count on every tick, so the changes never stop
+    /// coming, and at a quarter of a second that is four complete page reads a
+    /// second — which is what the owner saw as the pages flickering.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AChangeEveryTenthOfASecondIsStillOnePushASecond()
+    {
+        FakeTimeProvider clock = new();
+        FakeHub hub = new();
+        ActivityJournal journal = new(clock);
+        using LiveSnapshot live = new(hub, journal, new CapturingLogger(), () => CycleStatus.Unknown, clock);
+
+        // A second of a download in flight: the byte count moves, so a change
+        // is published, and it never stops for as long as the download runs.
+        for (int tenth = 0; tenth < 10; tenth++)
+        {
+            journal.Started(ActivityStage.Find, $"tick-{tenth}");
+            live.Changed();
+            clock.Advance(TimeSpan.FromMilliseconds(100));
+        }
+
+        Assert.Single(hub.Pushes);
+    }
+
+    /// <remarks>
     /// Coalesced, not dropped. The last change in a burst is the one that
     /// matters, and a page left showing the state from before it would be
     /// wrong until something else happened to move.

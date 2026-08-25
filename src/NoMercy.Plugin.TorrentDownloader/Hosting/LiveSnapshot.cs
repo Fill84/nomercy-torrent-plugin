@@ -5,7 +5,7 @@ using NoMercy.Plugins.Abstractions;
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
 /// <summary>
-/// Pushes the snapshot to every open page, at most once every 250 ms.
+/// Pushes the snapshot to every open page, at most once a second.
 /// </summary>
 /// <remarks>
 /// No page polls. A cycle publishes constantly — every source answering, every
@@ -20,7 +20,19 @@ public sealed class LiveSnapshot : IDisposable
     public const string Channel = "torrent-downloader:changed";
 
     /// <summary>The floor between two pushes.</summary>
-    public static readonly TimeSpan MinimumInterval = TimeSpan.FromMilliseconds(250);
+    /// <remarks>
+    /// A second, because a push costs the client a whole page. The message
+    /// carries the snapshot, but the host that draws a plugin does not read it:
+    /// any message means "something moved", and it answers by re-reading the
+    /// entire view over HTTP, translations and all. It has no other option — a
+    /// payload is this plugin's own shape and that host draws every plugin.
+    ///
+    /// A download in flight moves its byte count on every tick, so the changes
+    /// never stop, and at a quarter of a second that was four complete page
+    /// reads a second: the pages flickered for as long as anything was
+    /// downloading.
+    /// </remarks>
+    public static readonly TimeSpan MinimumInterval = TimeSpan.FromSeconds(1);
 
     private readonly IPluginHubContext _hub;
     private readonly IActivityJournal _journal;
