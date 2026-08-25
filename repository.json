@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.3.10",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.10/NoMercy.Plugin.TorrentDownloader-0.3.10.zip",
+          "checksum": "eeed2df26978cdc2aa523ef49fcda0f6ccdcd76a0537bef127d286a4849dc56e",
+          "changelog": "Every page is the same shell again. Shows, Queue, Downloads, History, Skipped, Sources and Settings were drawn in half the width with a dead pane beside them and their last column cut off; only the dashboard was right.",
+          "timestamp": "2026-08-25T16:18:54Z"
+        },
+        {
           "version": "0.3.9",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.9/NoMercy.Plugin.TorrentDownloader-0.3.9.zip",
