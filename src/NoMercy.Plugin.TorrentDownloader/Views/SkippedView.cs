@@ -1,4 +1,5 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Views;
@@ -32,8 +33,27 @@ public static class SkippedView
     // and nothing anyone pressed did anything at all.
     public const string AllowAction = "skipped/allow";
 
-    public static PluginView Render(IReadOnlyList<SkippedRelease> skipped)
+    /// <summary>Where a page of refusals is asked for.</summary>
+    /// <remarks>
+    /// The page number rides in the address so that a page can be linked to,
+    /// reloaded and gone back to. A page held in memory instead would put the
+    /// owner back at the top every time the view refreshed, and this view
+    /// refreshes whenever the journal moves.
+    /// </remarks>
+    public const string PageQuery = "page";
+
+    /// <summary>How many refusals one page holds.</summary>
+    /// <remarks>
+    /// Fifty is what fits without scrolling forever and is few enough to draw
+    /// at once. The whole list used to be drawn — 65,878 rows on the owner's
+    /// server — and the page took most of a minute to open.
+    /// </remarks>
+    public const int PageSize = 50;
+
+    public static PluginView Render(SkippedPage page)
     {
+        IReadOnlyList<SkippedRelease> skipped = page.Rows;
+
         return new()
         {
             Layout = PluginLayout.Standard,
@@ -76,8 +96,59 @@ public static class SkippedView
                             Allow(one))),
                     ],
                     "Nothing has been refused."),
+                .. Paging(page),
             ],
         };
+    }
+
+    /// <summary>
+    /// Where this page sits, and the way to the ones either side.
+    /// </summary>
+    /// <remarks>
+    /// Drawn only when there is more than one page. A pair of dead buttons
+    /// under a short list is furniture that says the plugin has more to show
+    /// when it has not.
+    /// </remarks>
+    private static IEnumerable<PluginComponent> Paging(SkippedPage page)
+    {
+        if (page.Pages <= 1)
+        {
+            yield break;
+        }
+
+        // The count is the point of the line: a page of fifty out of sixty-five
+        // thousand is a very different thing from fifty out of sixty, and the
+        // owner cannot tell which they are looking at from the rows.
+        yield return Ui.Text(
+            $"{TableId}-range",
+            $"Showing {page.First} to {page.Last} of {page.Total} refusals, page {page.Page} of {page.Pages}.",
+            "caption");
+
+        List<PluginComponent> controls = [];
+
+        if (page.HasPrevious)
+        {
+            controls.Add(Ui.Button(
+                $"{TableId}-previous",
+                "Previous",
+                PluginActionIntent.Navigate(Address(page.Page - 1))));
+        }
+
+        if (page.HasNext)
+        {
+            controls.Add(Ui.Button(
+                $"{TableId}-next",
+                "Next",
+                PluginActionIntent.Navigate(Address(page.Page + 1))));
+        }
+
+        yield return Ui.Row($"{TableId}-paging", [.. controls]);
+    }
+
+    /// <summary>This page's own address, which is what makes it linkable.</summary>
+    private static string Address(int page)
+    {
+        return page <= 1 ? Pages.SkippedRoute : $"{Pages.SkippedRoute}?{PageQuery}={page}";
     }
 
     /// <summary>

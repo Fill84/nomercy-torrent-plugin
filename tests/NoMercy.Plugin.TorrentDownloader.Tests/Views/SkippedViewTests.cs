@@ -1,3 +1,5 @@
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Storage;
 using System.Text.Json;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
@@ -21,12 +23,10 @@ public class SkippedViewTests
     [Fact]
     public void EveryRefusalIsRenderedWithTheReasonItWasRefusedFor()
     {
-        PluginView view = SkippedView.Render(
-        [
-            new(Episode(6), "Silo S03E06 720p WEB", "LimeTorrents", "720p is below the profile's floor of 1080p"),
-            new(Episode(6), "Silo S03E06 1080p x264", "1337x", "2 seeders is below the minimum of 5"),
-            new(Episode(7), "Silo S03E07 1080p", null, "the title is blacklisted"),
-        ]);
+        PluginView view = SkippedView.Render(Page(
+            new SkippedRelease(Episode(6), "Silo S03E06 720p WEB", "LimeTorrents", "720p is below the profile's floor of 1080p"),
+            new SkippedRelease(Episode(6), "Silo S03E06 1080p x264", "1337x", "2 seeders is below the minimum of 5"),
+            new SkippedRelease(Episode(7), "Silo S03E07 1080p", null, "the title is blacklisted")));
 
         string page = string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]);
 
@@ -52,8 +52,8 @@ public class SkippedViewTests
     [Fact]
     public void EveryRowCarriesTheControlToAllowThatOneRelease()
     {
-        PluginView view = SkippedView.Render(
-            [new(Episode(6), "Silo S03E06 720p WEB", "LimeTorrents", "720p is below the profile's floor")]);
+        PluginView view = SkippedView.Render(Page(
+            new SkippedRelease(Episode(6), "Silo S03E06 720p WEB", "LimeTorrents", "720p is below the profile's floor")));
 
         // The one row, by its id: the heading and the column headers share the
         // page's prefix, and only the row itself carries an action.
@@ -80,12 +80,17 @@ public class SkippedViewTests
     {
         Assert.Contains(
             "Nothing has been refused.",
-            string.Join(" ", [.. Rendered.Words(SkippedView.Render([])), .. Rendered.EveryValue(SkippedView.Render([]))]),
+            string.Join(" ", [.. Rendered.Words(SkippedView.Render(Page())), .. Rendered.EveryValue(SkippedView.Render(Page()))]),
             StringComparison.Ordinal);
     }
 
     private static EpisodeKey Episode(int number)
     {
         return new(42, 3, number);
+    }
+    /// <summary>One page holding exactly these, which is what a test means.</summary>
+    private static SkippedPage Page(params SkippedRelease[] refused)
+    {
+        return new(refused, refused.Length, 1, SkippedView.PageSize);
     }
 }

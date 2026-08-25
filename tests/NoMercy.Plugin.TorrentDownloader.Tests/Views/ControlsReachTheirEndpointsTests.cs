@@ -130,8 +130,9 @@ public class ControlsReachTheirEndpointsTests
         yield return ("Queue", QueueView.Render(
             [new(new(41, 3, 6), "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Missing)]));
 
-        yield return ("Skipped", SkippedView.Render(
-            [new(new(41, 3, 6), "Silo S03E06 720p WEB", "LimeTorrents", "720p is below the floor")]));
+        SkippedRelease refused = new(new(41, 3, 6), "Silo S03E06 720p WEB", "LimeTorrents", "720p is below the floor");
+
+        yield return ("Skipped", SkippedView.Render(new([refused], 1, 1, SkippedView.PageSize)));
 
         yield return ("Settings", SettingsView.Render(new(), [], []));
 

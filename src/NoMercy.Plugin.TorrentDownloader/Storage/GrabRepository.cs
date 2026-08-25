@@ -654,17 +654,48 @@ public sealed class GrabRepository(Store database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    /// <summary>Every refusal, newest first, as the Skipped page reads them.</summary>
-    public async Task<IReadOnlyList<SkippedRelease>> SkippedAsync(CancellationToken ct)
+    /// <summary>
+    /// One page of refusals, newest first, and how many there are in all.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A page, never all of them.</strong> This used to select every
+    /// refusal there had ever been, and the Skipped page rendered the lot: one
+    /// row is written for every release every cycle considered and did not
+    /// take, so the owner's history reached 66,149 lines with 65,878 of them
+    /// refusals. The page took the better part of a minute to open and the
+    /// client had to lay out sixty-five thousand rows nobody was going to read.
+    /// </para>
+    /// <para>
+    /// Pruning does not solve it and was never meant to: a fortnight of a busy
+    /// library is still tens of thousands of rows. What was missing is a limit.
+    /// </para>
+    /// </remarks>
+    /// <param name="page">One-based. Anything lower is the first page.</param>
+    /// <param name="size">How many rows a page holds.</param>
+    /// <param name="ct">Cancellation.</param>
+    public async Task<SkippedPage> SkippedAsync(int page, int size, CancellationToken ct)
     {
+        int wanted = Math.Max(1, page);
+        int rows = Math.Clamp(size, 1, 500);
+
         await using SqliteConnection connection = await database.OpenAsync(ct);
+
+        await using SqliteCommand counting = connection.CreateCommand();
+        counting.CommandText = "SELECT COUNT(*) FROM history WHERE event = 'skipped';";
+
+        int total = Convert.ToInt32(await counting.ExecuteScalarAsync(ct));
+
         await using SqliteCommand command = connection.CreateCommand();
 
         command.CommandText =
             """
             SELECT show_id, season, episode, release_title, source, detail FROM history
-            WHERE event = 'skipped' ORDER BY id DESC;
+            WHERE event = 'skipped' ORDER BY id DESC LIMIT $take OFFSET $skip;
             """;
+
+        command.Parameters.AddWithValue("$take", rows);
+        command.Parameters.AddWithValue("$skip", (wanted - 1) * rows);
 
         List<SkippedRelease> refused = [];
 
@@ -683,7 +714,7 @@ public sealed class GrabRepository(Store database)
                 reader.IsDBNull(5) ? "no reason was recorded" : reader.GetString(5)));
         }
 
-        return refused;
+        return new(refused, total, wanted, rows);
     }
 
     /// <summary>What the history says happened, newest first.</summary>

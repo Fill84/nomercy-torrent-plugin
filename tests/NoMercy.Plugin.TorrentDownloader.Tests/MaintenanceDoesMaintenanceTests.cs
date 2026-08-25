@@ -76,7 +76,7 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
 
         await plugin.ExecuteAsync(JobNames.Maintenance, CancellationToken.None);
 
-        SkippedRelease left = Assert.Single(await grabs.SkippedAsync(CancellationToken.None));
+        SkippedRelease left = Assert.Single((await grabs.SkippedAsync(1, 50, CancellationToken.None)).Rows);
 
         Assert.Equal("Silo.S03E06.2160p.WEB.H265-NEW", left.Title);
     }

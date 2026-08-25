@@ -1048,6 +1048,22 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return Pages.WithNavigation(await PageAsync(request, ct), request.Route);
     }
 
+    /// <summary>
+    /// A page number off the address, or the first page.
+    /// </summary>
+    /// <remarks>
+    /// Anything that is not a number is the first page rather than an error. A
+    /// hand-typed address is not worth a broken screen, and the page it lands
+    /// on says which page it is.
+    /// </remarks>
+    private static int Requested(PluginViewRequest request, string name)
+    {
+        return request.Query.TryGetValue(name, out string? asked)
+               && int.TryParse(asked, out int page)
+            ? page
+            : 1;
+    }
+
     private async Task<PluginView> PageAsync(PluginViewRequest request, CancellationToken ct)
     {
         // Rendered per request from the current state, never from a tree held
@@ -1082,7 +1098,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 return SourcesView.Render(await SourceReportsAsync(ct), DateTimeOffset.UtcNow);
 
             case Pages.SkippedRoute:
-                return SkippedView.Render(await (await GrabsAsync(ct)).SkippedAsync(ct));
+                // A page of them, not all of them: one refusal is written for
+                // every release every cycle considered and did not take, and
+                // the owner's history held 65,878 of them.
+                return SkippedView.Render(await (await GrabsAsync(ct)).SkippedAsync(
+                    Requested(request, SkippedView.PageQuery),
+                    SkippedView.PageSize,
+                    ct));
 
             case Pages.HistoryRoute:
                 return HistoryView.Render(

@@ -306,6 +306,61 @@ public class GrabRepositoryTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>A page of refusals, never all of them.</strong> One row is
+    /// written for every release every cycle considered and did not take, so
+    /// the owner's history reached 66,149 lines with 65,878 of them refusals —
+    /// and the Skipped page selected every one and drew every one. It took the
+    /// better part of a minute to open.
+    /// </para>
+    /// <para>
+    /// Pruning does not answer it: a fortnight of a busy library is still tens
+    /// of thousands of rows. A limit does.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheSkippedPageReadsOnePageAndSaysHowManyThereAre()
+    {
+        GrabRepository grabs = Repository();
+
+        for (int number = 1; number <= 25; number++)
+        {
+            await grabs.RecordSkippedAsync(
+                Episode(number),
+                "Silo",
+                $"Silo S03E{number:00} 720p WEB",
+                "1337x",
+                "720p is below the floor",
+                When,
+                CancellationToken.None);
+        }
+
+        SkippedPage first = await grabs.SkippedAsync(1, 10, CancellationToken.None);
+
+        Assert.Equal(10, first.Rows.Count);
+        Assert.Equal(25, first.Total);
+        Assert.Equal(3, first.Pages);
+        Assert.False(first.HasPrevious);
+        Assert.True(first.HasNext);
+
+        // Newest first, so the first page opens on the most recent refusal.
+        Assert.Equal("Silo S03E25 720p WEB", first.Rows[0].Title);
+
+        SkippedPage last = await grabs.SkippedAsync(3, 10, CancellationToken.None);
+
+        Assert.Equal(5, last.Rows.Count);
+        Assert.True(last.HasPrevious);
+        Assert.False(last.HasNext);
+        Assert.Equal("Silo S03E01 720p WEB", last.Rows[^1].Title);
+
+        // No page overlaps another, or the owner reads the same refusal twice
+        // and never sees one of the others.
+        SkippedPage second = await grabs.SkippedAsync(2, 10, CancellationToken.None);
+
+        Assert.Empty(first.Rows.Select(one => one.Title).Intersect(second.Rows.Select(one => one.Title)));
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>One torrent is one grab.</strong> Seven info hashes on the
     /// owner's server carried two rows each, and every step that walked grabs
     /// walked both — so one episode was staged twice and dispatched twice.

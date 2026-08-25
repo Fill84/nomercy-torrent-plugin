@@ -79,7 +79,7 @@ public class CycleRecordTests : IDisposable
             When,
             CancellationToken.None);
 
-        SkippedRelease refused = Assert.Single(await grabs.SkippedAsync(CancellationToken.None));
+        SkippedRelease refused = Assert.Single((await grabs.SkippedAsync(1, 50, CancellationToken.None)).Rows);
 
         Assert.Equal("Silo.S03E06.720p.WEB-DL", refused.Title);
         Assert.Equal("1337x", refused.Source);
