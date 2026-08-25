@@ -1309,7 +1309,12 @@ This is not a seam invented for testing. It is the pattern this codebase already
 places, missing from the one place a change is already dated.
 
 1. `Core/Ports/IEncodeGateway.cs`, shaped by what `Transfers` actually needs: a staged file, the
-   episode it is, the show's library, and an answer that is either "queued" or a reason.
+   episode it is, the show it belongs to, where that show's episodes already are, and an answer.
+   **Corrected on 25 August 2026 while doing this slice:** the answer is taken-or-not, not
+   "queued or a reason". The caller acts the same way whatever the reason — leave the file staged,
+   ask again next tick — and the refusal is already logged and journalled where it happens, so a
+   reason handed back would be read by nobody. The interface requires the refusal to say why before
+   it returns instead.
 2. `EncodeDispatch` implements it. Nothing inside it moves.
 3. `Transfers` takes the port.
 4. The comment on the interface names #30 and #35 and says what the second implementation will be,

@@ -105,6 +105,18 @@ The plugin does not import into the library. It stages the finished video and di
 job the dashboard's *Add content* button dispatches. `FileRescanJob` only re-walks existing library
 folders and cannot see a file staged elsewhere.
 
+**The plugin asks through `Core/Ports/IEncodeGateway`, and everything below is one implementation of
+it.** The cadence hands over a staged file, the episode it is, the show it belongs to and where that
+show's episodes already are, and learns only whether the ask was taken. It names no type from this
+page. When #30 and #35 land, the contract implementation is a second class beside this one and a
+single line where the plugin is composed — `EncodeDispatch` is then deleted whole, and it is the only
+reflection in the plugin, so when it goes there is none.
+
+An implementation that refuses must say why in the log and the journal before it returns. The caller
+learns nothing but "not taken" and acts the same way whatever the reason — leave the file staged,
+ask again next tick — so a silent refusal is an episode that never arrives with nothing anywhere
+saying why. Three of the owner's ended up in a folder nobody was watching exactly that way.
+
 Reached by name through `IServiceProvider`, never by reference — referencing the encoder and the EF
 model would make them part of this plugin's ABI, which is what the plugin contract exists to avoid.
 

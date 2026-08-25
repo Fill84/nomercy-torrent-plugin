@@ -403,12 +403,21 @@ public class EncodeDispatchTests : IDisposable
         string? existing = null,
         EpisodeKey? episode = null)
     {
+        // The library and its type are read off the show now, so the test says
+        // which show rather than which library. Nothing it asserts changed.
+        Show show = new(
+            203744,
+            "Silo",
+            2023,
+            libraryId,
+            libraryType == "anime" ? LibraryKind.Anime : LibraryKind.Television,
+            "Silo (2023)");
+
         return new EncodeDispatch(server, server.Journal, server.Log).DispatchAsync(
             Staged(),
-            libraryId,
-            libraryType,
-            existing,
             episode ?? new(203744, 2, 8),
+            show,
+            existing,
             CancellationToken.None);
     }
 

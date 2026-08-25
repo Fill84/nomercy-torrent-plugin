@@ -30,7 +30,7 @@ public sealed class Transfers(
     GrabRepository grabs,
     ILibrary library,
     Stager stager,
-    EncodeDispatch dispatch,
+    IEncodeGateway dispatch,
     IActivityJournal journal,
     ILogger logger,
     TimeProvider? time = null)
@@ -331,13 +331,7 @@ public sealed class Transfers(
         // folder it really lives in. A library can have several.
         string? existing = (await thisTick.GetShowFilesAsync(episode.ShowId, ct)).FirstOrDefault();
 
-        bool queued = await dispatch.DispatchAsync(
-            staged,
-            show.LibraryId,
-            show.Kind == LibraryKind.Anime ? "anime" : "tv",
-            existing,
-            episode,
-            ct);
+        bool queued = await dispatch.DispatchAsync(staged, episode, show, existing, ct);
 
         if (!queued)
         {

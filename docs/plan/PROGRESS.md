@@ -4,12 +4,16 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-06 — a port for the encode.** Everything this plugin asks of the server sits behind an
-interface in `Core/Ports` except the encode, which is the concrete `EncodeDispatch` handed straight
-to `Transfers` — and it is the one part already scheduled to change, when media-server #30 gives
-plugins `IPluginEncoder` and #35 gives them the episode's id. With a port that day is a new class
-beside the old one and one line of composition; without it, it is surgery on `Transfers` while it is
-the thing keeping the owner's library filling.
+**S10-07 — the plan says what happened.** S9-03 "Every show in a library is in scope" is marked done
+and was reverted the same day, so a reader following the plan would put the 479 grabs back. S8-05 and
+S9-06 are both called "Release 0.4.0". `docs/02-library.md` still describes the widened rule rather
+than the one the code applies.
+
+Three more found while doing Sprint 10, all for that slice: `docs/03-architecture.md` § Project
+layout names a `Core/Transfers/` folder that does not exist — the ports live in `Core/Ports/`, and
+there are now six of them; `docs/plan/SPRINTS.md` S10-04 named a **Read first** section that has never
+existed, which is already corrected in place; and the Sprint 9 slices were never added to § Slices
+here at all.
 
 The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded, staged, dispatched with its own
 episode id and encoded into the owner's library at 22:33 — the first episode this plugin has
@@ -157,7 +161,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S10-03` A connection costs a connection
 - [x] `S10-04` Maintenance does maintenance
 - [x] `S10-05` Nothing that nothing reaches
-- [ ] `S10-06` A port for the encode
+- [x] `S10-06` A port for the encode
 - [ ] `S10-07` The plan says what happened
 - [ ] `S10-08` Release 0.3.9
 - [ ] `S10-09` Release 0.4.0 — on the contract, with no reflection left
@@ -166,6 +170,17 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- `S10-06` **F1.** `Core/Ports/IEncodeGateway.cs` — a staged file, the episode it is, the show it
+  belongs to, where that show's episodes already are, and an answer of taken or not. `EncodeDispatch`
+  implements it with nothing inside it moved; the one thing that did move is the `"anime"`/`"tv"`
+  string, from the cadence into the adapter, because it is the file list service's vocabulary and not
+  the domain's. `Transfers` now names no host type at all, and `EncodeDispatch` is named in exactly
+  one place: the line where the plugin is composed. The answer stays a bool rather than a reason —
+  the slice said "queued or a reason", but the caller acts the same way whatever the reason and the
+  refusal is already logged and journalled where it happens, so a reason nobody reads would be the
+  dead code S10-05 has just finished removing. The interface says instead that a refusal must say why
+  before it returns. The test is the day itself, rehearsed: a second implementation handed to the
+  same cadence, asked the same things. It could not even be compiled before this slice.
 - `S10-05` **D1.** `Ui.List`, `Ui.Container` and `Ui.EmptyState` are gone, and so are the three
   client names only they used — recorded in `docs/08-ui.md` § Components instead, so a page that
   needs one has them without reading the client again. The finding's *reasoning* was wrong and the

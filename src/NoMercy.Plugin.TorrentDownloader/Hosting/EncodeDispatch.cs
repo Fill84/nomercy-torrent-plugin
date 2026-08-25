@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
@@ -28,6 +29,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </para>
 /// </remarks>
 public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal journal, ILogger logger)
+    : IEncodeGateway
 {
     /// <summary>What queues the job.</summary>
     public const string DispatcherType = "NoMercy.MediaProcessing.Jobs.IJobDispatcher";
@@ -71,32 +73,23 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
     /// cadence, so one type mismatch stopped every download in flight from being
     /// looked at.
     /// </remarks>
-    /// <param name="stagedFile">The video, in the intake folder.</param>
-    /// <param name="libraryId">
-    /// The show's own library, from <c>PluginLibraryShow.LibraryId</c>. That is
-    /// what puts an anime episode in the anime library and a television episode
-    /// in the tv library: the server decided the media type when the show was
-    /// filed, and this plugin follows it rather than choosing.
-    /// </param>
-    /// <param name="libraryType">The library's type, as the file list service wants it.</param>
-    /// <param name="ct">Cancellation.</param>
-    /// <param name="existing">
-    /// A path where this show's episodes already are, when it has any. A
-    /// library can have more than one folder and an encode has to go to the one
-    /// the show really lives in.
-    /// </param>
-    /// <param name="episode">
-    /// Which episode this file is. The encode job is registered against the
-    /// server's own row for it, and this is what finds that row.
-    /// </param>
+    /// <inheritdoc/>
     public async Task<bool> DispatchAsync(
         string stagedFile,
-        string libraryId,
-        string libraryType,
-        string? existing,
         EpisodeKey episode,
+        Show show,
+        string? existing,
         CancellationToken ct)
     {
+        // The show's own library, and its type spelled the way the file list
+        // service wants it. Both are read off the show rather than asked for
+        // separately: the server decided the media type when the show was
+        // filed, and this plugin follows it rather than choosing. Turning the
+        // one into the other is host vocabulary, so it happens here at the edge
+        // and not in the cadence.
+        string libraryId = show.LibraryId;
+        string libraryType = show.Kind == LibraryKind.Anime ? "anime" : "tv";
+
         try
         {
             if (Named(DispatcherType) is not Type dispatcherType
