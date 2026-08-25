@@ -1169,3 +1169,180 @@ this plugin does not delete what it did not make.
 3. Only when the owner asks.
 
 **Done when** the owner says so.
+
+# Sprint 10 — What the audit found
+
+`docs/plan/AUDIT-0.3.9.md` is the report. Every slice here names the findings it closes.
+
+**Nothing in this sprint changes what the plugin does.** Each one removes work, moves a rule to one
+place, or puts a seam where the next change already lands. A slice that cannot be done without
+changing behaviour is a slice that was wrong, and the plan gets fixed rather than the behaviour.
+
+The gate for all of them is the same and it is stricter than usual: `dotnet test` must be green
+**without a single test changing its expectation**. A test that has to be edited to accept the new
+code is the proof that the behaviour moved. The only edits allowed are to a test's own construction
+— a fake given one more constructor argument — never to what it asserts.
+
+## S10-00 · Release 0.3.9
+
+The plugin as it stands: it downloads, it stages, it encodes, and the episode lands in the library.
+That is worth a number before anything is touched.
+
+`v0.4.0` is already a tag, on `ecc0241` of 21 August, which is 74 commits behind and predates every
+fix of the last four days — the upload policy, the video whitelist, the naming, the duplicate
+grabs, the episode id. It was never published as a release; only `v0.1.0` ever was.
+
+1. Delete the tag, locally and on the remote. It names a build nobody should install.
+2. `Directory.Build.props` and `plugin.json` say `0.3.9`.
+3. Tag `v0.3.9` on the commit that has been running on the owner's server.
+4. `PROGRESS.md` says what 0.3.9 does and what it does not.
+
+**Done when** the owner asks for it. Read first: nothing.
+
+## S10-01 · One rule for whose show it is
+
+Closes **A1**.
+
+`MissingRefresh` decides which shows are searched for; `Transfers.NotOursAsync` decides which grabs
+are cancelled for belonging to a show the owner does not have. They are one policy written twice,
+and on 24 August 2026 changing one of them put the plugin on 479 grabs in an afternoon.
+
+It is also the rule that changes when media-server #36 lands and library membership becomes the
+discriminator. One place to change, not two.
+
+1. A test that fails when the two disagree: give the fake library a show with no episode on disk,
+   and assert that the refresh does not track it **and** that a grab for it is cancelled — one test,
+   both sides.
+2. `Core/Pipeline/Ownership.cs`: `public static bool Theirs(IReadOnlyList<Episode> episodes)`, with
+   the comment that names the 479 grabs and says what replaces it when #36 lands.
+3. `MissingRefresh` and `NotOursAsync` both call it. Neither holds the expression.
+
+**Done when** deleting the body of `Ownership.Theirs` fails tests on both sides.
+Read first: `docs/02-library.md`.
+
+## S10-02 · One question, one answer, per tick
+
+Closes **B1**, **B2**, **B3**.
+
+The transfers cadence runs every minute. It asks the library for its shows once per staged file and
+once per dispatch, asks for a show's episodes from two places with two caches, and reads the open
+grabs twice.
+
+None of it is wrong. All of it is the same question asked again inside one tick.
+
+1. A test that counts: the fake library records how many times each method was called, and one tick
+   over four staged episodes asks for the shows **once**.
+2. `TickAsync` fetches the shows once and passes them to `StageAsync` and `DispatchAsync`.
+3. One episode lookup per tick, shared by `NotOursAsync` and `FinishAsync`.
+4. Staging returns what it wrote, so `LeftBehindAsync` does not re-read the open grabs to find out.
+
+**Done when** the call counts in that test are what the tick actually needs, and every existing
+test still passes untouched. Read first: nothing.
+
+## S10-03 · A connection costs a connection
+
+Closes **B4**, **B5**.
+
+Every database call makes the data folder and sets `journal_mode`. The folder exists after the
+first call and `journal_mode` is a property of the file, not of the connection: about 21,600
+directory creations and 21,600 unnecessary round trips a day, for nothing.
+
+`foreign_keys` is genuinely per-connection and stays exactly where it is.
+
+1. A test that opens twice and asserts the second open issues no `journal_mode` statement.
+2. `Store` makes the folder once and sets `journal_mode` once, on the first open of the process.
+3. Settings are cached and the cache is dropped on save. A stale settings cache is worse than the
+   round trip, so the invalidation gets its own test: save, then load, and see the new value.
+
+**Done when** both tests fail if the caching is removed. Read first: nothing.
+
+## S10-04 · Maintenance does maintenance
+
+Closes **C1**.
+
+The maintenance cadence runs at four in the morning and its whole body is a refresh that the search
+cadence already does before each of its four daily cycles. The actual housekeeping is elsewhere:
+history is pruned as a side effect of that refresh, and duplicate grab rows are cleared on the first
+transfers tick behind a `_refreshed` flag.
+
+Three pieces of periodic work, none of them in the cadence named for it.
+
+1. Maintenance owns the housekeeping: prune the history, clear duplicate grab rows, and whatever
+   else is periodic and not part of a search.
+2. `RefreshAsync` refreshes and does nothing else.
+3. The first-tick flag goes, and with it the special case that made a start different from a tick.
+4. Search keeps its own refresh: a cycle needs a fresh missing list and must not wait for four in
+   the morning.
+
+**Done when** a start behaves exactly like any other tick, and the duplicate-row test still passes
+against the maintenance cadence rather than against the first tick. Read first: `docs/04-domain.md`
+§ Cadences.
+
+## S10-05 · Nothing that nothing reaches
+
+Closes **D1**.
+
+`Ui.List`, `Ui.Container` and `Ui.EmptyState` have no caller. The last one matters: pages draw their
+empty states by hand while a helper for it sits unused, which is where a design system starts to
+drift.
+
+1. Every page that draws an empty state uses `Ui.EmptyState`.
+2. `Ui.List` and `Ui.Container` go, unless step 1 finds a use for them.
+
+The three unused members in the BitTorrent client — `Dht.BootstrapAsync`, `RequestLedger.Cancelled`,
+`TorrentRun.ResumePoint` — are **not** touched. The client is proven and out of scope; they are
+recorded in the audit so they are not lost.
+
+**Done when** every page's empty state renders through one helper and the pages look exactly as they
+do now. Read first: `docs/08-ui.md`.
+
+## S10-06 · A port for the encode
+
+Closes **F1**.
+
+Everything this plugin asks of the server sits behind an interface in `Core/Ports` — except the
+encode, which is the concrete `EncodeDispatch` handed straight to `Transfers`. It is also the one
+part that is already scheduled to change: media-server #30 gives plugins `IPluginEncoder` and #35
+gives them the episode's id, and between them every line of reflection in `EncodeDispatch.cs` goes.
+
+With a port that day is a new class beside the old one and one line of composition. Without it, it
+is surgery on `Transfers` while it is the thing keeping the owner's library filling.
+
+This is not a seam invented for testing. It is the pattern this codebase already uses in five other
+places, missing from the one place a change is already dated.
+
+1. `Core/Ports/IEncodeGateway.cs`, shaped by what `Transfers` actually needs: a staged file, the
+   episode it is, the show's library, and an answer that is either "queued" or a reason.
+2. `EncodeDispatch` implements it. Nothing inside it moves.
+3. `Transfers` takes the port.
+4. The comment on the interface names #30 and #35 and says what the second implementation will be,
+   so the next reader does not have to find this document.
+
+**Done when** `Transfers` names no concrete host type and every test passes with only its
+construction changed. Read first: `docs/09-host-contract.md`.
+
+## S10-07 · The plan says what happened
+
+Closes **E1**, **E2**.
+
+**S9-03 "Every show in a library is in scope" is marked done and was reverted the same day.** A
+reader following this plan would put the 479 grabs back. **S8-05 and S9-06 are both called "Release
+0.4.0".**
+
+1. S9-03 says it was reverted, why, and what replaces it — media-server #36, after which library
+   membership becomes the rule and this slice can be done properly.
+2. The release slices carry the numbers they really released.
+3. `docs/02-library.md` matches the rule the code actually applies.
+
+**Done when** every slice marked done describes code that exists. Read first: `docs/plan/PROGRESS.md`
+§ Decisions.
+
+## S10-08 · Release 0.4.0
+
+1. `Directory.Build.props` and `plugin.json` say `0.4.0`.
+2. `PROGRESS.md` says what changed since 0.3.9: nothing the owner can see, everything the next
+   change needs.
+3. The tag names the commit that passed every slice above.
+4. Only when the owner asks.
+
+**Done when** the owner says so.

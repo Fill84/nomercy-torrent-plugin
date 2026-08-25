@@ -4,6 +4,15 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**S10-00 — release 0.3.9.** The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded,
+staged, dispatched with its own episode id and encoded into the owner's library at 22:33 — the
+first episode this plugin has delivered end to end. `docs/plan/AUDIT-0.3.9.md` is a full read of the
+source made the same day; Sprint 10 closes what it found, and none of it changes what the plugin
+does.
+
+The section below is what was true before that, and is kept because it is what the proving looked
+like.
+
 **Everything up to staging is proved on the owner's own server. The step the plugin exists for —
 asking the encoder, and knowing what became of that — has never once succeeded there.**
 
@@ -131,6 +140,16 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- `S9-04` The encode is proved end to end. The job carried an empty media id, so the encoder threw it
+  away in silence — `Id.ToInt()` on an empty string is 0, which matches no row. That id came from
+  asking the server to identify the staged file all over again from its name. The plugin chose the
+  show, the season and the number, so it now asks the server's own table for that row: media-server
+  #35 puts it in the contract, and until then it is read through `MediaContext`, which is recorded
+  under **Decisions**.
+- `AUDIT` A full read of 27,241 lines of source before 0.4.0. Eleven findings, one of them high: the
+  rule that decides whose show it is exists in two places. No `TODO`, no commented-out code, and
+  twelve types named only in their own file, all of them legitimate. `docs/plan/AUDIT-0.3.9.md`.
 
 - `S0-01` Solution, three source projects and four test projects, all three gates green. `Core` and
   `Bittorrent` reference nothing at all, and a test in each reads its project file and says so — the
