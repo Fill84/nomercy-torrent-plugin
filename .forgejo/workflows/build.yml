@@ -1,0 +1,223 @@
+name: build
+
+# Builds this plugin, runs every gate the working agreement names, packages a
+# folder that can be dropped into a server's plugins directory, and on a `v*`
+# tag publishes it to both forges.
+#
+# Why a release is never made by hand: the two remotes are meant to be identical
+# and they drifted the moment a person was doing the publishing — 0.2.0 went to
+# forgejo and never to GitHub, 0.3.9 to GitHub and never to forgejo. The tag is
+# the trigger and scripts/publish-release.sh is the only thing that publishes.
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PLUGIN: NoMercy.Plugin.TorrentDownloader
+  DOTNET_CHANNEL: "10.0"
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+
+  # The runner hands the workflow an internal address for the forge, which the
+  # per-workflow container cannot resolve. Everything that talks to forgejo —
+  # the checkout and the release — goes through the public one instead.
+  FORGEJO_URL: https://forgejo.phillippepelzer.me
+
+  # The mirror. It is not a backup: it carries the same tags, the same releases
+  # and the same bytes, and the release step fails if it cannot.
+  GITHUB_REPO: Fill84/nomercy-torrent-plugin
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # The runner may be a host rather than a container, so root is not a
+      # given and the image may already carry these. Install only what is
+      # really missing, and only if that is possible at all.
+      - name: Tooling
+        run: |
+          set -eu
+          missing=""
+          for tool in git curl zip unzip jq; do
+            command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+          done
+          [ -n "$missing" ] || { echo "everything needed is present"; exit 0; }
+
+          echo "missing:$missing"
+          if [ "$(id -u)" = "0" ]; then sudo=""
+          elif command -v sudo >/dev/null 2>&1; then sudo="sudo"
+          else echo "cannot install$missing — not root and no sudo" >&2; exit 1
+          fi
+
+          $sudo apt-get update -y
+          $sudo apt-get install -y --no-install-recommends ca-certificates libicu-dev $missing
+
+      - name: .NET SDK ${{ env.DOTNET_CHANNEL }}
+        run: |
+          set -eux
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
+          chmod +x /tmp/dotnet-install.sh
+          /tmp/dotnet-install.sh --channel "$DOTNET_CHANNEL" --install-dir "$HOME/.dotnet"
+          echo "DOTNET_ROOT=$HOME/.dotnet" >> "$GITHUB_ENV"
+          echo "$HOME/.dotnet" >> "$GITHUB_PATH"
+
+      # By hand rather than with a checkout action, for the same reason the
+      # public URL is set above: the action clones from the address the runner
+      # supplies, and the container cannot reach it.
+      - name: Checkout
+        env:
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # No `set -x` here. The header below is the token base64-encoded, and
+          # the runner's masking only knows the token's literal text — with
+          # xtrace on it would be printed in full and readable by anyone.
+          set -eu
+          : "${TOKEN:?the runner gave no token}"
+
+          cd "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          shopt -s dotglob nullglob
+          rm -rf -- *
+
+          git init -q .
+          git remote add origin "${FORGEJO_URL}/${GITHUB_REPOSITORY}.git"
+
+          # Into a file, not onto the command line: an argument is visible in
+          # the process list to anything else on the machine.
+          umask 077
+          printf 'Authorization: basic %s\n' \
+            "$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)" > /tmp/auth
+          git config --local http.extraHeader "$(cat /tmp/auth)"
+          rm -f /tmp/auth
+
+          git fetch --depth=1 origin "$GITHUB_SHA"
+          git config --local --unset-all http.extraHeader
+          git checkout -q FETCH_HEAD
+          git log --oneline -1
+
+      # The contract is not on nuget.org. The script packs it out of the media
+      # server into _nupkgs/, which the committed nuget.config already points
+      # at, and it is the same script a developer runs — so the two cannot
+      # drift.
+      - name: Pack the plugin contract
+        run: |
+          set -eu
+          chmod +x scripts/fetch-abstractions.sh
+          ./scripts/fetch-abstractions.sh
+
+      - name: Restore
+        run: dotnet restore
+
+      # The three gates from CLAUDE.md, in its own words and its own order.
+      - name: Build
+        run: dotnet build -c Release -warnaserror --no-restore
+
+      - name: Test
+        run: dotnet test -c Release --no-build --logger "console;verbosity=normal"
+
+      - name: Format
+        run: dotnet format --verify-no-changes
+
+      # Everything the build produced, worked out here rather than written
+      # down. A hand-kept list is how a package came to name twelve assemblies
+      # and carry three: the host resolves a plugin's dependencies from beside
+      # the plugin, finds none, and reports nothing — the plugin is simply
+      # absent from the server's list with no sign of why.
+      #
+      # Symbols and documentation stay behind; nothing at runtime reads them.
+      # Native code ships for every platform, because a release does not know
+      # which machine will install it.
+      - name: Package
+        id: package
+        run: |
+          set -eu
+          out="src/$PLUGIN/bin/Release/net10.0"
+          stage="_stage/$PLUGIN"
+
+          case "${GITHUB_REF_NAME:-}" in
+            v*) version="${GITHUB_REF_NAME#v}" ;;
+            *)  version="0.0.0-${GITHUB_SHA:0:8}" ;;
+          esac
+
+          rm -rf _stage
+          mkdir -p "$stage"
+          (cd "$out" && find . -type f ! -name '*.pdb' ! -name '*.xml' \
+              -exec cp --parents {} "$OLDPWD/$stage/" \;)
+
+          zip_name="$PLUGIN-$version.zip"
+          (cd _stage && zip -qr "../$zip_name" "$PLUGIN")
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "zip=$zip_name" >> "$GITHUB_OUTPUT"
+          ls -l "$zip_name"
+
+      # What the package must be true about, checked rather than assumed. Every
+      # line here is a way a package has already been wrong.
+      - name: Check the package
+        env:
+          VERSION: ${{ steps.package.outputs.version }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          set -eu
+          stage="_stage/$PLUGIN"
+
+          # The manifest is read by the server before any of this code runs, and
+          # a version it disagrees with is a server reporting one thing while
+          # running another.
+          case "$VERSION" in
+            0.0.0-*) echo "not a tag, so the manifest version is not checked" ;;
+            *)
+              declared="$(jq -r '.version' "$stage/plugin.json")"
+              [ "$declared" = "$VERSION" ] || {
+                echo "the tag says $VERSION and plugin.json says $declared" >&2
+                exit 1
+              }
+              ;;
+          esac
+
+          # Everything the plugin's own build produced has to be in the package.
+          # deps.json tells them apart for us: a project reference is a bare
+          # filename, a package is a path.
+          missing=""
+          for dep in $(jq -r '.targets[] | to_entries[] | .value.runtime // {} | keys[]' \
+                        "$stage/$PLUGIN.deps.json" | grep -v '/' | sort -u); do
+            [ -f "$stage/$dep" ] || missing="$missing $dep"
+          done
+          [ -z "$missing" ] || { echo "the package is missing:$missing" >&2; exit 1; }
+
+          # The catalogue is read from beside the assembly. Without it the
+          # plugin has no sources at all and says nothing about why.
+          [ -f "$stage/sources.json" ] || { echo "sources.json is not in the package" >&2; exit 1; }
+
+          echo "package holds $(find "$stage" -type f | wc -l) files"
+
+      # Both forges, from one tag, by one script. Skipping either is a failure:
+      # they are meant to be identical.
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          FORGEJO_REPO: ${{ github.repository }}
+          FORGEJO_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.MIRROR_GITHUB_TOKEN }}
+          VERSION: ${{ steps.package.outputs.version }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          set -eu
+          notes="docs/releases/$VERSION.md"
+          [ -f "$notes" ] || {
+            echo "no release notes at $notes." >&2
+            echo "A release says what it is and what it is not, and that is written" >&2
+            echo "in the repository and reviewed, never generated from a tag." >&2
+            exit 1
+          }
+
+          chmod +x scripts/publish-release.sh
+          ./scripts/publish-release.sh "$VERSION" "$ZIP" "$notes"

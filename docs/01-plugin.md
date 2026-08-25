@@ -123,7 +123,12 @@ Three things a test must keep true, because each has broken before:
 ## Building against the contract
 
 `NoMercy.Plugins.Abstractions` is not on nuget.org. `scripts/fetch-abstractions.*` clones the media
-server (sparse, shallow, branch **`dev`**) and packs the contract locally into `_nupkgs/`. After
+server (sparse, shallow, branch **`master`**) and packs the contract locally into `_nupkgs/`.
+
+**`master`, never `dev`.** `dev` carries a fixed `0.1.404` that never moves, so packing from it gives
+a contract older than the one released servers ship — and the build then fails with a `CS0246` naming
+a type, which reads like a missing `using` and is really a server too old. This plugin is installed
+on servers running a release, so it compiles against what those servers carry. After
 repacking the same version number, clear that package's NuGet cache entry or the old one is used
 and nothing says so.
 

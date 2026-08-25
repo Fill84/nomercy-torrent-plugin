@@ -8,7 +8,14 @@
 
 set -euo pipefail
 
-branch="dev"
+# master, never dev — the PowerShell twin of this script has said so all along
+# and this one disagreed with it. dev's Directory.Build.props carries a fixed
+# <Version>0.1.404</Version> that never moves, so packing from it gives a
+# contract older than the one released servers ship. The build then fails with
+# CS0246 naming a type, which reads like a missing using and is really a server
+# too old. This plugin is installed on servers running a release, so the
+# contract it compiles against is the one those servers carry.
+branch="master"
 fresh=0
 for argument in "$@"; do
     case "$argument" in
