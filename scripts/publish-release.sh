@@ -65,8 +65,9 @@ trap 'rm -f "$config"' EXIT
 # $3 owner/repo
 # $4 the token
 # $5 the url assets are uploaded to, with {id} where the release id goes
+# $6 the url one asset is deleted from, with {release} and {asset} in it
 publish() {
-    local forge="$1" api="$2" repo="$3" token="$4" upload="$5"
+    local forge="$1" api="$2" repo="$3" token="$4" upload="$5" remove="$6"
 
     if [ -z "$token" ]; then
         echo "$forge: no token given, so nothing was published there." >&2
@@ -118,16 +119,22 @@ publish() {
     # An asset of the same name is replaced rather than added beside itself.
     # Two files called the same thing on one release is worse than either of
     # them alone: nobody can tell which one they downloaded.
+    #
+    # The two forges spell this differently and that difference is not
+    # cosmetic. Forgejo wants the release in the path; GitHub wants the asset
+    # alone. Using GitHub's shape for both made every forgejo delete a 404,
+    # which `|| true` swallowed — so forgejo kept an older build's package
+    # while GitHub took the new one, and this script said they matched.
     local old
     old="$(curl -K "$config" -fsS "$api/repos/$repo/releases/$id/assets" \
-           | jq -r --arg name "$asset" '.[] | select(.name == $name) | .id' || true)"
+           | jq -r --arg name "$asset" '.[] | select(.name == $name) | .id')"
 
-    if [ -n "$old" ]; then
-        echo "$forge: replacing the existing $asset"
-        for one in $old; do
-            curl -K "$config" -fsS -X DELETE "$api/repos/$repo/releases/assets/$one" > /dev/null
-        done
-    fi
+    for one in $old; do
+        echo "$forge: removing the existing $asset ($one)"
+
+        curl -K "$config" -fsS -X DELETE \
+            "$(printf '%s' "$remove" | sed -e "s/{release}/$id/" -e "s/{asset}/$one/")" > /dev/null
+    done
 
     echo "$forge: uploading $asset"
 
@@ -136,7 +143,23 @@ publish() {
         --data-binary "@$zip" \
         "${upload//\{id\}/$id}?name=$asset" > /dev/null
 
-    echo "$forge: $tag published"
+    # Read back what is really on the release. Every step above can fail in a
+    # way that leaves the old file in place, and a release that quietly carries
+    # the wrong package is the one fault this script exists to prevent.
+    local landed
+    landed="$(curl -K "$config" -fsS "$api/repos/$repo/releases/$id/assets" \
+              | jq -r --arg name "$asset" '[.[] | select(.name == $name) | .size] | @tsv')"
+
+    local expected
+    expected="$(wc -c < "$zip" | tr -d ' ')"
+
+    if [ "$landed" != "$expected" ]; then
+        echo "$forge: $asset should be $expected bytes and the release carries '$landed'." >&2
+        echo "$forge: either the upload did not take or an older copy is still there." >&2
+        return 1
+    fi
+
+    echo "$forge: $tag published, $expected bytes"
 }
 
 # ---------------------------------------------------------------------------
@@ -147,7 +170,7 @@ publish "forgejo" \
     "${FORGEJO_URL:?FORGEJO_URL is not set}/api/v1" \
     "${FORGEJO_REPO:?FORGEJO_REPO is not set}" \
     "${FORGEJO_TOKEN:-}" \
-    "${FORGEJO_URL}/api/v1/repos/${FORGEJO_REPO}/releases/{id}/assets" || failed=1
+    "${FORGEJO_URL}/api/v1/repos/${FORGEJO_REPO}/releases/{id}/assets"     "${FORGEJO_URL}/api/v1/repos/${FORGEJO_REPO}/releases/{release}/assets/{asset}"     || failed=1
 
 # GitHub takes its uploads on a host of its own, which is the one difference
 # between the two that is not this repository's doing.
@@ -155,7 +178,7 @@ publish "github" \
     "https://api.github.com" \
     "${MIRROR_REPO:?MIRROR_REPO is not set}" \
     "${MIRROR_TOKEN:-}" \
-    "https://uploads.github.com/repos/${MIRROR_REPO}/releases/{id}/assets" || failed=1
+    "https://uploads.github.com/repos/${MIRROR_REPO}/releases/{id}/assets"     "https://api.github.com/repos/${MIRROR_REPO}/releases/assets/{asset}"     || failed=1
 
 if [ "$failed" != "0" ]; then
     echo >&2
