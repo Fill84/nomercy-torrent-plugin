@@ -4,26 +4,33 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**S10-08 — release 0.3.9.** Every slice above it is done and the plugin does exactly what it did
-before, with less work behind it and one place to change each rule. `v0.4.0` is already a tag, on
-`ecc0241` of 21 August, which is 74 commits behind and predates every fix of the week that followed;
-it was never published, only `v0.1.0` ever was, and it stands in the way of the real 0.4.0. It gets
-deleted, `Directory.Build.props` and `plugin.json` say `0.3.9`, and `v0.3.9` is tagged.
+**0.3.9 is tagged. S10-09 is next, and it is not this repository's to start.**
 
-**Only when the owner asks.** Nothing here is done without that.
+**What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
+was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
+22:33 — the first episode this plugin has delivered end to end. `docs/plan/AUDIT-0.3.9.md` is a full
+read of the source made the same day, and Sprint 10 closed all eleven of its findings. **Not one of
+them changed what the plugin does**: each removed work, moved a rule to one place, or put a seam
+where the next change already lands.
 
-The chain is closed. On 25 August 2026 Sugar S02E04 was downloaded, staged, dispatched with its own
-episode id and encoded into the owner's library at 22:33 — the first episode this plugin has
-delivered end to end.
+What that came to: the rule for whose show it is written once instead of twice; a tick that asks the
+library each question once instead of eight times; a database that prepares its file once a run
+instead of 21,600 times a day; every piece of periodic housekeeping in the cadence named for it;
+nothing in `Ui` that no page draws; and the encode behind a port, so the day the contract lands is
+an addition rather than surgery.
 
-`docs/plan/AUDIT-0.3.9.md` is a full read of the source made the same day. Sprint 10 closes what it
-found, and none of it changes what the plugin does. **0.3.9 is what that sprint produces**, tagged
-at S10-08 rather than before it: the version is the audited plugin, not the plugin that was about to
-be audited.
+**What 0.3.9 is not.** It still reaches into the server by name — five types, in one file. It still
+decides a show is the owner's by whether it has a file on disk, which makes a show just added
+invisible. Both are known, both are written down, and both are waiting on the media server.
 
 **0.4.0 is not a date.** It is the version where this plugin stops reaching into the server by name,
 and it waits on media-server #30, #34, #35, #36 and #37 — none of them this repository's to close.
-S10-06 and S10-01 exist so that day is two additions rather than surgery.
+S10-06 and S10-01 exist so that day is two additions rather than surgery. **S10-09**, and only when
+the owner asks.
+
+The `v0.4.0` tag that stood in the way is gone. It named `ecc0241` of 21 August — 74 commits behind,
+older than every fix of the week that followed, and never published as a release; only `v0.1.0` ever
+was.
 
 The section below is what was true **before 25 August 2026**, and is kept because it is what the
 proving looked like. Read it as a record, not as a statement of what holds now: the encode it says
@@ -172,13 +179,18 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S10-05` Nothing that nothing reaches
 - [x] `S10-06` A port for the encode
 - [x] `S10-07` The plan says what happened
-- [ ] `S10-08` Release 0.3.9
+- [x] `S10-08` Release 0.3.9
 - [ ] `S10-09` Release 0.4.0 — on the contract, with no reflection left
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- `S10-08` **0.3.9.** All three carriers say `0.3.9` — `Directory.Build.props`, `PluginIdentity` and
+  `plugin.json` — and a test holds them together. The stale `v0.4.0` tag is deleted locally and on
+  both remotes; it named `ecc0241` of 21 August and had never been published as a release, so
+  nothing was withdrawn from anybody. `v0.3.9` names the commit that carries the number. What ships
+  is the audited plugin, not the plugin that was about to be audited.
 - `S10-07` **E1, E2.** Every slice marked done now describes what really happened. **S9-03** was the
   dangerous one: marked done, reverted the same afternoon, and left reading as instructions — a
   reader following the plan would have put the 479 grabs back. It now says what it cost, why the

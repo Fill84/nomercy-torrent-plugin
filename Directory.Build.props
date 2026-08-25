@@ -47,13 +47,13 @@
       copies of one number is how a server comes to report a version it is not
       running.
 
-      Left to the compiler this was 1.0.0 for the whole of 0.4.0's development,
+      Left to the compiler this was 1.0.0 for a whole sprint's development,
       which matters at exactly one moment — a deploy onto a server that was not
       stopped fails and leaves the old build in place, and that looks exactly
       like a deploy that worked. Somebody checking the file's version to tell
       the two apart would have been reading a number that never changed.
     -->
-    <Version>0.4.0</Version>
+    <Version>0.3.9</Version>
   </PropertyGroup>
 
 </Project>
