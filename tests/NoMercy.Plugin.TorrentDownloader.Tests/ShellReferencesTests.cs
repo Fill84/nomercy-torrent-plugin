@@ -29,7 +29,7 @@ public class ShellReferencesTests
         string[] references = document
             .Descendants()
             .Where(element => element.Name.LocalName == "ProjectReference")
-            .Select(element => Path.GetFileNameWithoutExtension(element.Attribute("Include")?.Value ?? string.Empty))
+            .Select(element => Path.GetFileNameWithoutExtension(Separators(element.Attribute("Include")?.Value)))
             .Concat(document
                 .Descendants()
                 .Where(element => element.Name.LocalName == "PackageReference")
@@ -40,6 +40,21 @@ public class ShellReferencesTests
         Assert.Contains("NoMercy.Plugin.TorrentDownloader.Bittorrent", references);
         Assert.Contains("NoMercy.Plugins.Abstractions", references);
         Assert.Contains("NoMercy.Plugins.Mvc", references);
+    }
+
+    /// <summary>
+    /// An MSBuild path as this machine spells one.
+    /// </summary>
+    /// <remarks>
+    /// A project file writes <c>..\Foo\Foo.csproj</c> whatever it is built on,
+    /// and <c>Path.GetFileNameWithoutExtension</c> only knows the separator of
+    /// the machine it runs on. On Linux it therefore saw no separator at all
+    /// and answered with the whole path, so this test failed on the first CI
+    /// build there had ever been while passing on every developer's machine.
+    /// </remarks>
+    private static string Separators(string? include)
+    {
+        return (include ?? string.Empty).Replace('\\', '/');
     }
 
     private static string RepositoryRoot()

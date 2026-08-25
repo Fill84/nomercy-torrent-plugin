@@ -206,12 +206,7 @@ public class StagerTests : IDisposable
     [Fact]
     public async Task StagingAcrossVolumesWorks()
     {
-        string here = Path.GetPathRoot(Path.GetFullPath(AppContext.BaseDirectory))!;
-        string temp = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath()))!;
-
-        Assert.NotEqual(here, temp);
-
-        string across = Path.Combine(here, "nomercy-staging-" + Guid.NewGuid().ToString("n")[..8]);
+        string across = Path.Combine(AnotherVolume(), "nomercy-staging-" + Guid.NewGuid().ToString("n")[..8]);
 
         Directory.CreateDirectory(across);
 
@@ -241,6 +236,56 @@ public class StagerTests : IDisposable
         {
             Directory.Delete(across, recursive: true);
         }
+    }
+
+    /// <summary>
+    /// Somewhere on a different device from the intake folder.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A volume is not a drive letter everywhere. On Windows it is: the drive
+    /// this repository is on and the drive the temporary folder is on are two
+    /// devices, and comparing path roots finds them. On Linux every absolute
+    /// path roots at <c>/</c> however many devices are mounted, so that
+    /// comparison finds nothing and the test failed on the first CI build there
+    /// had ever been — for want of a second drive letter on a machine with
+    /// several file systems.
+    /// </para>
+    /// <para>
+    /// <c>/dev/shm</c> is the one that is always there and always its own:
+    /// it is a tmpfs, so a move out of it is a copy exactly as a move between
+    /// two disks is.
+    /// </para>
+    /// <para>
+    /// If no second device can be found this says so and fails, rather than
+    /// passing quietly. A cross-volume staging that has never run is one nobody
+    /// knows about until the owner's server has two disks.
+    /// </para>
+    /// </remarks>
+    private static string AnotherVolume()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            string here = Path.GetPathRoot(Path.GetFullPath(AppContext.BaseDirectory))!;
+            string temp = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath()))!;
+
+            Assert.NotEqual(here, temp);
+
+            return here;
+        }
+
+        foreach (string candidate in new[] { "/dev/shm", "/run/shm" })
+        {
+            if (Directory.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        throw new InvalidOperationException(
+            "No second device to stage across: neither /dev/shm nor /run/shm is mounted, and every "
+            + "path here roots at /. Cross-volume staging is what turns a move into a copy, and it "
+            + "is not being tested on this machine.");
     }
 
     public void Dispose()

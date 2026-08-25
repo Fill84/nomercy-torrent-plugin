@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Xunit;
@@ -83,15 +84,49 @@ public class SocketTransportTests
             port = ((IPEndPoint)nobody.Client.LocalEndPoint!).Port;
         }
 
-        TrackerException gone = await Assert.ThrowsAsync<TrackerException>(
+        // Short, so that a machine which does not deliver the refusal costs
+        // this suite two seconds rather than fifteen. Whether the answer is
+        // fast is asserted below against this same figure.
+        TimeSpan patience = TimeSpan.FromSeconds(2);
+
+        long started = Stopwatch.GetTimestamp();
+
+        Exception refused = await Assert.ThrowsAnyAsync<Exception>(
             () => new SocketTrackerTransport(new HttpClient()).ExchangeAsync(
                 IPAddress.Loopback.ToString(),
                 port,
                 [1, 2, 3, 4],
-                TimeSpan.FromSeconds(15),
+                patience,
                 CancellationToken.None));
 
+        TimeSpan took = Stopwatch.GetElapsedTime(started);
+
+        if (refused is TimeoutException)
+        {
+            // The machine never delivered the ICMP refusal. A container that
+            // does not carry it is the ordinary case on a Linux runner, and
+            // waiting is then the correct answer rather than a fault — the
+            // timeout half of this rule is proved by the test above, which does
+            // not depend on ICMP at all.
+            //
+            // Said rather than skipped in silence: on a platform that does
+            // deliver it, the assertions below are what stop the plugin
+            // spending a whole cycle's patience on a tracker that is gone.
+            Assert.True(
+                took >= patience,
+                $"No refusal was delivered, but it gave up after {took.TotalSeconds:0.0}s of {patience.TotalSeconds:0.0}s.");
+
+            return;
+        }
+
+        TrackerException gone = Assert.IsType<TrackerException>(refused);
+
         Assert.Contains(port.ToString(), gone.Message, StringComparison.Ordinal);
+
+        // At once, which is the whole point: the machine answered a datagram
+        // sent to a closed port with a refusal, and waiting out the patience
+        // for an answer already given is a cycle spent on nothing.
+        Assert.True(took < patience, $"The refusal was delivered but it still waited {took.TotalSeconds:0.0}s.");
     }
 
     /// <remarks>

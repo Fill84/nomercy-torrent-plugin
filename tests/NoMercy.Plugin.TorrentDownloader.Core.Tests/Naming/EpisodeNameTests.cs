@@ -69,6 +69,40 @@ public class EpisodeNameTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The same episode is named the same on every server.</strong>
+    /// The rule used to be <c>Path.GetInvalidFileNameChars()</c>, which answers
+    /// with seven characters on Windows and effectively none on Linux — so a
+    /// Linux server wrote names carrying a colon or a question mark, which no
+    /// Windows client can open, for the same episode a Windows server named
+    /// cleanly.
+    /// </para>
+    /// <para>
+    /// Every character here is one Windows refuses. They are checked one at a
+    /// time so that a failure names the character rather than a whole string,
+    /// and this test is the reason the set is written down rather than asked
+    /// for.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData('<')]
+    [InlineData('>')]
+    [InlineData(':')]
+    [InlineData('"')]
+    [InlineData('/')]
+    [InlineData('\\')]
+    [InlineData('|')]
+    [InlineData('?')]
+    [InlineData('*')]
+    public void NoCharacterWindowsRefusesSurvivesOnAnyPlatform(char refused)
+    {
+        string named = EpisodeName.For($"Silo{refused}", 2023, new(1, 3, 6), "1080p", ".mkv");
+
+        Assert.DoesNotContain(refused, named);
+        Assert.StartsWith("Silo.", named, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
     /// Two digits is the shape every release uses, and a longer number keeps
     /// its own length rather than being cut to fit.
     /// </remarks>

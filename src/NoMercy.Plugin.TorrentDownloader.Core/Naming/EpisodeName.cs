@@ -77,6 +77,20 @@ public static class EpisodeName
         return string.Join('.', parts.Where(one => one.Length > 0)) + extension;
     }
 
+    /// <summary>
+    /// The characters a staged name never carries, on any server.
+    /// </summary>
+    /// <remarks>
+    /// Windows' set, written down here and applied everywhere on purpose.
+    /// Asking the running system instead — <c>Path.GetInvalidFileNameChars()</c>
+    /// — answers with seven characters on Windows and effectively none on
+    /// Linux, so the same episode was named differently depending on which
+    /// machine served it, and a Linux server wrote names no Windows client
+    /// could open. The owner has one library however many machines serve it,
+    /// and the name is part of what the episode is.
+    /// </remarks>
+    private const string Forbidden = "<>:\"/\\|?*";
+
     /// <summary>A title as a file name: spaces to dots, the rest dropped.</summary>
     /// <remarks>
     /// Dropped rather than replaced, because a character standing in for a
@@ -87,7 +101,8 @@ public static class EpisodeName
         string spaced = Spacing.Replace(title.Trim(), ".");
 
         string kept = string.Concat(spaced.Where(one =>
-            one == '.' || (!Path.GetInvalidFileNameChars().Contains(one) && one != '\'')));
+            one == '.'
+            || (!Forbidden.Contains(one) && !char.IsControl(one) && one != '\'')));
 
         return Runs.Replace(kept, ".").Trim('.');
     }

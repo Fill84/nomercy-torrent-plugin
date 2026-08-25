@@ -26,6 +26,22 @@ public class DiskSpaceTests
     [Fact]
     public void APathNothingCanBeToldAboutAnswersUnknownRatherThanNought()
     {
+        // A null character is refused by every file system API there is, so
+        // this asks the same question of Windows and of Linux. It matters that
+        // both are asked: a Linux server roots every absolute path at "/",
+        // which is always a real volume, so the UNC share below — the case this
+        // rule was written for — cannot be expressed there at all.
+        Assert.Null(new DiskSpace().FreeBytes("/downloads/\0/nowhere"));
+
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        // The measured case, and the reason the root is matched against the
+        // volumes this machine really has: given a UNC path DriveInfo answered
+        // with the current drive's free space, so a download folder on a full
+        // share was reported as having two hundred gigabytes free.
         Assert.Null(new DiskSpace().FreeBytes(@"\\no-such-host\no-such-share\downloads"));
     }
 }
