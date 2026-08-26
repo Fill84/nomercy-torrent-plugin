@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.3.14 is tagged. S10-09 is next, and it is not this repository's to start.**
+**0.3.15 is tagged. S10-09 is next, and it is not this repository's to start.**
 
 **What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
 was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
@@ -205,6 +205,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **0.3.15.** Downloads start. A client that takes a magnet on dials with nought pieces, because the
+  piece count is what it is dialling for — and nearly every peer sends its bitfield the moment the
+  handshake is done. A bitfield for nought pieces is nought bytes, so each one read as a protocol
+  violation, the metadata fetch unwound, the conversation swallowed it as "one peer is one peer", and
+  the peer was destroyed on its first message. 175 dialled, nine handshaken, nine gone. A bitfield is
+  now taken as it comes until there is something to check it against. The swarm test finds peers in
+  three seconds and the file appears on disk.
 
 - **0.3.14.** The reason nothing downloaded. Before the metadata arrives nobody knows the size, and
   the announce sent `left = 0` — which is not "unknown" to a tracker but **seed**, and a seed is sent
