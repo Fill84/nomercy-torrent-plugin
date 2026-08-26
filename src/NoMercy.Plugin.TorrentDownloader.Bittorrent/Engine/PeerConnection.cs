@@ -126,11 +126,37 @@ public sealed class PeerConnection(Stream wire, PeerHandshake introduction, int 
                     return message;
 
                 case PeerMessageId.Bitfield:
-                    Has = Bitfield.Read(message.Payload, pieces);
+                    // Checked against the piece count, unless there is not one
+                    // yet. A client that took a magnet on knows the info hash
+                    // and nothing else — it dials with nought pieces, because
+                    // the metadata saying how many there are is the very thing
+                    // it is dialling for — and nearly every peer sends its
+                    // bitfield the moment the handshake is done.
+                    //
+                    // A bitfield for nought pieces is nought bytes, so every one
+                    // of them read as a protocol violation and took the peer
+                    // with it: a swarm of 1206 seeders answered nine of 175
+                    // dials on 26 August 2026 and all nine were destroyed on
+                    // their first message, leaving the page saying no peers, no
+                    // seeds and no error for hours.
+                    //
+                    // Taken as it comes until there is something to check it
+                    // against. What a peer has cannot be acted on before the
+                    // metadata anyway: there are no pieces to ask it for.
+                    Has = pieces > 0
+                        ? Bitfield.Read(message.Payload, pieces)
+                        : Bitfield.Read(message.Payload, message.Payload.Length * 8);
+
                     return message;
 
                 case PeerMessageId.Have:
-                    Has.Set(message.AsHave());
+                    // The same rule: a have naming a piece past the end of a
+                    // bitfield nobody could size yet is not a peer misbehaving.
+                    if (pieces > 0 || message.AsHave() < Has.Count)
+                    {
+                        Has.Set(message.AsHave());
+                    }
+
                     return message;
 
                 case PeerMessageId.Piece:

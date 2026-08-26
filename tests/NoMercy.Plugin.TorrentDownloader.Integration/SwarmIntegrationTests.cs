@@ -237,7 +237,19 @@ public class SwarmIntegrationTests
         }
         finally
         {
-            Directory.Delete(folder, recursive: true);
+            // Best effort. Passing this test means the engine reached the
+            // metadata and started writing the file, so the file is open and
+            // Windows will not have it deleted — which is a success, not a
+            // failure, and must not be reported as one.
+            try
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+            catch (IOException)
+            {
+                // Still downloading. The folder is in temp and the machine
+                // clears it.
+            }
         }
     }
 }

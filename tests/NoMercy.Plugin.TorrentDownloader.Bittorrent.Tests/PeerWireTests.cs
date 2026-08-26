@@ -385,6 +385,54 @@ public class PeerWireTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A magnet has no piece count, and a peer still sends a
+    /// bitfield.</strong> A client that took a magnet on knows the info hash
+    /// and nothing else: it dials with nought pieces, because the metadata that
+    /// says how many there are is the very thing it is dialling for.
+    /// </para>
+    /// <para>
+    /// Nearly every client sends its bitfield the moment the handshake is done,
+    /// and a bitfield for nought pieces is nought bytes — so every one of them
+    /// was read as a protocol violation and the peer was dropped. The
+    /// conversation swallowed the exception, the peer went with it, and the
+    /// metadata it was dialled for never had a chance to arrive. On 26 August
+    /// 2026 a swarm of 1206 seeders answered 9 of 175 dials and every one of
+    /// the nine was destroyed on its first message: the page said no peers, no
+    /// seeds and no error, for hours.
+    /// </para>
+    /// <para>
+    /// There is nothing to check a bitfield against until the metadata says how
+    /// long it should be, so it is taken as it comes and checked when there is
+    /// something to check it with.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ABitfieldBeforeTheMetadataIsTakenRatherThanRefused()
+    {
+        byte[] theirs = Fixture("peer-handshake.bin");
+        byte[] infoHash = theirs[28..48];
+
+        // A real peer's bitfield: far more than the nought bytes a torrent of
+        // nought pieces would have.
+        PeerMessage bitfield = new(PeerMessageId.Bitfield, [.. Enumerable.Repeat((byte)0xFF, 188)]);
+
+        byte[] already = [.. theirs, .. bitfield.Write()];
+
+        using MemoryStream wire = new();
+
+        PeerConnection connection = Assert.IsType<PeerConnection>(
+            await PeerConnection.IntroducedAsync(wire, infoHash, pieces: 0, already, CancellationToken.None));
+
+        using (connection)
+        {
+            PeerMessage first = Assert.IsType<PeerMessage>(await connection.NextAsync(CancellationToken.None));
+
+            Assert.Equal(PeerMessageId.Bitfield, first.Id);
+        }
+    }
+
+    /// <remarks>
     /// A peer offering another torrent is a different swarm, not a confused
     /// peer. BEP 3 says to drop it, and writing its blocks into these files
     /// would be writing somebody else's bytes.
