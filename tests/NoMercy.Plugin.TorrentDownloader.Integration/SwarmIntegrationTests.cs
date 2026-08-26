@@ -1,0 +1,205 @@
+
+using Microsoft.Extensions.Logging;
+
+using NoMercy.Plugin.TorrentDownloader.Bittorrent;
+using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
+
+using Xunit;
+
+namespace NoMercy.Plugin.TorrentDownloader.Integration;
+
+/// <summary>
+/// The engine reaches a swarm that is demonstrably there.
+/// </summary>
+/// <remarks>
+/// <strong>Both of these need a machine that can dial out.</strong> They are
+/// integration tests and excluded from the ordinary run for that reason: on a
+/// host whose outbound ports are shut, every peer times out and the engine test
+/// fails for the network rather than for the code. Run them where the plugin
+/// itself runs.
+/// </remarks>
+/// <remarks>
+/// <para>
+/// On 26 August 2026 a magnet the owner pasted by hand — twelve trackers on it,
+/// among them opentrackr, demonii and torrent.eu.org — sat at "fetching
+/// metadata" with no peer and no seed until it timed out. Announcing that same
+/// info hash to that same tracker with this plugin's own code answered
+/// <c>seeders 1206, leechers 462</c> and handed back ten peers, so neither the
+/// swarm nor the announce was at fault.
+/// </para>
+/// <para>
+/// This is the reproduction that fault needs: the real engine, the real
+/// transport, the real dialler, and one magnet whose swarm is large enough that
+/// finding nobody cannot be bad luck.
+/// </para>
+/// </remarks>
+public class SwarmIntegrationTests
+{
+    /// <summary>Everything the engine said, so a silent failure is not silent.</summary>
+    private sealed class Told : ILogger
+    {
+        public List<string> Lines { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel level) => true;
+
+        public void Log<TState>(
+            LogLevel level,
+            EventId id,
+            TState state,
+            Exception? wrong,
+            Func<TState, Exception?, string> format)
+        {
+            lock (Lines)
+            {
+                Lines.Add($"{level}: {format(state, wrong)}");
+            }
+        }
+    }
+
+    /// <summary>The swarm this fault was found in, measured rather than assumed.</summary>
+    /// <remarks>
+    /// The magnet the owner pasted by hand on 26 August 2026. Announcing this
+    /// hash to this tracker with this plugin's own code answered
+    /// <c>seeders 1206, leechers 462</c> and handed back ten peers, so a client
+    /// that finds nobody here has not been unlucky.
+    /// </remarks>
+    private const string Hash = "4319E25E0603C6D838C77688550308A2508026AD";
+
+    private const string Tracker = "udp://tracker.opentrackr.org:1337/announce";
+
+    /// <summary>
+    /// Whether this machine may dial the wider internet.
+    /// </summary>
+    /// <remarks>
+    /// Asked for rather than assumed. Both tests below need outbound
+    /// connections to arbitrary peer ports, and a host that has none — the CI
+    /// runner, or a developer's machine with everything but one port shut —
+    /// fails them for the network rather than for the plugin. A red test that
+    /// says nothing about the code is worse than no test, so these run only
+    /// where somebody has said the ports are open:
+    ///
+    /// <c>NOMERCY_SWARM=1 dotnet test tests/NoMercy.Plugin.TorrentDownloader.Integration</c>
+    /// </remarks>
+    private static bool CanDialOut =>
+        string.Equals(Environment.GetEnvironmentVariable("NOMERCY_SWARM"), "1", StringComparison.Ordinal);
+
+    private const string Magnet =
+        "magnet:?xt=urn:btih:" + Hash
+        + "&tr=udp%3A%2F%2Ftracker.opentrackr.org%3A1337%2Fannounce"
+        + "&tr=udp%3A%2F%2Fopen.demonii.com%3A1337%2Fannounce"
+        + "&tr=udp%3A%2F%2Ftracker.torrent.eu.org%3A451%2Fannounce"
+        + "&tr=udp%3A%2F%2Fopen.stealth.si%3A80%2Fannounce";
+
+    /// <remarks>
+    /// The announce on its own, so that a swarm nobody reaches can be told
+    /// apart from a swarm nobody asked for. This is the half above the dial.
+    /// </remarks>
+    [Fact]
+    public async Task IntegrationTheTrackersHandBackPeersForThatSwarm()
+    {
+        if (!CanDialOut)
+        {
+            return;
+        }
+
+        using HttpClient http = new();
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+
+        TrackerSet trackers = new(new SocketTrackerTransport(http), TimeProvider.System);
+
+        AnnounceRequest asking = new(
+            Convert.FromHexString(Hash),
+            PeerIdentity.New(),
+            51999,
+            Uploaded: 0,
+            Downloaded: 0,
+            Left: 1L << 40,
+            Event: AnnounceEvent.Started);
+
+        IReadOnlyList<TrackerResult> answers = await trackers.AnnounceAsync(
+            [Tracker],
+            asking,
+            stopping.Token);
+
+        string said = string.Join(
+            Environment.NewLine,
+            answers.Select(one =>
+                $"{one.Tracker}: peers {one.Response?.Peers.Count.ToString() ?? "-"}, "
+                + $"seeders {one.Response?.Seeders.ToString() ?? "-"}, failure {one.Failure ?? "none"}"));
+
+        Assert.True(answers.Any(one => one.Response is { Peers.Count: > 0 }), said);
+    }
+
+    [Fact]
+    public async Task IntegrationTheEngineFindsPeersForASwarmThatIsDefinitelyThere()
+    {
+        if (!CanDialOut)
+        {
+            return;
+        }
+
+        Told said = new();
+
+        using HttpClient http = new();
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(3));
+
+        using BittorrentEngine engine = new(
+            listenPort: 51999,
+            metadataTimeout: TimeSpan.FromMinutes(3),
+            stallLimit: TimeSpan.FromMinutes(5),
+            maxConcurrent: 1,
+            seeding: new SeedLimit(0, TimeSpan.Zero),
+            maxDownloadRate: 0,
+            maxUploadRate: 0,
+            mapping: null,
+            journal: new ActivityJournal(TimeProvider.System),
+            logger: said,
+            transport: new SocketTrackerTransport(http),
+            dialler: new SocketPeerDialler(SocketPeerDialler.DefaultPatience, PeerEncryption.Allowed));
+
+        engine.Start();
+
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-swarm-" + Guid.NewGuid().ToString("n")[..8]);
+
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            TorrentHandle taken = await engine.AddAsync(new(Magnet, [], folder, null), stopping.Token);
+
+            // Long enough for a connect, an announce and a handshake on a slow
+            // link, and far short of the metadata timeout.
+            TorrentStatus? seen = null;
+
+            for (int second = 0; second < 90; second++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), stopping.Token);
+
+                seen = (await engine.StatusAsync(stopping.Token))
+                    .FirstOrDefault(one => string.Equals(one.InfoHash, taken.InfoHash, StringComparison.OrdinalIgnoreCase));
+
+                if (seen is { Peers: > 0 })
+                {
+                    break;
+                }
+            }
+
+            Assert.NotNull(seen);
+
+            Assert.True(
+                seen.Peers > 0,
+                $"the engine found nobody in ninety seconds: state {seen.State}, "
+                + $"peers {seen.Peers}, seeds {seen.Seeds}, error {seen.Error ?? "none"}"
+                + Environment.NewLine
+                + string.Join(Environment.NewLine, said.Lines));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+}

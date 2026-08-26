@@ -505,6 +505,16 @@ public sealed class TorrentRun : IDisposable
     }
 
     /// <summary>What this client tells a tracker about itself.</summary>
+    /// <summary>
+    /// What is announced as still wanted before the metadata says otherwise.
+    /// </summary>
+    /// <remarks>
+    /// Any non-zero number gets peers; this one is a terabyte so that no
+    /// tracker ranking by need reads a client that knows nothing as one that
+    /// is nearly finished.
+    /// </remarks>
+    private const long UnknownSize = 1L << 40;
+
     private AnnounceRequest Request()
     {
         RunProgress progress = Progress();
@@ -516,11 +526,23 @@ public sealed class TorrentRun : IDisposable
             progress.Downloaded,
             progress.Uploaded,
 
-            // What is left, or nought when nobody knows the size yet. A tracker
-            // reads a left of nought as a seed, so this is the one number worth
-            // being careful about before the metadata arrives — and a client
-            // with no metadata has nothing to seed either way.
-            progress.BytesTotal is long total ? Math.Max(0, total - progress.BytesDone) : 0,
+            // What is left, or an unfinished amount when nobody knows the size
+            // yet. A tracker reads a left of nought as a seed, and a seed is
+            // sent no peers because it has no use for any — so announcing
+            // nought before the metadata arrives asks every tracker for the
+            // one thing that cannot help and is answered, correctly, with an
+            // empty list and no error at all.
+            //
+            // That is what left every magnet at "fetching metadata" with no
+            // peer and no seed until it timed out: announcing worked, the
+            // swarm was there — 1206 seeders on the release the owner pasted
+            // by hand — and this client had told every tracker it was done.
+            //
+            // A terabyte because the number has to be large as well as
+            // non-zero: a tracker that ranks by how much a peer still needs
+            // must not read a client that knows nothing as one that is nearly
+            // finished.
+            progress.BytesTotal is long total ? Math.Max(0, total - progress.BytesDone) : UnknownSize,
             AnnounceEvent.Started);
     }
 
