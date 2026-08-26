@@ -206,7 +206,13 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
-- **0.3.15.** Downloads start. A client that takes a magnet on dials with nought pieces, because the
+- **0.3.15.** Downloads start, and the gated indexers answer. The browser was stopped when its last
+  tab closed, so 1337x, TorrentBay and EZTV each met their challenge from cold with none of the
+  clearance the last solve earned — two of the three never got past it and all three reported no
+  rows, which is why the site with the most seeders was never chosen. The job object added in 0.3.13
+  is what keeps a killed server from leaving a browser behind, so the teardown went. Asked again:
+  1337x 2 rows, TorrentBay 34, EZTV 5.
+- **0.3.15 (the rest).** Downloads start. A client that takes a magnet on dials with nought pieces, because the
   piece count is what it is dialling for — and nearly every peer sends its bitfield the moment the
   handshake is done. A bitfield for nought pieces is nought bytes, so each one read as a protocol
   violation, the metadata fetch unwound, the conversation swallowed it as "one peer is one peer", and
