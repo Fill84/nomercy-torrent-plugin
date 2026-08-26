@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.3.13 is tagged. S10-09 is next, and it is not this repository's to start.**
+**0.3.14 is tagged. S10-09 is next, and it is not this repository's to start.**
 
 **What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
 was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
@@ -205,6 +205,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **0.3.14.** The reason nothing downloaded. Before the metadata arrives nobody knows the size, and
+  the announce sent `left = 0` — which is not "unknown" to a tracker but **seed**, and a seed is sent
+  no peers. Every magnet announced itself as finished and was answered with an empty peer list and no
+  error, which is exactly what "fetching metadata, 0 peers, 0 seeds" was. The same hash announced to
+  the same tracker with this plugin's own code answers seeders 1206. `left` is a terabyte while the
+  size is unknown: large as well as non-zero, so a tracker ranking by need does not read a client
+  that knows nothing as nearly finished.
 
 - **0.3.13.** Downloads that never started. Every name now goes to every indexer before anything is
   taken — two early exits gone, the shelf answer taken before any indexer was asked and the return

@@ -37,6 +37,32 @@ namespace NoMercy.Plugin.TorrentDownloader.Integration;
 /// </remarks>
 public class SwarmIntegrationTests
 {
+    /// <summary>Counts what the engine asked of the dialler, and what came back.</summary>
+    private sealed class Counted(IPeerDialler inner) : IPeerDialler
+    {
+        public int Attempted;
+        public int Answered;
+
+        public async Task<PeerConnection?> DialAsync(
+            PeerAddress peer,
+            byte[] infoHash,
+            byte[] peerId,
+            int pieces,
+            CancellationToken ct)
+        {
+            Interlocked.Increment(ref Attempted);
+
+            PeerConnection? talked = await inner.DialAsync(peer, infoHash, peerId, pieces, ct);
+
+            if (talked is not null)
+            {
+                Interlocked.Increment(ref Answered);
+            }
+
+            return talked;
+        }
+    }
+
     /// <summary>Everything the engine said, so a silent failure is not silent.</summary>
     private sealed class Told : ILogger
     {
@@ -84,6 +110,16 @@ public class SwarmIntegrationTests
     ///
     /// <c>NOMERCY_SWARM=1 dotnet test tests/NoMercy.Plugin.TorrentDownloader.Integration</c>
     /// </remarks>
+    /// <summary>
+    /// The port this machine really accepts on, announced so peers can dial
+    /// back. A client that announces a shut port is only ever reachable to the
+    /// peers it dials first, which in a swarm behind NAT is most of nobody.
+    /// </summary>
+    private static int ListenPort =>
+        int.TryParse(Environment.GetEnvironmentVariable("NOMERCY_SWARM_PORT"), out int port)
+            ? port
+            : 51413;
+
     private static bool CanDialOut =>
         string.Equals(Environment.GetEnvironmentVariable("NOMERCY_SWARM"), "1", StringComparison.Ordinal);
 
@@ -114,7 +150,7 @@ public class SwarmIntegrationTests
         AnnounceRequest asking = new(
             Convert.FromHexString(Hash),
             PeerIdentity.New(),
-            51999,
+            ListenPort,
             Uploaded: 0,
             Downloaded: 0,
             Left: 1L << 40,
@@ -143,13 +179,14 @@ public class SwarmIntegrationTests
         }
 
         Told said = new();
+        Counted counted = new(new SocketPeerDialler(SocketPeerDialler.DefaultPatience, PeerEncryption.Allowed));
 
         using HttpClient http = new();
-        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(3));
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(6));
 
         using BittorrentEngine engine = new(
-            listenPort: 51999,
-            metadataTimeout: TimeSpan.FromMinutes(3),
+            listenPort: ListenPort,
+            metadataTimeout: TimeSpan.FromMinutes(6),
             stallLimit: TimeSpan.FromMinutes(5),
             maxConcurrent: 1,
             seeding: new SeedLimit(0, TimeSpan.Zero),
@@ -159,7 +196,7 @@ public class SwarmIntegrationTests
             journal: new ActivityJournal(TimeProvider.System),
             logger: said,
             transport: new SocketTrackerTransport(http),
-            dialler: new SocketPeerDialler(SocketPeerDialler.DefaultPatience, PeerEncryption.Allowed));
+            dialler: counted);
 
         engine.Start();
 
@@ -175,7 +212,7 @@ public class SwarmIntegrationTests
             // link, and far short of the metadata timeout.
             TorrentStatus? seen = null;
 
-            for (int second = 0; second < 90; second++)
+            for (int second = 0; second < 240; second++)
             {
                 await Task.Delay(TimeSpan.FromSeconds(1), stopping.Token);
 
@@ -192,8 +229,9 @@ public class SwarmIntegrationTests
 
             Assert.True(
                 seen.Peers > 0,
-                $"the engine found nobody in ninety seconds: state {seen.State}, "
-                + $"peers {seen.Peers}, seeds {seen.Seeds}, error {seen.Error ?? "none"}"
+                $"the engine found nobody in four minutes: state {seen.State}, "
+                + $"peers {seen.Peers}, seeds {seen.Seeds}, error {seen.Error ?? "none"}, "
+                + $"dials attempted {counted.Attempted}, answered {counted.Answered}"
                 + Environment.NewLine
                 + string.Join(Environment.NewLine, said.Lines));
         }
