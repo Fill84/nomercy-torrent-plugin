@@ -206,6 +206,15 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **0.3.18.** Proved against the owner's own pack, and the pipeline pinned from both sides. The
+  season-pack path was built and never run against anything a scene group actually publishes, so the
+  nine file names of the Dark Matter pack are a fixture now — episode titles and all, which is where
+  a parser expecting tags meets `Are.You.Happy.in.Your.Life` — and the test reads them into their
+  nine episodes and stages each under the episode that names it. The pipeline depth asserted exactly
+  rather than at most: a cap that slipped to one piece would hold no memory either and would quietly
+  ask a peer for sixteen kibibytes at a time. Bytes in flight to one peer are the pipeline times the
+  piece length, megabytes on any real torrent.
+
 - **0.3.18.** Every peer joins the download, not only the one that described it. The metadata fetch
   waited on its own peer saying something, and a seed says nothing: it has every piece, so no
   `have`, and it will not unchoke a client that never said it was interested — which this client

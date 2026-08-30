@@ -129,8 +129,14 @@ public class PipelineDepthTests : IDisposable
             talking.ContinueWith(_ => { }, TaskScheduler.Default),
             reading.ContinueWith(_ => { }, TaskScheduler.Default));
 
-        // It has to ask for something, or this proves nothing at all.
-        Assert.InRange(distinct, 1, TorrentSession.Pipeline);
+        // Exactly the pipeline, both ways round. Fewer is the other regression
+        // and the one that would go unnoticed: a cap that slipped to one piece
+        // still holds no memory to speak of, and quietly asks a peer for
+        // sixteen kibibytes at a time on a link that could carry a hundred
+        // times that. The bytes in flight to one peer are this many pieces
+        // times the piece length — megabytes on any real torrent — which is
+        // why four is enough and why fewer would not be.
+        Assert.Equal(TorrentSession.Pipeline, distinct);
     }
 
     public void Dispose()

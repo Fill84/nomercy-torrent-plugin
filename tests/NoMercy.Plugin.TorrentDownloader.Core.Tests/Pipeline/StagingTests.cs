@@ -1,6 +1,7 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
+using NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
@@ -267,6 +268,59 @@ public class StagingTests
                     File("Dark.Matter.2024.S01E01.REPACK.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", Gigabyte),
                 ],
                 [DarkMatter]));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The owner's own pack, file for file, taken off the download folder on
+    /// 30 August 2026 — nine episodes and the two text files a release ships
+    /// with. Every other test here names its files by hand, and a name written
+    /// by the person who also wrote the parser proves nothing about what a
+    /// scene group actually publishes.
+    /// </para>
+    /// <para>
+    /// Episode titles are the trap. <c>Are.You.Happy.in.Your.Life</c> and
+    /// <c>In.the.Fires.of.Dead.Stars</c> are words where a parser expects tags,
+    /// and a season pack whose episode four is filed as episode one is worse
+    /// than a pack that stages nothing at all.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheOwnersOwnSeasonPackIsReadIntoItsNineEpisodes()
+    {
+        IReadOnlyList<TorrentFile> pack =
+        [
+            .. Capture.Fixture("dark-matter-s01-pack.txt")
+                .Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+
+                // Roughly four gigabytes each, which is what they are. The
+                // text files are bytes, and the sample rule turns on size.
+                .Select(path => new TorrentFile(path, path.EndsWith(".mkv", StringComparison.Ordinal) ? 4 * Gigabyte : 500)),
+        ];
+
+        IReadOnlyList<EpisodeKey> found = Staging.Discover(pack, [DarkMatter, SomethingElse]);
+
+        Assert.Equal(
+            [
+                new(7, 1, 1), new(7, 1, 2), new(7, 1, 3), new(7, 1, 4), new(7, 1, 5),
+                new(7, 1, 6), new(7, 1, 7), new(7, 1, 8), new(7, 1, 9),
+            ],
+            found);
+
+        // And the whole way through: each episode gets the file that names it,
+        // and neither text file is staged.
+        IReadOnlyList<Staged> chosen = Staging.Choose(pack, found);
+
+        Assert.Equal(9, chosen.Count);
+        Assert.All(chosen, one => Assert.EndsWith(".mkv", one.Path, StringComparison.Ordinal));
+
+        foreach (Staged one in chosen)
+        {
+            Assert.Contains($"S01E{one.Episode.Number:00}", one.Path, StringComparison.Ordinal);
+        }
+
+        // Nothing is left over, which is what says the pack arrived whole.
+        Assert.Empty(Staging.Unanswered(chosen, found));
     }
 
     /// <summary>A show the owner has, in a tv library.</summary>
