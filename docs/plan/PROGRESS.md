@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.3.15 is tagged. S10-09 is next, and it is not this repository's to start.**
+**0.3.16 is tagged. S10-09 is next, and it is not this repository's to start.**
 
 **What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
 was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
@@ -205,6 +205,15 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **0.3.16.** Enough peers. Dht, PeerSearch, DhtStore, Pex, PeerExchange, LsdSocket and
+  LocalDiscovery were all written, all tested, and none was ever constructed — so every peer this
+  client had came from a tracker's fifty addresses, most of them stale, which is why a swarm with
+  hundreds of seeds gave it one peer. `ut_pex` is asked for and dialled, the DHT is joined and asked
+  on every announce pass over a transport that did not exist before, and the local network is
+  announced to. Nothing is asked of the DHT before the metadata says the torrent is not private, and
+  it searches without announcing. Also: the solver left open every tab it read a page in — ninety
+  Chrome processes with nothing running — and a block nobody asked for is no longer written.
 
 - **0.3.15.** Downloads start, and the gated indexers answer. The browser was stopped when its last
   tab closed, so 1337x, TorrentBay and EZTV each met their challenge from cold with none of the
