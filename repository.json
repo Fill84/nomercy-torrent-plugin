@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.3.18",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.18/NoMercy.Plugin.TorrentDownloader-0.3.18.zip",
+          "checksum": "8e13da91e43c6277300993e959a1fd8b7163c9239708be71651bd64e089cea92",
+          "changelog": "Every peer in the swarm is now downloaded from, a torrent added by hand reaches the library, and no piece is held in memory while it is put together.",
+          "timestamp": "2026-08-30T22:35:23Z"
+        },
+        {
           "version": "0.3.17",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.17/NoMercy.Plugin.TorrentDownloader-0.3.17.zip",
