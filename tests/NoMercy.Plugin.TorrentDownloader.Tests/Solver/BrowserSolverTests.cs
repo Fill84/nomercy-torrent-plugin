@@ -130,6 +130,53 @@ public class BrowserSolverTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>And every page read, which is most of what the browser does.</strong>
+    /// A solve happens once per host; a gated source is read on every name of
+    /// every cycle, so a tab left open there is a tab per search for ever.
+    /// </para>
+    /// <para>
+    /// It was: ninety Chrome processes were found on the owner's machine with
+    /// nothing running and no cycle in flight, holding seven hundred megabytes
+    /// between them. The browser is meant to stay up between solves — that is
+    /// what keeps a gated source's clearance — and a tab is not.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheTabIsClosedWhenAPageHasBeenRead()
+    {
+        FakeTimeProvider clock = new();
+        FakeTabs tabs = new();
+        tabs.Tab("www.1337x.to").Shows("<html>a listing</html>");
+
+        string? page = await Solver(tabs, clock)
+            .GetPageAsync(new("https://www.1337x.to/search/Silo/1/"), CancellationToken.None);
+
+        Assert.Contains("a listing", page);
+        Assert.Equal(1, tabs.Tab("www.1337x.to").Closed);
+    }
+
+    /// <remarks>
+    /// The same for a POST, which is how a torrent's magnet is asked for on a
+    /// site that publishes none: once per release taken, and a leak there is
+    /// one tab per download.
+    /// </remarks>
+    [Fact]
+    public async Task TheTabIsClosedWhenAFormHasBeenPosted()
+    {
+        FakeTimeProvider clock = new();
+        FakeTabs tabs = new();
+        tabs.Tab("extranet.torrentbay.st").Shows("<html>a magnet</html>");
+
+        await Solver(tabs, clock).PostAsync(
+            new("https://extranet.torrentbay.st/ajax/getSearchMagnet.php"),
+            "id=1",
+            CancellationToken.None);
+
+        Assert.Equal(1, tabs.Tab("extranet.torrentbay.st").Closed);
+    }
+
+    /// <remarks>
     /// A challenge that never cleared still leaves no tab behind. This is the
     /// path that leaked most: a site that keeps refusing is asked again every
     /// cycle, so a tab left open by a failure is a tab left open for ever.

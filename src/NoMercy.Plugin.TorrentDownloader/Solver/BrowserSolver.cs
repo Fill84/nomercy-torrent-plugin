@@ -150,7 +150,12 @@ public sealed class BrowserSolver(
 
     private async Task<string?> ReadingAsync(Uri url, CancellationToken ct)
     {
-        IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
+        // Closed however this returns. The browser stays up between solves —
+        // that is what keeps a gated source's clearance — and a tab does not:
+        // a page is read on every name of every cycle, so one left open is a
+        // tab per search for ever. Ninety Chrome processes were found on the
+        // owner's machine with nothing running at all.
+        await using IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
 
         if (tab is null)
         {
@@ -212,7 +217,9 @@ public sealed class BrowserSolver(
 
     private async Task<string?> PostingAsync(Uri url, string formBody, CancellationToken ct)
     {
-        IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
+        // And here: this is how a magnet is asked for on a site that publishes
+        // none, which is once per release taken.
+        await using IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
 
         if (tab is null)
         {

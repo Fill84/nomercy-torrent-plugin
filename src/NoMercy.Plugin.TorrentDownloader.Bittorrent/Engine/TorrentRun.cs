@@ -648,6 +648,24 @@ public sealed class TorrentRun : IDisposable
         }
     }
 
+    /// <summary>
+    /// Somebody else has named a peer on this torrent.
+    /// </summary>
+    /// <remarks>
+    /// For whoever hears of one outside this run — the local network, which no
+    /// tracker and no DHT can see. Dialled the same way as any other: the same
+    /// address twice is one peer, whoever named it.
+    /// </remarks>
+    public void Met(IReadOnlyList<PeerAddress> addresses)
+    {
+        if (_disposed || addresses.Count == 0)
+        {
+            return;
+        }
+
+        _ = MeetAsync(addresses, _stopping.Token);
+    }
+
     /// <summary>Asks the DHT who else is on this torrent.</summary>
     /// <remarks>
     /// Not awaited by the announce that starts it: a walk towards a hash takes

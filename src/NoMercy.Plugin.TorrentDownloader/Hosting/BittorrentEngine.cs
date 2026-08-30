@@ -73,6 +73,24 @@ public sealed class BittorrentEngine(
     private Dht? _dht;
 
     private SocketDhtTransport? _dhtSocket;
+
+    /// <summary>
+    /// The local network, which no tracker and no DHT knows about.
+    /// </summary>
+    /// <remarks>
+    /// Worth little on a machine that is the only client on its network and
+    /// nothing at all when it is not — but it costs one multicast packet every
+    /// five minutes, and a second client on the same network is the one peer
+    /// that is never behind anybody's router.
+    /// </remarks>
+    private LsdSocket? _local;
+
+    /// <summary>What this client calls itself on the local network.</summary>
+    /// <remarks>
+    /// Its own announcements come back to it, and this is how they are told
+    /// apart from somebody else's.
+    /// </remarks>
+    private readonly string _cookie = Convert.ToHexString(RandomNumberGenerator.GetBytes(8));
     private bool _started;
     private bool _disposed;
 
@@ -147,6 +165,13 @@ public sealed class BittorrentEngine(
                 _dht = new(me, new RoutingTable(me), _dhtSocket);
 
                 _ = BootstrappingAsync(_dht, _stopping.Token);
+
+                // And the network this machine is on, which neither a tracker
+                // nor the DHT can see.
+                _local = new();
+
+                _ = AnnouncingLocallyAsync(_local, _sockets.Port, _stopping.Token);
+                _ = ListeningLocallyAsync(_local, _stopping.Token);
             }
             catch (PortInUseException refused)
             {
@@ -509,6 +534,8 @@ public sealed class BittorrentEngine(
             // The DHT's socket with them. Its own reading loop stops on the
             // token, and a socket left open would hold the port after the
             // plugin has gone.
+            _local?.Dispose();
+            _local = null;
             _dhtSocket?.Dispose();
             _dhtSocket = null;
             _dht = null;
@@ -606,6 +633,87 @@ public sealed class BittorrentEngine(
         catch (Exception quiet) when (quiet is not OperationCanceledException)
         {
             logger.LogWarning("The DHT could not be joined: {Why}", quiet.Message);
+        }
+    }
+
+    /// <summary>
+    /// Says on the local network what this client is holding.
+    /// </summary>
+    /// <remarks>
+    /// Private torrents are never among them: the packet carries the info hash
+    /// in the clear to everybody on the network, which is precisely what a
+    /// private tracker's members are forbidden to do.
+    /// </remarks>
+    private async Task AnnouncingLocallyAsync(LsdSocket socket, int port, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                string[] holding;
+
+                lock (_lock)
+                {
+                    holding = [.. LocalDiscovery.Announceable(
+                        _torrents.Values.Select(one => one.Run.Torrent).OfType<TorrentMetadata>())];
+                }
+
+                if (holding.Length > 0)
+                {
+                    await socket.AnnounceAsync(port, holding, _cookie, ct).ConfigureAwait(false);
+                }
+            }
+            catch (Exception quiet) when (quiet is not OperationCanceledException)
+            {
+                // A network that will not take a multicast packet is the
+                // ordinary case on plenty of machines, and costs this client
+                // nothing but the peers it would have found on it.
+                logger.LogDebug("Local discovery could not announce: {Why}", quiet.Message);
+            }
+
+            try
+            {
+                await Task.Delay(LocalDiscovery.Interval, _time, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    /// <summary>Dials whoever answers on the local network.</summary>
+    private async Task ListeningLocallyAsync(LsdSocket socket, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                (LsdAnnounce announce, IPAddress from) = await socket.ReceiveAsync(_cookie, ct).ConfigureAwait(false);
+
+                foreach (string hash in announce.InfoHashes)
+                {
+                    Held? held;
+
+                    lock (_lock)
+                    {
+                        _torrents.TryGetValue(hash, out held);
+                    }
+
+                    // Only what this client is actually holding. Somebody else's
+                    // torrent is not this client's business.
+                    held?.Run.Met([new(from, announce.Port)]);
+                }
+            }
+            catch (Exception gone)
+            {
+                if (gone is OperationCanceledException or ObjectDisposedException)
+                {
+                    return;
+                }
+
+                logger.LogDebug("Local discovery could not listen: {Why}", gone.Message);
+            }
         }
     }
 
