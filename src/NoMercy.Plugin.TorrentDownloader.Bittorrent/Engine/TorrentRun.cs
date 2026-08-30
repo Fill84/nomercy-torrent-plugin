@@ -145,7 +145,23 @@ public sealed class TorrentRun : IDisposable
     /// so a torrent that is removed does not go on meeting people.
     /// </remarks>
     private readonly CancellationTokenSource _stopping = new();
+
+    /// <summary>Where peers come from when the tracker's list runs thin.</summary>
+    /// <remarks>
+    /// Null where the client has none. A tracker hands out fifty addresses and
+    /// most are stale; the DHT is how every other client finds the hundreds
+    /// that are actually there.
+    /// </remarks>
+    private readonly Dht? _dht;
+
     private bool _nothingWanted;
+
+    /// <summary>How many peers one DHT search asks for.</summary>
+    /// <remarks>
+    /// The same fifty a tracker is asked for. More than a swarm's worth of
+    /// dials at once is a burst this client has no use for.
+    /// </remarks>
+    private const int DhtPeersWanted = 50;
 
     public TorrentRun(
         byte[] infoHash,
@@ -159,8 +175,10 @@ public sealed class TorrentRun : IDisposable
         TorrentMetadata? torrent = null,
         ResumeKeeper? resume = null,
         Func<IReadOnlyList<TorrentFileEntry>, IReadOnlyList<TorrentFileEntry>>? choose = null,
-        RateLimits? limits = null)
+        RateLimits? limits = null,
+        Dht? dht = null)
     {
+        _dht = dht;
         _infoHash = infoHash;
         _trackers = [.. trackers];
         _folder = folder;
@@ -364,6 +382,21 @@ public sealed class TorrentRun : IDisposable
             .ConfigureAwait(false);
 
         Told(answers);
+
+        // And the DHT, which is where the peers a tracker does not name are.
+        // Only once the metadata has arrived: whether a torrent is private is
+        // written in its info dictionary, and BEP 27 says a private one is
+        // never to be looked for anywhere but its own tracker. A magnet has no
+        // info dictionary yet, so until it does this asks nobody.
+        //
+        // Searched and not announced. An announce puts this client on the
+        // DHT's own list of who has the file, which is the owner's rule about
+        // not offering anything back on a public swarm — and a search costs
+        // that swarm nothing.
+        if (_dht is not null && Torrent is { Private: false } known)
+        {
+            _ = FromTheDhtAsync(known, ct);
+        }
 
         List<PeerAddress> fresh = [];
 
@@ -612,6 +645,35 @@ public sealed class TorrentRun : IDisposable
                 _peers.Add(peer);
                 _conversations.Add(ConverseAsync(peer, ct));
             }
+        }
+    }
+
+    /// <summary>Asks the DHT who else is on this torrent.</summary>
+    /// <remarks>
+    /// Not awaited by the announce that starts it: a walk towards a hash takes
+    /// rounds of asking and the announce loop has its own interval to keep.
+    /// Whoever it finds is dialled the moment it finds them.
+    /// </remarks>
+    private async Task FromTheDhtAsync(TorrentMetadata torrent, CancellationToken ct)
+    {
+        if (_dht is null)
+        {
+            return;
+        }
+
+        try
+        {
+            PeerSearch found = await _dht.PeersAsync(torrent, DhtPeersWanted, ct).ConfigureAwait(false);
+
+            if (found.Peers.Count > 0)
+            {
+                await MeetAsync(found.Peers, ct).ConfigureAwait(false);
+            }
+        }
+        catch (Exception quiet) when (quiet is not OperationCanceledException)
+        {
+            // The DHT is a best effort by design: a search that fails leaves
+            // the trackers and the peer exchanges exactly as they were.
         }
     }
 

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
@@ -60,6 +61,18 @@ public sealed class BittorrentEngine(
         Upload = { BytesPerSecond = maxUploadRate },
     };
     private ListenSockets? _sockets;
+
+    /// <summary>
+    /// The one DHT this client has, shared by every torrent on it.
+    /// </summary>
+    /// <remarks>
+    /// One routing table for the process, because it is the network's map and
+    /// not any torrent's: a table per torrent would bootstrap from nothing
+    /// every time and know a fraction of what one shared table knows.
+    /// </remarks>
+    private Dht? _dht;
+
+    private SocketDhtTransport? _dhtSocket;
     private bool _started;
     private bool _disposed;
 
@@ -123,6 +136,17 @@ public sealed class BittorrentEngine(
                 // it is being asked, and the answer only changes what the
                 // Settings page says.
                 _ = MappingAsync(_sockets.Port, _stopping.Token);
+
+                // The DHT, which is where the peers a tracker never names
+                // are. Bootstrapped in the background for the same reason as
+                // the router: it takes seconds of asking strangers, and every
+                // torrent works without it in the meantime.
+                NodeId me = NodeId.Random();
+
+                _dhtSocket = new();
+                _dht = new(me, new RoutingTable(me), _dhtSocket);
+
+                _ = BootstrappingAsync(_dht, _stopping.Token);
             }
             catch (PortInUseException refused)
             {
@@ -279,7 +303,11 @@ public sealed class BittorrentEngine(
                         .Wanted([.. files.Select(file => new TorrentFile(file.Path, file.Length))])
                         .Select(kept => files.First(file => string.Equals(file.Path, kept.Path, StringComparison.Ordinal))),
                 ],
-                _limits);
+                _limits,
+
+                // The client's own, shared by every torrent: the DHT is a map
+                // of the network rather than of any one swarm.
+                _dht);
 
             Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time));
 
@@ -477,6 +505,13 @@ public sealed class BittorrentEngine(
         lock (_lock)
         {
             _sockets?.Dispose();
+
+            // The DHT's socket with them. Its own reading loop stops on the
+            // token, and a socket left open would hold the port after the
+            // plugin has gone.
+            _dhtSocket?.Dispose();
+            _dhtSocket = null;
+            _dht = null;
             _sockets = null;
         }
     }
@@ -513,6 +548,64 @@ public sealed class BittorrentEngine(
             {
                 return;
             }
+        }
+    }
+
+    /// <summary>
+    /// Finds the DHT's own network, once, at startup.
+    /// </summary>
+    /// <remarks>
+    /// A routing table that knows nobody can find nobody, and the only way in
+    /// is somebody already there — the two addresses in
+    /// <see cref="Dht.BootstrapNodes"/>, resolved because they move. A failure
+    /// costs the client its DHT and nothing else: the trackers and the peer
+    /// exchanges carry on exactly as they were.
+    /// </remarks>
+    private async Task BootstrappingAsync(Dht dht, CancellationToken ct)
+    {
+        List<IPEndPoint> nodes = [];
+
+        foreach (string address in Dht.BootstrapNodes)
+        {
+            string[] parts = address.Split(':');
+
+            if (parts.Length != 2 || !int.TryParse(parts[1], out int port))
+            {
+                continue;
+            }
+
+            try
+            {
+                foreach (IPAddress found in await Dns.GetHostAddressesAsync(parts[0], ct).ConfigureAwait(false))
+                {
+                    if (found.AddressFamily == AddressFamily.InterNetwork)
+                    {
+                        nodes.Add(new(found, port));
+                    }
+                }
+            }
+            catch (Exception unreachable) when (unreachable is not OperationCanceledException)
+            {
+                logger.LogDebug("{Node} could not be resolved: {Why}", address, unreachable.Message);
+            }
+        }
+
+        if (nodes.Count == 0)
+        {
+            logger.LogWarning("No DHT bootstrap node could be resolved, so peers come from trackers alone.");
+
+            return;
+        }
+
+        try
+        {
+            await dht.BootstrapAsync(nodes, ct).ConfigureAwait(false);
+
+            logger.LogInformation("The DHT knows {Count} nodes.", dht.Table.Count);
+        }
+        catch (Exception quiet) when (quiet is not OperationCanceledException)
+        {
+            logger.LogWarning("The DHT could not be joined: {Why}", quiet.Message);
         }
     }
 

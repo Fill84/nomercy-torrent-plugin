@@ -1,4 +1,8 @@
 
+using System.Globalization;
+using System.Net;
+using System.Net.Sockets;
+
 using Microsoft.Extensions.Logging;
 
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
@@ -251,5 +255,79 @@ public class SwarmIntegrationTests
                 // clears it.
             }
         }
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The DHT against the real network. A tracker hands out fifty addresses
+    /// and most are stale; this is where every other client finds the hundreds
+    /// that are there, and until 0.3.16 this one asked nobody — <c>Dht</c> was
+    /// written, tested and never constructed.
+    /// </para>
+    /// <para>
+    /// Joining is what is asserted, not a peer count: which peers the network
+    /// holds for one torrent is nobody's to promise, and a table with nodes in
+    /// it is the thing that was missing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task IntegrationTheDhtJoinsTheNetworkAndCanBeAsked()
+    {
+        if (!CanDialOut)
+        {
+            return;
+        }
+
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(4));
+        using SocketDhtTransport socket = new();
+
+        NodeId me = NodeId.Random();
+
+        Dht dht = new(me, new RoutingTable(me), socket);
+
+        List<IPEndPoint> bootstrap = [];
+
+        foreach (string address in Dht.BootstrapNodes)
+        {
+            string[] parts = address.Split(':');
+
+            foreach (IPAddress found in await Dns.GetHostAddressesAsync(parts[0], stopping.Token))
+            {
+                if (found.AddressFamily == AddressFamily.InterNetwork)
+                {
+                    bootstrap.Add(new(found, int.Parse(parts[1], CultureInfo.InvariantCulture)));
+                }
+            }
+        }
+
+        Assert.NotEmpty(bootstrap);
+
+        await dht.BootstrapAsync(bootstrap, stopping.Token);
+
+        Assert.True(dht.Table.Count > 0, "the DHT bootstrapped into a table that knows nobody");
+
+        // And a real search over it, on a torrent published to be found.
+        TorrentMetadata torrent = TorrentMetadata.Read(
+            await File.ReadAllBytesAsync(Fixture("ubuntu-desktop.torrent"), stopping.Token));
+
+        PeerSearch walked = await dht.PeersAsync(torrent, 50, stopping.Token);
+
+        Assert.True(
+            walked.Asked > 0,
+            $"the search asked nobody: {dht.Table.Count} nodes in the table");
+    }
+
+    /// <summary>A captured torrent, from the repository's own fixtures.</summary>
+    private static string Fixture(string name)
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+
+        while (directory is not null
+               && !File.Exists(Path.Combine(directory.FullName, "NoMercy.Plugin.TorrentDownloader.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return Path.Combine(directory!.FullName, "tests", "fixtures", name);
     }
 }
