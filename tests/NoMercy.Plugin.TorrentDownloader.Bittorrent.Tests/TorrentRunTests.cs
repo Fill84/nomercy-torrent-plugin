@@ -160,6 +160,83 @@ public class TorrentRunTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A peer that did not supply the metadata is still a peer.</strong>
+    /// The fetch waits on that peer saying something, and a seed says nothing:
+    /// it has every piece, so it sends no <c>have</c>, and it will not unchoke a
+    /// client that never said it was interested — which this client cannot say
+    /// until it is in the session. A keep-alive does not wake it either, because
+    /// the connection swallows those.
+    /// </para>
+    /// <para>
+    /// So only the peer that happened to deliver the last block of the metadata
+    /// ever reached the session. Every other one sat in that read for the rest
+    /// of the run, asked for nothing and asking for nothing, until the far end
+    /// dropped it for being idle. That is a magnet with a swarm behind it
+    /// downloading nothing: on 30 August 2026 a season pack fetched its metadata
+    /// at 05:15 and was at nought peers and nought per cent by 05:29.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APeerThatDidNotSupplyTheMetadataIsStillAskedForPieces()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+
+        ScriptedPeer serving = new(ArchiveHash, ArchiveInfo());
+
+        using TorrentRun run = Run(new AnsweringTrackers(), serving);
+
+        // A second peer, which dialled in rather than being dialled. It offers
+        // ut_metadata like any peer and is never asked for a block of it,
+        // because the first peer answers the whole thing.
+        PeerWire wire = new();
+
+        PeerConnection?[] introduced = await Task.WhenAll(
+            PeerConnection.IntroduceAsync(wire.Receiver, ArchiveHash, Id("QUIET0"), 0, dialling: false, stopping.Token),
+            PeerConnection.IntroduceAsync(wire.Initiator, ArchiveHash, Id("NM0002"), 0, dialling: true, stopping.Token));
+
+        PeerConnection quiet = introduced[0]!;
+
+        run.Take(introduced[1]!, stopping.Token);
+
+        // Everything it ever says: an extension handshake, and then silence.
+        await quiet.SendAsync(Offering(), stopping.Token);
+
+        // Meanwhile the metadata arrives from the other peer entirely.
+        await run.OnceAsync(stopping.Token);
+        await serving.ServeAsync(stopping.Token);
+        await run.Metadata.WaitAsync(TimeSpan.FromSeconds(10), stopping.Token);
+
+        // Interested is the session's word and nothing else sends it. Hearing
+        // it is this peer being taken on as somebody to download from.
+        Task<bool> asked = Task.Run(
+            async () =>
+            {
+                while (!stopping.IsCancellationRequested)
+                {
+                    if (await quiet.NextAsync(stopping.Token).ConfigureAwait(false) is not PeerMessage message)
+                    {
+                        return false;
+                    }
+
+                    if (message.Id == PeerMessageId.Interested)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            },
+            stopping.Token);
+
+        Task first = await Task.WhenAny(asked, Task.Delay(TimeSpan.FromSeconds(10), stopping.Token));
+
+        Assert.True(
+            first == asked && await asked,
+            "the peer that did not supply the metadata was never asked for anything");
+    }
+
+    /// <remarks>
     /// A magnet is a hash and a list of trackers. Everything else — the name,
     /// the file list, the piece length, the hashes every block is checked
     /// against — comes from a peer, and until it does there is no disk to open
@@ -197,9 +274,17 @@ public class TorrentRunTests : IDisposable
     /// A peer that does not speak <c>ut_metadata</c> is asked for nothing. Most
     /// of a swarm does speak it, and a client that asked anyway would be
     /// sending a message every one of the others rejects.
+    ///
+    /// It is kept all the same, which is the half this used to have backwards.
+    /// Such a peer was dropped on the spot — there is no session to hand it to
+    /// while the torrent is unknown, so the conversation simply ended — and a
+    /// peer with every piece of the file was thrown away for not being able to
+    /// describe it. It is held until the metadata arrives from somebody else,
+    /// so its serving loop no longer ends when this client hangs up, and it is
+    /// no longer waited for.
     /// </remarks>
     [Fact]
-    public async Task APeerThatDoesNotSpeakTheMetadataExtensionIsAskedForNothing()
+    public async Task APeerThatDoesNotSpeakTheMetadataExtensionIsAskedForNothingAndKeptAnyway()
     {
         using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
 
@@ -208,10 +293,17 @@ public class TorrentRunTests : IDisposable
         using TorrentRun run = Run(new AnsweringTrackers(), peer);
 
         await run.OnceAsync(stopping.Token);
-        await peer.ServeAsync(stopping.Token);
+
+        Task serving = peer.ServeAsync(stopping.Token);
+
+        await Task.WhenAny(serving, Task.Delay(TimeSpan.FromSeconds(2), stopping.Token));
 
         Assert.Equal(0, peer.Requested);
         Assert.Null(run.Torrent);
+
+        // And still there. A peer that cannot serve the metadata can serve
+        // every piece of the file once somebody else has described it.
+        Assert.Equal(1, run.Progress().Peers);
     }
 
     /// <remarks>
@@ -472,6 +564,28 @@ public class TorrentRunTests : IDisposable
         BencodeDocument document = Bencode.Read(torrent);
 
         return torrent[document.InfoStart!.Value..(document.InfoStart.Value + document.InfoLength!.Value)];
+    }
+
+    /// <summary>An extension handshake offering <c>ut_metadata</c>, from a peer.</summary>
+    /// <remarks>
+    /// Complete enough to be taken seriously — an id and a size — because a
+    /// handshake without them is the other case entirely: a peer that cannot
+    /// help with the metadata at all.
+    /// </remarks>
+    private static PeerMessage Offering()
+    {
+        BencodeDictionary body = new(
+        [
+            new(
+                "m"u8.ToArray(),
+                new BencodeDictionary(
+                [
+                    new(System.Text.Encoding.ASCII.GetBytes(Extensions.Metadata), new BencodeInteger(3)),
+                ])),
+            new("metadata_size"u8.ToArray(), new BencodeInteger(ArchiveInfo().Length)),
+        ]);
+
+        return new(PeerMessageId.Extended, [Extensions.HandshakeId, .. Bencode.Write(body)]);
     }
 
     private static byte[] Id(string name)

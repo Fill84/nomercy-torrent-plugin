@@ -196,7 +196,14 @@ public sealed class TorrentSession(
     /// is asked for. A client that only downloaded would be choked by every
     /// well-behaved peer in the swarm within a minute.
     /// </remarks>
-    public async Task RunAsync(PeerConnection peer, CancellationToken ct)
+    /// <param name="peer">The peer to talk to.</param>
+    /// <param name="ct">Stops the conversation.</param>
+    /// <param name="pending">
+    /// A read of this peer already under way, from whoever held the connection
+    /// before. Awaited as the first message rather than started again: two
+    /// reads on one connection take each other's bytes.
+    /// </param>
+    public async Task RunAsync(PeerConnection peer, CancellationToken ct, Task<PeerMessage?>? pending = null)
     {
         lock (_lock)
         {
@@ -237,7 +244,11 @@ public sealed class TorrentSession(
             // it finished, which is the one thing a swarm cannot forgive.
             while (!ct.IsCancellationRequested)
             {
-                PeerMessage? message = await peer.NextAsync(ct).ConfigureAwait(false);
+                PeerMessage? message = pending is not null
+                    ? await pending.ConfigureAwait(false)
+                    : await peer.NextAsync(ct).ConfigureAwait(false);
+
+                pending = null;
 
                 if (message is null)
                 {

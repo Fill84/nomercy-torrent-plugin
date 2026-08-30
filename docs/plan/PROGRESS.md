@@ -206,6 +206,18 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **0.3.18.** Every peer joins the download, not only the one that described it. The metadata fetch
+  waited on its own peer saying something, and a seed says nothing: it has every piece, so no
+  `have`, and it will not unchoke a client that never said it was interested — which this client
+  could not say until it was in the session. Keep-alives do not wake it either; the connection
+  swallows those. So only the peer that happened to deliver the last block of the metadata ever
+  reached the session, and every other one sat in that read being asked for nothing until the far end
+  dropped it. **This is why the season pack fetched its metadata at 05:15 and was at nought peers by
+  05:29 with hundreds of seeds in the swarm** — the unanswered question from 0.3.17. The fetch now
+  waits on the metadata as well as on the peer, and hands its half-finished read to the session
+  rather than abandoning it. A peer that cannot serve the metadata at all is held until somebody else
+  does, instead of being dropped for not being able to describe a file it has every piece of.
+
 - **0.3.18.** A torrent added by hand reaches the library. docs/08-ui.md said all along that
   `AddTorrent` still runs the finished file through staging and the encode dispatch, because a
   torrent added by hand is an episode like any other. Half of it was built: the grab is recorded

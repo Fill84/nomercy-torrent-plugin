@@ -954,14 +954,21 @@ public sealed class TorrentRun : IDisposable
     {
         try
         {
+            // A read this peer had already begun when the metadata arrived,
+            // handed on rather than abandoned. Two readers on one connection
+            // is worse than one, and cancelling a read that may already have
+            // taken bytes off the socket loses the frame it was in the middle
+            // of.
+            Task<PeerMessage?>? pending = null;
+
             if (Torrent is null)
             {
-                await FetchAsync(peer, ct).ConfigureAwait(false);
+                pending = await FetchAsync(peer, ct).ConfigureAwait(false);
             }
 
             if (Session() is TorrentSession session)
             {
-                await session.RunAsync(peer, ct).ConfigureAwait(false);
+                await session.RunAsync(peer, ct, pending).ConfigureAwait(false);
             }
         }
         catch (Exception gone) when (gone is not OperationCanceledException)
@@ -995,7 +1002,7 @@ public sealed class TorrentRun : IDisposable
     /// likely to have the pieces.
     /// </para>
     /// </remarks>
-    private async Task FetchAsync(PeerConnection peer, CancellationToken ct)
+    private async Task<Task<PeerMessage?>?> FetchAsync(PeerConnection peer, CancellationToken ct)
     {
         await peer.SendAsync(Extensions.Handshake(Client), ct).ConfigureAwait(false);
 
@@ -1003,11 +1010,32 @@ public sealed class TorrentRun : IDisposable
 
         while (Torrent is null && !ct.IsCancellationRequested)
         {
-            PeerMessage? message = await peer.NextAsync(ct).ConfigureAwait(false);
+            Task<PeerMessage?> next = peer.NextAsync(ct);
+
+            // Either this peer says something, or somebody else finishes the
+            // metadata. Waiting only on the peer parked it here for the rest of
+            // the run: a seed has every piece, so it sends no `have`, and it
+            // will not unchoke a client that never said it was interested —
+            // which this client cannot say until it is in the session. A
+            // keep-alive does not wake it either, because the connection
+            // swallows those.
+            //
+            // So only the peer that happened to deliver the last block of the
+            // metadata ever reached the session, and every other one sat in
+            // this read being asked for nothing until the far end dropped it
+            // for being idle. On 30 August 2026 a season pack fetched its
+            // metadata at 05:15 and was at nought peers by 05:29 with hundreds
+            // of seeds in the swarm.
+            if (await Task.WhenAny(next, _metadata.Task).ConfigureAwait(false) != (Task)next)
+            {
+                return next;
+            }
+
+            PeerMessage? message = await next.ConfigureAwait(false);
 
             if (message is null)
             {
-                return;
+                return null;
             }
 
             if (message.Id != PeerMessageId.Extended || message.Payload.Length < 1)
@@ -1022,8 +1050,15 @@ public sealed class TorrentRun : IDisposable
                 if (handshake.MetadataId is not int id || handshake.MetadataSize is not int size)
                 {
                     // It cannot help with this. Not a fault and not worth a
-                    // line: it is still a peer, and the session will have it.
-                    return;
+                    // line: it is still a peer, and the session will have it —
+                    // which is what returning here did not do. There is no
+                    // session while the torrent is unknown, so the conversation
+                    // ended and the connection was disposed. Waited for
+                    // instead, holding a peer this client will want the moment
+                    // it knows what the torrent is.
+                    await _metadata.Task.WaitAsync(ct).ConfigureAwait(false);
+
+                    return null;
                 }
 
                 theirs = id;
@@ -1057,6 +1092,8 @@ public sealed class TorrentRun : IDisposable
 
             await TakeAsync(peer, already, message, ct).ConfigureAwait(false);
         }
+
+        return null;
     }
 
     /// <summary>Takes one metadata message from a peer, and finishes if it was the last.</summary>
