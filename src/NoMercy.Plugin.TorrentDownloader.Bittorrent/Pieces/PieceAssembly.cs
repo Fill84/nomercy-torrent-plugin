@@ -12,8 +12,10 @@ public enum PieceOutcome
     Verified,
 
     /// <summary>
-    /// Complete and wrong. Discarded whole: there is no way to tell which block
-    /// was the bad one, and keeping any of it would put the fault on disk.
+    /// Complete and wrong. Given up whole: there is no way to tell which block
+    /// was the bad one, so the piece is fetched again from somebody else and
+    /// written over what is there. What is on the disk in the meantime is never
+    /// served and never counted — the verified bitfield decides both.
     /// </summary>
     Failed,
 }
@@ -22,14 +24,24 @@ public enum PieceOutcome
 /// One piece being put together out of blocks from several peers.
 /// </summary>
 /// <remarks>
+/// <para>
 /// It remembers who contributed. A piece that fails its hash was ruined by one
 /// of them, and there is no way to say which — so every contributor is
 /// penalised, and a peer that has been in two failures is not worth the
 /// bandwidth.
+/// </para>
+/// <para>
+/// <strong>It holds no bytes.</strong> Each block goes to its place on the disk
+/// as it arrives and the piece is hashed by reading it back. Holding the piece
+/// instead meant a buffer its whole length for every piece being built, and
+/// with four pieces claimed per peer and fifty peers that is two hundred of
+/// them at once: on a season pack whose pieces are megabytes each, more than a
+/// gigabyte of blocks waiting for their neighbours. What is held now is which
+/// blocks have arrived, at one bit each.
+/// </para>
 /// </remarks>
-public sealed class PieceAssembly(int piece, long length, byte[] expectedHash)
+public sealed class PieceAssembly(int piece, long length, byte[] expectedHash, TorrentDisk disk)
 {
-    private readonly byte[] _bytes = new byte[length];
     private readonly HashSet<int> _have = [];
     private readonly HashSet<string> _contributors = [];
 
@@ -44,9 +56,6 @@ public sealed class PieceAssembly(int piece, long length, byte[] expectedHash)
 
     /// <summary>How many blocks it is made of.</summary>
     public int BlockCount => (int)((length + PeerMessage.BlockLength - 1) / PeerMessage.BlockLength);
-
-    /// <summary>The bytes, once it is complete and verified.</summary>
-    public ReadOnlySpan<byte> Bytes => _bytes;
 
     /// <summary>
     /// Takes one block from one peer.
@@ -65,7 +74,7 @@ public sealed class PieceAssembly(int piece, long length, byte[] expectedHash)
                 $"A block at {offset} of {data.Length} bytes is not part of a piece of {length}.");
         }
 
-        data.CopyTo(_bytes.AsSpan(offset));
+        disk.Write(piece, offset, data);
         _have.Add(offset / PeerMessage.BlockLength);
         _contributors.Add(peer);
 
@@ -75,8 +84,9 @@ public sealed class PieceAssembly(int piece, long length, byte[] expectedHash)
         }
 
         // The whole point of the piece: twenty bytes the torrent named, over
-        // the bytes that arrived. Nothing is written to disk before this.
-        return SHA1.HashData(_bytes).AsSpan().SequenceEqual(expectedHash)
+        // the bytes that arrived — read back from the disk they were written
+        // to, because that is where they are.
+        return SHA1.HashData(disk.Read(piece)).AsSpan().SequenceEqual(expectedHash)
             ? PieceOutcome.Verified
             : PieceOutcome.Failed;
     }

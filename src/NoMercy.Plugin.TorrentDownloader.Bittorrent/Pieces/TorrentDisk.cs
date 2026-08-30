@@ -63,7 +63,19 @@ public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDispo
     /// </summary>
     public void Write(int piece, ReadOnlySpan<byte> bytes)
     {
-        long at = (long)piece * torrent.PieceLength;
+        Write(piece, 0, bytes);
+    }
+
+    /// <summary>Writes part of a piece, at an offset within it.</summary>
+    /// <remarks>
+    /// So a block can go to its place the moment it arrives instead of waiting
+    /// in memory for the rest of its piece. Nothing written here is trusted:
+    /// what a peer may be served is decided by the verified bitfield, and a
+    /// piece that fails its hash is fetched again over the top of this.
+    /// </remarks>
+    public void Write(int piece, int offset, ReadOnlySpan<byte> bytes)
+    {
+        long at = ((long)piece * torrent.PieceLength) + offset;
 
         foreach (TorrentSlice slice in torrent.Slice(at, bytes.Length))
         {
@@ -81,6 +93,12 @@ public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDispo
     }
 
     /// <summary>Reads a range back, for uploading and for verification.</summary>
+    public byte[] Read(int piece)
+    {
+        return Read((long)piece * torrent.PieceLength, (int)torrent.LengthOfPiece(piece));
+    }
+
+    /// <summary>Reads bytes from wherever in the torrent they fall.</summary>
     public byte[] Read(long offset, int length)
     {
         byte[] bytes = new byte[length];

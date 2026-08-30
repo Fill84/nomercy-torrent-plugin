@@ -381,7 +381,7 @@ public sealed class TorrentSession(
                     break;
                 }
 
-                _building[piece] = new(piece, torrent.LengthOfPiece(piece), torrent.Pieces[piece]);
+                _building[piece] = new(piece, torrent.LengthOfPiece(piece), torrent.Pieces[piece], disk);
                 _claimedFor[piece] = peer;
                 _asked[piece] = Now();
             }
@@ -546,11 +546,11 @@ public sealed class TorrentSession(
 
             if (outcome == PieceOutcome.Verified)
             {
-                // Written first, then counted, then announced. Only a crash
-                // between the first two could tell the difference, so no test
-                // here can — but a bitfield claiming a piece that never reached
-                // the disk is one this client would go on to serve as rubbish.
-                disk.Write(piece, assembly.Bytes);
+                // On the disk already, block by block as they arrived, and the
+                // hash that says Verified was taken by reading it back — so by
+                // here the bytes are down and this only records that they are.
+                // A bitfield claiming a piece that never reached the disk is
+                // one this client would go on to serve as rubbish.
                 verified.Set(piece);
                 _building.Remove(piece);
                 _claimedFor.Remove(piece);

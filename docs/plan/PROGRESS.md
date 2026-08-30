@@ -206,6 +206,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **0.3.18.** No piece is held in memory. A piece was assembled in a buffer its whole length and
+  written only once its hash matched, so every piece being built cost that buffer. With four pieces
+  claimed per peer and fifty peers that is two hundred at once — over a gigabyte on a season pack
+  whose pieces are megabytes each, even after the per-peer count was fixed. A block now goes to its
+  place on the disk as it arrives and the piece is hashed by reading it back; what is held is which
+  blocks arrived, one bit each. Nothing unverified is ever served: `Serve` refuses any piece the
+  verified bitfield does not have, and a piece that fails is fetched again over the top.
+
 - **0.3.17.** Released. Two faults, one torrent. **Memory:** `Pipeline` is four and its summary says how many
   pieces are asked of one peer at a time, but it was counted per call, and the asking runs on every
   message a peer sends — so each message claimed up to four more pieces, each holding a buffer the

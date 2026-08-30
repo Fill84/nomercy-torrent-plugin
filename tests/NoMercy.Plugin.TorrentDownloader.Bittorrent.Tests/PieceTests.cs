@@ -156,29 +156,57 @@ public class PieceTests : IDisposable
     }
 
     /// <remarks>
-    /// A piece is verified against the twenty bytes the torrent named before
-    /// anything of it reaches the disk. That check is the whole reason a
+    /// A piece is verified against the twenty bytes the torrent named, and
+    /// nothing counts as had until it is. That check is the whole reason a
     /// torrent can be trusted at all.
+    ///
+    /// The blocks are on the disk by then rather than in a buffer, so the hash
+    /// is taken over what was read back — which is also what proves each block
+    /// went where it belongs.
     /// </remarks>
     [Fact]
     public void APieceThatHashesCorrectlyIsVerifiedAndOneThatDoesNotIsDiscarded()
     {
-        byte[] wanted = RandomNumberGenerator.GetBytes(20_000);
+        TorrentMetadata torrent = Torrent();
 
-        PieceAssembly good = new(0, wanted.Length, SHA1.HashData(wanted));
+        int length = (int)torrent.LengthOfPiece(0);
+        byte[] wanted = RandomNumberGenerator.GetBytes(length);
 
-        Assert.Equal(PieceOutcome.Incomplete, good.Add(0, wanted.AsSpan(0, 16384), "one"));
-        Assert.Equal(PieceOutcome.Verified, good.Add(16384, wanted.AsSpan(16384), "two"));
-        Assert.True(good.Bytes.SequenceEqual(wanted));
+        using TorrentDisk right = Disk(torrent, "right");
 
-        PieceAssembly bad = new(0, wanted.Length, SHA1.HashData(wanted));
+        PieceAssembly good = new(0, length, SHA1.HashData(wanted), right);
+        PieceOutcome outcome = PieceOutcome.Incomplete;
 
-        bad.Add(0, wanted.AsSpan(0, 16384), "one");
+        for (int at = 0; at < length; at += PeerMessage.BlockLength)
+        {
+            Assert.Equal(PieceOutcome.Incomplete, outcome);
 
-        byte[] ruined = wanted[16384..];
-        ruined[0] ^= 0xFF;
+            int size = Math.Min(PeerMessage.BlockLength, length - at);
 
-        Assert.Equal(PieceOutcome.Failed, bad.Add(16384, ruined, "two"));
+            outcome = good.Add(at, wanted.AsSpan(at, size), "one");
+        }
+
+        Assert.Equal(PieceOutcome.Verified, outcome);
+
+        // And it is on the disk, which is where it went as it arrived.
+        Assert.True(right.Read(0).AsSpan().SequenceEqual(wanted));
+
+        // The same piece with one byte of the last block turned over.
+        using TorrentDisk wrong = Disk(torrent, "wrong");
+
+        PieceAssembly bad = new(0, length, SHA1.HashData(wanted), wrong);
+
+        byte[] ruined = wanted.ToArray();
+        ruined[^1] ^= 0xFF;
+
+        for (int at = 0; at < length; at += PeerMessage.BlockLength)
+        {
+            int size = Math.Min(PeerMessage.BlockLength, length - at);
+
+            outcome = bad.Add(at, ruined.AsSpan(at, size), "two");
+        }
+
+        Assert.Equal(PieceOutcome.Failed, outcome);
     }
 
     /// <remarks>
@@ -212,7 +240,11 @@ public class PieceTests : IDisposable
     [Fact]
     public void ABlockThatIsNotWhereABlockGoesIsRefused()
     {
-        PieceAssembly piece = new(0, 20_000, new byte[20]);
+        TorrentMetadata torrent = Torrent();
+
+        using TorrentDisk disk = Disk(torrent, "guard");
+
+        PieceAssembly piece = new(0, 20_000, new byte[20], disk);
 
         Assert.Throws<PeerProtocolException>(() => piece.Add(17, new byte[16], "one"));
         Assert.Throws<PeerProtocolException>(() => piece.Add(16384, new byte[16384], "one"));
@@ -387,6 +419,60 @@ public class PieceTests : IDisposable
         }
 
         return field;
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A block is on the disk the moment it arrives.</strong> A piece
+    /// used to be assembled in memory and written only once its hash matched,
+    /// which meant a buffer the size of a whole piece for every piece being
+    /// built. With four pieces claimed per peer and fifty peers that is two
+    /// hundred buffers at once — on a season pack whose pieces are megabytes
+    /// each, more than a gigabyte of nothing but blocks waiting for their
+    /// neighbours.
+    /// </para>
+    /// <para>
+    /// So the block goes straight to its place and the piece is hashed by
+    /// reading it back. What is held instead is which blocks have arrived,
+    /// which is one bit each.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ABlockIsOnTheDiskAsSoonAsItArrivesRatherThanWhenThePieceIsWhole()
+    {
+        TorrentMetadata torrent = Torrent();
+
+        using TorrentDisk disk = new(torrent, _folder);
+        disk.Create();
+
+        PieceAssembly assembly = new(0, torrent.LengthOfPiece(0), torrent.Pieces[0], disk);
+
+        // The second block, so this cannot pass by writing everything at the
+        // front of the piece.
+        byte[] block = RandomNumberGenerator.GetBytes(PeerMessage.BlockLength);
+
+        Assert.Equal(PieceOutcome.Incomplete, assembly.Add(PeerMessage.BlockLength, block, "peer"));
+
+        // Read back through the file map, which is what makes this the disk and
+        // not a buffer: the piece straddles two files and this offset is past
+        // the end of the first one.
+        Assert.True(
+            disk.Read(PeerMessage.BlockLength, block.Length).AsSpan().SequenceEqual(block),
+            "the block was not on the disk until the piece was finished");
+    }
+
+    /// <summary>A disk of its own, under this test's folder.</summary>
+    private TorrentDisk Disk(TorrentMetadata torrent, string name)
+    {
+        string folder = Path.Combine(_folder, name);
+
+        Directory.CreateDirectory(folder);
+
+        TorrentDisk disk = new(torrent, folder);
+
+        disk.Create();
+
+        return disk;
     }
 
     private static TorrentMetadata Torrent()
