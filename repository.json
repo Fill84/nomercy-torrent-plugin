@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.3.16",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.16/NoMercy.Plugin.TorrentDownloader-0.3.16.zip",
+          "checksum": "ca00678e8e99f09e5887fd9ea31ece24e1484ebdb5fc400084af893deeea8934",
+          "changelog": "Enough peers to download from, and a browser that stops collecting tabs.",
+          "timestamp": "2026-08-30T03:00:42Z"
+        },
+        {
           "version": "0.3.15",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.15/NoMercy.Plugin.TorrentDownloader-0.3.15.zip",
