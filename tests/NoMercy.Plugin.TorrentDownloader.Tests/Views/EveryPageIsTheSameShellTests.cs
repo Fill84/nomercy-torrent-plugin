@@ -31,6 +31,16 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Views;
 /// itself. This asserts them against each other, which is where the fault
 /// actually lives: not in any one page, but in two of them disagreeing.
 /// </para>
+/// <para>
+/// <strong>The shell they all ask for is <c>Wide</c>, and was
+/// <c>Standard</c>.</strong> Standard is a sixty-four rem measure, which is
+/// right for a page of cards and wrong for every page here: these are tables,
+/// and a table held to a measure loses its last columns behind a scrollbar. The
+/// owner had one across the Downloads page on 31 August 2026. Wide is the shape
+/// the client already has for exactly this — "a table wants every column it
+/// declared and a dashboard wants the room it has" — and moving them together
+/// is what keeps the bar of tabs from jumping.
+/// </para>
 /// </remarks>
 public class EveryPageIsTheSameShellTests
 {
@@ -44,7 +54,7 @@ public class EveryPageIsTheSameShellTests
     {
         PluginRoute dashboard = Pages.Routes.Routes.Single(route => route.Name == "dashboard");
 
-        Assert.Equal(PluginLayout.Standard, dashboard.Layout);
+        Assert.Equal(PluginLayout.Wide, dashboard.Layout);
 
         foreach (PluginRoute route in Pages.Routes.Routes)
         {
@@ -71,7 +81,7 @@ public class EveryPageIsTheSameShellTests
             PluginView page = await plugin.GetViewAsync(new() { Route = route.Path }, CancellationToken.None);
 
             Assert.True(
-                page.Layout == PluginLayout.Standard,
+                page.Layout == PluginLayout.Wide,
                 $"The view at {route.Path} sends {page.Layout}. Every page of this plugin is "
                 + "the width the dashboard is, or the tab bar moves under the owner's cursor.");
         }

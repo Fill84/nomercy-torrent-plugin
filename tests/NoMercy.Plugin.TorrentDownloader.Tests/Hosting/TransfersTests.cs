@@ -567,6 +567,55 @@ public class TransfersTests : IDisposable
                    && (one.Detail ?? string.Empty).Contains("no audio stream", StringComparison.Ordinal));
     }
 
+    /// <remarks>
+    /// <para>
+    /// A pack added by hand for a show that is in no library is left where it
+    /// is, and the History page says so. On 31 August 2026 the owner had 37 GB
+    /// of Dark Matter sitting at "finished" and nothing anywhere saying why —
+    /// the show is not in their media server at all, so there is no library to
+    /// put it in and nothing to name the episodes against.
+    /// </para>
+    /// <para>
+    /// Guessing a library would be worse: files under a name nobody chose, in
+    /// somebody else's folder. So it is refused, said out loud once, and asked
+    /// again on the next tick — because the answer changes the moment the show
+    /// is added.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APackForAShowInNoLibraryIsLeftAloneAndTheReasonIsWrittenDown()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string episode = Downloaded("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        // The library the owner really has, which does not hold this show.
+        Transfers transfers = Transfers(engine, grabs, server);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // Left where it is: nothing staged, nothing dispatched, and the grab
+        // still open so it is picked up the day the show is added.
+        Assert.False(File.Exists(Staged), "It was staged into a library it does not belong to.");
+        Assert.Null(server.Dispatcher.Job);
+        Assert.NotEmpty(await grabs.OpenAsync(CancellationToken.None));
+
+        // And said once, on the page that keeps it. Twice would bury the page
+        // it is written on within a day.
+        SkippedPage skipped = await grabs.SkippedAsync(1, 20, CancellationToken.None);
+
+        Assert.Single(skipped.Rows, one => one.Reason.Contains("no library", StringComparison.Ordinal)
+                                           || one.Reason.Contains("in a library", StringComparison.Ordinal));
+    }
+
     /// <summary>A server that says the same thing about every job.</summary>
     private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
     {

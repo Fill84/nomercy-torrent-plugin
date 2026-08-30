@@ -56,7 +56,7 @@ public static class SkippedView
 
         return new()
         {
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
             Components =
             [
                 Ui.Text("skipped-heading", "Skipped", "title"),

@@ -206,6 +206,17 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **Three things the owner saw.** The browser was kept for the life of the server, which is ten
+  Chrome processes and two hundred megabytes held by a machine that will not search again until
+  morning; it is kept for a quarter of an hour with nothing open and then closed, so a search cycle
+  still shares one clearance and an evening gets its memory back. Every page asked for the
+  `standard` shell, which is a sixty-four rem measure — right for cards and wrong for the tables
+  every page here is, so the Downloads page had a scrollbar across it; they all ask for `wide` now,
+  together, which is what keeps the bar of tabs from jumping. And a pack added by hand for a show
+  that is in no library was left at "finished" with the reason only in memory: it goes to the
+  Skipped page now, once, and is asked again every tick because the answer changes the day the show
+  is added.
+
 - **Everything the contract now offers, used.** Every media-server issue this plugin opened is
   closed, and four of them were closed and unused. **#34/#36 — membership.** `Ownership.Theirs` asked
   whether a show had a file, because the server kept rows for shows nobody added and nothing else

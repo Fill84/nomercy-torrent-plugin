@@ -164,8 +164,8 @@ public class ShowsAndQueueViewTests : IDisposable
         PluginRouteMatch shows = Assert.IsType<PluginRouteMatch>(plugin.Routes.Resolve(Pages.ShowsRoute));
         PluginRouteMatch settings = Assert.IsType<PluginRouteMatch>(plugin.Routes.Resolve(Pages.SettingsRoute));
 
-        Assert.Equal(PluginLayout.Standard, shows.Route.Layout);
-        Assert.Equal(PluginLayout.Standard, settings.Route.Layout);
+        Assert.Equal(PluginLayout.Wide, shows.Route.Layout);
+        Assert.Equal(PluginLayout.Wide, settings.Route.Layout);
         Assert.Null(plugin.Routes.Resolve("/no-such-page"));
         Assert.Equal(2, plugin.NavEntries.Count);
     }

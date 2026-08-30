@@ -26,10 +26,18 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Solver;
 /// ends. That is the mechanism, and it costs no clearance.
 /// </para>
 /// <para>
+/// <strong>It does not outlive the evening.</strong> Kept for the life of the
+/// server, it is ten Chrome processes and two hundred megabytes held by a
+/// machine that will not search again until morning — which the owner saw on
+/// 31 August 2026 and asked about. So there is now one caller that stops it,
+/// and it is behind a quarter of an hour of having nothing open. A tab closing
+/// still stops nothing, which is the rule this class is named for.
+/// </para>
+/// <para>
 /// Read from the source rather than exercised, because the seam is
 /// PuppeteerSharp's own browser and a test that stood one up would need Chrome
-/// and a hidden desktop to say something this plain. What matters is that one
-/// line does not come back.
+/// and a hidden desktop to say something this plain. What the browser is closed
+/// <em>on</em> is decided by <c>IdleBrowser</c>, which is exercised for real.
 /// </para>
 /// </remarks>
 public class TheBrowserOutlivesItsTabsTests
@@ -44,12 +52,28 @@ public class TheBrowserOutlivesItsTabsTests
             "Solver",
             "PuppeteerTabs.cs"));
 
-        Assert.DoesNotContain("browser.Stop()", tabs, StringComparison.Ordinal);
+        // What a closing tab does, from the method it calls to the end of it.
+        // Everything the browser is worth keeping for is lost the moment this
+        // says Stop: the clearance a gated source handed to that session.
+        int from = tabs.IndexOf("private void Closed()", StringComparison.Ordinal);
+
+        Assert.True(from > 0, "the tab no longer says when it closed");
+
+        string closing = tabs[from..tabs.IndexOf("/// <summary>", from, StringComparison.Ordinal)];
+
+        Assert.DoesNotContain("Stop(", closing, StringComparison.Ordinal);
+
+        // And the browser is stopped in exactly one place in this file: the
+        // idle check. Two would mean one of them was added without this being
+        // thought about again.
+        Assert.Equal(1, tabs.Split("_browser.Stop()").Length - 1);
     }
 
     /// <remarks>
-    /// And the one place that does stop it is the one that owns it. A second
-    /// caller stopping the browser is the same fault by another route.
+    /// And it is stopped in two places in the whole plugin: the browser itself,
+    /// and the idle check in the tabs that hand it out. A third would be
+    /// somebody stopping it for a reason nobody wrote down, which is how the
+    /// clearance was lost the first time.
     /// </remarks>
     [Fact]
     public void OnlyTheBrowserItselfStopsTheBrowser()
@@ -64,6 +88,10 @@ public class TheBrowserOutlivesItsTabsTests
                 .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
                 .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
                 .Where(file => Path.GetFileName(file) != "Browser.cs")
+
+                // The idle close, which is a quarter of an hour with nothing
+                // open and never a tab closing. Its own test above says so.
+                .Where(file => Path.GetFileName(file) != "PuppeteerTabs.cs")
                 .Where(file => File.ReadAllText(file).Contains(".Stop();", StringComparison.Ordinal)),
         ];
 

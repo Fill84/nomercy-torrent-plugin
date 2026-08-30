@@ -25,7 +25,7 @@ public static class DashboardView
     {
         return new()
         {
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
             Components =
             [
                 StatusBar(cycle, activity.TakenAt),

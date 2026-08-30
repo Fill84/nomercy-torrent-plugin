@@ -19,7 +19,7 @@ public static class ShowsView
     {
         return new()
         {
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
             Components =
             [
                 Ui.Table(

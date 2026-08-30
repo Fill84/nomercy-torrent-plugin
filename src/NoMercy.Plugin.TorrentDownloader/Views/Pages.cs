@@ -108,56 +108,56 @@ public static class Pages
             Path = DashboardRoute,
             Name = "dashboard",
             Label = "Torrent Downloader",
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
         },
         new PluginRoute
         {
             Path = ShowsRoute,
             Name = "shows",
             Label = "Shows",
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
         },
         new PluginRoute
         {
             Path = QueueRoute,
             Name = "queue",
             Label = "Queue",
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
         },
         new PluginRoute
         {
             Path = DownloadsRoute,
             Name = "downloads",
             Label = "Downloads",
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
         },
         new PluginRoute
         {
             Path = HistoryRoute,
             Name = "history",
             Label = "History",
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
         },
         new PluginRoute
         {
             Path = SkippedRoute,
             Name = "skipped",
             Label = "Skipped",
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
         },
         new PluginRoute
         {
             Path = SourcesRoute,
             Name = "sources",
             Label = "Sources",
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
         },
         new PluginRoute
         {
             Path = SettingsRoute,
             Name = "settings",
             Label = "Settings",
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
         });
 
     /// <summary>

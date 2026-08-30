@@ -47,7 +47,7 @@ public static class SettingsView
 
         return new()
         {
-            Layout = PluginLayout.Standard,
+            Layout = PluginLayout.Wide,
             Components =
             [
                 .. problems.Select((string problem, int index) =>

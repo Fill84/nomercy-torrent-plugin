@@ -263,17 +263,42 @@ public sealed class Transfers(
 
                 if (covers.Count == 0)
                 {
-                    // Said out loud rather than left as a torrent that finished
-                    // and did nothing. Nothing in it names an episode of a show
-                    // the owner has, and guessing where to put it is worse than
-                    // leaving it where the owner put it.
-                    journal.Failed(
-                        ActivityStage.Download,
-                        finished.ReleaseTitle,
-                        "nothing in it names an episode of a show in the library, so it was left where it is");
+                    // Written down, not only said. Nothing in it names an
+                    // episode of a show the owner has — the usual cause being a
+                    // pack pasted in for a show not added to a library yet —
+                    // and guessing where to put it is worse than leaving it
+                    // where the owner put it. It goes to the History page
+                    // because the journal is memory: a torrent that sits at
+                    // finished for a week with no reason anywhere is exactly
+                    // what this plugin exists not to do.
+                    //
+                    // Once per run, and the tick that follows says nothing. The
+                    // check is cheap and the answer changes the moment the show
+                    // is added, so it goes on being asked; saying so every
+                    // minute would bury the page it is written on.
+                    string reason =
+                        "nothing in it names an episode of a show in a library, so it was left where it is";
+
+                    journal.Failed(ActivityStage.Download, finished.ReleaseTitle, reason);
+
+                    if (_unplaceable.Add(finished.InfoHash))
+                    {
+                        await grabs.RecordSkippedAsync(
+                            new(0, 0, 0),
+                            string.Empty,
+                            finished.ReleaseTitle,
+                            "by hand",
+                            reason,
+                            (time ?? TimeProvider.System).GetUtcNow(),
+                            ct);
+                    }
 
                     return null;
                 }
+
+                // No longer unplaceable, if it ever was: the show has been
+                // added since, and a later one must be said out loud again.
+                _unplaceable.Remove(finished.InfoHash);
 
                 await grabs.CoversAsync(finished.InfoHash, covers, ct);
 
@@ -740,6 +765,13 @@ public sealed class Transfers(
     /// refresh sees the file and the episode stops being missing on its own.
     /// </para>
     /// </remarks>
+    /// <summary>Torrents already reported as naming no show the owner has.</summary>
+    /// <remarks>
+    /// Per run, like the encode clock beside it. A restart says it once more,
+    /// which is a line on a page rather than a fault.
+    /// </remarks>
+    private readonly HashSet<string> _unplaceable = new(StringComparer.OrdinalIgnoreCase);
+
     private async Task StillWaitingAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
     {
         DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();

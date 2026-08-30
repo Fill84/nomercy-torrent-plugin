@@ -26,10 +26,43 @@ namespace NoMercy.Plugin.TorrentDownloader.Solver;
 /// stage first and this attaches to the port it was told to listen on.
 /// </para>
 /// </remarks>
-public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTabs
+public sealed class PuppeteerTabs : IBrowserTabs
 {
+    private readonly Browser _browser;
+    private readonly ILogger _logger;
+    private readonly TimeProvider _time;
     private readonly SemaphoreSlim _connecting = new(1, 1);
+    private readonly ITimer _watching;
+
     private IBrowser? _connected;
+    private int _open;
+    private DateTimeOffset? _lastClosed;
+
+    /// <param name="browser">The browser to open tabs in.</param>
+    /// <param name="logger">Where it says what it did.</param>
+    /// <param name="time">The clock, and the thing that wakes the idle check.</param>
+    /// <param name="idleFor">
+    /// How long a browser with nothing open is kept. See <see cref="IdleBrowser"/>
+    /// for why it is kept at all and why it is not kept for ever.
+    /// </param>
+    public PuppeteerTabs(Browser browser, ILogger logger, TimeProvider? time = null, TimeSpan? idleFor = null)
+    {
+        _browser = browser;
+        _logger = logger;
+        _time = time ?? TimeProvider.System;
+
+        TimeSpan idle = idleFor ?? IdleBrowser.After;
+
+        // Woken rather than asked. Nothing calls in while the browser is idle,
+        // which is the whole of the case being answered: a server that stopped
+        // searching at nine held ten Chrome processes at midnight because there
+        // was nobody left to notice.
+        _watching = _time.CreateTimer(
+            _ => CloseIfIdle(idle),
+            null,
+            idle,
+            idle);
+    }
 
     public async Task<IBrowserTab?> ForAsync(string host, CancellationToken ct)
     {
@@ -37,7 +70,7 @@ public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTab
 
         try
         {
-            IBrowserProcess? process = await browser.StartAsync(ct);
+            IBrowserProcess? process = await _browser.StartAsync(ct);
 
             if (process is null)
             {
@@ -51,9 +84,11 @@ public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTab
                 BrowserURL = $"http://127.0.0.1:{process.Port}",
             });
 
-            logger.LogDebug("Opening a tab for {Host}.", host);
+            _logger.LogDebug("Opening a tab for {Host}.", host);
 
-            return new PuppeteerTab(await _connected.NewPageAsync());
+            _open++;
+
+            return new PuppeteerTab(await _connected.NewPageAsync(), Closed);
         }
         finally
         {
@@ -69,6 +104,8 @@ public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTab
     /// </remarks>
     public ValueTask DisposeAsync()
     {
+        _watching.Dispose();
+
         if (_connected is not null)
         {
             // Disconnected, not closed. Closing from the driver would take the
@@ -83,10 +120,53 @@ public sealed class PuppeteerTabs(Browser browser, ILogger logger) : IBrowserTab
 
         return ValueTask.CompletedTask;
     }
+
+    /// <summary>A tab has been closed by whoever opened it.</summary>
+    private void Closed()
+    {
+        lock (_watching)
+        {
+            _open--;
+            _lastClosed = _time.GetUtcNow();
+        }
+    }
+
+    /// <summary>
+    /// Takes the browser down when nothing has used it for long enough.
+    /// </summary>
+    /// <remarks>
+    /// Disconnected first and then stopped, in that order: the driver holds a
+    /// socket to a process this is about to end, and ending it underneath the
+    /// driver is how a stray process is left with nowhere to be. Started again
+    /// by the next tab that is asked for, which pays one challenge on a gated
+    /// source and nothing at all on any other.
+    /// </remarks>
+    private void CloseIfIdle(TimeSpan idle)
+    {
+        lock (_watching)
+        {
+            if (!IdleBrowser.Due(_open, _lastClosed, _time.GetUtcNow(), idle))
+            {
+                return;
+            }
+
+            _lastClosed = null;
+
+            _connected?.Disconnect();
+            _connected?.Dispose();
+            _connected = null;
+        }
+
+        _logger.LogInformation(
+            "The browser has had nothing to do for {Minutes:0} minutes, so it was closed.",
+            idle.TotalMinutes);
+
+        _browser.Stop();
+    }
 }
 
 /// <summary>One real tab.</summary>
-internal sealed class PuppeteerTab(IPage page) : IBrowserTab
+internal sealed class PuppeteerTab(IPage page, Action closed) : IBrowserTab
 {
     public async Task GoToAsync(Uri url, CancellationToken ct)
     {
@@ -176,6 +256,10 @@ internal sealed class PuppeteerTab(IPage page) : IBrowserTab
         await page.CloseAsync();
 
         page.Dispose();
+
+        // Said out loud to whoever handed it out, because that is the only
+        // thing that knows whether the browser still has anything to do.
+        closed();
     }
 }
 
