@@ -72,7 +72,8 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
         int number,
         string? title = "An episode",
         DateTime? airDate = null,
-        bool hasFile = false)
+        bool hasFile = false,
+        int id = 0)
     {
         if (!_episodes.TryGetValue(showId, out List<PluginLibraryEpisode>? list))
         {
@@ -80,7 +81,7 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
             _episodes[showId] = list;
         }
 
-        list.Add(new(showId, season, number, title, airDate, hasFile));
+        list.Add(new(showId, season, number, title, airDate, hasFile) { Id = id });
         return this;
     }
 

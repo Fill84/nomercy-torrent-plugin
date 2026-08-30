@@ -71,7 +71,12 @@ public sealed class HostLibrary(IPluginLibraryQuery query) : ILibrary
                 // "now" would make an episode that aired this morning look as
                 // though it had not aired yet.
                 episode.AirDate is null ? null : DateOnly.FromDateTime(episode.AirDate.Value),
-                episode.HasFile)),
+                episode.HasFile)
+            {
+                // media-server #35. Nought on a server too old to set it, which
+                // the encode gateway refuses rather than guessing around.
+                ServerId = episode.Id,
+            }),
         ];
     }
 }

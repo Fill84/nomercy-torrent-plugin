@@ -206,6 +206,19 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **S10-09, step 1.** The encode is asked for through the contract. All five media-server issues
+  this plugin opened were closed on 30 August 2026, and two of them are what 0.4.0 waits on: #30 gives
+  `IPluginEncoder`, #35 puts the server's own episode id in the library answer. Both are in contract
+  0.1.479, which this plugin now builds against. `ContractEncodeGateway` is the second implementation
+  of `IEncodeGateway` the port was written for — a class of its own and one line of composition, and
+  no line of `Transfers` touched. It names no server type that does not come from
+  `NoMercy.Plugins.Abstractions` and reflects nothing. An episode the server named no id for is
+  refused out loud rather than asked for with none, because a null id is the filename guess #35
+  removed. `EncodeDispatch` stays beside it and is chosen for a server that does not offer the
+  contract: a plugin installed on a server the owner has not upgraded must go on filling its library.
+  **Steps 2, 3 and 4 of S10-09 remain**, and step 2 — deleting the reflecting one whole — is a
+  decision about who is running what.
+
 - **0.3.18.** Released. Proved against the owner's own pack, and the pipeline pinned from both sides. The
   season-pack path was built and never run against anything a scene group actually publishes, so the
   nine file names of the Dark Matter pack are a fixture now — episode titles and all, which is where

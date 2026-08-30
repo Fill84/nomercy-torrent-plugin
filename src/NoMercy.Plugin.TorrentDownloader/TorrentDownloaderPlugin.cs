@@ -290,12 +290,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         BittorrentEngine engine = await EngineAsync(settings, ct);
 
+        HostLibrary library = new(Context.Library);
+
         _transfers ??= new(
             engine,
             await GrabsAsync(ct),
-            new HostLibrary(Context.Library),
+            library,
             new Stager(_journal, Context.Logger),
-            new EncodeDispatch(Context.Services, _journal, Context.Logger),
+
+            // The contract where this server offers it, and the older way where
+            // it does not. media-server #30 and #35 are what made the first of
+            // those possible.
+            EncodeGateway.For(Context.Services, library, _journal, Context.Logger),
             _journal,
             Context.Logger);
 

@@ -25,6 +25,20 @@ public sealed record Episode(
     DateOnly? AirDate,
     bool HasFile)
 {
+    /// <summary>The server's own id for this episode, or nought where it named none.</summary>
+    /// <remarks>
+    /// What an encode registers its result against. Without it a plugin holding
+    /// exactly the episode it means has no way to say which row the work
+    /// belongs to, and the only route left is asking the server to identify the
+    /// file again from its name — which is a guess, and one that registers the
+    /// encode against nothing.
+    ///
+    /// A member with a default rather than another positional parameter,
+    /// exactly as the contract added it: every place that builds an Episode
+    /// without one still says what it means.
+    /// </remarks>
+    public int ServerId { get; init; }
+
     public int Season => Key.Season;
 
     public int Number => Key.Number;
