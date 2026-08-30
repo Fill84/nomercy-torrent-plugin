@@ -134,6 +134,17 @@ public sealed class TorrentRun : IDisposable
     private TorrentDisk? _disk;
     private TorrentMetadata? _torrent;
     private bool _disposed;
+
+    /// <summary>
+    /// Stops what this run started on its own account.
+    /// </summary>
+    /// <remarks>
+    /// A peer exchange arrives inside a conversation and is dialled outside
+    /// one, so those dials answer to the run rather than to whichever caller
+    /// happened to be reading a message. Cancelled when the run is disposed,
+    /// so a torrent that is removed does not go on meeting people.
+    /// </remarks>
+    private readonly CancellationTokenSource _stopping = new();
     private bool _nothingWanted;
 
     public TorrentRun(
@@ -470,6 +481,11 @@ public sealed class TorrentRun : IDisposable
             _session = null;
             _disk = null;
         }
+
+        // Outside the lock: cancelling runs continuations, and one of them
+        // taking this lock on the way out would deadlock against it.
+        _stopping.Cancel();
+        _stopping.Dispose();
     }
 
     /// <summary>
@@ -551,6 +567,54 @@ public sealed class TorrentRun : IDisposable
     /// A peer that will not talk is the ordinary case rather than a fault: most
     /// of the addresses a tracker hands out are stale.
     /// </remarks>
+    /// <summary>
+    /// Dials peers this run heard about from somewhere other than a tracker.
+    /// </summary>
+    /// <remarks>
+    /// A tracker hands out fifty addresses and most of them are stale, so a
+    /// client with nowhere else to ask ends up talking to one or two. Everybody
+    /// else in the swarm is known to the peers already connected, and peer
+    /// exchange is how they say so — on 26 August 2026 a swarm other clients
+    /// saw hundreds of seeds in gave this one a single peer.
+    /// </remarks>
+    private async Task MeetAsync(IReadOnlyList<PeerAddress> addresses, CancellationToken ct)
+    {
+        List<PeerAddress> fresh = [];
+
+        lock (_lock)
+        {
+            foreach (PeerAddress address in addresses)
+            {
+                // The same peer twice is one peer, whoever named it. A tracker
+                // and a peer exchange naming the same address is the ordinary
+                // case rather than a second client.
+                if (_tried.Add(address.ToString()))
+                {
+                    fresh.Add(address);
+                }
+            }
+        }
+
+        if (fresh.Count == 0)
+        {
+            return;
+        }
+
+        foreach (PeerConnection? peer in await Task.WhenAll(fresh.Select(one => DialAsync(one, ct))))
+        {
+            if (peer is null)
+            {
+                continue;
+            }
+
+            lock (_lock)
+            {
+                _peers.Add(peer);
+                _conversations.Add(ConverseAsync(peer, ct));
+            }
+        }
+    }
+
     private async Task<PeerConnection?> DialAsync(PeerAddress address, CancellationToken ct)
     {
         try
@@ -653,6 +717,23 @@ public sealed class TorrentRun : IDisposable
                 theirs = id;
 
                 await AskAsync(peer, id, Fetch(size), ct).ConfigureAwait(false);
+
+                continue;
+            }
+
+            if (message.Payload[0] == Extensions.OurExchangeId)
+            {
+                // Peers before pieces. A magnet is exactly when this client has
+                // fewest of them and needs most: the metadata itself has to
+                // come from somebody.
+                PexUpdate offered = Pex.Read(message);
+
+                if (offered.Added.Count > 0)
+                {
+                    // Not awaited: dialling twenty peers must not hold up the
+                    // metadata this loop is here for.
+                    _ = MeetAsync(offered.Added, ct);
+                }
 
                 continue;
             }
@@ -784,7 +865,11 @@ public sealed class TorrentRun : IDisposable
                 Verified(_torrent, _disk),
                 keeping.Count == _torrent.Files.Count ? null : _torrent.PiecesOf(keeping),
                 time: _time,
-                limits: _limits);
+                limits: _limits,
+
+                // What the session is told about, this run dials. The session
+                // owns no sockets on purpose.
+                met: addresses => _ = MeetAsync(addresses, _stopping.Token));
 
             return _session;
         }

@@ -308,4 +308,30 @@ public class PeerExchangeTests
     {
         return new(priv ? Archive : Ubuntu, "something", 262144, [], [], 0, [], priv);
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A peer only sends what it was told we speak.</strong> The
+    /// extension handshake is the whole of that conversation: an extension left
+    /// out of it is one that never arrives, however well this client can read
+    /// it.
+    /// </para>
+    /// <para>
+    /// <c>ut_pex</c> was left out, so no peer ever offered one and every peer
+    /// this client had came from a tracker's own list — fifty addresses of
+    /// which most are stale. On 26 August 2026 a swarm that other clients see
+    /// hundreds of seeds in gave this one a single peer, which is what asking
+    /// nobody for more looks like.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void OurHandshakeAsksForPeerExchangeAsWellAsMetadata()
+    {
+        PeerMessage handshake = Extensions.Handshake("NoMercy");
+
+        ExtensionHandshake ours = Extensions.Read(handshake);
+
+        Assert.Equal(Extensions.OurMetadataId, ours.Messages[Extensions.Metadata]);
+        Assert.Equal(Extensions.OurExchangeId, ours.Messages[Extensions.PeerExchange]);
+    }
 }

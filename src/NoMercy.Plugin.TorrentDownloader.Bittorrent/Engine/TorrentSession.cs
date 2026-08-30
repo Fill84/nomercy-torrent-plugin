@@ -60,6 +60,11 @@ public sealed record SessionProgress(
 /// <param name="limits">
 /// The owner's rate limits, shared with every other torrent, or null for none.
 /// </param>
+/// <param name="met">
+/// Told about peers this session was offered by the ones it is talking to, or
+/// null to ignore them. It is handed up rather than acted on here, because
+/// this session owns no sockets.
+/// </param>
 public sealed class TorrentSession(
     TorrentMetadata torrent,
     TorrentDisk disk,
@@ -67,7 +72,8 @@ public sealed class TorrentSession(
     Bitfield? wanted = null,
     TimeSpan? patience = null,
     TimeProvider? time = null,
-    RateLimits? limits = null) : IDisposable
+    RateLimits? limits = null,
+    Action<IReadOnlyList<PeerAddress>>? met = null) : IDisposable
 {
     private readonly PiecePicker _picker = new(torrent.PieceCount, PiecePicker.DefaultEndgamePieces, wanted);
     private readonly Dictionary<int, PieceAssembly> _building = [];
@@ -233,6 +239,26 @@ public sealed class TorrentSession(
     /// <summary>What to do with one message from one peer.</summary>
     private async Task Handle(PeerConnection peer, PeerMessage message, CancellationToken ct)
     {
+        // Peer exchange, before anything this session itself wants. A swarm is
+        // learned from the peers already in it: a tracker's fifty addresses are
+        // mostly stale, and without this a download runs on the one or two that
+        // answered. Handed up rather than acted on here, because the sockets
+        // belong to the run.
+        if (message.Id == PeerMessageId.Extended
+            && message.Payload.Length > 0
+            && message.Payload[0] == Extensions.OurExchangeId
+            && met is not null)
+        {
+            PexUpdate offered = Pex.Read(message);
+
+            if (offered.Added.Count > 0)
+            {
+                met(offered.Added);
+            }
+
+            return;
+        }
+
         switch (message.Id)
         {
             case PeerMessageId.Piece:

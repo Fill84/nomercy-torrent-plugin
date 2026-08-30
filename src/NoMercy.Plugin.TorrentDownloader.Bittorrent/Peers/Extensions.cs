@@ -56,6 +56,17 @@ public static class Extensions
     /// </remarks>
     public const int OurMetadataId = 1;
 
+    /// <summary>
+    /// The id this client asks peers to send <c>ut_pex</c> under.
+    /// </summary>
+    /// <remarks>
+    /// A peer sends only what the handshake said we speak, so leaving this out
+    /// meant no peer ever offered one and every peer this client had came from
+    /// a tracker's own list — fifty addresses of which most are stale. A swarm
+    /// other clients see hundreds of seeds in gave this one a single peer.
+    /// </remarks>
+    public const int OurExchangeId = 2;
+
     /// <summary>Our own handshake: what we speak and what to send it under.</summary>
     public static PeerMessage Handshake(string client, int? metadataSize = null)
     {
@@ -63,7 +74,16 @@ public static class Extensions
         [
             new(
                 "m"u8.ToArray(),
-                new BencodeDictionary([new(Encoding.ASCII.GetBytes(Metadata), new BencodeInteger(OurMetadataId))])),
+                new BencodeDictionary(
+                [
+                    new(Encoding.ASCII.GetBytes(Metadata), new BencodeInteger(OurMetadataId)),
+
+                    // Asked for on every torrent. A private one is where this
+                    // client must not <em>send</em> peers on; being told about
+                    // them costs nobody anything, and the sending side is
+                    // governed by PeerExchange.Allowed.
+                    new(Encoding.ASCII.GetBytes(PeerExchange), new BencodeInteger(OurExchangeId)),
+                ])),
             new("v"u8.ToArray(), new BencodeBytes(Encoding.UTF8.GetBytes(client))),
         ];
 
