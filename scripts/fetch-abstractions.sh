@@ -88,10 +88,10 @@ fi
 
 echo "The media server on $branch is version $version."
 
-declared="$(msbuild_property "$repository_root/Directory.Build.props" NoMercyContractVersion)"
-if [[ "$declared" != "$version" ]]; then
-    echo "warning: Directory.Build.props asks for $declared. Set NoMercyContractVersion to $version, or the build restores nothing." >&2
-fi
+# Nothing to check it against. NoMercyContractVersion floats, so the build
+# takes whatever is packed below and there is no second number to keep in step.
+# The line above is what a build compiled against, and it is the only record of
+# it that a floating version leaves.
 
 mkdir -p "$package_path"
 

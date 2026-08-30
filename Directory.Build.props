@@ -34,12 +34,25 @@
 
   <PropertyGroup>
     <!--
-      The version of NoMercy.Plugins.Abstractions and NoMercy.Plugins.Mvc that
-      scripts/fetch-abstractions packs into _nupkgs/. It is the media server's
-      own version, read from its Directory.Build.props on branch dev; when that
-      moves, this moves with it and the script says so.
+      Whichever NoMercy.Plugins.Abstractions and NoMercy.Plugins.Mvc that
+      scripts/fetch-abstractions last packed into _nupkgs/, which is the media
+      server's current release. Floating rather than a number, by the owner's
+      decision: this plugin is always built against the newest contract, and a
+      server release is never chased by hand here.
+
+      It replaces a half-and-half that could only ever break. The number was
+      fixed and the checkout the packages are built from followed master, so
+      the two agreed until the server released and then did not: on
+      30 August 2026 the server went to 0.1.479, the number still said 0.1.478,
+      that version no longer existed to resolve, and NU1603 under
+      -warnaserror turned a release commit red.
+
+      What floating costs, said out loud: the same commit built on two days can
+      resolve two different contracts, so a build is not reproducible from the
+      commit alone. What it was compiled against is in that run's own log,
+      which prints the version it packed.
     -->
-    <NoMercyContractVersion>0.1.479</NoMercyContractVersion>
+    <NoMercyContractVersion>*</NoMercyContractVersion>
 
     <!--
       The version, in the one place every project shares it. PluginIdentity and

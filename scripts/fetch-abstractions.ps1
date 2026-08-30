@@ -116,10 +116,10 @@ if (-not $version) {
 
 Write-Host "The media server on $Branch is version $version."
 
-$declared = Get-MsBuildProperty -Path (Join-Path $repositoryRoot 'Directory.Build.props') -Name 'NoMercyContractVersion'
-if ($declared -ne $version) {
-    Write-Warning "Directory.Build.props asks for $declared. Set NoMercyContractVersion to $version, or the build restores nothing."
-}
+# Nothing to check it against. NoMercyContractVersion floats, so the build
+# takes whatever is packed below and there is no second number to keep in step.
+# The line above is what a build compiled against, and it is the only record of
+# it that a floating version leaves.
 
 New-Item -ItemType Directory -Force -Path $packagePath | Out-Null
 
