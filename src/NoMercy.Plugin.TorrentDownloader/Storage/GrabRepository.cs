@@ -195,6 +195,40 @@ public sealed class GrabRepository(Store database)
     /// tick, and a grab that said where without saying so would be staged all
     /// over again.
     /// </remarks>
+    /// <summary>Writes down which episodes a grab turned out to answer for.</summary>
+    /// <remarks>
+    /// For a torrent added by hand, which is recorded covering no episode
+    /// because claiming one nobody chose would put that episode back to missing
+    /// if the download failed. Once it is finished, its own files say which
+    /// episodes it holds — and every step after staging reads them from here,
+    /// so working them out without writing them down would leave the dispatch
+    /// done and the episodes still counted as missing.
+    ///
+    /// It refuses a grab that already covers something. A grab from the search
+    /// chain answers for the episode the chain chose, and overwriting that with
+    /// what the files happen to be named is how a release lands under the wrong
+    /// episode.
+    /// </remarks>
+    public async Task CoversAsync(string infoHash, IReadOnlyList<EpisodeKey> covers, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            UPDATE grabs SET covers = $covers
+            WHERE info_hash = $hash AND (covers IS NULL OR covers = '[]');
+            """;
+
+        command.Parameters.AddWithValue(
+            "$covers",
+            JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })));
+
+        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task StagedAsync(string infoHash, string path, CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);

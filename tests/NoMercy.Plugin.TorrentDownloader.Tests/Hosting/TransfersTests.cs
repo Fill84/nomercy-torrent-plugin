@@ -60,6 +60,51 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A torrent added by hand is an episode like any other.</strong>
+    /// docs/08-ui.md § Actions: <c>AddTorrent</c> still runs the finished file
+    /// through staging and the encode dispatch.
+    /// </para>
+    /// <para>
+    /// It is recorded covering no episode, and staging is handed the episodes —
+    /// so with none it chose no file, moved nothing and dispatched nothing. A
+    /// season pack pasted in by hand downloaded in full and stopped there: on
+    /// 30 August 2026, 37 GB of Dark Matter sat complete in the download folder
+    /// with nothing in the plugin able to move it. What it holds is read out of
+    /// its own file names instead, and written down, because every step after
+    /// staging reads the episodes back out of the store.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentAddedByHandIsStagedAndDispatchedLikeAnyOther()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(Staged, "4417")];
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "It was never staged.");
+        Assert.NotNull(server.Dispatcher.Job);
+
+        // And it says which episode it turned out to be, in the store rather
+        // than only in this tick: the steps that mark the episode arrived and
+        // clear the torrent read it from there.
+        StoredDownload stored = Assert.Single(await grabs.EveryAsync(CancellationToken.None));
+
+        Assert.Equal([Episode], stored.Covers);
+    }
+
+    /// <remarks>
     /// Both halves of a failure, or the episode is lost one way or the other:
     /// blacklisting without returning it leaves it looking grabbed for ever,
     /// and returning it without blacklisting has the next cycle choose the same
@@ -687,6 +732,26 @@ public class TransfersTests : IDisposable
             Ratio: 0.4,
             Eta: null,
             Error: null);
+    }
+
+    /// <summary>A magnet the owner pasted in, which covers no episode.</summary>
+    /// <remarks>
+    /// Exactly what <c>AddTorrent</c> writes: no show, no episode, and the
+    /// source recorded as "by hand". Claiming an episode nobody chose would put
+    /// that episode back to missing if the download failed.
+    /// </remarks>
+    private static async Task ByHand(GrabRepository grabs)
+    {
+        await grabs.RecordAsync(
+            new(0, 0, 0),
+            string.Empty,
+            "Silo.S03E06.1080p.WEB.H264-CAKES",
+            "by hand",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [],
+            DateTimeOffset.UtcNow,
+            CancellationToken.None);
     }
 
     private static async Task Grabbed(GrabRepository grabs)

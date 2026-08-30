@@ -182,6 +182,99 @@ public class StagingTests
         Assert.Empty(Staging.Choose([], [Episode(6)]));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent added by hand answers for whatever it turns out to
+    /// hold.</strong> docs/08-ui.md § Actions: <c>AddTorrent</c> still runs the
+    /// finished file through staging and the encode dispatch, because a torrent
+    /// added by hand is an episode like any other.
+    /// </para>
+    /// <para>
+    /// It is recorded covering no episode, and deliberately so: claiming one
+    /// nobody chose would put that episode back to missing if the download
+    /// failed. So the episodes are read out of the torrent itself once it is
+    /// finished, which is what this does. Without it a season pack added by
+    /// hand downloaded in full and stopped there — on 30 August 2026, 37 GB of
+    /// Dark Matter sat complete in the download folder with nothing to move it,
+    /// because staging is handed the episodes and there were none.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void APackAddedByHandIsReadBackIntoTheEpisodesItHolds()
+    {
+        IReadOnlyList<EpisodeKey> found = Staging.Discover(
+            [
+                File("Dark.Matter.2024.S01E01.Are.You.Happy.in.Your.Life.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", Gigabyte),
+                File("Dark.Matter.2024.S01E02.Trip.of.a.Lifetime.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", Gigabyte),
+                File("Dark.Matter.2024.S01E03.The.Box.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", Gigabyte),
+
+                // Everything a pack ships beside the episodes, none of which is
+                // an episode of anything.
+                File("NEW upcoming releases by Xclusive.txt", 71),
+                File("[TGx]Downloaded from torrentgalaxy.to .txt", 479),
+            ],
+            [DarkMatter, SomethingElse]);
+
+        Assert.Equal(
+            [new(7, 1, 1), new(7, 1, 2), new(7, 1, 3)],
+            found);
+    }
+
+    /// <remarks>
+    /// One episode added by hand is the same thing with one file. The single
+    /// magnet is the ordinary case — a pack is the harder one — and both go the
+    /// same way.
+    /// </remarks>
+    [Fact]
+    public void OneEpisodeAddedByHandIsFoundTheSameWay()
+    {
+        Assert.Equal(
+            [new(9, 3, 6)],
+            Staging.Discover([File("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", Gigabyte)], [DarkMatter, SomethingElse]));
+    }
+
+    /// <remarks>
+    /// A show the owner does not have is not guessed at. Staging it would put a
+    /// file in somebody else's library folder, and that is worse than leaving it
+    /// in the download folder where the owner put it.
+    /// </remarks>
+    [Fact]
+    public void AShowTheOwnerDoesNotHaveIsNotStagedAtAll()
+    {
+        Assert.Empty(
+            Staging.Discover(
+                [File("Some.Show.Nobody.Has.S01E01.1080p.WEB.H264.mkv", Gigabyte)],
+                [DarkMatter, SomethingElse]));
+
+        // And a video that names no episode at all is not an episode, however
+        // much it looks like one.
+        Assert.Empty(Staging.Discover([File("Dark.Matter.2024.1080p.mkv", Gigabyte)], [DarkMatter]));
+    }
+
+    /// <remarks>
+    /// The same episode in two files is one episode. A pack that ships a repack
+    /// beside the original would otherwise be staged twice, and the second
+    /// dispatch overwrites what the first one encoded.
+    /// </remarks>
+    [Fact]
+    public void TheSameEpisodeTwiceIsStillOneEpisode()
+    {
+        Assert.Equal(
+            [new(7, 1, 1)],
+            Staging.Discover(
+                [
+                    File("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", Gigabyte),
+                    File("Dark.Matter.2024.S01E01.REPACK.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", Gigabyte),
+                ],
+                [DarkMatter]));
+    }
+
+    /// <summary>A show the owner has, in a tv library.</summary>
+    private static Show DarkMatter => new(7, "Dark Matter", 2024, "01HQ5W4AVF30N10RT6XCF6AJHM", LibraryKind.Television, "Dark Matter (2024)");
+
+    /// <summary>Another, so that matching has to choose rather than take the only one.</summary>
+    private static Show SomethingElse => new(9, "Silo", 2023, "01HQ5W4AVF30N10RT6XCF6AJHM", LibraryKind.Television, "Silo (2023)");
+
     private const long Megabyte = 1024 * 1024;
 
     private const long Gigabyte = 1024 * Megabyte;

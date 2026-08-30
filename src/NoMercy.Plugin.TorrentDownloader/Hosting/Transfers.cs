@@ -246,9 +246,45 @@ public sealed class Transfers(
         try
         {
             IReadOnlyList<TorrentFile> files = await engine.FilesAsync(finished.InfoHash, ct);
-            IReadOnlyList<Staged> chosen = Staging.Choose(files, finished.Covers);
 
-            foreach (EpisodeKey unanswered in Staging.Unanswered(chosen, finished.Covers))
+            // A torrent added by hand covers no episode, deliberately: claiming
+            // one nobody chose would put that episode back to missing if the
+            // download failed. docs/08-ui.md § Actions says it is staged and
+            // dispatched like any other, so this is where it finds out what it
+            // holds — from its own file names, once there are files to read.
+            // Written down as well as used, because every step after staging
+            // reads the episodes back out of the store.
+            IReadOnlyList<EpisodeKey> covers = finished.Covers;
+
+            if (covers.Count == 0)
+            {
+                covers = Staging.Discover(files, await thisTick.GetShowsAsync(ct));
+
+                if (covers.Count == 0)
+                {
+                    // Said out loud rather than left as a torrent that finished
+                    // and did nothing. Nothing in it names an episode of a show
+                    // the owner has, and guessing where to put it is worse than
+                    // leaving it where the owner put it.
+                    journal.Failed(
+                        ActivityStage.Download,
+                        finished.ReleaseTitle,
+                        "nothing in it names an episode of a show in the library, so it was left where it is");
+
+                    return null;
+                }
+
+                await grabs.CoversAsync(finished.InfoHash, covers, ct);
+
+                journal.Finished(
+                    ActivityStage.Download,
+                    finished.ReleaseTitle,
+                    $"added by hand, and it holds {covers.Count} episode{(covers.Count == 1 ? string.Empty : "s")}");
+            }
+
+            IReadOnlyList<Staged> chosen = Staging.Choose(files, covers);
+
+            foreach (EpisodeKey unanswered in Staging.Unanswered(chosen, covers))
             {
                 journal.Failed(
                     ActivityStage.Download,
@@ -262,7 +298,7 @@ public sealed class Transfers(
             // leaves the file under the torrent's own name rather than under a
             // name made up from what is to hand.
             Show? show = (await thisTick.GetShowsAsync(ct))
-                .FirstOrDefault(candidate => candidate.Id == finished.Covers.FirstOrDefault().ShowId);
+                .FirstOrDefault(candidate => candidate.Id == covers.FirstOrDefault().ShowId);
 
             string? resolution = ReleaseName.Parse(finished.ReleaseTitle).Resolution;
 

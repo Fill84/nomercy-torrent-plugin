@@ -206,6 +206,18 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **0.3.18.** A torrent added by hand reaches the library. docs/08-ui.md said all along that
+  `AddTorrent` still runs the finished file through staging and the encode dispatch, because a
+  torrent added by hand is an episode like any other. Half of it was built: the grab is recorded
+  covering no episode, deliberately, since claiming one nobody chose would put that episode back to
+  missing if it failed — but nothing ever worked out what it turned out to hold, and `Staging.Choose`
+  is handed the episodes and returns nothing when there are none. So a magnet pasted in downloaded in
+  full and stopped: 37 GB of Dark Matter sat complete with nothing able to move it. `Staging.Discover`
+  reads the episodes out of the torrent's own file names, matched against the shows the server offers,
+  and they are written to the grab because every step after staging reads them back from the store.
+  Pack or single episode, both go the same way. Nothing is guessed: a video naming a show the owner
+  does not have, or no episode at all, is left where it is and said so in the journal.
+
 - **0.3.18.** No piece is held in memory. A piece was assembled in a buffer its whole length and
   written only once its hash matched, so every piece being built cost that buffer. With four pieces
   claimed per peer and fifty peers that is two hundred at once — over a gigabyte on a season pack

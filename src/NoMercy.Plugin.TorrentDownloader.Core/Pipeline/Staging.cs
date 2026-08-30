@@ -99,6 +99,77 @@ public static class Staging
     public const long SampleUnder = 50L * 1024 * 1024;
 
     /// <summary>
+    /// Reads the episodes out of a torrent that was never told which it is for.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A torrent added by hand is recorded covering no episode, and deliberately
+    /// so: claiming one nobody chose would put that episode back to missing if
+    /// the download failed. docs/08-ui.md § Actions says what happens instead —
+    /// <c>AddTorrent</c> still runs the finished file through staging and the
+    /// encode dispatch, because a torrent added by hand is an episode like any
+    /// other — and this is the part that was missing. Without it a pack added by
+    /// hand downloaded in full and stopped: <see cref="Choose"/> is handed the
+    /// episodes and there were none, so nothing was moved and nothing was
+    /// dispatched.
+    /// </para>
+    /// <para>
+    /// It reads the file's own name, never the torrent's, and never its order.
+    /// A pack names its episodes in its files; the torrent's own name says only
+    /// that it is a season. Nothing is guessed: a video naming a show the owner
+    /// does not have, or naming no episode at all, yields nothing rather than
+    /// being placed somewhere plausible.
+    /// </para>
+    /// </remarks>
+    /// <param name="files">Every file in the torrent, video or not.</param>
+    /// <param name="shows">The shows the server offers, which is what may be matched.</param>
+    public static IReadOnlyList<EpisodeKey> Discover(IReadOnlyList<TorrentFile> files, IReadOnlyList<Show> shows)
+    {
+        List<EpisodeKey> found = [];
+
+        foreach (TorrentFile file in Wanted(files))
+        {
+            ReleaseName name = ReleaseName.Parse(System.IO.Path.GetFileName(file.Path));
+
+            if (name.Season is not int season || name.Episode is not int number)
+            {
+                continue;
+            }
+
+            // The parsed title, not the file name. TitleMatcher is written for
+            // a title that ends at the season tag, so handing it the whole file
+            // name leaves the resolution, the codec, the group and the
+            // extension trailing behind the show — and a one-word show like
+            // Silo is then refused, because what follows it is not a year or a
+            // country.
+            Show? show = shows.FirstOrDefault(candidate => TitleMatcher.Matches(name.Title, candidate.Title));
+
+            if (show is null)
+            {
+                continue;
+            }
+
+            // Every episode a file claims, because a file may claim several:
+            // a double episode is one file answering for two, and staging one
+            // of them leaves the other missing with its bytes already on disk.
+            for (int at = number; at <= (name.LastEpisode ?? number); at++)
+            {
+                EpisodeKey episode = new(show.Id, season, at);
+
+                // The same episode in two files is one episode. A pack that
+                // ships a repack beside the original would otherwise be staged
+                // twice, and the second dispatch overwrites the first.
+                if (!found.Contains(episode))
+                {
+                    found.Add(episode);
+                }
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>
     /// Which files answer for which episodes.
     /// </summary>
     /// <param name="files">Everything in the finished torrent.</param>
