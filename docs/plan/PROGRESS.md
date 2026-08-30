@@ -206,7 +206,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
-- **0.3.18.** Proved against the owner's own pack, and the pipeline pinned from both sides. The
+- **0.3.18.** Released. Proved against the owner's own pack, and the pipeline pinned from both sides. The
   season-pack path was built and never run against anything a scene group actually publishes, so the
   nine file names of the Dark Matter pack are a fixture now — episode titles and all, which is where
   a parser expecting tags meets `Are.You.Happy.in.Your.Life` — and the test reads them into their
