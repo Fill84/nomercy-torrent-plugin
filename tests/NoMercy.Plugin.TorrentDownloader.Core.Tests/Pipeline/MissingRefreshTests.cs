@@ -12,34 +12,40 @@ public class MissingRefreshTests
 
     /// <remarks>
     /// <para>
-    /// <strong>A show the owner has none of is not a show they have.</strong>
-    /// The server keeps rows for shows nobody asked for, in the same table,
-    /// against the same library id, with a folder and a full episode list.
-    /// Nothing in the row says which is which; having a file does.
+    /// <strong>A show in the library is one the owner has, from the day it is
+    /// added.</strong> A show just added has nothing on disk, and it is the case
+    /// most worth having: every episode of it is a gap.
     /// </para>
     /// <para>
-    /// Taking every show in the library instead was tried on 24 August 2026,
-    /// because a show just added has nothing on disk and is exactly the case
-    /// worth having. Within the hour the owner's plugin was on 479 grabs —
-    /// Family Guy alone claimed 456 missing episodes, and it is a show they
-    /// have never watched. It was already solved and the rule was already
-    /// here; removing it undid that.
+    /// Having a file was the rule until 30 August 2026, because the server kept
+    /// rows for shows nobody asked for — same table, same library id, a folder
+    /// and a full episode list, and nothing in the row to tell them apart.
+    /// Taking every show was tried on 24 August and within the hour the owner
+    /// was on 479 grabs, Family Guy alone claiming 456. media-server #36 stopped
+    /// identification importing shows on a guess and #34 made a newly added show
+    /// visible; on the owner's server the next day the television library held
+    /// fifty-five shows and not one without a file, so the rows that made the
+    /// old rule necessary were gone.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AShowWithNotOneEpisodeOnDiskIsNotOneTheOwnerHas()
+    public async Task AShowJustAddedIsSearchedForOnTheDayItIsAdded()
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
             .Episode(1, 1, 1, hasFile: true, airDate: new DateOnly(2020, 1, 1))
             .Episode(1, 1, 2, airDate: new DateOnly(2020, 1, 8))
-            .Show(2, "Family Guy")
+
+            // Added this morning: in the library, and not one file yet.
+            .Show(2, "Dark Matter")
             .Episode(2, 1, 1, airDate: new DateOnly(2020, 1, 1))
             .Episode(2, 1, 2, airDate: new DateOnly(2020, 1, 8));
 
         IReadOnlyList<TrackedEpisode> tracked = await Derive(library);
 
-        Assert.All(tracked, episode => Assert.Equal("Silo", episode.ShowTitle));
+        // Both shows, and every episode of the one with nothing on disk.
+        Assert.Contains(tracked, episode => episode.ShowTitle == "Silo");
+        Assert.Equal(2, tracked.Count(episode => episode.ShowTitle == "Dark Matter"));
     }
 
     /// <remarks>

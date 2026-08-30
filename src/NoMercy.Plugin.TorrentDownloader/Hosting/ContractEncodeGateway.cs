@@ -38,7 +38,7 @@ public sealed class ContractEncodeGateway(
     IActivityJournal journal,
     ILogger logger) : IEncodeGateway
 {
-    public async Task<bool> DispatchAsync(
+    public async Task<EncodeAsk> DispatchAsync(
         string stagedFile,
         EpisodeKey episode,
         Show show,
@@ -89,7 +89,10 @@ public sealed class ContractEncodeGateway(
 
             journal.Finished(ActivityStage.Download, name, $"encode dispatched to library {show.LibraryId}");
 
-            return true;
+            // With the job it queued, which is what makes a failed encode
+            // something the plugin can be told about rather than something it
+            // waits six hours to infer.
+            return new(true, answer.JobId);
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
@@ -101,11 +104,11 @@ public sealed class ContractEncodeGateway(
         }
     }
 
-    private bool Refused(string name, string reason)
+    private EncodeAsk Refused(string name, string reason)
     {
         logger.LogWarning("No encode was dispatched for {File}: {Reason}.", name, reason);
         journal.Failed(ActivityStage.Download, name, reason);
 
-        return false;
+        return EncodeAsk.No;
     }
 }

@@ -47,15 +47,40 @@ public sealed class SettingsStore
     /// the alternative is a test that passes or fails on how many drives the
     /// machine running it happens to have.
     /// </summary>
+    /// <summary>
+    /// <c>storage</c> is the server's own list of places it can write.
+    /// </summary>
+    /// <remarks>
+    /// media-server #32, which this plugin opened and which names this exact
+    /// case: the intake folder is a string the owner typed, on whatever machine
+    /// the server happens to be. The facade cannot replace the check below —
+    /// that one creates the folder and writes a real file into it, which proves
+    /// more than any list can — but it can say where the server <em>can</em>
+    /// write when the typed path turns out to be somewhere it cannot. A refusal
+    /// the owner can act on rather than one they can only read.
+    ///
+    /// Null on a server that offers no storage facade, and the refusal is then
+    /// what it always was.
+    /// </remarks>
     public SettingsStore(
         IPluginConfiguration configuration,
         IPluginSecretStore secrets,
-        Func<string, string?>? volumeOf = null)
+        Func<string, string?>? volumeOf = null,
+        Func<IPluginStorage?>? storage = null)
     {
         _configuration = configuration;
         _secrets = secrets;
         _volumeOf = volumeOf ?? Path.GetPathRoot;
+        _storage = storage;
     }
+
+    /// <summary>How to reach the server's own list of places it can write.</summary>
+    /// <remarks>
+    /// Asked for at the moment it is wanted, which is only ever a folder that
+    /// was refused. Resolved when the plugin starts instead, it would make
+    /// every start depend on a service the server need not offer at all.
+    /// </remarks>
+    private readonly Func<IPluginStorage?>? _storage;
 
     /// <summary>Where an indexer's API key is kept.</summary>
     public static string IndexerApiKey(string indexerId)
@@ -123,8 +148,20 @@ public sealed class SettingsStore
             }
         }
 
+        // Asked once, and only used where a folder was refused: a save that
+        // passes says nothing about storage at all.
+        int before = errors.Count;
+
         CheckFolder("incomplete", settings.IncompleteFolder, errors);
         CheckFolder("intake", settings.IntakeFolder, errors);
+
+        if (errors.Count > before && await WhereItCanWriteAsync(ct).ConfigureAwait(false) is { Length: > 0 } places)
+        {
+            for (int at = before; at < errors.Count; at++)
+            {
+                errors[at] += places;
+            }
+        }
 
         if (errors.Count > 0)
         {
@@ -199,6 +236,36 @@ public sealed class SettingsStore
     /// look fine until something is written. The alternative is finding out at
     /// three in the morning, when a finished transfer has nowhere to go.
     /// </remarks>
+    /// <summary>Where the server says it can write, named as the owner sees them.</summary>
+    private async Task<string> WhereItCanWriteAsync(CancellationToken ct)
+    {
+        try
+        {
+            if (_storage?.Invoke() is not IPluginStorage storage)
+            {
+                return string.Empty;
+            }
+
+            string[] places =
+            [
+                .. (await storage.LocationsAsync(ct).ConfigureAwait(false))
+                    .Where(one => one.Writable)
+                    .Select(one => $"{one.Name} ({one.Kind})"),
+            ];
+
+            return places.Length == 0
+                ? string.Empty
+                : $" The server can write to: {string.Join(", ", places)}.";
+        }
+        catch (Exception quiet) when (quiet is not OperationCanceledException)
+        {
+            // A refusal that cannot be enriched is still a refusal. Failing to
+            // list the places must never turn a bad folder into a saved one, or
+            // a good one into an error.
+            return string.Empty;
+        }
+    }
+
     private void CheckFolder(string which, string path, List<string> errors)
     {
         if (string.IsNullOrWhiteSpace(path))

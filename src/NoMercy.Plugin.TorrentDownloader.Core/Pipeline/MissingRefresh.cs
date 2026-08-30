@@ -47,14 +47,14 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
         {
             IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
 
-            // Whether the owner has this show at all. The rule and the whole of
-            // its reasoning are in Ownership.Theirs, which the transfers tick
-            // asks as well: the two decide the same thing, and two copies of it
-            // could disagree.
-            if (!Ownership.Theirs(episodes))
-            {
-                continue;
-            }
+            // No question asked here any more, and that is the answer rather
+            // than the absence of one: this loop is over the shows the watched
+            // libraries hold, so every show in it is a member by construction.
+            // Ownership.Theirs is that same question, and the transfers tick
+            // has to ask it because a grab names a show id rather than coming
+            // from the list. It used to be asked here too, as "has a file",
+            // which is why a show just added stayed invisible until something
+            // downloaded — media-server #34, and closed.
 
             // Built from the list already fetched, so it costs no extra call —
             // and built from all of it, before anything is filtered out, because

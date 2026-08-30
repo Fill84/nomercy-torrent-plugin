@@ -121,7 +121,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, encode_job FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed');
             """;
 
@@ -139,6 +139,7 @@ public sealed class GrabRepository(Store database)
             {
                 Covers = Covered(reader.GetString(4)),
                 StagedPath = reader.IsDBNull(5) ? null : reader.GetString(5),
+                EncodeJobId = reader.IsDBNull(6) ? null : reader.GetString(6),
             });
         }
 
@@ -162,7 +163,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, encode_job FROM grabs
             WHERE info_hash IS NOT NULL;
             """;
 
@@ -180,6 +181,7 @@ public sealed class GrabRepository(Store database)
             {
                 Covers = Covered(reader.GetString(4)),
                 StagedPath = reader.IsDBNull(5) ? null : reader.GetString(5),
+                EncodeJobId = reader.IsDBNull(6) ? null : reader.GetString(6),
             });
         }
 
@@ -224,6 +226,28 @@ public sealed class GrabRepository(Store database)
             "$covers",
             JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })));
 
+        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>Writes down the encode job a grab is now waiting on.</summary>
+    /// <remarks>
+    /// So that a restart does not lose it. The one case worth answering is
+    /// exactly the one memory cannot: the plugin comes back, the grab is still
+    /// dispatched, and nothing knows whether the job died with the old process.
+    /// </remarks>
+    public async Task EncodeJobAsync(string infoHash, string jobId, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            UPDATE grabs SET encode_job = $job WHERE info_hash = $hash;
+            """;
+
+        command.Parameters.AddWithValue("$job", jobId);
         command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
 
         await command.ExecuteNonQueryAsync(ct);

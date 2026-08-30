@@ -85,6 +85,32 @@ public class SettingsViewTests
     }
 
     /// <remarks>
+    /// <para>
+    /// A folder is chosen, not typed. Both folder settings were plain text with
+    /// an example path beside them, so the owner typed the path by hand and a
+    /// typo was a plugin with nowhere to download to and no way to see why.
+    /// </para>
+    /// <para>
+    /// This plugin asked the media server for the field — #33, closed on
+    /// 30 August 2026 — and then went on not using it.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("incompleteFolder")]
+    [InlineData("intakeFolder")]
+    public void AFolderIsChosenRatherThanTyped(string field)
+    {
+        PluginView view = SettingsView.Render(new(), [], []);
+
+        PluginFormField[] fields = Assert.IsType<PluginFormField[]>(
+            Rendered.ById(view, "folders").Props["fields"]);
+
+        PluginFormField folder = Assert.Single(fields, one => one.Name == field);
+
+        Assert.Equal(PluginFormFieldType.Folder, folder.Type);
+    }
+
+    /// <remarks>
     /// A field arrives holding what the setting holds. A form that opened empty
     /// would have the owner retyping every setting on the page to change one of
     /// them, and a blank left behind would clear it.

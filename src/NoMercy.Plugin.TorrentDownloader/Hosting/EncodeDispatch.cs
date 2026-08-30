@@ -74,7 +74,7 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
     /// looked at.
     /// </remarks>
     /// <inheritdoc/>
-    public async Task<bool> DispatchAsync(
+    public async Task<EncodeAsk> DispatchAsync(
         string stagedFile,
         EpisodeKey episode,
         Show show,
@@ -199,7 +199,11 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
 
             journal.Finished(ActivityStage.Download, Path.GetFileName(full), $"encode dispatched to library {libraryId}");
 
-            return true;
+            // Taken, and with no job to name. This builds the job itself and
+            // hands it to a queue that answers nothing, so there is no id to
+            // ask about afterwards — which is the whole of why media-server #31
+            // was opened. A grab dispatched this way waits the six hours.
+            return new(true, null);
         }
         catch (Exception whatever)
         {
@@ -327,12 +331,12 @@ public sealed class EncodeDispatch(IServiceProvider services, IActivityJournal j
             + $"episode {Read(parsed, "Episode") ?? "nothing"}");
     }
 
-    private bool Refused(string reason)
+    private EncodeAsk Refused(string reason)
     {
         logger.LogWarning("No encode was dispatched: {Reason}.", reason);
         journal.Failed(ActivityStage.Download, "encode", reason);
 
-        return false;
+        return EncodeAsk.No;
     }
 
     /// <summary>

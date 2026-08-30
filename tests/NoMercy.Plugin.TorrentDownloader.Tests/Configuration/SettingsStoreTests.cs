@@ -1,12 +1,76 @@
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using NoMercy.Plugins.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Configuration;
 
 public class SettingsStoreTests : IDisposable
 {
+    /// <remarks>
+    /// <para>
+    /// A folder the server cannot write to says where it can. The check itself
+    /// is stronger than any list — it creates the folder and writes a real file
+    /// into it — but "it cannot be written" is something the owner can only
+    /// read, and the names of the places that would work are something they can
+    /// act on.
+    /// </para>
+    /// <para>
+    /// media-server #32, opened by this plugin and naming this exact case: the
+    /// intake folder is a string typed on whatever machine the server happens
+    /// to be. Writing <em>through</em> the facade is a different thing and not
+    /// this: the encode is asked for with an absolute path, so a staged file on
+    /// a remote location could not be named to the encoder at all.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFolderTheServerCannotWriteToSaysWhereItCan()
+    {
+        FakePluginContext context = new();
+
+        SettingsStore store = new(
+            context.Config,
+            context.Secrets,
+            volumeOf: _ => @"C:\",
+            storage: () => new TwoPlaces());
+
+        Settings settings = new()
+        {
+            // A path no machine has, so the write probe refuses it and nothing
+            // in this test depends on which drives the runner happens to carry.
+            IncompleteFolder = Path.Combine(Path.GetTempPath(), "nomercy-nowhere", "\u0000"),
+            IntakeFolder = Path.Combine(Path.GetTempPath(), "nomercy-intake-" + Guid.NewGuid().ToString("n")[..8]),
+        };
+
+        SaveResult result = await store.SaveAsync(settings, CancellationToken.None);
+
+        Assert.False(result.Saved);
+        Assert.Contains(result.Errors, one => one.Contains("Media (local)", StringComparison.Ordinal));
+
+        // And not the one it cannot write to, because a place that is no use is
+        // not a suggestion.
+        Assert.DoesNotContain(result.Errors, one => one.Contains("Archive", StringComparison.Ordinal));
+    }
+
+    /// <summary>A server with one place it can write and one it cannot.</summary>
+    private sealed class TwoPlaces : IPluginStorage
+    {
+        public Task<IReadOnlyList<PluginStorageLocation>> LocationsAsync(CancellationToken ct = default)
+        {
+            return Task.FromResult<IReadOnlyList<PluginStorageLocation>>(
+            [
+                new("01", "Media", "local", Writable: true),
+                new("02", "Archive", "s3", Writable: false),
+            ]);
+        }
+
+        public Task<IPluginStorageScope?> OpenAsync(string locationId, CancellationToken ct = default)
+        {
+            return Task.FromResult<IPluginStorageScope?>(null);
+        }
+    }
+
     private readonly List<string> _folders = [];
 
     /// <remarks>

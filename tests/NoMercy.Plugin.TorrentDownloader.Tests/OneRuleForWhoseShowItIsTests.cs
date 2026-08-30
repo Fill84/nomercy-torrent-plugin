@@ -28,15 +28,22 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests;
 /// 24 August 2026, with Family Guy alone claiming 456 missing episodes. So it
 /// is asserted from both sides at once, against one library, in one test.
 /// </para>
+/// <para>
+/// <strong>The rule is membership now.</strong> Having a file was what told a
+/// show the owner added from a row the server kept, and it cost them the case
+/// most worth having: a show just added has nothing on disk. media-server #36
+/// stopped identification importing shows on a guess and #34 made a newly added
+/// show visible, so a show in a library is theirs and a show in none is not.
+/// </para>
 /// </remarks>
 public class OneRuleForWhoseShowItIsTests : IDisposable
 {
     private const string TelevisionLibrary = "01KZGKX2G0966V80H26EKGG5T0";
 
-    /// <summary>The owner's show: it has an episode on disk.</summary>
+    /// <summary>The owner's show: added this morning, with nothing on disk yet.</summary>
     private const int Silo = 41;
 
-    /// <summary>A row the server keeps that nobody asked for: nothing on disk.</summary>
+    /// <summary>A show in no library at all: removed, or never theirs.</summary>
     private const int FamilyGuy = 99;
 
     private const string SiloHash = "0123456789ABCDEF0123456789ABCDEF01234567";
@@ -47,19 +54,22 @@ public class OneRuleForWhoseShowItIsTests : IDisposable
         "nomercy-ownership-" + Guid.NewGuid().ToString("n")[..8]);
 
     [Fact]
-    public async Task AShowWithNothingOnDiskIsNeitherSearchedForNorLeftDownloading()
+    public async Task AShowInNoLibraryIsCancelledAndOneJustAddedIsSearchedFor()
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
             .Library(TelevisionLibrary, "Television", "tv")
 
-            // The owner's: one episode on disk, one gap that has aired.
+            // The owner's, and added this morning: in the library, both
+            // episodes aired, and not one file. Under the old rule this show
+            // was invisible until something downloaded, which is the whole of
+            // media-server #34.
             .Show(Silo, "Silo", TelevisionLibrary, year: 2023)
-            .Episode(Silo, 1, 1, hasFile: true, airDate: new DateTime(2023, 5, 5))
+            .Episode(Silo, 1, 1, airDate: new DateTime(2023, 5, 5))
             .Episode(Silo, 3, 6, airDate: new DateTime(2026, 1, 1))
 
-            // Not the owner's: a full episode list, a folder, the same library
-            // id, and not one file.
-            .Show(FamilyGuy, "Family Guy", TelevisionLibrary, year: 1999)
+            // Not the owner's: the server still has its episode rows, and the
+            // show is in no library. Nothing else tells them apart, and nothing
+            // else has to.
             .Episode(FamilyGuy, 1, 1, airDate: new DateTime(2020, 1, 1))
             .Episode(FamilyGuy, 1, 2, airDate: new DateTime(2020, 1, 8));
 
@@ -71,7 +81,8 @@ public class OneRuleForWhoseShowItIsTests : IDisposable
                 new FakeTimeProvider(new DateTimeOffset(2026, 8, 25, 9, 0, 0, TimeSpan.Zero)))
             .DeriveAsync(new Profile(), CancellationToken.None);
 
-        Assert.NotEmpty(tracked);
+        // Every episode of it, because it has none of them yet.
+        Assert.Equal(2, tracked.Count);
         Assert.All(tracked, episode => Assert.Equal("Silo", episode.ShowTitle));
 
         // The transfers side: one grab for each show, both downloading.

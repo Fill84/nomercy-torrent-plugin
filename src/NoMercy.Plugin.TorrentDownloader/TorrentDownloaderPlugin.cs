@@ -133,7 +133,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // Objects, not I/O: nothing here opens a file, a socket or a database.
         // The settings are read when something asks for them, and the database
         // is created and migrated the first time it is really used.
-        _settings = new(context.Configuration, context.Secrets);
+        _settings = new(
+            context.Configuration,
+            context.Secrets,
+            volumeOf: null,
+
+            // Where the server says it can write, used only to make a refused
+            // folder something the owner can act on. media-server #32.
+            storage: () => context.Services.GetService(typeof(IPluginStorage)) as IPluginStorage);
         _database = new(context.DataFolderPath);
         _episodes = new(_database);
         _grabs = new(_database);
@@ -303,7 +310,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // those possible.
             EncodeGateway.For(Context.Services, library, _journal, Context.Logger),
             _journal,
-            Context.Logger);
+            Context.Logger,
+            time: null,
+
+            // Where the server will say what became of an encode. Without it a
+            // failed job and a slow one look the same and both are waited out.
+            jobs: EncodeGateway.JobsOf(Context.Services));
 
         await _transfers.TickAsync(settings.IncompleteFolder, settings.IntakeFolder, ct);
     }

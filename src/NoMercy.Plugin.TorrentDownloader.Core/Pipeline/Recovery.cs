@@ -60,6 +60,14 @@ public sealed record StoredDownload(string InfoHash, string Magnet, string Relea
     /// </remarks>
     public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
 
+    /// <summary>The encode job this grab is waiting on, where the server named one.</summary>
+    /// <remarks>
+    /// Null on a server that cannot name a job, and on every grab dispatched
+    /// before it could. Those are waited out instead of asked about, which is
+    /// what the plugin did for all of them until media-server #31.
+    /// </remarks>
+    public string? EncodeJobId { get; init; }
+
     /// <summary>
     /// Where its episode was copied to, once it has been.
     /// </summary>

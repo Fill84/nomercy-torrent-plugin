@@ -33,7 +33,8 @@ public sealed class Transfers(
     IEncodeGateway dispatch,
     IActivityJournal journal,
     ILogger logger,
-    TimeProvider? time = null)
+    TimeProvider? time = null,
+    IEncodeJobs? jobs = null)
 {
     /// <summary>
     /// How long an encode is given before it is given up on.
@@ -367,9 +368,9 @@ public sealed class Transfers(
         // folder it really lives in. A library can have several.
         string? existing = (await thisTick.GetShowFilesAsync(episode.ShowId, ct)).FirstOrDefault();
 
-        bool queued = await dispatch.DispatchAsync(staged, episode, show, existing, ct);
+        EncodeAsk asked = await dispatch.DispatchAsync(staged, episode, show, existing, ct);
 
-        if (!queued)
+        if (!asked.Taken)
         {
             // Left staged, so the next tick asks again without copying the file
             // a second time. An encode refused because the server could not yet
@@ -386,6 +387,13 @@ public sealed class Transfers(
             ct);
 
         await grabs.StateAsync(infoHash, GrabState.Dispatched, ct);
+
+        // The job it queued, where the server named one, so a restart does not
+        // lose which encode this grab is waiting on. media-server #31.
+        if (asked.JobId is string job)
+        {
+            await grabs.EncodeJobAsync(infoHash, job, ct);
+        }
 
         // The clock starts here, not on the tick that next looks at it: an
         // encode is waited on from the moment it was asked for.
@@ -438,7 +446,7 @@ public sealed class Transfers(
             // library remembers it for both.
             foreach (int show in open.Covers.Select(one => one.ShowId).Distinct())
             {
-                theirs &= Ownership.Theirs(await thisTick.GetEpisodesAsync(show, ct));
+                theirs &= Ownership.Theirs(show, await thisTick.GetShowsAsync(ct));
             }
 
             if (theirs)
@@ -735,6 +743,42 @@ public sealed class Transfers(
     private async Task StillWaitingAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
     {
         DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();
+
+        // Asked rather than inferred, where there is a job to ask about and a
+        // server that answers. Everything below this sees one thing only —
+        // whether the library has the episode yet — so an encode that died in
+        // its first minute and one still running look the same, and both are
+        // waited out for six hours before the episode goes back to missing and
+        // the same gigabytes are downloaded again. media-server #31, which this
+        // plugin opened, is what makes the difference sayable.
+        if (jobs is not null && sent.EncodeJobId is string job)
+        {
+            EncodeJob? standing = await jobs.StatusAsync(job, ct);
+
+            if (standing is { State: EncodeJobState.Failed })
+            {
+                _waiting.Remove(sent.InfoHash);
+
+                string said = standing.Failure ?? "the server gave up on the encode and said no more than that";
+
+                await grabs.FailedAsync(sent.InfoHash, said, now, ct);
+
+                logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, said);
+                journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, said);
+
+                return;
+            }
+
+            if (standing is { State: EncodeJobState.Queued or EncodeJobState.Running })
+            {
+                // Alive, so it is not asked for again and not given up on,
+                // whatever the clock says. The six hours below are a guess at
+                // this question and this is the answer to it.
+                _waiting[sent.InfoHash] = now;
+
+                return;
+            }
+        }
 
         if (!_waiting.TryGetValue(sent.InfoHash, out DateTimeOffset since))
         {

@@ -22,7 +22,10 @@ public sealed class RecordingEncoder : IEncodeGateway
     /// <summary>Whether it takes what it is asked. False is a server refusing.</summary>
     public bool Takes { get; set; } = true;
 
-    public Task<bool> DispatchAsync(
+    /// <summary>The job it names, or null for a server that cannot name one.</summary>
+    public string? JobId { get; set; }
+
+    public Task<EncodeAsk> DispatchAsync(
         string stagedFile,
         EpisodeKey episode,
         Show show,
@@ -31,6 +34,6 @@ public sealed class RecordingEncoder : IEncodeGateway
     {
         Asked.Add((stagedFile, episode, show, existing));
 
-        return Task.FromResult(Takes);
+        return Task.FromResult(Takes ? new EncodeAsk(true, JobId) : EncodeAsk.No);
     }
 }

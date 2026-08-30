@@ -1,5 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugins.Abstractions;
@@ -38,10 +39,14 @@ public class TheContractEncoderTests
         RecordingPluginEncoder encoder = new();
         FakeProvider server = new();
 
-        bool taken = await Gateway(encoder, server)
+        EncodeAsk ask = await Gateway(encoder, server)
             .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 6), Show(), null, CancellationToken.None);
 
-        Assert.True(taken);
+        Assert.True(ask.Taken);
+
+        // The job the server queued, kept so what became of it can be asked
+        // rather than waited out. media-server #31.
+        Assert.Equal("01KZGKX2G0966V80H26EKGG5T1", ask.JobId);
 
         (string File, string Library, string? Media, string? Preset) asked = Assert.Single(encoder.Asked);
 
@@ -72,10 +77,10 @@ public class TheContractEncoderTests
         RecordingPluginEncoder encoder = new() { Refusal = "no encoder profile for that library" };
         FakeProvider server = new();
 
-        bool taken = await Gateway(encoder, server)
+        EncodeAsk ask = await Gateway(encoder, server)
             .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 6), Show(), null, CancellationToken.None);
 
-        Assert.False(taken);
+        Assert.False(ask.Taken);
         Assert.Contains(
             server.Journal.Snapshot().History,
             one => one.Outcome == ActivityOutcome.Failed
@@ -97,10 +102,10 @@ public class TheContractEncoderTests
 
         // Season three, episode nine: a real episode of the show, and one this
         // library answer carries no id for.
-        bool taken = await Gateway(encoder, server)
+        EncodeAsk ask = await Gateway(encoder, server)
             .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 9), Show(), null, CancellationToken.None);
 
-        Assert.False(taken);
+        Assert.False(ask.Taken);
         Assert.Empty(encoder.Asked);
         Assert.Contains(
             server.Journal.Snapshot().History,

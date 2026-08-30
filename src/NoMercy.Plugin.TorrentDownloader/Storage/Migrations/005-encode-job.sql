@@ -1,0 +1,12 @@
+-- The encode job a grab is waiting on.
+--
+-- Kept here rather than in memory because the case worth answering is exactly
+-- the one memory cannot: the plugin restarts, the grab is still dispatched, and
+-- nothing knows whether the job it asked for died with the old process or is
+-- still running. Eleven grabs of the owner's waited on jobs the encoder had
+-- already thrown away while the queue sat empty.
+--
+-- Null where the server named no job, which every server without
+-- IPluginJobs does -- media-server #31 -- and those grabs are waited out the
+-- old way instead.
+ALTER TABLE grabs ADD COLUMN encode_job TEXT;

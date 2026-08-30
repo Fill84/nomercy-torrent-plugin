@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Time.Testing;
+using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
@@ -509,6 +510,78 @@ public class TransfersTests : IDisposable
     /// </para>
     /// </remarks>
     [Fact]
+    public async Task AnEncodeTheServerSaysFailedIsGivenUpOnAtOnceAndForItsOwnReason()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
+
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        server.Files.Matches = [(Staged, "4417")];
+
+        // A server that names the job it queued, and then says it died.
+        RecordingEncoder encoder = new() { JobId = "01KZGKX2G0966V80H26EKGG5T1" };
+        SayingJobs jobs = new(new(EncodeJobState.Failed, "the source file has no audio stream"));
+
+        Transfers transfers = new(
+            engine,
+            grabs,
+            new HostLibrary(new FakeLibraryQuery()
+                .Library(TelevisionLibrary, "Television", "tv")
+                .Show(41, "Silo", TelevisionLibrary, year: 2023)
+                .Episode(41, 3, 6)
+                .Episode(41, 1, 1, hasFile: true)),
+            new Stager(server.Journal, server.Log),
+            encoder,
+            server.Journal,
+            server.Log,
+            clock,
+            jobs);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(
+            GrabState.Dispatched,
+            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+
+        // A minute later, not six hours: the plugin asked rather than waited.
+        clock.Advance(TimeSpan.FromMinutes(1));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+
+        // In the server's own words, which is the whole point of asking: "it
+        // was given up on" tells the owner nothing they can act on.
+        Assert.Contains(
+            server.Journal.Snapshot().History,
+            one => one.Outcome == ActivityOutcome.Failed
+                   && (one.Detail ?? string.Empty).Contains("no audio stream", StringComparison.Ordinal));
+    }
+
+    /// <summary>A server that says the same thing about every job.</summary>
+    private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
+    {
+        public Task<EncodeJob?> StatusAsync(string jobId, CancellationToken ct)
+        {
+            return Task.FromResult<EncodeJob?>(standing);
+        }
+    }
+
+    /// <remarks>
+    /// The backstop, for a server that cannot say. It is what every grab
+    /// dispatched by the older gateway falls back to, because that one builds
+    /// its own job and hands it to a queue that names nothing.
+    /// </remarks>
+    [Fact]
     public async Task AnEncodeThatNeverArrivesIsGivenUpOn()
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
@@ -794,23 +867,26 @@ public class TransfersTests : IDisposable
         FakeProvider server,
         bool encoded = false,
         bool owned = true,
-        TimeProvider? clock = null)
+        TimeProvider? clock = null,
+        IEncodeJobs? jobs = null)
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
             // A real Ulid, because the server's library id is one and the
             // encode job will not take anything else. "library-tv" made every
             // test here agree with a plugin that could never dispatch.
             .Library(TelevisionLibrary, "Television", "tv")
-            .Show(41, "Silo", TelevisionLibrary, year: 2023)
-
             // Whether the encode has landed. It is the only thing the plugin
             // can see that says the job finished.
             .Episode(41, 3, 6, hasFile: encoded)
+            .Episode(41, 1, 1, hasFile: true);
 
-            // Whether the owner has this show at all: one episode on disk is
-            // what says so, and a show with none is one the server keeps a row
-            // for that nobody asked for.
-            .Episode(41, 1, 1, hasFile: owned);
+        // Whether the owner has this show at all, which since media-server #34
+        // and #36 is whether it is in a library. A show that is in none is one
+        // they removed, or one this plugin was never for.
+        if (owned)
+        {
+            query = query.Show(41, "Silo", TelevisionLibrary, year: 2023);
+        }
 
         return new(
             engine,
@@ -820,7 +896,8 @@ public class TransfersTests : IDisposable
             new EncodeDispatch(server, server.Journal, server.Log),
             server.Journal,
             server.Log,
-            clock ?? TimeProvider.System);
+            clock ?? TimeProvider.System,
+            jobs);
     }
 
     private async Task<GrabRepository> Grabs()

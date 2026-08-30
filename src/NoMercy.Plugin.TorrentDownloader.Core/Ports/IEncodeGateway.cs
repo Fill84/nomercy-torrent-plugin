@@ -32,6 +32,24 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Ports;
 /// test.
 /// </para>
 /// </remarks>
+/// <summary>What came of asking for an encode.</summary>
+/// <param name="Taken">Whether the server took it. False leaves the file staged.</param>
+/// <param name="JobId">
+/// The job it queued, where the server named one. Null both when it was refused
+/// and when it was taken by a server with no way to name the job — the older
+/// dispatch cannot, because it builds the job itself and hands it to a queue
+/// that answers nothing.
+///
+/// It is what <see cref="IEncodeJobs"/> is asked about, so a grab that has one
+/// can be told a dead job from a slow one instead of waiting six hours to find
+/// out which it was.
+/// </param>
+public sealed record EncodeAsk(bool Taken, string? JobId)
+{
+    /// <summary>Refused, with the reason already said out loud by whoever refused it.</summary>
+    public static EncodeAsk No { get; } = new(false, null);
+}
+
 public interface IEncodeGateway
 {
     /// <summary>
@@ -76,7 +94,7 @@ public interface IEncodeGateway
     /// lives in.
     /// </param>
     /// <param name="ct">Cancellation.</param>
-    Task<bool> DispatchAsync(
+    Task<EncodeAsk> DispatchAsync(
         string stagedFile,
         EpisodeKey episode,
         Show show,

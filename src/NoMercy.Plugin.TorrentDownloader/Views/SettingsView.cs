@@ -113,6 +113,13 @@ public static class SettingsView
             {
                 Name = "incompleteFolder",
                 Label = "Incomplete folder — where a download lands while it runs",
+
+                // Chosen rather than typed. This was a text box with an example
+                // path beside it, so the owner typed the path by hand and a typo
+                // was a plugin with nowhere to download to and nothing saying
+                // why. The field is media-server #33, which this plugin asked
+                // for and then went on not using.
+                Type = PluginFormFieldType.Folder,
                 Value = settings.IncompleteFolder,
                 Placeholder = @"D:\torrents\incomplete",
             },
@@ -120,6 +127,7 @@ public static class SettingsView
             {
                 Name = "intakeFolder",
                 Label = "Intake folder — where finished video is staged for the encoder",
+                Type = PluginFormFieldType.Folder,
                 Value = settings.IntakeFolder,
                 Placeholder = @"D:\torrents\intake",
             });

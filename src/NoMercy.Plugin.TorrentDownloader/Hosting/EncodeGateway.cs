@@ -49,4 +49,14 @@ public static class EncodeGateway
 
         return new EncodeDispatch(services, journal, logger);
     }
+
+    /// <summary>Whether this server will say what became of a job, and how to ask.</summary>
+    /// <remarks>
+    /// Null where it will not, and the plugin then waits an encode out instead
+    /// of asking about it. media-server #31.
+    /// </remarks>
+    public static IEncodeJobs? JobsOf(IServiceProvider services)
+    {
+        return services.GetService(typeof(IPluginJobs)) is IPluginJobs jobs ? new HostEncodeJobs(jobs) : null;
+    }
 }

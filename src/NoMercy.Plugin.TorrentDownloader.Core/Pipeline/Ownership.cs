@@ -15,37 +15,44 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// or keeps one it should never have started.
 /// </para>
 /// <para>
-/// <strong>Why having a file is the rule.</strong> Taking every show in the
-/// library instead was tried on 24 August 2026, because a show just added has
-/// nothing on disk and is exactly the case worth having. Within the hour the
-/// owner's plugin was on 479 grabs, and Family Guy alone claimed 456 missing
-/// episodes — a show they have never watched, whose row the server keeps all
-/// the same. Nothing in such a row tells it apart from a show they added: it
-/// carries the library's id, a folder and a full episode list, the same as the
-/// rest. Having a file is the only thing that does.
+/// <strong>Membership is the rule, and having a file used to be.</strong>
+/// Taking every show in the library was tried on 24 August 2026 and within the
+/// hour the owner's plugin was on 479 grabs, Family Guy alone claiming 456
+/// missing episodes — a show they have never watched, whose row the server kept
+/// all the same. Nothing in such a row told it apart from a show they added: the
+/// library's id, a folder, a full episode list, the same as the rest. So having
+/// a file became the discriminator, and the cost was that a show just added was
+/// invisible until something downloaded — the case most worth having, and the
+/// one the rule could not reach.
 /// </para>
 /// <para>
-/// <strong>What replaces it.</strong> When media-server #36 stops
-/// identification importing shows on a guess, and #34 makes a newly added show
-/// visible, library membership becomes the discriminator and this body becomes
-/// that question instead. A show just added is then in scope on the day it is
-/// added, which is what the rule should have said all along. Until then this is
-/// the rule, and a show just added is still not searched for — known and
-/// unsolved rather than overlooked.
+/// <strong>Why it can change now.</strong> media-server #36 stopped
+/// identification importing whole shows on a guess and #34 made a newly added
+/// show visible; both closed on 30 August 2026. On the owner's server the next
+/// day, the television library held fifty-five shows and <em>not one of them</em>
+/// was without a file — so membership and having a file gave the same answer,
+/// and the rows nobody asked for were gone. Membership is what the rule should
+/// have said all along: a show is in scope on the day it is added.
+/// </para>
+/// <para>
+/// <strong>What it costs, said out loud.</strong> A show added with nothing on
+/// disk now has every episode missing, and the plugin will look for all of them.
+/// That is the point of it and it is still a burst of searching that the owner
+/// did not have before.
 /// </para>
 /// </remarks>
 public static class Ownership
 {
     /// <summary>
-    /// True when the show these episodes belong to is one the owner has.
+    /// True when this show is in one of the libraries the plugin watches.
     /// </summary>
-    /// <param name="episodes">
-    /// Every episode of one show, as the library gives them. An empty list is
-    /// not the owner's: a show with nothing at all is the clearest case of the
-    /// row nobody asked for.
+    /// <param name="showId">The show a grab names, or one being considered.</param>
+    /// <param name="shows">
+    /// Every show the watched libraries hold. A show that is in none of them is
+    /// one the owner has removed, or one this plugin was never for.
     /// </param>
-    public static bool Theirs(IReadOnlyList<Episode> episodes)
+    public static bool Theirs(int showId, IReadOnlyList<Show> shows)
     {
-        return episodes.Any(episode => episode.HasFile);
+        return shows.Any(show => show.Id == showId);
     }
 }

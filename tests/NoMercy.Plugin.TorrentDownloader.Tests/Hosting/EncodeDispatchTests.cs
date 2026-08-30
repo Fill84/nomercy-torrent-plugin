@@ -1,6 +1,7 @@
 using NoMercy.MediaProcessing.Jobs.MediaJobs;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using Xunit;
@@ -396,7 +397,14 @@ public class EncodeDispatchTests : IDisposable
         Assert.Equal("6900394", Assert.IsType<VideoEncodeJob>(server.Dispatcher.Job).Id);
     }
 
-    private Task<bool> Dispatch(
+    /// <remarks>
+    /// The gateway answers with the job it queued as well as with yes or no,
+    /// since media-server #31 made a failed encode something that can be asked
+    /// about rather than waited out. These tests are about the older dispatch,
+    /// which names no job: it builds its own and hands it to a queue that
+    /// answers nothing. So the answer is read back down to what they assert.
+    /// </remarks>
+    private async Task<bool> Dispatch(
         FakeProvider server,
         string libraryType,
         string libraryId = Wanted,
@@ -413,12 +421,18 @@ public class EncodeDispatchTests : IDisposable
             libraryType == "anime" ? LibraryKind.Anime : LibraryKind.Television,
             "Silo (2023)");
 
-        return new EncodeDispatch(server, server.Journal, server.Log).DispatchAsync(
+        EncodeAsk asked = await new EncodeDispatch(server, server.Journal, server.Log).DispatchAsync(
             Staged(),
             episode ?? new(203744, 2, 8),
             show,
             existing,
             CancellationToken.None);
+
+        // Taken, and with no job named, which is the whole difference between
+        // this and the contract one.
+        Assert.Null(asked.JobId);
+
+        return asked.Taken;
     }
 
     private FakeProvider Server()

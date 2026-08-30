@@ -206,6 +206,23 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **Everything the contract now offers, used.** Every media-server issue this plugin opened is
+  closed, and four of them were closed and unused. **#34/#36 — membership.** `Ownership.Theirs` asked
+  whether a show had a file, because the server kept rows for shows nobody added and nothing else
+  told them apart; the cost was that a show just added was invisible until something downloaded. On
+  the owner's server on 31 August the television library held fifty-five shows and not one without a
+  file, so the rows that made the old rule necessary are gone: membership is the rule, and a show is
+  in scope the day it is added. **#31 — job status.** The plugin could see one thing, whether the
+  library had the episode yet, so a dead encode and a slow one looked the same and both were waited
+  out for six hours before the episode went back to missing. The job id is kept on the grab — a
+  restart used to lose which encode a grab was waiting on — and a job the server says failed becomes
+  its reason on the History page at once. **#33 — the folder picker.** Both folder settings were text
+  boxes with an example path beside them. **#32 — storage.** Writing through the facade cannot be
+  adopted: the encode is asked for with an absolute path, so a staged file on a remote location could
+  not be named to the encoder at all, and the existing check is stronger than any list because it
+  creates the folder and writes a real file into it. What is adopted is what the facade uniquely
+  knows: a refused folder now names the places the server can write.
+
 - **S10-09, step 1.** The encode is asked for through the contract. All five media-server issues
   this plugin opened were closed on 30 August 2026, and two of them are what 0.4.0 waits on: #30 gives
   `IPluginEncoder`, #35 puts the server's own episode id in the library answer. Both are in contract
