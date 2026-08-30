@@ -206,7 +206,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
-- **0.3.17.** Two faults, one torrent. **Memory:** `Pipeline` is four and its summary says how many
+- **0.3.17.** Released. Two faults, one torrent. **Memory:** `Pipeline` is four and its summary says how many
   pieces are asked of one peer at a time, but it was counted per call, and the asking runs on every
   message a peer sends — so each message claimed up to four more pieces, each holding a buffer the
   size of a whole piece until it arrived, failed or sat unanswered for a minute. A peer that talks
