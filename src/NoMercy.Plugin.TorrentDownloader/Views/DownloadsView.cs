@@ -140,8 +140,13 @@ public static class DownloadsView
                 new() { Key = "state", Label = "State" },
                 new() { Key = "progress", Label = "Progress" },
                 new() { Key = "rate", Label = "Rate" },
-                new() { Key = "peers", Label = "Peers" },
+                // Seeds first. A seed has the whole file and can finish this
+                // download on its own; a peer has part of it and may have none
+                // of the part this client still needs. The owner reads the
+                // column that decides whether a download will finish, and it
+                // is this one.
                 new() { Key = "seeds", Label = "Seeds" },
+                new() { Key = "peers", Label = "Peers" },
                 new() { Key = "ratio", Label = "Ratio" },
                 new() { Key = "destination", Label = "Destination" },
                 new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
@@ -158,8 +163,8 @@ public static class DownloadsView
 
                         // A count nobody has been told is not nought. This is
                         // the whole of what 0.3.4 got wrong on this page.
-                        ["peers"] = row.Transfer is null ? Unknown : row.Transfer.Peers,
                         ["seeds"] = row.Transfer is null ? Unknown : row.Transfer.Seeds,
+                        ["peers"] = row.Transfer is null ? Unknown : row.Transfer.Peers,
                         ["ratio"] = row.Transfer?.Ratio is double ratio
                             ? ratio.ToString("0.00", CultureInfo.InvariantCulture)
                             : Unknown,
