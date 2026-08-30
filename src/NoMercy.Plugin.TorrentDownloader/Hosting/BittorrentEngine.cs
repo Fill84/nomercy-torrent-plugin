@@ -569,7 +569,11 @@ public sealed class BittorrentEngine(
 
             try
             {
-                await Task.Delay(held.Run.Interval, _time, ct).ConfigureAwait(false);
+                // What the run asks for rather than the tracker's interval,
+                // which is not the same number when the run has lost everybody:
+                // it announces at the tracker's interval either way, and dials
+                // oftener while it has nobody to dial anyone from.
+                await Task.Delay(held.Run.Wait, _time, ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {
@@ -1079,7 +1083,14 @@ public sealed class BittorrentEngine(
             // nothing back when it has taken nothing.
             progress.Downloaded > 0 ? progress.Uploaded / (double)progress.Downloaded : null,
             Eta(progress),
-            held.Error);
+            held.Error,
+
+            // What the trackers say the whole swarm holds. Nought connected out
+            // of three hundred seeds is a client that has not met anybody yet;
+            // nought out of nought is a dead release. One number cannot say
+            // which, and the owner is reading it to decide whether to wait.
+            held.Run.SwarmSeeds,
+            held.Run.SwarmPeers);
     }
 
     /// <summary>Where one torrent stands, in the port's own words.</summary>

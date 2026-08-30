@@ -206,6 +206,17 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **0.3.17.** A torrent that loses its peers finds them again. Every address a run dialled went
+  into a set nothing took it out of, so once the peers of the first announce were gone, every later
+  announce named the same addresses and every one of them was refused: nought peers, nought seeds
+  and nought per cent until the owner paused and resumed, which was the only thing that cleared the
+  set. A season pack sat there on 30 August 2026 while qBittorrent saw three hundred seeds in the
+  same swarm. The set is now a clock — an address not connected is offered again after five minutes
+  — the run keeps an address book so a pass has somewhere to look without announcing, the announce
+  keeps the tracker'''s own interval whatever the pass does, no pass dials past fifty peers, and a
+  run with nobody to talk to comes round every five minutes instead of every half hour. The Downloads
+  page also says how many of the swarm this client is connected to rather than only its own count.
+
 - **0.3.16.** Enough peers. Dht, PeerSearch, DhtStore, Pex, PeerExchange, LsdSocket and
   LocalDiscovery were all written, all tested, and none was ever constructed — so every peer this
   client had came from a tracker's fifty addresses, most of them stale, which is why a swarm with

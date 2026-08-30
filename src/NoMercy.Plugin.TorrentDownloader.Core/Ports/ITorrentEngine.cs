@@ -104,6 +104,13 @@ public sealed record TorrentFile(string Path, long Length);
 /// <param name="Ratio">Uploaded over downloaded, or null before anything has been downloaded.</param>
 /// <param name="Eta">How long it has left, or null when that cannot be worked out.</param>
 /// <param name="Error">What went wrong, in its own words, or null.</param>
+/// <param name="SwarmSeeds">
+/// How many seeds the trackers say the whole swarm has, or null before one
+/// answered. Not what this client is connected to: nought connected out of
+/// three hundred is a client that has not met anybody yet, and nought out of
+/// nought is a dead release.
+/// </param>
+/// <param name="SwarmPeers">The same for the peers still downloading it.</param>
 public sealed record TorrentStatus(
     string InfoHash,
     string? Name,
@@ -116,7 +123,9 @@ public sealed record TorrentStatus(
     int Seeds,
     double? Ratio,
     TimeSpan? Eta,
-    string? Error);
+    string? Error,
+    int? SwarmSeeds = null,
+    int? SwarmPeers = null);
 
 /// <summary>
 /// The torrent client, as the pipeline is allowed to see it.

@@ -46,6 +46,13 @@ public interface IPeerDialler
 /// </param>
 /// <param name="UploadRateBytesPerSecond">The same, going out.</param>
 /// <param name="Complete">Whether every piece is verified.</param>
+/// <param name="SwarmSeeds">
+/// How many seeds the trackers say the whole swarm has, or null before one
+/// answered. Not what this client is connected to: nought connected out of
+/// three hundred is a client that has not met anybody yet, and nought out of
+/// nought is a dead release.
+/// </param>
+/// <param name="SwarmPeers">The same for the peers still downloading it.</param>
 public sealed record RunProgress(
     string? Name,
     bool HasMetadata,
@@ -57,7 +64,9 @@ public sealed record RunProgress(
     long Uploaded,
     double DownloadRateBytesPerSecond,
     double UploadRateBytesPerSecond,
-    bool Complete);
+    bool Complete,
+    int? SwarmSeeds = null,
+    int? SwarmPeers = null);
 
 /// <summary>
 /// One torrent, running: the parts of this client joined to the outside.
@@ -105,14 +114,46 @@ public sealed class TorrentRun : IDisposable
     private readonly Lock _lock = new();
 
     /// <summary>
-    /// Every peer this run has dialled, whether it answered or not.
+    /// Every address this run has dialled, and when it last did.
     /// </summary>
     /// <remarks>
     /// A peer already tried is one the next announce names again. Re-dialling
     /// it every interval is a connection a minute to the same machine, which is
     /// how a client gets itself banned by a swarm it is trying to join.
+    ///
+    /// A clock rather than a set, and that is the fault this carries the mark
+    /// of. As a set it barred an address for the life of the torrent, so a run
+    /// that lost the peers of its first announce could never replace them:
+    /// every later announce named the same addresses and every one of them was
+    /// already in the set. Only a pause and a resume, which cleared it, brought
+    /// such a torrent back.
     /// </remarks>
-    private readonly HashSet<string> _tried = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, DateTimeOffset> _tried = new(StringComparer.Ordinal);
+
+    /// <summary>Every address this run has heard of, from whatever named it.</summary>
+    /// <remarks>
+    /// A tracker is asked at its own interval, and a run that has lost every
+    /// peer cannot wait that interval out with nobody to talk to. The addresses
+    /// of the last announce are still addresses, so a pass between announces
+    /// offers them again rather than having nowhere to look.
+    /// </remarks>
+    private readonly Dictionary<string, PeerAddress> _known = new(StringComparer.Ordinal);
+
+    /// <summary>Which address each dialled peer is on, while it is connected.</summary>
+    /// <remarks>
+    /// So that a peer this run is in the middle of talking to is not dialled a
+    /// second time when the next announce names it again. A connection knows
+    /// its socket rather than the address it was reached at, and a peer that
+    /// dialled in was never dialled out to, so neither is in here.
+    /// </remarks>
+    private readonly Dictionary<PeerConnection, string> _talkingTo = [];
+
+    /// <summary>When this run last announced.</summary>
+    /// <remarks>
+    /// Kept here rather than by the caller, so a pass can come round sooner
+    /// than the tracker's interval without announcing on every one of them.
+    /// </remarks>
+    private DateTimeOffset _announced = DateTimeOffset.MinValue;
 
     private readonly List<PeerConnection> _peers = [];
     private readonly List<Task> _conversations = [];
@@ -155,6 +196,24 @@ public sealed class TorrentRun : IDisposable
     private readonly Dht? _dht;
 
     private bool _nothingWanted;
+
+    /// <summary>
+    /// What the trackers say the whole swarm holds, as against what this client
+    /// is connected to.
+    /// </summary>
+    /// <remarks>
+    /// An announce answers with both counts and they were read for the interval
+    /// and thrown away. They are the numbers that say whether a download is
+    /// worth waiting for: nought connected out of three hundred seeds is a
+    /// client that has not met anybody yet, and nought out of nought is a dead
+    /// release. Drawn as the same one number, those two look identical.
+    ///
+    /// The largest any tracker gave, because a tracker knows only its own
+    /// members and the swarm is at least as big as the best-informed one says.
+    /// </remarks>
+    private int? _swarmSeeds;
+
+    private int? _swarmPeers;
 
     /// <summary>How many peers one DHT search asks for.</summary>
     /// <remarks>
@@ -207,6 +266,30 @@ public sealed class TorrentRun : IDisposable
         }
     }
 
+    /// <summary>What the trackers say the swarm holds, or null before one answered.</summary>
+    public int? SwarmSeeds
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _swarmSeeds;
+            }
+        }
+    }
+
+    /// <summary>The same for the peers still downloading it.</summary>
+    public int? SwarmPeers
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _swarmPeers;
+            }
+        }
+    }
+
     /// <summary>Whether this run is stopped and dialling nobody.</summary>
     public bool Paused { get; private set; }
 
@@ -244,6 +327,29 @@ public sealed class TorrentRun : IDisposable
     public static readonly TimeSpan DefaultInterval = TimeSpan.FromMinutes(30);
 
     /// <summary>
+    /// How long an address that this run is not connected to is left alone
+    /// before it is dialled again.
+    /// </summary>
+    /// <remarks>
+    /// Long enough not to hammer anybody: a peer exchange arrives about once a
+    /// minute from every connected peer and names the same addresses each time,
+    /// so with no floor at all a dead address would be dialled dozens of times
+    /// an hour. Short enough that a run which has lost everybody is trying
+    /// again in minutes rather than at the tracker's own interval, which is a
+    /// quarter of an hour at best and half an hour by default.
+    /// </remarks>
+    public static readonly TimeSpan RedialAfter = TimeSpan.FromMinutes(5);
+
+    /// <summary>How many peers this run wants to be connected to at once.</summary>
+    /// <remarks>
+    /// Peer exchange in a large swarm names hundreds of addresses within
+    /// minutes, and dialling all of them is hundreds of sockets for one
+    /// torrent. Fifty is what this client asks a swarm for, and no pass dials
+    /// past it.
+    /// </remarks>
+    public const int PeersWanted = 50;
+
+    /// <summary>
     /// When to announce again, as the trackers themselves asked.
     /// </summary>
     /// <remarks>
@@ -253,6 +359,26 @@ public sealed class TorrentRun : IDisposable
     /// another tracker's wish to be asked sooner.
     /// </remarks>
     public TimeSpan Interval { get; private set; } = DefaultInterval;
+
+    /// <summary>How long before this run's next pass.</summary>
+    /// <remarks>
+    /// The tracker's interval while there is somebody to talk to, and the
+    /// redial floor while there is not. A run with no peers has nothing to do
+    /// but look for some, and half an hour of having nothing to do is what an
+    /// owner sees as nought per cent in front of a swarm somebody else can see
+    /// three hundred seeds in. The announce keeps the tracker's own interval
+    /// whatever this says, so coming round sooner asks the tracker for nothing.
+    /// </remarks>
+    public TimeSpan Wait
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _peers.Count > 0 ? Interval : RedialAfter;
+            }
+        }
+    }
 
     /// <summary>
     /// Completes when the metadata has arrived and hashed right.
@@ -377,11 +503,26 @@ public sealed class TorrentRun : IDisposable
         // them.
         Session();
 
-        IReadOnlyList<TrackerResult> answers = await _trackerSet
-            .AnnounceAsync(_trackers, Request(), ct)
-            .ConfigureAwait(false);
+        // The announce keeps the tracker's own interval; the pass around it
+        // comes round sooner. A run that has lost every peer has to be able to
+        // look for more without announcing again - asking oftener than the
+        // tracker said is how a client gets itself banned, and sitting out a
+        // half-hour interval with nobody to talk to is how a torrent shows
+        // nought per cent in front of a swarm of three hundred seeds.
+        if (_time.GetUtcNow() - _announced >= Interval)
+        {
+            _announced = _time.GetUtcNow();
 
-        Told(answers);
+            IReadOnlyList<TrackerResult> answers = await _trackerSet
+                .AnnounceAsync(_trackers, Request(), ct)
+                .ConfigureAwait(false);
+
+            Told(answers);
+
+            Remember(answers
+                .Where(one => one.Response is not null)
+                .SelectMany(one => one.Response!.Peers));
+        }
 
         // And the DHT, which is where the peers a tracker does not name are.
         // Only once the metadata has arrived: whether a torrent is private is
@@ -398,29 +539,117 @@ public sealed class TorrentRun : IDisposable
             _ = FromTheDhtAsync(known, ct);
         }
 
+        // Everybody this run has ever heard of, not only whoever this announce
+        // named: a pass that did not announce has nowhere else to look, and the
+        // peers of the last announce are still peers.
+        await DialEveryAsync(Pick(Book()), ct).ConfigureAwait(false);
+    }
+
+    /// <summary>Every address this run knows of.</summary>
+    private List<PeerAddress> Book()
+    {
+        lock (_lock)
+        {
+            return [.. _known.Values];
+        }
+    }
+
+    /// <summary>Writes addresses into the book, whoever named them.</summary>
+    private void Remember(IEnumerable<PeerAddress> addresses)
+    {
+        lock (_lock)
+        {
+            foreach (PeerAddress address in addresses)
+            {
+                _known[address.ToString()] = address;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Which of a set of addresses are worth dialling on this pass.
+    /// </summary>
+    /// <remarks>
+    /// The same peer from two trackers is one peer: dialling it twice is two
+    /// connections to one client, which is how a swarm of six comes to look
+    /// like a swarm of twelve. <see cref="Worth"/> stamps each address as it
+    /// admits it, so the second copy in one pass is refused along with the ones
+    /// dialled too recently.
+    /// </remarks>
+    private List<PeerAddress> Pick(IReadOnlyList<PeerAddress> addresses)
+    {
         List<PeerAddress> fresh = [];
 
         lock (_lock)
         {
-            foreach (PeerAddress peer in answers
-                         .Where(one => one.Response is not null)
-                         .SelectMany(one => one.Response!.Peers))
+            int room = PeersWanted - _peers.Count;
+
+            foreach (PeerAddress address in addresses)
             {
-                // The same peer from two trackers is one peer. Dialling it
-                // twice is two connections to one client, which is how a swarm
-                // of six comes to look like a swarm of twelve.
-                if (_tried.Add(peer.ToString()))
+                if (fresh.Count >= room)
                 {
-                    fresh.Add(peer);
+                    break;
+                }
+
+                if (Worth(address))
+                {
+                    fresh.Add(address);
                 }
             }
         }
 
-        // The dials are awaited and the conversations are not. A dial has an
-        // end — the peer answers or it does not — and a conversation lasts as
-        // long as the peer does, so an announce pass that waited for one would
-        // never come round again.
-        foreach (PeerConnection? peer in await Task.WhenAll(fresh.Select(one => DialAsync(one, ct))))
+        return fresh;
+    }
+
+    /// <summary>
+    /// Whether an address is worth dialling now, recording that it was.
+    /// </summary>
+    /// <remarks>
+    /// Called while <see cref="_lock"/> is held: it reads who this run is
+    /// connected to and writes when the address was last tried.
+    /// </remarks>
+    private bool Worth(PeerAddress address)
+    {
+        string key = address.ToString();
+
+        // A peer this run is talking to already. One machine on two connections
+        // is not two peers, and both ends carry the second one for nothing.
+        if (_talkingTo.ContainsValue(key))
+        {
+            return false;
+        }
+
+        DateTimeOffset now = _time.GetUtcNow();
+
+        if (_tried.TryGetValue(key, out DateTimeOffset last) && now - last < RedialAfter)
+        {
+            return false;
+        }
+
+        _tried[key] = now;
+
+        return true;
+    }
+
+    /// <summary>Dials a set of addresses and takes on whoever answers.</summary>
+    /// <remarks>
+    /// The dials are awaited and the conversations are not. A dial has an end -
+    /// the peer answers or it does not - and a conversation lasts as long as
+    /// the peer does, so a pass that waited for one would never come round
+    /// again.
+    /// </remarks>
+    private async Task DialEveryAsync(IReadOnlyList<PeerAddress> fresh, CancellationToken ct)
+    {
+        if (fresh.Count == 0)
+        {
+            return;
+        }
+
+        (PeerAddress Address, PeerConnection? Peer)[] dialled = await Task
+            .WhenAll(fresh.Select(async one => (one, await DialAsync(one, ct).ConfigureAwait(false))))
+            .ConfigureAwait(false);
+
+        foreach ((PeerAddress address, PeerConnection? peer) in dialled)
         {
             if (peer is null)
             {
@@ -430,6 +659,7 @@ public sealed class TorrentRun : IDisposable
             lock (_lock)
             {
                 _peers.Add(peer);
+                _talkingTo[peer] = address.ToString();
                 _conversations.Add(ConverseAsync(peer, ct));
             }
         }
@@ -477,6 +707,7 @@ public sealed class TorrentRun : IDisposable
             }
 
             _peers.Clear();
+            _talkingTo.Clear();
         }
     }
 
@@ -510,6 +741,7 @@ public sealed class TorrentRun : IDisposable
             }
 
             _peers.Clear();
+            _talkingTo.Clear();
             _session?.Dispose();
             _session = null;
             _disk = null;
@@ -538,6 +770,14 @@ public sealed class TorrentRun : IDisposable
         {
             return;
         }
+
+        _swarmSeeds = said.Select(one => one.Seeders).OfType<int>().DefaultIfEmpty().Max() is int seeds and > 0
+            ? seeds
+            : _swarmSeeds;
+
+        _swarmPeers = said.Select(one => one.Leechers).OfType<int>().DefaultIfEmpty().Max() is int peers and > 0
+            ? peers
+            : _swarmPeers;
 
         TimeSpan wanted = said
             .Select(one => one.Interval)
@@ -612,40 +852,13 @@ public sealed class TorrentRun : IDisposable
     /// </remarks>
     private async Task MeetAsync(IReadOnlyList<PeerAddress> addresses, CancellationToken ct)
     {
-        List<PeerAddress> fresh = [];
+        // The same peer twice is one peer, whoever named it: a tracker and a
+        // peer exchange naming the same address is the ordinary case rather
+        // than a second client. Remembered whether or not it is dialled now, so
+        // that a later pass still has it.
+        Remember(addresses);
 
-        lock (_lock)
-        {
-            foreach (PeerAddress address in addresses)
-            {
-                // The same peer twice is one peer, whoever named it. A tracker
-                // and a peer exchange naming the same address is the ordinary
-                // case rather than a second client.
-                if (_tried.Add(address.ToString()))
-                {
-                    fresh.Add(address);
-                }
-            }
-        }
-
-        if (fresh.Count == 0)
-        {
-            return;
-        }
-
-        foreach (PeerConnection? peer in await Task.WhenAll(fresh.Select(one => DialAsync(one, ct))))
-        {
-            if (peer is null)
-            {
-                continue;
-            }
-
-            lock (_lock)
-            {
-                _peers.Add(peer);
-                _conversations.Add(ConverseAsync(peer, ct));
-            }
-        }
+        await DialEveryAsync(Pick(addresses), ct).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -742,6 +955,7 @@ public sealed class TorrentRun : IDisposable
             lock (_lock)
             {
                 _peers.Remove(peer);
+                _talkingTo.Remove(peer);
             }
 
             peer.Dispose();

@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests;
@@ -70,12 +71,13 @@ public class TorrentRunTests : IDisposable
     }
 
     /// <remarks>
-    /// Nothing is dialled twice. A peer already connected is one the next
-    /// announce names again, and re-dialling it every interval is a client that
-    /// opens a connection a minute to the same machine until it is banned.
+    /// Nothing is dialled twice in quick succession. A peer just dialled is one
+    /// the next announce names again, and re-dialling it every interval is a
+    /// client that opens a connection a minute to the same machine until it is
+    /// banned.
     /// </remarks>
     [Fact]
-    public async Task APeerAlreadyConnectedIsNotDialledAgainOnTheNextAnnounce()
+    public async Task APeerJustDialledIsNotDialledAgainOnTheNextAnnounce()
     {
         AnsweringTrackers trackers = new();
         RecordingDialler dialler = new();
@@ -86,6 +88,75 @@ public class TorrentRunTests : IDisposable
         await run.OnceAsync(CancellationToken.None);
 
         Assert.Single(dialler.Dialled);
+    }
+
+    /// <remarks>
+    /// And it is offered again once that floor has passed. Every address this
+    /// run dialled went into a set nothing ever took it out of, so a torrent
+    /// that lost the peers of its first announce could never replace them: each
+    /// later announce named the same addresses and every one of them was
+    /// already in the set. Only a pause and a resume, which cleared it, brought
+    /// such a torrent back.
+    ///
+    /// On 30 August 2026 a season pack fetched its metadata from the peers of
+    /// its first announce, lost them over the following minutes, and then sat
+    /// at nought peers, nought seeds and nought per cent for as long as it was
+    /// left alone — while another client on the same machine saw three hundred
+    /// seeds in the same swarm.
+    /// </remarks>
+    [Fact]
+    public async Task AnAddressThatIsNoLongerConnectedIsDialledAgainOnceTheFloorHasPassed()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 30, 5, 0, 0, TimeSpan.Zero));
+
+        AnsweringTrackers trackers = new();
+        RecordingDialler dialler = new();
+
+        using TorrentRun run = Run(trackers, dialler, time: clock);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        // Sooner than the floor, so the address is left alone.
+        clock.Advance(TorrentRun.RedialAfter - TimeSpan.FromMinutes(1));
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.Single(dialler.Dialled);
+
+        // Past it, and without a second announce: this run has not waited the
+        // tracker's half hour, and a run with nobody left to talk to cannot
+        // wait that long to try somebody.
+        clock.Advance(TimeSpan.FromMinutes(2));
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.Equal(2, dialler.Dialled.Count);
+        Assert.Equal(["http://one.example/announce", "http://two.example/announce"], trackers.Asked.Order());
+    }
+
+    /// <remarks>
+    /// A run with nobody to talk to comes round sooner than the tracker asked.
+    /// The announce keeps the tracker's own interval whatever this says, so a
+    /// shorter wait costs the tracker nothing — it is the dialling that has to
+    /// happen oftener, because a torrent with no peers has nothing else to do
+    /// and a quarter of an hour of having nothing to do is what the owner sees
+    /// as nought per cent.
+    /// </remarks>
+    [Fact]
+    public async Task ARunWithNobodyToTalkToComesRoundSoonerThanTheTrackerAsked()
+    {
+        AnsweringTrackers trackers = new();
+        RecordingDialler dialler = new();
+
+        using TorrentRun run = Run(trackers, dialler);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        // Nobody answered, so there is nobody: the dialler is every address in
+        // this swarm refusing, which is what most tracker addresses do.
+        Assert.Equal(TorrentRun.RedialAfter, run.Wait);
+
+        // And it really is sooner: the captured answer asks for a quarter of an
+        // hour, so this is not the same number under another name.
+        Assert.True(run.Interval > TorrentRun.RedialAfter);
     }
 
     /// <remarks>
@@ -372,17 +443,20 @@ public class TorrentRunTests : IDisposable
         AnsweringTrackers transport,
         IPeerDialler dialler,
         TorrentMetadata? torrent = null,
-        ResumeKeeper? resume = null)
+        ResumeKeeper? resume = null,
+        TimeProvider? time = null)
     {
+        TimeProvider clock = time ?? TimeProvider.System;
+
         return new(
             ArchiveHash,
             ["http://one.example/announce", "http://two.example/announce"],
             _folder,
-            new TrackerSet(transport, TimeProvider.System),
+            new TrackerSet(transport, clock),
             dialler,
             Id("NM0001"),
             listenPort: 51413,
-            TimeProvider.System,
+            clock,
             torrent,
             resume);
     }

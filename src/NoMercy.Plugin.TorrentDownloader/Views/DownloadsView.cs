@@ -163,8 +163,8 @@ public static class DownloadsView
 
                         // A count nobody has been told is not nought. This is
                         // the whole of what 0.3.4 got wrong on this page.
-                        ["seeds"] = row.Transfer is null ? Unknown : row.Transfer.Seeds,
-                        ["peers"] = row.Transfer is null ? Unknown : row.Transfer.Peers,
+                        ["seeds"] = Swarm(row.Transfer?.Seeds, row.Transfer?.SwarmSeeds),
+                        ["peers"] = Swarm(row.Transfer?.Peers, row.Transfer?.SwarmPeers),
                         ["ratio"] = row.Transfer?.Ratio is double ratio
                             ? ratio.ToString("0.00", CultureInfo.InvariantCulture)
                             : Unknown,
@@ -202,6 +202,32 @@ public static class DownloadsView
         return row.Transfer.Error is string wrong
             ? $"{Words(row.Transfer.State.ToString())}: {wrong}"
             : Words(row.Transfer.State.ToString());
+    }
+
+    /// <summary>
+    /// How many are connected, and how many there are to connect to.
+    /// </summary>
+    /// <remarks>
+    /// Nought connected out of three hundred seeds is a client that has not met
+    /// anybody yet. Nought out of nought is a release nobody is serving. Drawn
+    /// as one number those read the same, and the owner is looking at this
+    /// column to decide whether a download is worth waiting for.
+    ///
+    /// The swarm's own count comes from the trackers, which report it on every
+    /// announce; it was read for the interval and thrown away.
+    /// </remarks>
+    private static string Swarm(int? connected, int? swarm)
+    {
+        if (connected is not int has)
+        {
+            // A count nobody has been told is not nought. The whole of what
+            // 0.3.4 got wrong on this page.
+            return Unknown;
+        }
+
+        return swarm is int all
+            ? $"{has} of {all}"
+            : has.ToString(CultureInfo.InvariantCulture);
     }
 
     /// <summary>A state's own name, as words an owner reads.</summary>
