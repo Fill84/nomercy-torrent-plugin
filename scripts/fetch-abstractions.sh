@@ -53,7 +53,16 @@ fi
 
 if [[ -d "$server_path/.git" ]]; then
     echo "Updating _server to origin/$branch ..."
-    git -C "$server_path" fetch --depth 1 origin "$branch"
+    # With the refspec spelled out, exactly as the PowerShell twin does and
+    # for the reason it gives: a single-branch shallow clone tracks only the
+    # branch it was made from, so fetching one by name lands in FETCH_HEAD and
+    # never writes refs/remotes/origin/<branch>. The checkout below then resets
+    # to whatever origin/<branch> was at clone time and reports "Reset branch"
+    # as though it had moved. On 30 August 2026 a local checkout sat on
+    # contract 0.1.478 that way while CI, which always clones fresh, packed
+    # 0.1.479 — and the difference only showed as a red run nobody could
+    # reproduce locally.
+    git -C "$server_path" fetch --depth 1 origin "+refs/heads/$branch:refs/remotes/origin/$branch"
     git -C "$server_path" sparse-checkout set "${sparse_paths[@]}"
     git -C "$server_path" checkout -B "$branch" "origin/$branch"
 else
