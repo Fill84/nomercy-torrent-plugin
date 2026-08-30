@@ -81,6 +81,18 @@ public sealed class TorrentSession(
     /// <summary>When each piece being built last heard anything.</summary>
     private readonly Dictionary<int, DateTimeOffset> _asked = [];
     private readonly PeerTrust _trust = new();
+
+    /// <summary>
+    /// What each peer has been asked for, and may therefore send.
+    /// </summary>
+    /// <remarks>
+    /// A block nobody asked for is not a gift: it is memory this process did
+    /// not plan to spend, written at an offset nothing is expecting, and the
+    /// peer sending it is either broken or trying something. One ledger per
+    /// peer, because two peers may hold a request for the same block — the
+    /// endgame asks several on purpose.
+    /// </remarks>
+    private readonly Dictionary<PeerConnection, RequestLedger> _ledgers = [];
     private readonly List<PeerConnection> _peers = [];
     private readonly Lock _lock = new();
     private readonly Random _random = new();
@@ -224,6 +236,10 @@ public sealed class TorrentSession(
             {
                 _peers.Remove(peer);
                 _picker.Left(peer.Has);
+
+                // Its ledger goes with it. What it was asked for is not owed by
+                // whoever dials in next.
+                _ledgers.Remove(peer);
             }
 
             if (beating is not null)
@@ -234,6 +250,18 @@ public sealed class TorrentSession(
                 await beating.ConfigureAwait(false);
             }
         }
+    }
+
+    /// <summary>What this peer has been asked for. Under the lock.</summary>
+    private RequestLedger Ledger(PeerConnection peer)
+    {
+        if (!_ledgers.TryGetValue(peer, out RequestLedger? ledger))
+        {
+            ledger = new();
+            _ledgers[peer] = ledger;
+        }
+
+        return ledger;
     }
 
     /// <summary>What to do with one message from one peer.</summary>
@@ -326,6 +354,15 @@ public sealed class TorrentSession(
         {
             foreach (BlockRequest block in PiecePicker.Blocks(piece, torrent.LengthOfPiece(piece)))
             {
+                lock (_lock)
+                {
+                    // Written down before it is sent. A block that arrived
+                    // between the send and the note would be refused as
+                    // unasked-for, which is the one way this guard could cost a
+                    // real download a block.
+                    Ledger(peer).Asked(block.Piece, block.Offset, block.Length);
+                }
+
                 await peer.SendAsync(PeerMessage.Request(block.Piece, block.Offset, block.Length), ct).ConfigureAwait(false);
             }
         }
@@ -440,6 +477,15 @@ public sealed class TorrentSession(
 
         lock (_lock)
         {
+            if (!Ledger(peer).Accept(piece, offset, data.Length))
+            {
+                // Nobody asked this peer for this. Dropped rather than
+                // accommodated, and not counted: a block written at an offset
+                // nothing is expecting is how a peer that is broken — or
+                // trying something — spends this process's memory.
+                return;
+            }
+
             _downloaded += data.Length;
 
             if (!_building.TryGetValue(piece, out assembly))
