@@ -206,16 +206,25 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **0.3.17.** Two faults, one torrent. **Memory:** `Pipeline` is four and its summary says how many
+  pieces are asked of one peer at a time, but it was counted per call, and the asking runs on every
+  message a peer sends — so each message claimed up to four more pieces, each holding a buffer the
+  size of a whole piece until it arrived, failed or sat unanswered for a minute. A peer that talks
+  without sending blocks walked the client through the whole file list: a 36.1 GB season pack put the
+  media server at 45 GB resident while showing nought per cent. The count is per peer now, and a
+  peer that leaves stops counting.
+
 - **0.3.17.** A torrent that loses its peers finds them again. Every address a run dialled went
   into a set nothing took it out of, so once the peers of the first announce were gone, every later
   announce named the same addresses and every one of them was refused: nought peers, nought seeds
   and nought per cent until the owner paused and resumed, which was the only thing that cleared the
   set. A season pack sat there on 30 August 2026 while qBittorrent saw three hundred seeds in the
-  same swarm. The set is now a clock — an address not connected is offered again after five minutes
+  same swarm. The set is now a clock — an address not connected is offered again after thirty seconds
   — the run keeps an address book so a pass has somewhere to look without announcing, the announce
-  keeps the tracker'''s own interval whatever the pass does, no pass dials past fifty peers, and a
-  run with nobody to talk to comes round every five minutes instead of every half hour. The Downloads
-  page also says how many of the swarm this client is connected to rather than only its own count.
+  keeps the tracker's own interval whatever the pass does, no pass dials past fifty peers, and a
+  run with nobody to talk to comes round every minute instead of every half hour. Both numbers are
+  the owner's. The Downloads page also says how many of the swarm this client is connected to
+  rather than only its own count.
 
 - **0.3.16.** Enough peers. Dht, PeerSearch, DhtStore, Pex, PeerExchange, LsdSocket and
   LocalDiscovery were all written, all tested, and none was ever constructed — so every peer this

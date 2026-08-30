@@ -78,6 +78,23 @@ public sealed class TorrentSession(
     private readonly PiecePicker _picker = new(torrent.PieceCount, PiecePicker.DefaultEndgamePieces, wanted);
     private readonly Dictionary<int, PieceAssembly> _building = [];
 
+    /// <summary>Which peer each piece being built was claimed for.</summary>
+    /// <remarks>
+    /// <see cref="Pipeline"/> says how many pieces are asked of one peer at a
+    /// time, and it was counted per call rather than per peer. The asking runs
+    /// on every message a peer sends, and each run claimed up to four more
+    /// pieces — a buffer the size of a whole piece each, held until the piece
+    /// arrived, failed its hash, or sat unanswered for the abandon patience of
+    /// a minute. A peer that talks without sending blocks therefore walked this
+    /// client through the entire file list: on 30 August 2026 a 36.1 GB season
+    /// pack put the media server at 45 GB of memory while showing nought per
+    /// cent, because it had claimed a buffer for very nearly every piece of
+    /// itself.
+    ///
+    /// So the count is per peer now, and this is what it is counted from.
+    /// </remarks>
+    private readonly Dictionary<int, PeerConnection> _claimedFor = [];
+
     /// <summary>When each piece being built last heard anything.</summary>
     private readonly Dictionary<int, DateTimeOffset> _asked = [];
     private readonly PeerTrust _trust = new();
@@ -240,6 +257,16 @@ public sealed class TorrentSession(
                 // Its ledger goes with it. What it was asked for is not owed by
                 // whoever dials in next.
                 _ledgers.Remove(peer);
+
+                // And its claims stop counting against it, so the peer that
+                // takes its place is not held to a pipeline full of pieces
+                // nobody is going to send. The half-built pieces themselves
+                // stay where they are: the abandon sweep is what gives those
+                // back, and it knows to throw away what was assembled.
+                foreach (int piece in _claimedFor.Where(one => one.Value == peer).Select(one => one.Key).ToArray())
+                {
+                    _claimedFor.Remove(piece);
+                }
             }
 
             if (beating is not null)
@@ -322,7 +349,20 @@ public sealed class TorrentSession(
 
             _picker.Saw(peer.Has);
 
-            while (asking.Count < Pipeline)
+            // What this peer is already on the hook for. Pieces claimed for
+            // somebody else do not count against it, and its own do — however
+            // many messages ago they were claimed.
+            int held = 0;
+
+            foreach (PeerConnection one in _claimedFor.Values)
+            {
+                if (one == peer)
+                {
+                    held++;
+                }
+            }
+
+            while (held + asking.Count < Pipeline)
             {
                 int? next = _picker.Next(verified, peer.Has, _building.Keys.ToHashSet(), _random);
 
@@ -342,6 +382,7 @@ public sealed class TorrentSession(
                 }
 
                 _building[piece] = new(piece, torrent.LengthOfPiece(piece), torrent.Pieces[piece]);
+                _claimedFor[piece] = peer;
                 _asked[piece] = Now();
             }
 
@@ -457,6 +498,7 @@ public sealed class TorrentSession(
         foreach (int piece in _asked.Where(one => now - one.Value >= waited).Select(one => one.Key).ToArray())
         {
             _building.Remove(piece);
+            _claimedFor.Remove(piece);
             _asked.Remove(piece);
         }
     }
@@ -511,12 +553,14 @@ public sealed class TorrentSession(
                 disk.Write(piece, assembly.Bytes);
                 verified.Set(piece);
                 _building.Remove(piece);
+                _claimedFor.Remove(piece);
                 _asked.Remove(piece);
             }
             else if (outcome == PieceOutcome.Failed)
             {
                 _trust.Failed(assembly.Contributors);
                 _building.Remove(piece);
+                _claimedFor.Remove(piece);
                 _asked.Remove(piece);
             }
         }

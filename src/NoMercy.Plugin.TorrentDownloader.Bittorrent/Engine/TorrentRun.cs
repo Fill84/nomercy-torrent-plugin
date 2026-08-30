@@ -331,14 +331,32 @@ public sealed class TorrentRun : IDisposable
     /// before it is dialled again.
     /// </summary>
     /// <remarks>
-    /// Long enough not to hammer anybody: a peer exchange arrives about once a
-    /// minute from every connected peer and names the same addresses each time,
-    /// so with no floor at all a dead address would be dialled dozens of times
-    /// an hour. Short enough that a run which has lost everybody is trying
-    /// again in minutes rather than at the tracker's own interval, which is a
-    /// quarter of an hour at best and half an hour by default.
+    /// Half a minute, which is the owner's number and not a guess. A floor
+    /// there has to be — a peer exchange arrives about once a minute from every
+    /// connected peer and names the same addresses each time, so with none at
+    /// all one dead address would be dialled on every message that mentioned
+    /// it. Half a minute is as short as that floor goes while still being a
+    /// floor, and a torrent showing nought peers is a download not happening
+    /// for as long as it says so.
+    ///
+    /// It costs only addresses this run is not connected to: a peer already
+    /// being talked to is refused whatever the clock says.
     /// </remarks>
-    public static readonly TimeSpan RedialAfter = TimeSpan.FromMinutes(5);
+    public static readonly TimeSpan RedialAfter = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// How long a run with nobody to talk to waits before its next pass.
+    /// </summary>
+    /// <remarks>
+    /// Not the same number as the redial floor, which is about one address:
+    /// this is about the whole run, and a run with no peers is a run doing
+    /// nothing at all. A minute, so that a torrent which has just lost everyone
+    /// is looking again while the owner is still on the page, rather than
+    /// sitting out the tracker's interval — a quarter of an hour at best and
+    /// half an hour by default. The announce keeps that interval regardless, so
+    /// the tracker is asked for nothing extra.
+    /// </remarks>
+    public static readonly TimeSpan LookAgainAfter = TimeSpan.FromMinutes(1);
 
     /// <summary>How many peers this run wants to be connected to at once.</summary>
     /// <remarks>
@@ -362,12 +380,12 @@ public sealed class TorrentRun : IDisposable
 
     /// <summary>How long before this run's next pass.</summary>
     /// <remarks>
-    /// The tracker's interval while there is somebody to talk to, and the
-    /// redial floor while there is not. A run with no peers has nothing to do
-    /// but look for some, and half an hour of having nothing to do is what an
-    /// owner sees as nought per cent in front of a swarm somebody else can see
-    /// three hundred seeds in. The announce keeps the tracker's own interval
-    /// whatever this says, so coming round sooner asks the tracker for nothing.
+    /// The tracker's interval while there is somebody to talk to, and a minute
+    /// while there is not. A run with no peers has nothing to do but look for
+    /// some, and half an hour of having nothing to do is what an owner sees as
+    /// nought per cent in front of a swarm somebody else can see three hundred
+    /// seeds in. The announce keeps the tracker's own interval whatever this
+    /// says, so coming round sooner asks the tracker for nothing.
     /// </remarks>
     public TimeSpan Wait
     {
@@ -375,7 +393,7 @@ public sealed class TorrentRun : IDisposable
         {
             lock (_lock)
             {
-                return _peers.Count > 0 ? Interval : RedialAfter;
+                return _peers.Count > 0 ? Interval : LookAgainAfter;
             }
         }
     }

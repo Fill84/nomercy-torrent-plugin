@@ -117,7 +117,7 @@ public class TorrentRunTests : IDisposable
         await run.OnceAsync(CancellationToken.None);
 
         // Sooner than the floor, so the address is left alone.
-        clock.Advance(TorrentRun.RedialAfter - TimeSpan.FromMinutes(1));
+        clock.Advance(TorrentRun.RedialAfter - TimeSpan.FromSeconds(5));
         await run.OnceAsync(CancellationToken.None);
 
         Assert.Single(dialler.Dialled);
@@ -125,7 +125,7 @@ public class TorrentRunTests : IDisposable
         // Past it, and without a second announce: this run has not waited the
         // tracker's half hour, and a run with nobody left to talk to cannot
         // wait that long to try somebody.
-        clock.Advance(TimeSpan.FromMinutes(2));
+        clock.Advance(TimeSpan.FromSeconds(10));
         await run.OnceAsync(CancellationToken.None);
 
         Assert.Equal(2, dialler.Dialled.Count);
@@ -152,11 +152,11 @@ public class TorrentRunTests : IDisposable
 
         // Nobody answered, so there is nobody: the dialler is every address in
         // this swarm refusing, which is what most tracker addresses do.
-        Assert.Equal(TorrentRun.RedialAfter, run.Wait);
+        Assert.Equal(TorrentRun.LookAgainAfter, run.Wait);
 
         // And it really is sooner: the captured answer asks for a quarter of an
         // hour, so this is not the same number under another name.
-        Assert.True(run.Interval > TorrentRun.RedialAfter);
+        Assert.True(run.Interval > TorrentRun.LookAgainAfter);
     }
 
     /// <remarks>
