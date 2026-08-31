@@ -133,18 +133,10 @@ public class TheContractEncoderTests
         FakeProvider server = new();
 
         Assert.IsType<ContractEncodeGateway>(
-            EncodeGateway.For(
-                new Offering(new RecordingPluginEncoder()),
-                new HostLibrary(new FakeLibraryQuery()),
-                server.Journal,
-                server.Log));
+            EncodeGateway.For(new Offering(new RecordingPluginEncoder()), server.Journal, server.Log));
 
         // Nothing at all on offer, which is every server before 0.1.479.
-        IEncodeGateway none = EncodeGateway.For(
-            new Offering(null),
-            new HostLibrary(new FakeLibraryQuery()),
-            server.Journal,
-            server.Log);
+        IEncodeGateway none = EncodeGateway.For(new Offering(null), server.Journal, server.Log);
 
         EncodeAsk ask = await none.DispatchAsync(
             @"D:\intake\Silo.mkv",
@@ -181,7 +173,7 @@ public class TheContractEncoderTests
 
     private static Show Show()
     {
-        return new(Silo, "Silo", 2023, TelevisionLibrary, LibraryKind.Television, "Silo (2023)");
+        return new(Silo, "Silo", 2023, TelevisionLibrary, "Television", LibraryKind.Television, "Silo (2023)");
     }
 
     /// <summary>The server's encoder, which records what it was asked for.</summary>

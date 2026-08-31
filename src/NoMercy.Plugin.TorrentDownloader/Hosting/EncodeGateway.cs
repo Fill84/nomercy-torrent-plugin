@@ -33,14 +33,18 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 public static class EncodeGateway
 {
     /// <summary>The gateway for this server, or one that says why there is none.</summary>
-    public static IEncodeGateway For(
-        IServiceProvider services,
-        ILibrary library,
-        IActivityJournal journal,
-        ILogger logger)
+    public static IEncodeGateway For(IServiceProvider services, IActivityJournal journal, ILogger logger)
     {
         if (services.GetService(typeof(IPluginEncoder)) is IPluginEncoder encoder)
         {
+            // Said out loud, because which of the two was chosen decides
+            // whether anything this plugin downloads is ever encoded, and a
+            // log that only speaks up when it goes wrong leaves the owner
+            // guessing on the run where it went right.
+            logger.LogInformation(
+                "This server offers IPluginEncoder ({Encoder}), so encodes are asked for over the contract.",
+                encoder.GetType().Name);
+
             return new ContractEncodeGateway(encoder, journal, logger);
         }
 

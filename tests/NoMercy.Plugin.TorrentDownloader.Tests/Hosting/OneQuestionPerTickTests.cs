@@ -213,7 +213,7 @@ public class OneQuestionPerTickTests : IDisposable
             grabs,
             new HostLibrary(query),
             new Stager(server.Journal, server.Log),
-            EncodeGateway.For(server, new HostLibrary(query), server.Journal, server.Log),
+            EncodeGateway.For(server, server.Journal, server.Log),
             server.Journal,
             server.Log,
             TimeProvider.System);

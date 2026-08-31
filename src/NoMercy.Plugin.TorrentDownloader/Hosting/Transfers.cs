@@ -438,7 +438,7 @@ public sealed class Transfers(
             episode,
             show.Title,
             Path.GetFileName(staged),
-            show.LibraryId,
+            show.LibraryName,
             DateTimeOffset.UtcNow,
             ct);
 
@@ -858,11 +858,13 @@ public sealed class Transfers(
 
             any = true;
 
+            // No episode: there is none, and that is what was handed over.
+            // A key of noughts here drew "Series S00E00" on the History page.
             await grabs.DispatchedAsync(
-                new(0, 0, 0),
-                into.Name,
+                null,
+                null,
                 Path.GetFileName(path),
-                into.Id,
+                into.Name,
                 (time ?? TimeProvider.System).GetUtcNow(),
                 ct);
         }

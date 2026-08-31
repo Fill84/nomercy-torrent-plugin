@@ -234,6 +234,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **The History page said nothing.** A file handed to a library for the server to identify has no
+  episode to name, and it was written with a key of noughts: ten rows reading `Series S00E00` for
+  one pack, none of them saying which file. It carries no episode now and the line names the file.
+  Both paths also named the library by its Ulid — `encode dispatched to library
+  01HQ5W4AVF30N10RT6XCF6AJHM` — so `Show` carries the library's name, off the same row its id comes
+  from, and the line reads `encode dispatched to Television`. `EncodeGateway.For` says out loud
+  which encoder it found, and lost the `ILibrary` it had stopped using when the reflection went.
+
 - **Three things the owner saw.** The browser was kept for the life of the server, which is ten
   Chrome processes and two hundred megabytes held by a machine that will not search again until
   morning; it is kept for a quarter of an hour with nothing open and then closed, so a search cycle

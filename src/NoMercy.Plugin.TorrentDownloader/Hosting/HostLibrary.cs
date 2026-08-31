@@ -59,7 +59,7 @@ public sealed class HostLibrary(IPluginLibraryQuery query) : ILibrary
                     continue;
                 }
 
-                shows.Add(new(show.Id, show.Title, show.Year, show.LibraryId, kind, show.Folder));
+                shows.Add(new(show.Id, show.Title, show.Year, show.LibraryId, library.Title, kind, show.Folder));
             }
         }
 

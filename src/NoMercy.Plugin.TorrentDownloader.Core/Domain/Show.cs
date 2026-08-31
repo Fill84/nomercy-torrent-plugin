@@ -35,6 +35,12 @@ public sealed record Library(string Id, string Name, LibraryKind Kind);
 /// The library it came from. Kept because a downloaded episode goes back to it,
 /// so an anime episode lands in the anime library — this plugin never picks one.
 /// </param>
+/// <param name="LibraryName">
+/// What the owner calls that library. It comes off the same row the id does, so
+/// carrying it costs nothing — and asking for it separately cost a second round
+/// trip on every tick, which is the thing this plugin is built not to do. It is
+/// here because the History page is read by a person and a Ulid is not a word.
+/// </param>
 /// <param name="Kind">Its media type, being the type of that library.</param>
 /// <param name="Folder">
 /// Its folder, relative to the library root. Never null or blank here: a show
@@ -46,5 +52,6 @@ public sealed record Show(
     string Title,
     int? Year,
     string LibraryId,
+    string LibraryName,
     LibraryKind Kind,
     string Folder);

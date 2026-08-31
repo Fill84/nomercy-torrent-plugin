@@ -659,6 +659,84 @@ public class TransfersTests : IDisposable
                                       && (one.Detail ?? string.Empty).Contains("no library", StringComparison.Ordinal));
     }
 
+    /// <remarks>
+    /// <para>
+    /// A handed-over file has no episode to name, so the line names the file.
+    /// A key of noughts in its place drew "Series S00E00" on the History page
+    /// ten times over for one pack, saying nothing about which file each line
+    /// was for — in the one case where the file's own name is all there is.
+    /// </para>
+    /// <para>
+    /// And it names the library the way the owner named it, not by the Ulid the
+    /// server keys it by: "dispatched to library 01HQ5W4AVF30N10RT6XCF6AJHM" is
+    /// not a sentence anybody can read.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AHandedOverFileIsNamedInTheHistoryByItsOwnNameAndItsLibrary()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string first = Downloaded("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(first), 900_000_000));
+
+        FakeProvider server = Server();
+
+        await Transfers(engine, grabs, server, encoder: new RecordingEncoder())
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        HistoryRow line = Assert.Single(
+            await grabs.HistoryAsync(CancellationToken.None),
+            one => one.Event == "dispatched");
+
+        Assert.Equal(Path.GetFileName(first), line.ReleaseTitle);
+
+        // Nothing about an episode, because there is no episode: the server was
+        // asked to work the file out. Noughts here are what the page read.
+        Assert.Null(line.ShowId);
+        Assert.Null(line.Season);
+        Assert.Null(line.Number);
+        Assert.Null(line.ShowTitle);
+
+        Assert.Contains("Television", line.Detail ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(TelevisionLibrary, line.Detail ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// The same for the ordinary path, which had the same fault and nobody had
+    /// read the line: an episode dispatched to a library says which library by
+    /// the name the owner gave it.
+    /// </remarks>
+    [Fact]
+    public async Task ADispatchedEpisodeSaysWhichLibraryByTheNameTheOwnerGaveIt()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        HistoryRow line = Assert.Single(
+            await grabs.HistoryAsync(CancellationToken.None),
+            one => one.Event == "dispatched");
+
+        Assert.Equal("Silo", line.ShowTitle);
+
+        Assert.Contains("Television", line.Detail ?? string.Empty, StringComparison.Ordinal);
+        Assert.DoesNotContain(TelevisionLibrary, line.Detail ?? string.Empty, StringComparison.Ordinal);
+    }
+
     /// <summary>A server that says the same thing about every job.</summary>
     private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
     {
@@ -980,7 +1058,7 @@ public class TransfersTests : IDisposable
             grabs,
             new HostLibrary(query),
             new Stager(server.Journal, server.Log),
-            encoder ?? EncodeGateway.For(server, new HostLibrary(query), server.Journal, server.Log),
+            encoder ?? EncodeGateway.For(server, server.Journal, server.Log),
             server.Journal,
             server.Log,
             clock ?? TimeProvider.System,

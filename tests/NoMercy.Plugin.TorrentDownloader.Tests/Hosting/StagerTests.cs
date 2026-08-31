@@ -540,7 +540,7 @@ public class StagerTests : IDisposable
 
     /// <summary>The show the staged episodes are of, as a library has it.</summary>
     private static Show Silo { get; } =
-        new(42, "Silo", 2023, "01KZGKX2G0966V80H26EKGG5JA", LibraryKind.Television, "Silo");
+        new(42, "Silo", 2023, "01KZGKX2G0966V80H26EKGG5JA", "Television", LibraryKind.Television, "Silo");
 
     private static EpisodeKey Episode(int number)
     {

@@ -324,10 +324,12 @@ public class StagingTests
     }
 
     /// <summary>A show the owner has, in a tv library.</summary>
-    private static Show DarkMatter => new(7, "Dark Matter", 2024, "01HQ5W4AVF30N10RT6XCF6AJHM", LibraryKind.Television, "Dark Matter (2024)");
+    private static Show DarkMatter =>
+        new(7, "Dark Matter", 2024, "01HQ5W4AVF30N10RT6XCF6AJHM", "Television", LibraryKind.Television, "Dark Matter (2024)");
 
     /// <summary>Another, so that matching has to choose rather than take the only one.</summary>
-    private static Show SomethingElse => new(9, "Silo", 2023, "01HQ5W4AVF30N10RT6XCF6AJHM", LibraryKind.Television, "Silo (2023)");
+    private static Show SomethingElse =>
+        new(9, "Silo", 2023, "01HQ5W4AVF30N10RT6XCF6AJHM", "Television", LibraryKind.Television, "Silo (2023)");
 
     private const long Megabyte = 1024 * 1024;
 

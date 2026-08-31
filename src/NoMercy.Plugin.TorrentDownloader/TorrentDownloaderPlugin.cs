@@ -308,7 +308,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // The contract where this server offers it, and the older way where
             // it does not. media-server #30 and #35 are what made the first of
             // those possible.
-            EncodeGateway.For(Context.Services, library, _journal, Context.Logger),
+            EncodeGateway.For(Context.Services, _journal, Context.Logger),
             _journal,
             Context.Logger,
             time: null,

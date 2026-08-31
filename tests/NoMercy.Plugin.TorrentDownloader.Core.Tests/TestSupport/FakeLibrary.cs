@@ -22,9 +22,10 @@ public sealed class FakeLibrary : ILibrary
         string title,
         int? year = null,
         LibraryKind kind = LibraryKind.Television,
-        string libraryId = "lib-tv")
+        string libraryId = "lib-tv",
+        string libraryName = "Television")
     {
-        _shows.Add(new(id, title, year, libraryId, kind, title));
+        _shows.Add(new(id, title, year, libraryId, libraryName, kind, title));
         return this;
     }
 

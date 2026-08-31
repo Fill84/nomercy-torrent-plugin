@@ -431,17 +431,30 @@ public sealed class GrabRepository(Store database)
     }
 
     /// <summary>
-    /// Records that an episode's encode was queued.
+    /// Records that a file's encode was queued.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The history is what the owner reads to answer "what happened to that
     /// episode". A grab that reached the encoder and one that stopped at the
     /// intake folder look identical from the outside, and this line is the
     /// difference.
+    /// </para>
+    /// <para>
+    /// <strong>No episode is a case, not a mistake.</strong> A file handed to a
+    /// library for the server to identify has none — that is the whole reason
+    /// it was handed over — and the line then names the file. Passing a key of
+    /// noughts instead wrote ten rows reading "Series S00E00" for one pack, each
+    /// saying nothing about which file it was for.
+    /// </para>
+    /// <para>
+    /// <paramref name="library"/> is the name the owner gave it. A Ulid is what
+    /// the server keys a library by and is not a thing a person can read.
+    /// </para>
     /// </remarks>
     public async Task DispatchedAsync(
-        EpisodeKey episode,
-        string showTitle,
+        EpisodeKey? episode,
+        string? showTitle,
         string releaseTitle,
         string library,
         DateTimeOffset at,
@@ -457,12 +470,19 @@ public sealed class GrabRepository(Store database)
             """;
 
         command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$show", episode.ShowId);
-        command.Parameters.AddWithValue("$season", episode.Season);
-        command.Parameters.AddWithValue("$episode", episode.Number);
-        command.Parameters.AddWithValue("$title", showTitle);
+        command.Parameters.AddWithValue("$show", (object?)episode?.ShowId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$season", (object?)episode?.Season ?? DBNull.Value);
+        command.Parameters.AddWithValue("$episode", (object?)episode?.Number ?? DBNull.Value);
+        command.Parameters.AddWithValue("$title", (object?)showTitle ?? DBNull.Value);
         command.Parameters.AddWithValue("$release", releaseTitle);
-        command.Parameters.AddWithValue("$detail", $"encode dispatched to library {library}");
+
+        // Which of the two it was, in words: an episode the plugin named, or a
+        // file the server was asked to work out for itself.
+        command.Parameters.AddWithValue(
+            "$detail",
+            episode is null
+                ? $"handed to {library} for the server to identify"
+                : $"encode dispatched to {library}");
 
         await command.ExecuteNonQueryAsync(ct);
     }
