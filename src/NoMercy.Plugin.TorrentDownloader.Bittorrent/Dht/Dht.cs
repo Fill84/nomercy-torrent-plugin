@@ -106,6 +106,83 @@ public sealed class Dht(NodeId ours, RoutingTable table, IDhtTransport transport
     }
 
     /// <summary>
+    /// Walks towards our own id until the table stops growing.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Bootstrapping asks two routers who they know and stops there, which is
+    /// two answers of eight contacts at best. That is not joining a network of
+    /// millions, it is standing at its door — and a search only ever adds the
+    /// nodes it happens to meet while dropping every one that does not answer,
+    /// so the table drained instead of filling. Measured on the owner's server
+    /// on 31 August 2026: five nodes after the bootstrap, two a minute later.
+    /// </para>
+    /// <para>
+    /// This is the join every other client does. Asking the nodes nearest to
+    /// our own id who <em>they</em> know, round after round, is what fills the
+    /// buckets around us — and those are the ones a later search starts from.
+    /// </para>
+    /// <para>
+    /// It is run again on a timer, because nodes go and the table erodes: a
+    /// join that happened only at boot is a table that is right once.
+    /// </para>
+    /// </remarks>
+    /// <returns>How many nodes the table holds afterwards.</returns>
+    public async Task<int> JoinAsync(CancellationToken ct)
+    {
+        HashSet<string> asked = new(StringComparer.Ordinal);
+        List<DhtContact> shortlist = [.. table.Closest(ours, RoutingTable.Kademlia * 2)];
+
+        for (int round = 0; round < MostRounds; round++)
+        {
+            DhtContact[] asking =
+            [
+                .. shortlist
+                    .Where(one => !asked.Contains(one.Address.ToString()))
+                    .OrderBy(one => one.Id.Distance(ours), Nearest.Instance)
+                    .Take(RoutingTable.Kademlia),
+            ];
+
+            if (asking.Length == 0)
+            {
+                // Everybody worth asking has been asked. The table is as full
+                // as this walk can make it.
+                break;
+            }
+
+            foreach (DhtContact node in asking)
+            {
+                asked.Add(node.Address.ToString());
+
+                KrpcMessage? answer = await transport
+                    .AskAsync(node.Address, Krpc.WriteFindNode(Transaction(), ours, ours), ct)
+                    .ConfigureAwait(false);
+
+                if (answer is null || answer.Kind != KrpcKind.Response)
+                {
+                    table.Remove(node.Id);
+
+                    continue;
+                }
+
+                table.Add(node);
+
+                foreach (DhtContact nearer in Krpc.ReadNodes(answer))
+                {
+                    table.Add(nearer);
+
+                    if (!asked.Contains(nearer.Address.ToString()))
+                    {
+                        shortlist.Add(nearer);
+                    }
+                }
+            }
+        }
+
+        return table.Count;
+    }
+
+    /// <summary>
     /// Finds peers for a torrent, walking towards its hash.
     /// </summary>
     /// <remarks>

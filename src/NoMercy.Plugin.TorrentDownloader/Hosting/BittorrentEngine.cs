@@ -635,13 +635,48 @@ public sealed class BittorrentEngine(
         {
             await dht.BootstrapAsync(nodes, ct).ConfigureAwait(false);
 
-            logger.LogInformation("The DHT knows {Count} nodes.", dht.Table.Count);
+            logger.LogInformation("The DHT bootstrap answered with {Count} nodes.", dht.Table.Count);
         }
         catch (Exception quiet) when (quiet is not OperationCanceledException)
         {
             logger.LogWarning("The DHT could not be joined: {Why}", quiet.Message);
+
+            return;
+        }
+
+        // And then the join itself, again and again. The bootstrap is two
+        // routers and the handful of contacts they name; the walk towards our
+        // own id is what fills the buckets around us, and it is repeated
+        // because nodes go and a table that was right at boot is not a table.
+        while (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                logger.LogInformation("The DHT knows {Count} nodes.", await dht.JoinAsync(ct).ConfigureAwait(false));
+            }
+            catch (Exception quiet) when (quiet is not OperationCanceledException)
+            {
+                logger.LogDebug("The DHT walk stopped: {Why}", quiet.Message);
+            }
+
+            try
+            {
+                await Task.Delay(DhtRefresh, _time, ct).ConfigureAwait(false);
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
         }
     }
+
+    /// <summary>How often the table is walked again.</summary>
+    /// <remarks>
+    /// Fifteen minutes is what BEP 5 asks of a bucket that has gone quiet, and
+    /// a walk costs eight questions a round against nodes that are answering
+    /// anyway.
+    /// </remarks>
+    private static readonly TimeSpan DhtRefresh = TimeSpan.FromMinutes(15);
 
     /// <summary>
     /// Says on the local network what this client is holding.
