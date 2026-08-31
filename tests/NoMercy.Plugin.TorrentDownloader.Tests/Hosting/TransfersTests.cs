@@ -607,9 +607,11 @@ public class TransfersTests : IDisposable
         // of this pack to find and nothing to delete.
         Assert.False(Directory.Exists(Intake) && Directory.EnumerateFiles(Intake).Any());
 
-        Assert.Equal(
-            GrabState.Dispatched,
-            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+        // Closed, not left waiting: the plugin does not know which episodes
+        // these files became, so there is nothing it could ever wait to see.
+        // Left open it stood in front of the step that deletes what it is
+        // finished with, and that step cost the owner the same pack twice.
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
     }
 
     /// <remarks>
@@ -778,9 +780,10 @@ public class TransfersTests : IDisposable
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        // Removing the torrent with its files is the deletion: that call is
-        // what took the 36 GB, and the download folder is the engine's to empty.
-        Assert.Empty(engine.Removed);
+        // Taking the torrent out of the client is fine and leaves the bytes
+        // alone; taking it out *with its files* is the deletion, and that is
+        // the call that took the 36 GB.
+        Assert.DoesNotContain(engine.Removed, one => one.DeleteFiles);
     }
 
     /// <remarks>
@@ -808,16 +811,25 @@ public class TransfersTests : IDisposable
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Empty(engine.Removed);
+        Assert.DoesNotContain(engine.Removed, one => one.DeleteFiles);
     }
 
     /// <remarks>
-    /// When every job it was given says it is finished, then it goes: the
-    /// torrent, its download, and the grab with them. That is the one thing
-    /// that ends a handover, and it is the server saying so.
+    /// <para>
+    /// And not even when every job says it finished. On 31 August 2026 nine of
+    /// them came back finished inside two minutes, the library gained not one
+    /// file, and the pack was deleted on their word — the same 36 GB, the
+    /// second time in one evening.
+    /// </para>
+    /// <para>
+    /// A server saying a job is over is not the episode being there, and for a
+    /// pack handed over to be identified there is nothing else to ask: the
+    /// plugin does not know which episodes those files became, so it can never
+    /// see them arrive. What it cannot verify it does not throw away.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task AHandedOverPackIsFinishedWhenTheServerSaysEveryOneOfItsEncodesIs()
+    public async Task AHandedOverPackIsNotDeletedEvenWhenEveryJobSaysItFinished()
     {
         GrabRepository grabs = await Grabs();
         await ByHand(grabs);
@@ -842,8 +854,7 @@ public class TransfersTests : IDisposable
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Contains(engine.Removed, one => one.DeleteFiles);
-        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+        Assert.DoesNotContain(engine.Removed, one => one.DeleteFiles);
     }
 
     /// <summary>A server that says the same thing about every job.</summary>

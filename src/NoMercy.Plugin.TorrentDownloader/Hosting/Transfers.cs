@@ -792,30 +792,35 @@ public sealed class Transfers(
                 continue;
             }
 
-            bool landed;
-
             if (sent.Covers.Count == 0)
             {
-                // Handed over for the server to identify, so there is no episode
-                // to watch for — and the rule below is "every episode it covers
-                // has a file", which over no episodes is true of nothing. That
-                // vacuous truth deleted a 36 GB pack two minutes after handing
-                // it over, while the server was still reading those very files:
-                // a handover gives the encoder their paths in the download
-                // folder, not a copy. Only the jobs it was given can end it.
-                landed = await StandingAsync(sent, ct) is { State: EncodeJobState.Finished };
+                // Handed over for the server to identify, and there is nothing
+                // here that can tell whether it arrived. The rule below reads
+                // "every episode it covers has a file", which over no episodes
+                // is true of nothing — that vacuous truth deleted a 36 GB pack
+                // two minutes after handing it over.
+                //
+                // The job was tried next and is no better. On 31 August 2026
+                // nine jobs came back finished inside two minutes, the library
+                // gained not one file, and this method deleted the same 36 GB
+                // again on their word. A server saying a job is over is not the
+                // episode being there, and for a handover nothing else is left
+                // to ask.
+                //
+                // So it is never deleted here. A pack this plugin cannot verify
+                // is one it must not throw away, and the owner decides what
+                // becomes of it.
+                continue;
             }
-            else
+
+            bool landed = true;
+
+            foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
             {
-                landed = true;
+                IReadOnlyList<Episode> episodes = await thisTick.GetEpisodesAsync(show.Key, ct);
 
-                foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
-                {
-                    IReadOnlyList<Episode> episodes = await thisTick.GetEpisodesAsync(show.Key, ct);
-
-                    landed &= show.All(wanted => episodes.Any(one =>
-                        one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile));
-                }
+                landed &= show.All(wanted => episodes.Any(one =>
+                    one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile));
             }
 
             if (!landed)
@@ -924,18 +929,28 @@ public sealed class Transfers(
 
         if (any)
         {
-            await grabs.StateAsync(finished.InfoHash, GrabState.Dispatched, ct);
+            // Done rather than dispatched, because there is nothing left for
+            // this plugin to do and nothing it could wait for: it does not know
+            // which episodes these files became, so it can never see them
+            // arrive. Leaving it dispatched put it in front of a step that
+            // deletes what it is finished with, and that step cost the owner
+            // the same pack twice.
+            await grabs.StateAsync(finished.InfoHash, GrabState.Done, ct);
 
             if (queued.Count > 0)
             {
                 await grabs.EncodeJobAsync(finished.InfoHash, string.Join(' ', queued), ct);
             }
 
-            // The clock starts here, as it does for a dispatch: an encode is
-            // waited on from the moment it was asked for.
-            _waiting[finished.InfoHash] = (time ?? TimeProvider.System).GetUtcNow();
-
             _unplaceable.Remove(finished.InfoHash);
+
+            // Said out loud, because the download stays where it is and the
+            // owner is the one who decides when it goes.
+            journal.Finished(
+                ActivityStage.Dispatch,
+                finished.ReleaseTitle,
+                $"handed to {into.Name} for the server to identify; the download is left in place, "
+                + "because this plugin cannot tell whether the server kept it");
         }
 
         return any;
