@@ -612,6 +612,70 @@ public class TransfersTests : IDisposable
         Assert.Empty((await grabs.SkippedAsync(1, 20, CancellationToken.None)).Rows);
     }
 
+    /// <remarks>
+    /// <para>
+    /// A job the server keeps calling alive is still given up on. Asking what
+    /// became of it answers the question the six hours were guessing at, and it
+    /// stops the encode being asked for twice — but an encoder that hangs
+    /// reports Running for ever, and a grab that waits for ever is an episode
+    /// that never arrives with nothing left to notice.
+    /// </para>
+    /// <para>
+    /// So the clock is started once and never restarted. Reset on every tick,
+    /// which is how this was first written, the six hours could not elapse at
+    /// all.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AJobTheServerKeepsCallingAliveIsStillGivenUpOn()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
+
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        RecordingEncoder encoder = new() { JobId = "01KZGKX2G0966V80H26EKGG5T1" };
+        SayingJobs jobs = new(new(EncodeJobState.Running, null));
+
+        Transfers transfers = new(
+            engine,
+            grabs,
+            new HostLibrary(new FakeLibraryQuery()
+                .Library(TelevisionLibrary, "Television", "tv")
+                .Show(41, "Silo", TelevisionLibrary, year: 2023)
+                .Episode(41, 3, 6)
+                .Episode(41, 1, 1, hasFile: true)),
+            new Stager(server.Journal, server.Log),
+            encoder,
+            server.Journal,
+            server.Log,
+            clock,
+            jobs);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // Ticked at every minute of it, and the server says Running each time.
+        for (int minute = 0; minute < 6 * 60; minute++)
+        {
+            clock.Advance(TimeSpan.FromMinutes(1));
+
+            await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        }
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+
+        // Once. Asking what became of it is what stops the second ask.
+        Assert.Single(encoder.Asked);
+    }
+
     /// <summary>A server that says the same thing about every job.</summary>
     private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
     {

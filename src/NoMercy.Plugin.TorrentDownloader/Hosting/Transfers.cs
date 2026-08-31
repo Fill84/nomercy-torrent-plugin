@@ -787,6 +787,11 @@ public sealed class Transfers(
     {
         DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();
 
+        // Whether the server says the job it queued is still going. Where it
+        // does, the file is not staged for a second time whatever the clock
+        // below decides.
+        bool alive = false;
+
         // Asked rather than inferred, where there is a job to ask about and a
         // server that answers. Everything below this sees one thing only —
         // whether the library has the episode yet — so an encode that died in
@@ -814,16 +819,21 @@ public sealed class Transfers(
 
             if (standing is { State: EncodeJobState.Queued or EncodeJobState.Running })
             {
-                // Alive, so it is not asked for again and not given up on,
-                // whatever the clock says. The six hours below are a guess at
-                // this question and this is the answer to it.
-                _waiting[sent.InfoHash] = now;
+                // Alive, so it is not asked for a second time — and that is
+                // the whole of what this branch does. The clock is started if
+                // it is not running and never restarted, and then the six hours
+                // below are left to run: an encoder that hangs reports Running
+                // for ever, so a branch that returned here, or wrote the clock
+                // on every tick, would leave a grab waiting for ever on a job
+                // nothing was doing. That is the one thing the six hours are
+                // there to stop.
+                alive = true;
 
-                return;
+                _waiting.TryAdd(sent.InfoHash, now);
             }
         }
 
-        if (!_waiting.TryGetValue(sent.InfoHash, out DateTimeOffset since))
+        if (!_waiting.TryGetValue(sent.InfoHash, out DateTimeOffset since) && !alive)
         {
             // Dispatched by a run of the plugin that is over. Its job is very
             // likely over with it: the owner's queue was empty while eleven
