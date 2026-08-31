@@ -347,8 +347,21 @@ public sealed class GrabRepository(Store database)
     /// A season pack that fails puts back every episode it answered for, which
     /// is what the covers list is kept for.
     /// </para>
+    /// <para>
+    /// <paramref name="until"/> is when the refusal runs out, and null is for
+    /// ever. Every failure used to be for ever, whatever it was about: a swarm
+    /// that did not answer on one evening refused that release permanently, and
+    /// on 31 August 2026 that was South Park S15E12 1080p HMAX CtrlHD — fifty
+    /// seeders on the site, blacklisted since 25 August, and the owner watching
+    /// the plugin settle for a 720p.
+    /// </para>
     /// </remarks>
-    public async Task<int> FailedAsync(string infoHash, string reason, DateTimeOffset at, CancellationToken ct)
+    public async Task<int> FailedAsync(
+        string infoHash,
+        string reason,
+        DateTimeOffset at,
+        DateTimeOffset? until,
+        CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);
         await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
@@ -394,12 +407,15 @@ public sealed class GrabRepository(Store database)
             // download.
             refusing.CommandText =
                 """
-                INSERT INTO blacklist (key, reason, at, until) VALUES ($key, $reason, $at, NULL)
-                ON CONFLICT(key) DO UPDATE SET reason = $reason, at = $at;
+                INSERT INTO blacklist (key, reason, at, until) VALUES ($key, $reason, $at, $until)
+                ON CONFLICT(key) DO UPDATE SET reason = $reason, at = $at, until = $until;
                 """;
             refusing.Parameters.AddWithValue("$key", hash);
             refusing.Parameters.AddWithValue("$reason", reason);
             refusing.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
+            refusing.Parameters.AddWithValue(
+                "$until",
+                (object?)until?.ToString("O", CultureInfo.InvariantCulture) ?? DBNull.Value);
 
             await refusing.ExecuteNonQueryAsync(ct);
         }

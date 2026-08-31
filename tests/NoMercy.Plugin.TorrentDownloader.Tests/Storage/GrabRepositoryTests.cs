@@ -109,6 +109,7 @@ public class GrabRepositoryTests : IDisposable
             Hash,
             "No peer sent its metadata within 5 minutes.",
             When,
+            until: null,
             CancellationToken.None);
 
         Assert.Equal(3, returned);
@@ -151,7 +152,7 @@ public class GrabRepositoryTests : IDisposable
         // The same torrent, grabbed again before the duplicate was stopped.
         await Record(grabs, Hash, [Episode(1)]);
 
-        await grabs.FailedAsync(Hash, "the swarm went quiet", DateTimeOffset.UtcNow, CancellationToken.None);
+        await grabs.FailedAsync(Hash, "the swarm went quiet", DateTimeOffset.UtcNow, null, CancellationToken.None);
 
         Assert.Equal(1, await Done(database));
 
@@ -183,8 +184,8 @@ public class GrabRepositoryTests : IDisposable
 
         await Record(grabs, Hash, [Episode(1)]);
 
-        await grabs.FailedAsync(Hash, "first reason", When, CancellationToken.None);
-        await grabs.FailedAsync(Hash, "second reason", When, CancellationToken.None);
+        await grabs.FailedAsync(Hash, "first reason", When, null, CancellationToken.None);
+        await grabs.FailedAsync(Hash, "second reason", When, null, CancellationToken.None);
 
         Assert.Single(await grabs.BlacklistedAsync(CancellationToken.None));
     }
@@ -205,7 +206,7 @@ public class GrabRepositoryTests : IDisposable
 
         Assert.Equal(GrabState.Downloading, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
 
-        Assert.Equal(1, await grabs.FailedAsync(Hash.ToLowerInvariant(), "gone", When, CancellationToken.None));
+        Assert.Equal(1, await grabs.FailedAsync(Hash.ToLowerInvariant(), "gone", When, null, CancellationToken.None));
     }
 
     /// <remarks>

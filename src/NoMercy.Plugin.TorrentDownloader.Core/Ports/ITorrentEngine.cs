@@ -111,6 +111,16 @@ public sealed record TorrentFile(string Path, long Length);
 /// nought is a dead release.
 /// </param>
 /// <param name="SwarmPeers">The same for the peers still downloading it.</param>
+/// <param name="ErrorIsTheRelease">
+/// Whether <paramref name="Error"/> is a property of the release or of this
+/// moment. "There is no video file in it" is true of that torrent for ever and
+/// there is no point ever asking for it again; "no peer sent its metadata
+/// within five minutes" is true of one evening. On 25 August 2026 that second
+/// one refused South Park S15E12 1080p HMAX CtrlHD, and on 31 August the same
+/// release sat on TorrentBay with fifty seeders while the plugin still would
+/// not look at it — because both were blacklisted the same way, for ever. This
+/// is what tells them apart.
+/// </param>
 public sealed record TorrentStatus(
     string InfoHash,
     string? Name,
@@ -125,7 +135,8 @@ public sealed record TorrentStatus(
     TimeSpan? Eta,
     string? Error,
     int? SwarmSeeds = null,
-    int? SwarmPeers = null);
+    int? SwarmPeers = null,
+    bool ErrorIsTheRelease = false);
 
 /// <summary>
 /// The torrent client, as the pipeline is allowed to see it.

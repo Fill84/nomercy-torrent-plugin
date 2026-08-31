@@ -163,6 +163,24 @@ public sealed class Transfers(
     /// way for as long as the plugin runs; without the return the episodes look
     /// grabbed for ever.
     /// </remarks>
+    /// <summary>How long a refusal about one moment stands before it runs out.</summary>
+    /// <remarks>
+    /// <para>
+    /// A swarm that did not answer tonight may be there tomorrow, and until
+    /// this existed every refusal was for ever: South Park S15E12 1080p HMAX
+    /// CtrlHD was blacklisted on 25 August 2026 because no peer sent its
+    /// metadata within five minutes, and on 31 August it sat on TorrentBay with
+    /// fifty seeders while the plugin would not look at it and the owner
+    /// watched it settle for a 720p.
+    /// </para>
+    /// <para>
+    /// Six hours, so a release is tried four times a day rather than once and
+    /// never. Each retry costs one metadata wait, which is minutes; refusing
+    /// for ever costs the episode.
+    /// </para>
+    /// </remarks>
+    public static readonly TimeSpan RefusedFor = TimeSpan.FromHours(6);
+
     private async Task<IReadOnlyList<string>> FailedAsync(
         IReadOnlyList<TorrentStatus> running,
         IReadOnlyList<StoredDownload> stored,
@@ -182,7 +200,19 @@ public sealed class Transfers(
             // from.
             string reason = status.Error ?? "the torrent client gave up on it and said no more than that";
 
-            await grabs.FailedAsync(status.InfoHash, reason, DateTimeOffset.UtcNow, ct);
+            DateTimeOffset when = DateTimeOffset.UtcNow;
+
+            await grabs.FailedAsync(
+                status.InfoHash,
+                reason,
+
+                // For ever only where the torrent's own contents are the
+                // reason. Everything else the client gives up on is about
+                // tonight, and comes round again.
+                when,
+                status.ErrorIsTheRelease ? null : when + RefusedFor,
+                ct);
+
             await engine.RemoveAsync(status.InfoHash, deleteFiles: false, ct);
 
             journal.Failed(ActivityStage.Download, status.Name ?? status.InfoHash, reason);
@@ -513,7 +543,15 @@ public sealed class Transfers(
             string reason = "it is not a show the owner has, so it was cancelled and its download deleted";
 
             await engine.RemoveAsync(open.InfoHash, deleteFiles: true, ct);
-            await grabs.FailedAsync(open.InfoHash, reason, DateTimeOffset.UtcNow, ct);
+
+            // Not about the release at all — about which shows are in the
+            // owner's libraries, which is a thing that changes.
+            await grabs.FailedAsync(
+                open.InfoHash,
+                reason,
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow + RefusedFor,
+                ct);
 
             logger.LogWarning("{Release}: {Reason}", open.ReleaseTitle, reason);
             journal.Failed(ActivityStage.Download, open.ReleaseTitle, reason);
@@ -559,7 +597,12 @@ public sealed class Transfers(
                 // told from here, and either way the library does not have it.
                 string reason = $"{Path.GetFileName(path)} was staged and is no longer there";
 
-                await grabs.FailedAsync(staged.InfoHash, reason, DateTimeOffset.UtcNow, ct);
+                await grabs.FailedAsync(
+                    staged.InfoHash,
+                    reason,
+                    DateTimeOffset.UtcNow,
+                    DateTimeOffset.UtcNow + RefusedFor,
+                    ct);
 
                 logger.LogWarning("{Release}: {Reason}", staged.ReleaseTitle, reason);
                 journal.Failed(ActivityStage.Dispatch, staged.ReleaseTitle, reason);
@@ -946,7 +989,7 @@ public sealed class Transfers(
 
                 string said = standing.Failure ?? "the server gave up on the encode and said no more than that";
 
-                await grabs.FailedAsync(sent.InfoHash, said, now, ct);
+                await grabs.FailedAsync(sent.InfoHash, said, now, now + RefusedFor, ct);
 
                 logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, said);
                 journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, said);
@@ -1009,7 +1052,7 @@ public sealed class Transfers(
         string reason =
             $"the encode was asked for {Patience.TotalHours:0} hours ago and the library still does not have it";
 
-        await grabs.FailedAsync(sent.InfoHash, reason, now, ct);
+        await grabs.FailedAsync(sent.InfoHash, reason, now, now + RefusedFor, ct);
 
         logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, reason);
         journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, reason);

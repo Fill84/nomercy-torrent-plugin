@@ -873,6 +873,11 @@ public sealed class BittorrentEngine(
 
         held.Error = "There is no video file in it, so nothing in it was downloaded.";
 
+        // The one refusal that is about the torrent rather than about tonight.
+        // Nothing will ever put a video file into it, so it is never worth
+        // asking for again.
+        held.ErrorIsTheRelease = true;
+
         held.Run.Pause();
 
         logger.LogWarning("{Name} was refused: {Reason}", held.Run.Torrent?.Name ?? held.Name, held.Error);
@@ -1189,6 +1194,9 @@ public sealed class BittorrentEngine(
 
         /// <summary>Why it was given up on, in the client's own words.</summary>
         public string? Error { get; set; }
+
+        /// <summary>Whether that reason is about the release rather than the moment.</summary>
+        public bool ErrorIsTheRelease { get; set; }
 
         /// <summary>Whether it is stopped because the client is full, not because the owner stopped it.</summary>
         public bool Queued { get; set; }
