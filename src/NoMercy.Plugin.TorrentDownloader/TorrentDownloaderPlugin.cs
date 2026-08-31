@@ -338,7 +338,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // What adds a show the owner does not have yet. Until this, a pack
             // for one could not be dispatched at all: an encode is asked for by
             // an episode id and a show with no row has none.
-            admission: new ShowAdmission(Context.Services, Context.Logger));
+            admission: Admission());
 
         await _transfers.TickAsync(settings.IncompleteFolder, settings.IntakeFolder, ct);
     }
@@ -1303,6 +1303,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private void Moved()
     {
         _live?.Changed();
+    }
+
+    /// <summary>What adds a show the owner does not have, having said whether it can.</summary>
+    private ShowAdmission Admission()
+    {
+        ShowAdmission admission = new(Context.Services, Context.Logger);
+
+        admission.Ready();
+
+        return admission;
     }
 
     private CycleStatus CurrentCycle()

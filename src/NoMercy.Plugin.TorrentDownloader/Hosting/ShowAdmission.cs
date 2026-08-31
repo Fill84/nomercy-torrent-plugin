@@ -46,6 +46,48 @@ public sealed class ShowAdmission(IServiceProvider services, ILogger logger)
     private const string ImportJobType = "NoMercy.MediaProcessing.Jobs.MediaJobs.ShowImportJob";
 
     /// <summary>
+    /// Says whether this server has the parts, before anything needs them.
+    /// </summary>
+    /// <remarks>
+    /// Asked once when the plugin wakes, because otherwise the answer arrives
+    /// only when a torrent for an unknown show finishes — which can be an hour
+    /// of downloading away, and is the worst moment to find out that the three
+    /// things this needs are not there. It names them, so a server that renamed
+    /// one can be told from a server that never had it.
+    /// </remarks>
+    public void Ready()
+    {
+        string[] missing =
+        [
+            .. new[] { ProbeType, DispatcherType, ImportJobType }
+                .Where(one => Find(one) is null),
+        ];
+
+        if (missing.Length > 0)
+        {
+            logger.LogWarning(
+                "A show this owner does not have cannot be added on this server: it offers no {Missing}. "
+                + "A torrent for one is handed over to be identified instead.",
+                string.Join(", ", missing));
+
+            return;
+        }
+
+        if (Resolve(ProbeType) is null || Resolve(DispatcherType) is null)
+        {
+            logger.LogWarning(
+                "This server has the parts that add a show but does not hand them out, "
+                + "so a torrent for a show the owner does not have is handed over to be identified instead.");
+
+            return;
+        }
+
+        logger.LogInformation(
+            "A torrent for a show the owner does not have will be looked up and added: "
+            + "this server offers the metadata probe and the import job both.");
+    }
+
+    /// <summary>
     /// Looks a show up with the server's own providers and adds it.
     /// </summary>
     /// <param name="title">The show's title, as the release name spells it.</param>
