@@ -49,9 +49,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        // The server knows the staged file once it is there, which is what the
-        // dispatch asks it for: the id is the server's own, never the filename.
-        server.Files.Matches = [(Staged, "4417")];
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -90,7 +87,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(Staged, "4417")];
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -255,7 +251,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(staged, "4417")];
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -315,7 +310,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(staged, "4417")];
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -375,7 +369,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(staged, "4417")];
 
         await Transfers(new StandingEngine(), grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -489,7 +482,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(Staged, "4417")];
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -526,7 +518,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(Staged, "4417")];
 
         // A server that names the job it queued, and then says it died.
         RecordingEncoder encoder = new() { JobId = "01KZGKX2G0966V80H26EKGG5T1" };
@@ -648,7 +639,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(staged, "4417")];
 
         // One instance across both ticks, as the plugin keeps one: how long an
         // encode has been waited on is held in memory, and a restart is a good
@@ -707,7 +697,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(Staged, "4417")];
 
         Transfers transfers = Transfers(engine, grabs, server);
 
@@ -755,7 +744,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(Staged, "4417")];
 
         Transfers transfers = Transfers(engine, grabs, server);
 
@@ -807,7 +795,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        server.Files.Matches = [(Staged, "4417")];
 
         // A fresh instance, as a restart gives: how long an encode has been
         // waited on is held in memory and nowhere else.

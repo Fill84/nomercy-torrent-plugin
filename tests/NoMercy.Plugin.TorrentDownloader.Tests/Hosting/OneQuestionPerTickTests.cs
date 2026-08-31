@@ -65,7 +65,6 @@ public class OneQuestionPerTickTests : IDisposable
             listed.Add((Staged(key), (4400 + number).ToString()));
         }
 
-        server.Files.Matches = listed;
 
         await Transfers(engine, grabs, query, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
