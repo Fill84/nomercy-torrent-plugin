@@ -30,7 +30,7 @@ goes stale — this heading said 0.3.9 for three releases.
 | [docs/02-library.md](docs/02-library.md) | where the show and episode information comes from, and how "missing" is derived |
 | [docs/03-architecture.md](docs/03-architecture.md) | the parallel pipeline |
 | [docs/04-domain.md](docs/04-domain.md) | release names, the profile, settings, the schema |
-| [docs/05-sources.md](docs/05-sources.md) | the seventeen shipped sources, the owner's own, and every trap |
+| [docs/05-sources.md](docs/05-sources.md) | the fifteen shipped sources, the owner's own, and every trap |
 | [docs/06-torrent-client.md](docs/06-torrent-client.md) | the BitTorrent protocol, written here |
 | [docs/07-solver.md](docs/07-solver.md) | the challenge solver, on a hidden desktop |
 | [docs/08-ui.md](docs/08-ui.md) | the live dashboard, the pages and every action |
@@ -138,8 +138,8 @@ It ships **every file the build produced** bar symbols and documentation, plus t
 the platform the server runs on, which it asks that machine for. Nothing is listed by hand.
 
 A hand-kept list is what this replaced, and it drifted three times: it missed the protocol assembly,
-it missed `sources.json` — the catalogue, read from beside the assembly, so seventeen sources read as
-none — and it named six files where the plugin needs seventeen. That last one reached a server and
+it missed `sources.json` — the catalogue, read from beside the assembly, so fifteen sources read as
+none — and it named six files where the plugin needs every one of its dependencies. That last one reached a server and
 the plugin simply did not appear in its list, because the host resolves a plugin's dependencies from
 beside the plugin, found none, and reported nothing. Tests hold the built output against what the
 dependency file names and against what the solution really builds.

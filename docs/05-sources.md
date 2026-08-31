@@ -3,7 +3,7 @@
 Seventeen sources ship in `src/.../sources.json`, copied beside the assembly. On top of them the
 owner may add their own indexers and their own private trackers.
 
-All seventeen were measured working end to end on 13 August 2026 — each answered a real release name
+All fifteen were measured working end to end on 13 August 2026 — each answered a real release name
 and produced a route to a torrent. The traps below are what that took.
 
 ## Roles
@@ -230,7 +230,7 @@ each source returned.
 A source is flagged when it does not answer, offers no route to a torrent, returns far fewer rows
 than last time, or — the case it exists for — when **the page is covered in torrents and the reader
 saw none of them**. It distinguishes that from a site that honestly has nothing by counting
-release-shaped **names** in the body: six of the seventeen answer JSON or XML with no anchor and no
+release-shaped **names** in the body: six of the fifteen answer JSON or XML with no anchor and no
 magnet anywhere in them, so a count of links would report every one of those as having nothing on
 the day its reader broke. A name is release-shaped when it carries a resolution, a codec or a
 source — never the episode number, which is in the term that was searched for and so appears on
