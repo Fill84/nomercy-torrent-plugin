@@ -393,7 +393,7 @@ public sealed record Magnet(string InfoHash, string? DisplayName, IReadOnlyList<
                     name ??= value.Length > 0 ? value : null;
                     break;
 
-                case "tr" when value.Length > 0 && !trackers.Contains(value, StringComparer.OrdinalIgnoreCase):
+                case "tr" when Announceable(value) && !trackers.Contains(value, StringComparer.OrdinalIgnoreCase):
                     trackers.Add(value);
                     break;
 
@@ -403,6 +403,27 @@ public sealed record Magnet(string InfoHash, string? DisplayName, IReadOnlyList<
         }
 
         return hash is null ? null : new(hash, name, trackers);
+    }
+
+    /// <summary>Whether a <c>tr</c> is an address this client could announce to.</summary>
+    /// <remarks>
+    /// A magnet arrives however the owner pasted it, and one can arrive cut in
+    /// half. On 31 August 2026 a hand-added magnet was stored at exactly a
+    /// thousand and twenty-four characters, ending mid-parameter, and the last
+    /// tracker on it read <c>udp://tracke</c>. That is not a host: it was asked
+    /// on every announce for as long as the torrent ran, and it sat in the
+    /// owner's log beside the real refusals as though it were one.
+    ///
+    /// A scheme this client speaks and a host with a dot or a colon in it — a
+    /// name, an address, or an IPv6 literal. Everything a real tracker has, and
+    /// nothing half a word has.
+    /// </remarks>
+    private static bool Announceable(string tracker)
+    {
+        return Uri.TryCreate(tracker, UriKind.Absolute, out Uri? address)
+               && address.Scheme is "udp" or "http" or "https"
+               && (address.Host.Contains('.', StringComparison.Ordinal)
+                   || address.Host.Contains(':', StringComparison.Ordinal));
     }
 
     /// <summary>

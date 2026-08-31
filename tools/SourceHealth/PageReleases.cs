@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tools.SourceHealth;
@@ -78,7 +79,7 @@ public static class PageReleases
                 end++;
             }
 
-            string name = body[start..end].Trim();
+            string name = Plain(body[start..end]);
 
             if (name.Length >= Shortest)
             {
@@ -87,6 +88,73 @@ public static class PageReleases
         }
 
         return found.Count;
+    }
+
+    /// <summary>
+    /// One release name, spelled the one way, however the page spelled it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A page carries the same release several times over — in the anchor's
+    /// text, in its <c>href</c>, in a <c>title</c> or <c>data-tooltip</c>
+    /// attribute — and a site that highlights the search term wraps parts of it
+    /// in markup inside the attribute as well. Each of those is a different
+    /// string and the set counted them as different releases.
+    /// </para>
+    /// <para>
+    /// On 31 August 2026 that reported TorrentBay as carrying thirty-one
+    /// releases where its page held fourteen, and LimeTorrents forty-eight
+    /// where it held seventeen — so the two sources whose readers were reading
+    /// every row on the page were both flagged as broken, and the search went
+    /// looking for a fault in the readers that was never there.
+    /// </para>
+    /// </remarks>
+    private static string Plain(string name)
+    {
+        StringBuilder plain = new(name.Length);
+        bool inside = false;
+        bool spaced = true;
+
+        foreach (char letter in System.Net.WebUtility.HtmlDecode(name))
+        {
+            if (letter == '<')
+            {
+                inside = true;
+
+                continue;
+            }
+
+            if (letter == '>')
+            {
+                inside = false;
+
+                continue;
+            }
+
+            if (inside)
+            {
+                continue;
+            }
+
+            // The separators a release name is written with are the same name:
+            // "South.Park.S15E12" and "South Park S15E12" are one release, and
+            // one page prints both.
+            if (letter is '.' or '_' or '-' or ' ' or '\t')
+            {
+                if (!spaced)
+                {
+                    plain.Append(' ');
+                    spaced = true;
+                }
+
+                continue;
+            }
+
+            plain.Append(char.ToLowerInvariant(letter));
+            spaced = false;
+        }
+
+        return plain.ToString().Trim();
     }
 
     /// <summary>The characters a release name is made of.</summary>
