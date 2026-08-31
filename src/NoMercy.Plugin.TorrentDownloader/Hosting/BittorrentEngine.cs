@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
@@ -559,6 +560,8 @@ public sealed class BittorrentEngine(
             try
             {
                 await held.Run.OnceAsync(ct).ConfigureAwait(false);
+
+                Said(held);
             }
             catch (Exception wrong) when (wrong is not OperationCanceledException)
             {
@@ -853,6 +856,86 @@ public sealed class BittorrentEngine(
 
         logger.LogWarning("{Hash} was dropped: {Reason}", held.Run.Torrent?.Name ?? held.Name, held.Error);
         journal.Failed(ActivityStage.Download, held.Name ?? "a magnet", held.Error);
+    }
+
+    /// <summary>Whether any torrent is taking or giving bytes right now.</summary>
+    /// <remarks>
+    /// Read once a second by the page's heartbeat, so it holds the lock for as
+    /// long as it takes to look at a rate and no longer. Asked rather than
+    /// pushed because a torrent's byte count moves continuously and nothing in
+    /// the journal marks it: without this the Downloads page drew the progress
+    /// of the moment it was opened and did not move again until the owner
+    /// refreshed it by hand.
+    /// </remarks>
+    public bool Moving
+    {
+        get
+        {
+            lock (_lock)
+            {
+                foreach (Held held in _torrents.Values)
+                {
+                    RunProgress progress = held.Run.Progress();
+
+                    if (progress.DownloadRateBytesPerSecond > 0 || progress.UploadRateBytesPerSecond > 0)
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Writes down what an announce got back, once per announce.
+    /// </summary>
+    /// <remarks>
+    /// The log said nothing about the swarm at all: a torrent taking ten
+    /// megabytes a second and one sitting at nought wrote the same nothing, so
+    /// on 31 August 2026 the only way to find out why the owner's pack had one
+    /// peer in front of three hundred seeders was to run a second copy of the
+    /// engine beside the server and measure it. One line an announce, naming
+    /// the trackers that would not answer, is what makes that readable instead.
+    /// </remarks>
+    private void Said(Held held)
+    {
+        if (held.Run.SaidAt == held.Logged)
+        {
+            return;
+        }
+
+        held.Logged = held.Run.SaidAt;
+
+        IReadOnlyList<TrackerSaid> said = held.Run.Said;
+
+        if (said.Count == 0)
+        {
+            return;
+        }
+
+        RunProgress progress = held.Run.Progress();
+
+        logger.LogInformation(
+            "{Name}: {Answered} of {Asked} trackers answered with {Addresses} addresses; "
+            + "{Peers} peers connected, {Seeds} of them seeds; the swarm has {SwarmSeeds} seeds and {SwarmPeers} peers.",
+            progress.Name ?? held.Name,
+            said.Count(one => one.Peers is not null),
+            said.Count,
+            said.Sum(one => one.Peers ?? 0),
+            progress.Peers,
+            progress.Seeds,
+            held.Run.SwarmSeeds?.ToString(CultureInfo.InvariantCulture) ?? "an unknown number of",
+            held.Run.SwarmPeers?.ToString(CultureInfo.InvariantCulture) ?? "an unknown number of");
+
+        foreach (TrackerSaid one in said.Where(one => one.Failure is not null))
+        {
+            // Named, because a magnet off a public indexer carries eighteen
+            // trackers and several are years dead — and which ones is the
+            // difference between a swarm nobody reached and one nobody asked.
+            logger.LogInformation("{Tracker} did not answer: {Reason}", one.Tracker, one.Failure);
+        }
     }
 
     /// <summary>
@@ -1197,6 +1280,9 @@ public sealed class BittorrentEngine(
 
         /// <summary>Whether that reason is about the release rather than the moment.</summary>
         public bool ErrorIsTheRelease { get; set; }
+
+        /// <summary>Which announce has already been written down.</summary>
+        public DateTimeOffset Logged { get; set; }
 
         /// <summary>Whether it is stopped because the client is full, not because the owner stopped it.</summary>
         public bool Queued { get; set; }

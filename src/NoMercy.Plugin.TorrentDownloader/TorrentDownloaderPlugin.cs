@@ -31,6 +31,24 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private LiveSnapshot? _live;
     private Chain? _chain;
     private BittorrentEngine? _engine;
+
+    /// <summary>Tells the open pages that a transfer has moved.</summary>
+    /// <remarks>
+    /// <para>
+    /// <see cref="Moved"/> was called from two places — a journal entry and a
+    /// cycle starting or stopping — and a download in flight is neither. So the
+    /// Downloads page drew the figures of the moment it was opened and then sat
+    /// there: the owner watched 41.2% of 36.1 GB while ten megabytes a second
+    /// were arriving, and only a refresh by hand moved it.
+    /// </para>
+    /// <para>
+    /// Only while something is really transferring, so a plugin with nothing to
+    /// say still says nothing — and <see cref="LiveSnapshot.MinimumInterval"/>
+    /// is the floor either way, so this cannot push oftener than a page can be
+    /// drawn.
+    /// </para>
+    /// </remarks>
+    private ITimer? _heartbeat;
     private HttpClient? _trackerHttp;
     private Transfers? _transfers;
     private int _settled;
@@ -1031,6 +1049,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                         TimeProvider.System));
 
                 _engine.Start();
+
+                _heartbeat = TimeProvider.System.CreateTimer(
+                    _ =>
+                    {
+                        if (_engine is { Moving: true })
+                        {
+                            Moved();
+                        }
+                    },
+                    null,
+                    LiveSnapshot.MinimumInterval,
+                    LiveSnapshot.MinimumInterval);
             }
 
             return _engine;
@@ -1288,6 +1318,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         _disposed = true;
         _lifetime.Cancel();
+
+        // Before the engine, which it reads on every tick.
+        _heartbeat?.Dispose();
 
         // Before the chain, because the client holds the listening sockets and
         // the port mapping: a plugin the server believes is gone must not still

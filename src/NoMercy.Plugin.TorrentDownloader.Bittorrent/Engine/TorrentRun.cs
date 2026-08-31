@@ -29,6 +29,12 @@ public interface IPeerDialler
         CancellationToken ct);
 }
 
+/// <summary>How one tracker answered an announce.</summary>
+/// <param name="Tracker">Its address.</param>
+/// <param name="Peers">How many addresses it handed over, or null if it did not answer.</param>
+/// <param name="Failure">Why it did not, or null.</param>
+public sealed record TrackerSaid(string Tracker, int? Peers, string? Failure);
+
 /// <summary>
 /// Where one torrent stands, from the driver's side.
 /// </summary>
@@ -223,6 +229,18 @@ public sealed class TorrentRun : IDisposable
     /// The largest any tracker gave, because a tracker knows only its own
     /// members and the swarm is at least as big as the best-informed one says.
     /// </remarks>
+    /// <summary>What the last announce got back, one line per tracker.</summary>
+    /// <remarks>
+    /// Kept because nothing else could say it. A torrent downloading at ten
+    /// megabytes a second wrote no line at all, and one sitting at nought wrote
+    /// the same nothing — so which trackers answered, how many addresses came
+    /// back and which of them were dead was knowable only by running a probe
+    /// beside the plugin. That is what an owner should be able to read.
+    /// </remarks>
+    private IReadOnlyList<TrackerSaid> _said = [];
+
+    private DateTimeOffset _saidAt;
+
     private int? _swarmSeeds;
 
     private int? _swarmPeers;
@@ -279,6 +297,30 @@ public sealed class TorrentRun : IDisposable
     }
 
     /// <summary>What the trackers say the swarm holds, or null before one answered.</summary>
+    /// <summary>How each tracker answered the last announce.</summary>
+    public IReadOnlyList<TrackerSaid> Said
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _said;
+            }
+        }
+    }
+
+    /// <summary>When that announce was, so a caller can say a line once.</summary>
+    public DateTimeOffset SaidAt
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _saidAt;
+            }
+        }
+    }
+
     public int? SwarmSeeds
     {
         get
@@ -548,6 +590,13 @@ public sealed class TorrentRun : IDisposable
                 .ConfigureAwait(false);
 
             Told(answers);
+
+            _said = [.. answers.Select(one => new TrackerSaid(
+                one.Tracker,
+                one.Response?.Peers.Count,
+                one.Failure))];
+
+            _saidAt = _time.GetUtcNow();
 
             Remember(answers
                 .Where(one => one.Response is not null)
