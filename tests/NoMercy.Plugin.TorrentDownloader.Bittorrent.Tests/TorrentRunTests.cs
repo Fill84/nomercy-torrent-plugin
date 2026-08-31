@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.Net;
 using Microsoft.Extensions.Time.Testing;
 using Xunit;
 
@@ -234,6 +235,60 @@ public class TorrentRunTests : IDisposable
         Assert.True(
             first == asked && await asked,
             "the peer that did not supply the metadata was never asked for anything");
+    }
+
+    /// <remarks>
+    /// <para>
+    /// Every address gets a turn. A pass dials at most fifty, and the book is
+    /// walked in the order the addresses arrived — so with more than fifty
+    /// known, the same first fifty were offered on every pass and the rest were
+    /// never reached at all.
+    /// </para>
+    /// <para>
+    /// That is not a corner: a tracker hands out its addresses in whatever
+    /// order it likes and most of them are stale, which this client's own
+    /// comments say twice. Fifty dead ones at the front is a torrent that
+    /// redials them for the rest of its life and never tries the ones that
+    /// would have answered — the very fault the address book was added to end.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnAddressBehindFiftyOthersIsStillDialledEventually()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 31, 21, 0, 0, TimeSpan.Zero));
+
+        AnsweringTrackers trackers = new();
+        RecordingDialler dialler = new();
+
+        using TorrentRun run = Run(trackers, dialler, time: clock);
+
+        // Sixty addresses this run has heard of, which is what a peer exchange
+        // in any real swarm hands over within a minute.
+        PeerAddress[] swarm =
+        [
+            .. Enumerable.Range(1, 60).Select(one => new PeerAddress(IPAddress.Parse($"192.0.2.{one}"), 51413)),
+        ];
+
+        run.Met(swarm);
+
+        // The first pass takes as many as it has room for, and no more.
+        while (dialler.Dialled.Count < TorrentRun.PeersWanted && !stopping.IsCancellationRequested)
+        {
+            await Task.Delay(20, stopping.Token);
+        }
+
+        Assert.Equal(TorrentRun.PeersWanted, dialler.Dialled.Count);
+
+        // Past the redial floor, so everything known is offerable again.
+        clock.Advance(TorrentRun.RedialAfter + TimeSpan.FromSeconds(1));
+
+        await run.OnceAsync(stopping.Token);
+
+        // The ten that were behind the first fifty. Without them this run would
+        // dial the same fifty until it was stopped.
+        Assert.Contains(dialler.Dialled, one => one.Address.ToString() == "192.0.2.60");
     }
 
     /// <remarks>

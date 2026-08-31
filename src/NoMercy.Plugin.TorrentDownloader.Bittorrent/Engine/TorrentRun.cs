@@ -568,7 +568,21 @@ public sealed class TorrentRun : IDisposable
     {
         lock (_lock)
         {
-            return [.. _known.Values];
+            // Least recently tried first, and never tried before any of them.
+            // A pass dials at most PeersWanted, so walked in the order they
+            // arrived the same first fifty were offered every time and the rest
+            // were never reached: a tracker hands its addresses over in
+            // whatever order it likes and most of them are stale, so fifty dead
+            // ones at the front is a torrent that redials them for the rest of
+            // its life and never tries the ones that would have answered.
+            return
+            [
+                .. _known
+                    .OrderBy(one => _tried.TryGetValue(one.Key, out DateTimeOffset when)
+                        ? when
+                        : DateTimeOffset.MinValue)
+                    .Select(one => one.Value),
+            ];
         }
     }
 
