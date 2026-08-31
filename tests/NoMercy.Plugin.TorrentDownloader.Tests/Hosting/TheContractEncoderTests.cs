@@ -40,7 +40,7 @@ public class TheContractEncoderTests
         FakeProvider server = new();
 
         EncodeAsk ask = await Gateway(encoder, server)
-            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 6), Show(), CancellationToken.None);
+            .DispatchAsync(@"D:\intake\Silo.mkv", Row(6, ItsOwnId), Show(), CancellationToken.None);
 
         Assert.True(ask.Taken);
 
@@ -78,7 +78,7 @@ public class TheContractEncoderTests
         FakeProvider server = new();
 
         EncodeAsk ask = await Gateway(encoder, server)
-            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 6), Show(), CancellationToken.None);
+            .DispatchAsync(@"D:\intake\Silo.mkv", Row(6, ItsOwnId), Show(), CancellationToken.None);
 
         Assert.False(ask.Taken);
         Assert.Contains(
@@ -103,7 +103,7 @@ public class TheContractEncoderTests
         // Season three, episode nine: a real episode of the show, and one this
         // library answer carries no id for.
         EncodeAsk ask = await Gateway(encoder, server)
-            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 9), Show(), CancellationToken.None);
+            .DispatchAsync(@"D:\intake\Silo.mkv", Row(9, 0), Show(), CancellationToken.None);
 
         Assert.False(ask.Taken);
         Assert.Empty(encoder.Asked);
@@ -148,7 +148,7 @@ public class TheContractEncoderTests
 
         EncodeAsk ask = await none.DispatchAsync(
             @"D:\intake\Silo.mkv",
-            new(Silo, 3, 6),
+            Row(6, ItsOwnId),
             Show(),
             CancellationToken.None);
 
@@ -170,16 +170,13 @@ public class TheContractEncoderTests
 
     private static ContractEncodeGateway Gateway(IPluginEncoder encoder, FakeProvider server)
     {
-        FakeLibraryQuery query = new FakeLibraryQuery()
-            .Library(TelevisionLibrary, "Television", "tv")
-            .Show(Silo, "Silo", TelevisionLibrary, year: 2023)
-            .Episode(Silo, 3, 6, id: ItsOwnId)
+        return new(encoder, server.Journal, server.Log);
+    }
 
-            // Named by the server and carrying no id of its own, which is what
-            // an older answer looks like.
-            .Episode(Silo, 3, 9, id: 0);
-
-        return new(encoder, new HostLibrary(query), server.Journal, server.Log);
+    /// <summary>An episode as the library answers it: the numbers and the server's id.</summary>
+    private static Episode Row(int number, int serverId)
+    {
+        return new(new(Silo, 3, number), "An episode", null, false) { ServerId = serverId };
     }
 
     private static Show Show()

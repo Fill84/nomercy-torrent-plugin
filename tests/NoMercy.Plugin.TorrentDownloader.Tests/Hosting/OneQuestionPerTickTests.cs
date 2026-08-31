@@ -70,6 +70,12 @@ public class OneQuestionPerTickTests : IDisposable
         Assert.Equal(1, query.Shows);
         Assert.Equal(1, query.Libraries);
 
+        // And the episodes of that show once, however many of them are staged.
+        // The encode names the episode by the server's own id, and the gateway
+        // fetched that for itself: four dispatches were four identical
+        // questions, and a season pack of nine would be nine.
+        Assert.Equal(1, query.Episodes);
+
     }
 
     /// <remarks>

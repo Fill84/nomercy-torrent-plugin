@@ -39,13 +39,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </remarks>
 public sealed class ContractEncodeGateway(
     IPluginEncoder encoder,
-    ILibrary library,
     IActivityJournal journal,
     ILogger logger) : IEncodeGateway
 {
     public async Task<EncodeAsk> DispatchAsync(
         string stagedFile,
-        EpisodeKey episode,
+        Episode episode,
         Show show,
         CancellationToken ct)
     {
@@ -53,14 +52,6 @@ public sealed class ContractEncodeGateway(
 
         try
         {
-            Episode? row = (await library.GetEpisodesAsync(show.Id, ct).ConfigureAwait(false))
-                .FirstOrDefault(one => one.Season == episode.Season && one.Number == episode.Number);
-
-            if (row is null)
-            {
-                return Refused(name, $"the server lists no {episode} for {show.Title}");
-            }
-
             // Nought is what the field reads as on a server too old to set it,
             // because the contract added it as a member so that plugins built
             // against the older shape still construct. Asked for with no id at
@@ -69,16 +60,16 @@ public sealed class ContractEncodeGateway(
             // the queue counter moves, the library stays empty, and from
             // outside it looks like an encode still running. That is the guess
             // #35 removed, so it is refused out loud instead of made quietly.
-            if (row.ServerId == 0)
+            if (episode.ServerId == 0)
             {
-                return Refused(name, $"the server named no id for {episode}, and an encode asked for without one is registered against nothing");
+                return Refused(name, $"the server named no id for {episode.Key}, and an encode asked for without one is registered against nothing");
             }
 
             PluginEncodeResult answer = await encoder
                 .EncodeAsync(
                     stagedFile,
                     show.LibraryId,
-                    row.ServerId.ToString(CultureInfo.InvariantCulture),
+                    episode.ServerId.ToString(CultureInfo.InvariantCulture),
 
                     // Null keeps the library's own presets, which is not this
                     // plugin's decision to make.

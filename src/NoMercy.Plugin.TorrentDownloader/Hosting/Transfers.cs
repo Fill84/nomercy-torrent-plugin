@@ -386,7 +386,25 @@ public sealed class Transfers(
             return;
         }
 
-        EncodeAsk asked = await dispatch.DispatchAsync(staged, episode, show, ct);
+        // The row the tick already has, rather than one the gateway fetches for
+        // itself. Asked in there it was one question per episode, so a season
+        // pack asked the server the same one nine times — against the rule this
+        // whole tick is built on.
+        Episode? row = (await thisTick.GetEpisodesAsync(episode.ShowId, ct))
+            .FirstOrDefault(one => one.Season == episode.Season && one.Number == episode.Number);
+
+        if (row is null)
+        {
+            logger.LogWarning(
+                "{File} was staged and the server lists no {Episode} for {Show}, so no encode was asked for.",
+                staged,
+                episode,
+                show.Title);
+
+            return;
+        }
+
+        EncodeAsk asked = await dispatch.DispatchAsync(staged, row, show, ct);
 
         if (!asked.Taken)
         {

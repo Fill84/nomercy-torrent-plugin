@@ -52,11 +52,15 @@ public class TheEncodeIsAskedThroughAPortTests : IDisposable
 
         await Tick(grabs, encoder);
 
-        (string StagedFile, EpisodeKey Episode, Show Show) asked =
+        (string StagedFile, Episode Episode, Show Show) asked =
             Assert.Single(encoder.Asked);
 
         Assert.Equal(Staged, asked.StagedFile);
-        Assert.Equal(new EpisodeKey(Silo, 3, 6), asked.Episode);
+        Assert.Equal(new EpisodeKey(Silo, 3, 6), asked.Episode.Key);
+
+        // With the server's own id on it, taken from the answer this tick
+        // already had rather than fetched again per episode.
+        Assert.NotEqual(0, asked.Episode.ServerId);
 
         // The show's own library, which is what puts an anime episode in the
         // anime library and a television one in the tv library.

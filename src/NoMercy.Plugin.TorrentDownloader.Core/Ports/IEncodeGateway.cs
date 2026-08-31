@@ -76,10 +76,15 @@ public interface IEncodeGateway
     /// </remarks>
     /// <param name="stagedFile">The video, waiting in the intake folder.</param>
     /// <param name="episode">
-    /// Which episode it is. The plugin chose the show, the season and the
-    /// number, so it knows this and the server does not have to work it out
+    /// Which episode it is, as the library answered: the numbers, and the
+    /// server's own id for the row. The plugin chose the show, the season and
+    /// the number, so it knows this and the server does not have to work it out
     /// from the file's name — which is what it did while every episode the
     /// owner staged on 24 August 2026 went nowhere.
+    ///
+    /// The row rather than the key, so the id comes from the answer the tick
+    /// already has. Looked up in here it was one question per episode, and a
+    /// season pack asked the same one nine times.
     /// </param>
     /// <param name="show">
     /// The show it belongs to, and with it the library the episode goes back
@@ -90,7 +95,7 @@ public interface IEncodeGateway
     /// <param name="ct">Cancellation.</param>
     Task<EncodeAsk> DispatchAsync(
         string stagedFile,
-        EpisodeKey episode,
+        Episode episode,
         Show show,
         CancellationToken ct);
 }

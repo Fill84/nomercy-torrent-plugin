@@ -41,7 +41,7 @@ public static class EncodeGateway
     {
         if (services.GetService(typeof(IPluginEncoder)) is IPluginEncoder encoder)
         {
-            return new ContractEncodeGateway(encoder, library, journal, logger);
+            return new ContractEncodeGateway(encoder, journal, logger);
         }
 
         // Said at the level the owner reads, because nothing else they can see
@@ -78,7 +78,7 @@ public static class EncodeGateway
     {
         public Task<EncodeAsk> DispatchAsync(
             string stagedFile,
-            EpisodeKey episode,
+            Episode episode,
             Show show,
             CancellationToken ct)
         {
