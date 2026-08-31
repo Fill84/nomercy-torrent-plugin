@@ -156,6 +156,18 @@ public sealed class TorrentRun : IDisposable
     private DateTimeOffset _announced = DateTimeOffset.MinValue;
 
     private readonly List<PeerConnection> _peers = [];
+
+    /// <summary>The conversations still going.</summary>
+    /// <remarks>
+    /// Pruned as it is added to, because nothing else ever takes anything out
+    /// of it and nothing reads it. Left to grow it kept a task for every peer
+    /// this run ever spoke to: fifty dials every half minute on a torrent that
+    /// runs for a week is a list nobody looks at, holding a hundred thousand
+    /// completed tasks.
+    ///
+    /// It is kept at all so a conversation is rooted while it runs, and so
+    /// anything that wants to wait for them has something to wait on.
+    /// </remarks>
     private readonly List<Task> _conversations = [];
 
     /// <summary>Completes the first time the metadata is whole and hashes right.</summary>
@@ -663,6 +675,19 @@ public sealed class TorrentRun : IDisposable
         return true;
     }
 
+    /// <summary>
+    /// Keeps a conversation, and forgets the ones that are over.
+    /// </summary>
+    /// <remarks>
+    /// Called while <see cref="_lock"/> is held. A conversation ends in its own
+    /// finally and tells nobody, so this is the only place that can notice.
+    /// </remarks>
+    private void Talking(Task conversation)
+    {
+        _conversations.RemoveAll(one => one.IsCompleted);
+        _conversations.Add(conversation);
+    }
+
     /// <summary>Dials a set of addresses and takes on whoever answers.</summary>
     /// <remarks>
     /// The dials are awaited and the conversations are not. A dial has an end -
@@ -692,7 +717,8 @@ public sealed class TorrentRun : IDisposable
             {
                 _peers.Add(peer);
                 _talkingTo[peer] = address.ToString();
-                _conversations.Add(ConverseAsync(peer, ct));
+
+                Talking(ConverseAsync(peer, ct));
             }
         }
     }
@@ -717,7 +743,8 @@ public sealed class TorrentRun : IDisposable
             }
 
             _peers.Add(peer);
-            _conversations.Add(ConverseAsync(peer, ct));
+
+            Talking(ConverseAsync(peer, ct));
         }
     }
 
