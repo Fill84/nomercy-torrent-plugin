@@ -46,6 +46,17 @@ public sealed class FakeLibrary : ILibrary
         return this;
     }
 
+    /// <summary>The libraries the shows in this fake belong to.</summary>
+    public Task<IReadOnlyList<Library>> GetLibrariesAsync(CancellationToken ct)
+    {
+        return Task.FromResult<IReadOnlyList<Library>>(
+        [
+            .. _shows
+                .Select(show => new Library(show.LibraryId, show.Kind.ToString(), show.Kind))
+                .DistinctBy(one => one.Id),
+        ]);
+    }
+
     public Task<IReadOnlyList<Show>> GetShowsAsync(CancellationToken ct)
     {
         return Task.FromResult<IReadOnlyList<Show>>([.. _shows]);

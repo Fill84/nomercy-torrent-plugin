@@ -35,6 +35,13 @@ public sealed class LibraryThisTick(ILibrary library) : ILibrary
 
     private IReadOnlyList<Show>? _shows;
 
+    private IReadOnlyList<Library>? _libraries;
+
+    public async Task<IReadOnlyList<Library>> GetLibrariesAsync(CancellationToken ct)
+    {
+        return _libraries ??= await library.GetLibrariesAsync(ct);
+    }
+
     public async Task<IReadOnlyList<Show>> GetShowsAsync(CancellationToken ct)
     {
         return _shows ??= await library.GetShowsAsync(ct);

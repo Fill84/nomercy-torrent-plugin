@@ -263,6 +263,17 @@ public sealed class Transfers(
 
                 if (covers.Count == 0)
                 {
+                    // Nothing the server has heard of. The owner asked for this
+                    // torrent by name, so it is handed over for the server to
+                    // identify — the same thing the dashboard's Add content
+                    // does with a file a person points it at, and the only
+                    // thing left once there is no episode row to point at.
+                    if (await IdentifiedAsync(finished, files, incompleteFolder, thisTick, ct))
+                    {
+                        return null;
+                    }
+
+
                     // Written down, not only said. Nothing in it names an
                     // episode of a show the owner has — the usual cause being a
                     // pack pasted in for a show not added to a library yet —
@@ -785,6 +796,86 @@ public sealed class Transfers(
     /// refresh sees the file and the episode stops being missing on its own.
     /// </para>
     /// </remarks>
+    /// <summary>
+    /// Hands a torrent's videos to a library for the server to identify.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Only ever for a torrent added by hand: the search chain records the
+    /// episodes it chose, so a finished grab covering none of them is one the
+    /// owner pasted in. There is no episode row to name, so the server is asked
+    /// to work the file out from its name — a guess, and the owner's own, since
+    /// they asked for this torrent.
+    /// </para>
+    /// <para>
+    /// <strong>From where they are, not from the intake folder.</strong> Staging
+    /// them first would put nine files in a folder whose sweep deletes whatever
+    /// no grab is waiting on, and a pack's files are named per episode while its
+    /// grab is named for the season: they would not match, and the next tick
+    /// would delete the download. The encoder takes a path and does not care
+    /// which folder it is in.
+    /// </para>
+    /// <para>
+    /// False where there is nowhere to put it, which is the case the caller then
+    /// reports: no library of the kind the files read as.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> IdentifiedAsync(
+        StoredDownload finished,
+        IReadOnlyList<TorrentFile> files,
+        string incompleteFolder,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        LibraryKind kind = Staging.Reads(files);
+
+        Library? into = (await thisTick.GetLibrariesAsync(ct)).FirstOrDefault(one => one.Kind == kind);
+
+        if (into is null)
+        {
+            return false;
+        }
+
+        bool any = false;
+
+        foreach (Staged file in Staging.Wanted(files).Select(one => new Staged(one.Path, new(0, 0, 0), one.Length)))
+        {
+            string path = Path.Combine(
+                incompleteFolder,
+                file.Path.Replace('/', Path.DirectorySeparatorChar));
+
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            EncodeAsk asked = await dispatch.IdentifyAsync(path, into, ct);
+
+            if (!asked.Taken)
+            {
+                continue;
+            }
+
+            any = true;
+
+            await grabs.DispatchedAsync(
+                new(0, 0, 0),
+                into.Name,
+                Path.GetFileName(path),
+                into.Id,
+                (time ?? TimeProvider.System).GetUtcNow(),
+                ct);
+        }
+
+        if (any)
+        {
+            await grabs.StateAsync(finished.InfoHash, GrabState.Dispatched, ct);
+            _unplaceable.Remove(finished.InfoHash);
+        }
+
+        return any;
+    }
+
     /// <summary>Torrents already reported as naming no show the owner has.</summary>
     /// <remarks>
     /// Per run, like the encode clock beside it. A restart says it once more,

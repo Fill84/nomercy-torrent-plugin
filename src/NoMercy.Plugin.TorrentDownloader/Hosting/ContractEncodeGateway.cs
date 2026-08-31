@@ -99,6 +99,45 @@ public sealed class ContractEncodeGateway(
         }
     }
 
+    public async Task<EncodeAsk> IdentifyAsync(string stagedFile, Library library, CancellationToken ct)
+    {
+        string name = Path.GetFileName(stagedFile);
+
+        try
+        {
+            PluginEncodeResult answer = await encoder
+                .EncodeAsync(
+                    stagedFile,
+                    library.Id,
+
+                    // No id, which tells the server to identify the file from
+                    // its name. Everywhere else in this plugin that is the
+                    // fault to avoid; here it is the only thing there is, and
+                    // it is what Add content does with a file a person points
+                    // at.
+                    mediaId: null,
+                    presetId: null,
+                    ct)
+                .ConfigureAwait(false);
+
+            if (!answer.Accepted)
+            {
+                return Refused(name, answer.Refusal ?? "the server refused it and said nothing about why");
+            }
+
+            journal.Finished(
+                ActivityStage.Download,
+                name,
+                $"handed to {library.Name} for the server to identify");
+
+            return new(true, answer.JobId);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            return Refused(name, wrong.Message);
+        }
+    }
+
     private EncodeAsk Refused(string name, string reason)
     {
         logger.LogWarning("No encode was dispatched for {File}: {Reason}.", name, reason);

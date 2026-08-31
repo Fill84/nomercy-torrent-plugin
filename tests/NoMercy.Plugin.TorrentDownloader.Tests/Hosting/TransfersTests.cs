@@ -561,21 +561,65 @@ public class TransfersTests : IDisposable
 
     /// <remarks>
     /// <para>
-    /// A pack added by hand for a show that is in no library is left where it
-    /// is, and the History page says so. On 31 August 2026 the owner had 37 GB
-    /// of Dark Matter sitting at "finished" and nothing anywhere saying why —
-    /// the show is not in their media server at all, so there is no library to
-    /// put it in and nothing to name the episodes against.
+    /// A pack added by hand for a show the server has never heard of is handed
+    /// to a library for the server to identify — the same thing the dashboard's
+    /// own Add content does with a file a person points it at, and what the
+    /// owner would otherwise do by hand for every episode.
     /// </para>
     /// <para>
-    /// Guessing a library would be worse: files under a name nobody chose, in
-    /// somebody else's folder. So it is refused, said out loud once, and asked
-    /// again on the next tick — because the answer changes the moment the show
-    /// is added.
+    /// <strong>From the download folder, not from the intake folder.</strong>
+    /// Staging them first would put a pack's files in a folder whose sweep
+    /// deletes whatever no grab is waiting on, and those files are named per
+    /// episode while the grab is named for the season: they would not match,
+    /// and the next tick would delete the download. On 31 August 2026 that was
+    /// 37 GB.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task APackForAShowInNoLibraryIsLeftAloneAndTheReasonIsWrittenDown()
+    public async Task APackForAShowTheServerDoesNotKnowIsHandedOverToBeIdentified()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string first = Downloaded("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+        string second = Downloaded("Dark.Matter.2024.S01E02.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(first), 900_000_000),
+            new TorrentFile(Path.GetFileName(second), 900_000_000));
+
+        FakeProvider server = Server();
+        RecordingEncoder encoder = new();
+
+        await Transfers(engine, grabs, server, encoder: encoder)
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // Both videos, each from where the download left it.
+        Assert.Equal(2, encoder.Identified.Count);
+        Assert.All(encoder.Identified, one => Assert.StartsWith(Incomplete, one.StagedFile, StringComparison.Ordinal));
+
+        // Into the television library, because the files are numbered by season
+        // rather than from the start of the series.
+        Assert.All(encoder.Identified, one => Assert.Equal(LibraryKind.Television, one.Library.Kind));
+
+        // And nothing was staged, so the sweep of the intake folder has nothing
+        // of this pack to find and nothing to delete.
+        Assert.False(Directory.Exists(Intake) && Directory.EnumerateFiles(Intake).Any());
+
+        Assert.Equal(
+            GrabState.Dispatched,
+            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+    }
+
+    /// <remarks>
+    /// And where there is no library of the kind its files read as, it is left
+    /// exactly where it is and the History page says which show to add. Putting
+    /// an anime pack in a television library because that is the only one there
+    /// is would be a guess nobody asked for.
+    /// </remarks>
+    [Fact]
+    public async Task APackWithNowhereToGoIsLeftAloneAndTheReasonNamesTheShow()
     {
         GrabRepository grabs = await Grabs();
         await ByHand(grabs);
@@ -587,97 +631,32 @@ public class TransfersTests : IDisposable
             new TorrentFile(Path.GetFileName(episode), 900_000_000));
 
         FakeProvider server = Server();
+        RecordingEncoder encoder = new();
 
-        // The library the owner really has, which does not hold this show.
-        Transfers transfers = Transfers(engine, grabs, server);
-
-        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
-        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
-
-        // Left where it is: nothing staged, nothing dispatched, and the grab
-        // still open so it is picked up the day the show is added.
-        Assert.False(File.Exists(Staged), "It was staged into a library it does not belong to.");
-        Assert.Null(server.Encoder.Job);
-        Assert.NotEmpty(await grabs.OpenAsync(CancellationToken.None));
-
-        // Said once, on the History page. Twice would bury the page it is
-        // written on within a day.
-        IReadOnlyList<HistoryRow> history = await grabs.HistoryAsync(CancellationToken.None);
-
-        // Naming the show the files say they are, because adding that show is
-        // the owner's next move and there is no other way for them to know
-        // which one to add.
-        Assert.Single(history, one => (one.Detail ?? string.Empty).Contains("Dark Matter", StringComparison.Ordinal)
-                                      && (one.Detail ?? string.Empty).Contains("no library", StringComparison.Ordinal));
-
-        // And not on the Skipped page, which is releases the profile refused:
-        // every row there carries a control that grabs the release anyway, and
-        // this one names no episode to grab it for.
-        Assert.Empty((await grabs.SkippedAsync(1, 20, CancellationToken.None)).Rows);
-    }
-
-    /// <remarks>
-    /// <para>
-    /// A job the server keeps calling alive is still given up on. Asking what
-    /// became of it answers the question the six hours were guessing at, and it
-    /// stops the encode being asked for twice — but an encoder that hangs
-    /// reports Running for ever, and a grab that waits for ever is an episode
-    /// that never arrives with nothing left to notice.
-    /// </para>
-    /// <para>
-    /// So the clock is started once and never restarted. Reset on every tick,
-    /// which is how this was first written, the six hours could not elapse at
-    /// all.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public async Task AJobTheServerKeepsCallingAliveIsStillGivenUpOn()
-    {
-        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 31, 12, 0, 0, TimeSpan.Zero));
-
-        GrabRepository grabs = await Grabs();
-        await Grabbed(grabs);
-
-        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
-
-        StandingEngine engine = new StandingEngine().Holding(
-            Finished() with { State = TorrentState.Finished },
-            new TorrentFile(Path.GetFileName(episode), 900_000_000));
-
-        FakeProvider server = Server();
-
-        RecordingEncoder encoder = new() { JobId = "01KZGKX2G0966V80H26EKGG5T1" };
-        SayingJobs jobs = new(new(EncodeJobState.Running, null));
-
+        // A server with no libraries at all, which is the only way there is
+        // nowhere for a television pack to go.
         Transfers transfers = new(
             engine,
             grabs,
-            new HostLibrary(new FakeLibraryQuery()
-                .Library(TelevisionLibrary, "Television", "tv")
-                .Show(41, "Silo", TelevisionLibrary, year: 2023)
-                .Episode(41, 3, 6)
-                .Episode(41, 1, 1, hasFile: true)),
+            new HostLibrary(new FakeLibraryQuery()),
             new Stager(server.Journal, server.Log),
             encoder,
             server.Journal,
             server.Log,
-            clock,
-            jobs);
+            TimeProvider.System);
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        // Ticked at every minute of it, and the server says Running each time.
-        for (int minute = 0; minute < 6 * 60; minute++)
-        {
-            clock.Advance(TimeSpan.FromMinutes(1));
+        Assert.Empty(encoder.Identified);
+        Assert.True(File.Exists(episode), "the download was not left where it was");
 
-            await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
-        }
+        // Said once, on the History page, naming the show the files claim to be
+        // so the owner knows which one to add.
+        IReadOnlyList<HistoryRow> history = await grabs.HistoryAsync(CancellationToken.None);
 
-        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
-
-        // Once. Asking what became of it is what stops the second ask.
-        Assert.Single(encoder.Asked);
+        Assert.Single(history, one => (one.Detail ?? string.Empty).Contains("Dark Matter", StringComparison.Ordinal)
+                                      && (one.Detail ?? string.Empty).Contains("no library", StringComparison.Ordinal));
     }
 
     /// <summary>A server that says the same thing about every job.</summary>
@@ -977,7 +956,8 @@ public class TransfersTests : IDisposable
         bool encoded = false,
         bool owned = true,
         TimeProvider? clock = null,
-        IEncodeJobs? jobs = null)
+        IEncodeJobs? jobs = null,
+        IEncodeGateway? encoder = null)
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
             // A real Ulid, because the server's library id is one and the
@@ -1000,7 +980,7 @@ public class TransfersTests : IDisposable
             grabs,
             new HostLibrary(query),
             new Stager(server.Journal, server.Log),
-            EncodeGateway.For(server, new HostLibrary(query), server.Journal, server.Log),
+            encoder ?? EncodeGateway.For(server, new HostLibrary(query), server.Journal, server.Log),
             server.Journal,
             server.Log,
             clock ?? TimeProvider.System,

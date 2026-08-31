@@ -76,14 +76,23 @@ public static class EncodeGateway
     /// </remarks>
     private sealed class NoEncoder(IActivityJournal journal, ILogger logger) : IEncodeGateway
     {
+        public Task<EncodeAsk> IdentifyAsync(string stagedFile, Library library, CancellationToken ct)
+        {
+            return Refuse(Path.GetFileName(stagedFile));
+        }
+
         public Task<EncodeAsk> DispatchAsync(
             string stagedFile,
             Episode episode,
             Show show,
             CancellationToken ct)
         {
-            string name = Path.GetFileName(stagedFile);
+            return Refuse(Path.GetFileName(stagedFile));
+        }
 
+        /// <summary>The one thing it can do, said the same way every time.</summary>
+        private Task<EncodeAsk> Refuse(string name)
+        {
             const string Reason =
                 "this server does not offer IPluginEncoder, so no encode can be asked for; "
                 + "it needs plugin contract 0.1.479 or newer";

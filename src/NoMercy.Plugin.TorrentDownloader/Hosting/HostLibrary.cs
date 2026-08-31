@@ -16,6 +16,23 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </remarks>
 public sealed class HostLibrary(IPluginLibraryQuery query) : ILibrary
 {
+    public async Task<IReadOnlyList<Library>> GetLibrariesAsync(CancellationToken ct)
+    {
+        List<Library> libraries = [];
+
+        foreach (PluginLibrary library in await query.GetLibrariesAsync(ct))
+        {
+            // The kinds this plugin is for and no others. A music library is a
+            // library and is not somewhere an episode goes.
+            if (LibraryKinds.TryParse(library.Type, out LibraryKind kind))
+            {
+                libraries.Add(new(library.Id, library.Title, kind));
+            }
+        }
+
+        return libraries;
+    }
+
     public async Task<IReadOnlyList<Show>> GetShowsAsync(CancellationToken ct)
     {
         List<Show> shows = [];

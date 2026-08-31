@@ -1,5 +1,11 @@
 namespace NoMercy.Plugin.TorrentDownloader.Core.Domain;
 
+/// <summary>One of the owner's libraries, as the plugin needs it.</summary>
+/// <param name="Id">The server's own id, which an encode is asked for by.</param>
+/// <param name="Name">What the owner calls it.</param>
+/// <param name="Kind">Television or anime, which the server decided when it was made.</param>
+public sealed record Library(string Id, string Name, LibraryKind Kind);
+
 /// <summary>
 /// One show in a television or anime library, in scope for downloading.
 /// </summary>

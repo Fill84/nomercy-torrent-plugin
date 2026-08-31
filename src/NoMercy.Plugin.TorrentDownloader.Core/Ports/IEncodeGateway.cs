@@ -98,4 +98,28 @@ public interface IEncodeGateway
         Episode episode,
         Show show,
         CancellationToken ct);
+
+    /// <summary>
+    /// Hands a staged file to a library and lets the server work out what it
+    /// is.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// For the one case the plugin cannot name an episode for: a torrent the
+    /// owner added by hand whose files are of a show the server has never
+    /// heard of. There is no row to point at, so there is no id to send, and
+    /// the server identifies the file from its name — which is exactly what the
+    /// dashboard's own <em>Add content</em> does with a file a person points it
+    /// at.
+    /// </para>
+    /// <para>
+    /// It is a guess, and it is the owner's guess: they pasted the magnet. The
+    /// search chain never comes here, because there the plugin knows the
+    /// episode and a guess would be the fault media-server #35 was opened for.
+    /// </para>
+    /// </remarks>
+    /// <param name="stagedFile">The video, waiting in the intake folder.</param>
+    /// <param name="library">Which library it goes to.</param>
+    /// <param name="ct">Cancellation.</param>
+    Task<EncodeAsk> IdentifyAsync(string stagedFile, Library library, CancellationToken ct);
 }

@@ -25,6 +25,16 @@ public sealed class RecordingEncoder : IEncodeGateway
     /// <summary>The job it names, or null for a server that cannot name one.</summary>
     public string? JobId { get; set; }
 
+    /// <summary>Files handed over for the server to identify, in order.</summary>
+    public List<(string StagedFile, Library Library)> Identified { get; } = [];
+
+    public Task<EncodeAsk> IdentifyAsync(string stagedFile, Library library, CancellationToken ct)
+    {
+        Identified.Add((stagedFile, library));
+
+        return Task.FromResult(Takes ? new EncodeAsk(true, JobId) : EncodeAsk.No);
+    }
+
     public Task<EncodeAsk> DispatchAsync(
         string stagedFile,
         Episode episode,

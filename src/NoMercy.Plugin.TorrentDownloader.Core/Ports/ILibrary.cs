@@ -33,6 +33,16 @@ public interface ILibrary
     /// </remarks>
     Task<IReadOnlyList<Show>> GetShowsAsync(CancellationToken ct);
 
+    /// <summary>Every library this plugin is for, of both kinds.</summary>
+    /// <remarks>
+    /// The shows are enough for everything the search chain does, because a
+    /// show carries the library it is in. This is for the one case where there
+    /// is no show to ask: a torrent added by hand whose files name a series the
+    /// server has never heard of. Somewhere has to be named for it, and until
+    /// this was here the plugin could not even ask which places exist.
+    /// </remarks>
+    Task<IReadOnlyList<Library>> GetLibrariesAsync(CancellationToken ct);
+
     /// <summary>
     /// Every episode of one show, including the ones with no file — those are
     /// the gaps this plugin exists to fill.

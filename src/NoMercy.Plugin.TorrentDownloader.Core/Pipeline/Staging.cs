@@ -130,6 +130,42 @@ public static class Staging
     /// leaves the owner nowhere: "the files name Dark Matter" is the same fact
     /// with the one thing they need to act on — the name to add.
     /// </remarks>
+    /// <summary>
+    /// Which kind of library a torrent's files read as, for a show nothing
+    /// knows yet.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Anime is numbered from the start of the series and television by season:
+    /// <c>- 137</c> against <c>S02E13</c>. That is the difference this plugin
+    /// already models — <c>ReleaseName</c> reads an absolute number where there
+    /// is one — and it is the only thing a file name says about which of the
+    /// two libraries a show belongs in.
+    /// </para>
+    /// <para>
+    /// It is a guess about a show the server has never heard of, and it is only
+    /// ever made for a torrent the owner added by hand. Everything from the
+    /// search chain has a show, and a show carries its library.
+    /// </para>
+    /// </remarks>
+    public static LibraryKind Reads(IReadOnlyList<TorrentFile> files)
+    {
+        foreach (TorrentFile file in Wanted(files))
+        {
+            ReleaseName name = ReleaseName.Parse(System.IO.Path.GetFileName(file.Path));
+
+            // A season and an episode is television's own shape, and one file
+            // carrying it settles the torrent: a pack numbered by season is not
+            // an anime release whatever else is in the folder.
+            if (name.Season is not null && name.Episode is not null)
+            {
+                return LibraryKind.Television;
+            }
+        }
+
+        return LibraryKind.Anime;
+    }
+
     public static IReadOnlyList<string> Names(IReadOnlyList<TorrentFile> files)
     {
         List<string> named = [];
