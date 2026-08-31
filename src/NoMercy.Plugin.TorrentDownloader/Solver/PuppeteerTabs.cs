@@ -35,8 +35,20 @@ public sealed class PuppeteerTabs : IBrowserTabs
     private readonly ITimer _watching;
 
     private IBrowser? _connected;
+
+    /// <summary>How many tabs are open, and when the last one closed.</summary>
+    /// <remarks>
+    /// Both are written from two places that do not exclude each other — a tab
+    /// being handed out, and a tab being disposed by whoever had it — so both
+    /// are interlocked. Guarded by <c>_connecting</c> in one place and a lock
+    /// in the other, an increment could be lost: the browser would then never
+    /// be idle and never close, or be counted idle with a tab still open and
+    /// closed underneath it.
+    /// </remarks>
     private int _open;
-    private DateTimeOffset? _lastClosed;
+
+    /// <summary>Ticks, so it can be written atomically. Nought means never.</summary>
+    private long _lastClosed;
 
     /// <param name="browser">The browser to open tabs in.</param>
     /// <param name="logger">Where it says what it did.</param>
@@ -86,7 +98,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
 
             _logger.LogDebug("Opening a tab for {Host}.", host);
 
-            _open++;
+            Interlocked.Increment(ref _open);
 
             return new PuppeteerTab(await _connected.NewPageAsync(), Closed);
         }
@@ -104,7 +116,10 @@ public sealed class PuppeteerTabs : IBrowserTabs
     /// </remarks>
     public ValueTask DisposeAsync()
     {
+        // The timer first, so no idle check starts after this. One already
+        // running holds the same guard, and taking it here waits for it.
         _watching.Dispose();
+        _connecting.Wait();
 
         if (_connected is not null)
         {
@@ -116,6 +131,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
             _connected = null;
         }
 
+        _connecting.Release();
         _connecting.Dispose();
 
         return ValueTask.CompletedTask;
@@ -124,11 +140,8 @@ public sealed class PuppeteerTabs : IBrowserTabs
     /// <summary>A tab has been closed by whoever opened it.</summary>
     private void Closed()
     {
-        lock (_watching)
-        {
-            _open--;
-            _lastClosed = _time.GetUtcNow();
-        }
+        Interlocked.Decrement(ref _open);
+        Interlocked.Exchange(ref _lastClosed, _time.GetUtcNow().UtcTicks);
     }
 
     /// <summary>
@@ -143,18 +156,38 @@ public sealed class PuppeteerTabs : IBrowserTabs
     /// </remarks>
     private void CloseIfIdle(TimeSpan idle)
     {
-        lock (_watching)
+        // The same guard a tab is handed out under, and taken only if it is
+        // free this instant. Waiting for it would be waiting to close a browser
+        // somebody is opening a tab on, which is the one moment it must not
+        // close — and a browser disconnected between that check and the page
+        // being made is a solve that fails on a disposed handle.
+        if (!_connecting.Wait(0))
         {
-            if (!IdleBrowser.Due(_open, _lastClosed, _time.GetUtcNow(), idle))
+            return;
+        }
+
+        try
+        {
+            long closed = Interlocked.Read(ref _lastClosed);
+
+            DateTimeOffset? last = closed == 0
+                ? null
+                : new DateTimeOffset(closed, TimeSpan.Zero);
+
+            if (!IdleBrowser.Due(Volatile.Read(ref _open), last, _time.GetUtcNow(), idle))
             {
                 return;
             }
 
-            _lastClosed = null;
+            Interlocked.Exchange(ref _lastClosed, 0);
 
             _connected?.Disconnect();
             _connected?.Dispose();
             _connected = null;
+        }
+        finally
+        {
+            _connecting.Release();
         }
 
         _logger.LogInformation(
