@@ -283,11 +283,8 @@ public sealed class Transfers(
 
                     if (_unplaceable.Add(finished.InfoHash))
                     {
-                        await grabs.RecordSkippedAsync(
-                            new(0, 0, 0),
-                            string.Empty,
+                        await grabs.NotedAsync(
                             finished.ReleaseTitle,
-                            "by hand",
                             reason,
                             (time ?? TimeProvider.System).GetUtcNow(),
                             ct);

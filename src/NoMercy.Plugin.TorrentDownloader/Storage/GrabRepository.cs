@@ -253,6 +253,35 @@ public sealed class GrabRepository(Store database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>Writes one line into the history and touches nothing else.</summary>
+    /// <remarks>
+    /// For something the owner has to be told and the plugin must not act on:
+    /// a torrent added by hand that names no show they have. Failing the grab
+    /// would throw the download away, and the answer changes the day the show
+    /// is added; the Skipped page is wrong for it too, because that page is
+    /// releases the profile refused and every row on it carries a control that
+    /// grabs the release anyway. This one cannot be allowed — there is no
+    /// episode to allow it for — and offering the control writes a search
+    /// against episode nought of show nought.
+    /// </remarks>
+    public async Task NotedAsync(string releaseTitle, string reason, DateTimeOffset at, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText =
+            """
+            INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+            VALUES ($at, 'failed', NULL, NULL, NULL, NULL, $release, NULL, $detail);
+            """;
+
+        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
+        command.Parameters.AddWithValue("$release", releaseTitle);
+        command.Parameters.AddWithValue("$detail", reason);
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     public async Task StagedAsync(string infoHash, string path, CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);

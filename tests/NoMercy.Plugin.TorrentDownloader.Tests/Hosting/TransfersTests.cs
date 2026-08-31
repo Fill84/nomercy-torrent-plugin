@@ -600,12 +600,16 @@ public class TransfersTests : IDisposable
         Assert.Null(server.Encoder.Job);
         Assert.NotEmpty(await grabs.OpenAsync(CancellationToken.None));
 
-        // And said once, on the page that keeps it. Twice would bury the page
-        // it is written on within a day.
-        SkippedPage skipped = await grabs.SkippedAsync(1, 20, CancellationToken.None);
+        // Said once, on the History page. Twice would bury the page it is
+        // written on within a day.
+        IReadOnlyList<HistoryRow> history = await grabs.HistoryAsync(CancellationToken.None);
 
-        Assert.Single(skipped.Rows, one => one.Reason.Contains("no library", StringComparison.Ordinal)
-                                           || one.Reason.Contains("in a library", StringComparison.Ordinal));
+        Assert.Single(history, one => (one.Detail ?? string.Empty).Contains("in a library", StringComparison.Ordinal));
+
+        // And not on the Skipped page, which is releases the profile refused:
+        // every row there carries a control that grabs the release anyway, and
+        // this one names no episode to grab it for.
+        Assert.Empty((await grabs.SkippedAsync(1, 20, CancellationToken.None)).Rows);
     }
 
     /// <summary>A server that says the same thing about every job.</summary>
