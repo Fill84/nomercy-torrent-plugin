@@ -1,0 +1,849 @@
+class NoMercy.Plugins.Abstractions.AuthResult
+    bool IsAuthenticated
+    string ErrorMessage
+    string UserName
+    System.Collections.Generic.Dictionary[string,string] Claims
+    System.Nullable[guid] UserId
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.EncodingProfile
+    string AudioCodec
+    string Container
+    string Name
+    string VideoCodec
+    System.Collections.Generic.Dictionary[string,string] ExtraParameters
+    System.Nullable[int] AudioBitrate
+    System.Nullable[int] Height
+    System.Nullable[int] VideoBitrate
+    System.Nullable[int] Width
+    Void .ctor()
+interface NoMercy.Plugins.Abstractions.IAuthPlugin
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.AuthResult] AuthenticateAsync(System.String,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IEncoderPlugin
+    NoMercy.Plugins.Abstractions.EncodingProfile GetProfile(NoMercy.Plugins.Abstractions.MediaInfo)
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.EncodingProfile] GetProfileAsync(NoMercy.Plugins.Abstractions.MediaInfo,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IMediaSourcePlugin
+    System.Threading.Tasks.Task[System.Collections.Generic.IEnumerable[NoMercy.Plugins.Abstractions.MediaFile]] ScanAsync(System.String,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IMetadataPlugin
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.MediaMetadata] GetMetadataAsync(System.String,NoMercy.Plugins.Abstractions.MediaType,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPlugin
+    string Description
+    string Name
+    System.Ulid Id
+    System.Version Version
+    Void Initialize(NoMercy.Plugins.Abstractions.IPluginContext)
+interface NoMercy.Plugins.Abstractions.IPluginConfiguration
+     GetConfiguration()
+    bool HasConfiguration()
+    System.Threading.Tasks.Task SaveConfigurationAsync(,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[] GetConfigurationAsync(System.Threading.CancellationToken)
+    Void DeleteConfiguration()
+    Void SaveConfiguration()
+interface NoMercy.Plugins.Abstractions.IPluginContext
+     Logger
+    NoMercy.Events.IEventBus EventBus
+    NoMercy.Plugins.Abstractions.IPluginConfiguration Configuration
+    NoMercy.Plugins.Abstractions.IPluginEncoder Encoder
+    NoMercy.Plugins.Abstractions.IPluginGrants Grants
+    NoMercy.Plugins.Abstractions.IPluginHubContext Hub
+    NoMercy.Plugins.Abstractions.IPluginJobs Jobs
+    NoMercy.Plugins.Abstractions.IPluginLibraryQuery Library
+    NoMercy.Plugins.Abstractions.IPluginLibraryWriter LibraryWriter
+    NoMercy.Plugins.Abstractions.IPluginPlayer Player
+    NoMercy.Plugins.Abstractions.IPluginSecretStore Secrets
+    NoMercy.Plugins.Abstractions.IPluginStorage Storage
+    NoMercy.Plugins.Abstractions.IPluginSystem System
+    string DataFolderPath
+    System.IServiceProvider Services
+    System.Net.Http.HttpClient HttpClient
+    System.Threading.Tasks.Task PublishAsync(System.String,,System.Threading.CancellationToken)
+    System.Ulid PluginId
+interface NoMercy.Plugins.Abstractions.IPluginEncoder
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.PluginEncodeResult] EncodeAsync(System.String,System.String,System.String,System.String,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginGrants
+    System.Threading.Tasks.Task RequestAsync(System.String,System.String,System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[bool] HasAsync(System.String,System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[string]] GetAsync(System.String,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginHubClient
+    System.Threading.Tasks.Task SendAsync(System.String,System.Object)
+interface NoMercy.Plugins.Abstractions.IPluginHubContext
+    System.Threading.Tasks.Task PushAsync(System.String,System.Object)
+    System.Threading.Tasks.Task PushToUserAsync(System.String,System.String,System.Object)
+interface NoMercy.Plugins.Abstractions.IPluginHubHandler
+    System.Threading.Tasks.Task HandleAsync(NoMercy.Plugins.Abstractions.PluginHubMessage,NoMercy.Plugins.Abstractions.IPluginHubClient,System.Threading.CancellationToken)
+    System.Ulid PluginId
+interface NoMercy.Plugins.Abstractions.IPluginJobs
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.PluginJobStatus] StatusAsync(System.String,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginLibraryQuery
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginLibrary]] GetLibrariesAsync(System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginLibraryEpisode]] GetEpisodesAsync(System.Int32,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginLibraryFile]] GetShowFilesAsync(System.Int32,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginLibraryMovie]] GetMoviesAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginLibraryShow]] GetShowsAsync(System.String,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginLibraryWriter
+    System.Threading.Tasks.Task DeleteAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task MoveAsync(System.String,System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task RecycleAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[bool] CanWriteAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginLibrary]] GetWritableLibrariesAsync(System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginManager
+    NoMercy.Plugins.Abstractions.IPlugin GetPluginInstance(System.Ulid)
+    NoMercy.Plugins.Abstractions.PluginInfo GetPluginInfo(System.Ulid)
+    System.Collections.Generic.IEnumerable[] GetPluginsOfType()
+    System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginInfo] GetInstalledPlugins()
+    System.Threading.Tasks.Task DisablePluginAsync(System.Ulid,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task EnablePluginAsync(System.Ulid,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task InstallPluginArchiveAsync(System.String,System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task InstallPluginAsync(System.String,System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task InstallPluginAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task UninstallPluginAsync(System.Ulid,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.Dictionary[string,string]] ReadTranslationsAsync(System.Ulid,System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginLoadResult]] LoadAllAsync(System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginPlayer
+    System.Threading.Tasks.Task ControlAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task EnqueueAsync(NoMercy.Plugins.Abstractions.PluginPlaybackSource,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task PlayAsync(NoMercy.Plugins.Abstractions.PluginPlaybackSource,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.PluginPlaybackState] GetStateAsync(System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginRepository
+    bool IsFromTrustedRepository(System.Ulid)
+    NoMercy.Plugins.Abstractions.PluginRepositoryEntry FindPlugin(System.Ulid)
+    NoMercy.Plugins.Abstractions.PluginVersionEntry FindVersion(System.Ulid,System.String)
+    System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginRepositoryEntry] GetAvailablePlugins()
+    System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginRepositoryInfo] GetRepositories()
+    System.Threading.Tasks.Task AddRepositoryAsync(System.String,System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task LoadAsync(System.Threading.CancellationToken)
+    System.Threading.Tasks.Task RefreshAsync(System.Threading.CancellationToken)
+    System.Threading.Tasks.Task RemoveRepositoryAsync(System.String,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginSecretStore
+    System.Threading.Tasks.Task DeleteAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task SetAsync(System.String,System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[string] GetAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[string]] KeysAsync(System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginServiceRegistrator
+    Void RegisterServices(Microsoft.Extensions.DependencyInjection.IServiceCollection)
+interface NoMercy.Plugins.Abstractions.IPluginStorage
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.IPluginStorageScope] OpenAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginStorageLocation]] LocationsAsync(System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginStorageScope
+    NoMercy.Plugins.Abstractions.PluginStorageLocation Location
+    System.Threading.Tasks.Task DeleteAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[bool] ExistsAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.IO.Stream] OpenReadAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[System.IO.Stream] OpenWriteAsync(System.String,System.Boolean,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IPluginSystem
+    bool Offers(System.String)
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.PluginSystemResult] InvokeAsync(System.String,System.String,System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]],System.Threading.CancellationToken)
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.PluginSystemResult] QueryAsync(System.String,System.String,System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IScheduledTaskPlugin
+    string CronExpression
+    System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginScheduledJob] Jobs
+    System.Threading.Tasks.Task ExecuteAsync(System.String,System.Threading.CancellationToken)
+    System.Threading.Tasks.Task ExecuteAsync(System.Threading.CancellationToken)
+interface NoMercy.Plugins.Abstractions.IUiPlugin
+    NoMercy.Plugins.Abstractions.PluginRouteTable Routes
+    System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginNavEntry] NavEntries
+    System.Threading.Tasks.Task[NoMercy.Plugins.Abstractions.PluginView] GetViewAsync(NoMercy.Plugins.Abstractions.PluginViewRequest,System.Threading.CancellationToken)
+class NoMercy.Plugins.Abstractions.MediaFile
+    NoMercy.Plugins.Abstractions.MediaType Type
+    string FileName
+    string Path
+    System.Collections.Generic.Dictionary[string,string] Properties
+    System.Int64 Size
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.MediaInfo
+    bool IsHdr
+    string AudioCodec
+    string FilePath
+    string VideoCodec
+    System.Nullable[int] Height
+    System.Nullable[int] Width
+    System.Nullable[System.Int64] Bitrate
+    System.Nullable[System.TimeSpan] Duration
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.MediaMetadata
+    string BackdropUrl
+    string ExternalId
+    string ExternalSource
+    string Overview
+    string PosterUrl
+    string Title
+    System.Collections.Generic.List[string] Genres
+    System.Nullable[int] Year
+    System.Nullable[System.Double] Rating
+    Void .ctor()
+enum NoMercy.Plugins.Abstractions.MediaType
+    bool Equals(System.Object)
+    bool HasFlag(System.Enum)
+    int CompareTo(System.Object)
+    int GetHashCode()
+    int value__
+    NoMercy.Plugins.Abstractions.MediaType Episode
+    NoMercy.Plugins.Abstractions.MediaType Movie
+    NoMercy.Plugins.Abstractions.MediaType Music
+    NoMercy.Plugins.Abstractions.MediaType Season
+    NoMercy.Plugins.Abstractions.MediaType TvShow
+    string ToString()
+    string ToString(System.IFormatProvider)
+    string ToString(System.String,System.IFormatProvider)
+    string ToString(System.String)
+    System.TypeCode GetTypeCode()
+class NoMercy.Plugins.Abstractions.PluginAbi
+    bool IsCompatible(System.String)
+    System.Version Current
+class NoMercy.Plugins.Abstractions.PluginActionIntent
+    bool ShouldSerializeConfirm()
+    NoMercy.Plugins.Abstractions.PluginActionIntent CallPlugin(System.String,System.Object,System.String,NoMercy.Plugins.Abstractions.PluginConfirmation)
+    NoMercy.Plugins.Abstractions.PluginActionIntent Enqueue(System.String,System.String,System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginActionIntent Navigate(System.String)
+    NoMercy.Plugins.Abstractions.PluginActionIntent OpenWebView(System.String)
+    NoMercy.Plugins.Abstractions.PluginActionIntent PlayMedia(System.String,System.String,System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginActionIntent RefreshView()
+    NoMercy.Plugins.Abstractions.PluginConfirmation Confirm
+    string Type
+    System.Collections.Generic.Dictionary[string,System.Object] Payload
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginActionTransport
+    string Hub
+    string Rest
+class NoMercy.Plugins.Abstractions.PluginActionType
+    string CallPlugin
+    string Enqueue
+    string Navigate
+    string OpenWebView
+    string PlayMedia
+    string RefreshView
+    System.Collections.Generic.IReadOnlySet[string] All
+class NoMercy.Plugins.Abstractions.PluginBadgeVariant
+    string Danger
+    string Info
+    string Neutral
+    string Success
+    string Warning
+    System.Collections.Generic.IReadOnlySet[string] All
+class NoMercy.Plugins.Abstractions.PluginCapabilities
+    bool Rest
+    bool Ws
+    NoMercy.Plugins.Abstractions.PluginNetworkCapability Network
+    NoMercy.Plugins.Abstractions.PluginUiCapability Ui
+    System.Collections.Generic.List[string] Hooks
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginCapability
+    bool IsKnown(System.String)
+    string Cast
+    string Downloads
+    string GrantFor(System.String)
+    string Library
+    string Notifications
+    string Player
+    string Tasks
+    System.String[] All
+class NoMercy.Plugins.Abstractions.PluginComponent
+    NoMercy.Plugins.Abstractions.PluginActionIntent Action
+    string Component
+    string Id
+    System.Collections.Generic.Dictionary[string,System.Object] Props
+    System.Collections.Generic.List[NoMercy.Plugins.Abstractions.PluginComponent] Items
+    System.Object Design
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginComponentType
+    string Badge
+    string Button
+    string Card
+    string Container
+    string Detail
+    string EmptyState
+    string Form
+    string Grid
+    string Image
+    string List
+    string Progress
+    string Row
+    string Spinner
+    string Table
+    string Text
+    string WebView
+    System.Collections.Generic.IReadOnlySet[string] All
+class NoMercy.Plugins.Abstractions.PluginConfirmation
+    bool Destructive
+    string CancelLabel
+    string ConfirmLabel
+    string Message
+    string Title
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginDesign
+    NoMercy.Plugins.Abstractions.PluginComponent Node(System.String,NoMercy.Design.NmProps,NoMercy.Plugins.Abstractions.PluginActionIntent)
+    NoMercy.Plugins.Abstractions.PluginComponent Node(System.String,NoMercy.Design.NmProps)
+    string ComponentOf(NoMercy.Design.NmProps)
+class NoMercy.Plugins.Abstractions.PluginEncodeResult
+    bool Accepted
+    bool Equals(NoMercy.Plugins.Abstractions.PluginEncodeResult)
+    bool Equals(System.Object)
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginEncodeResult <Clone>$()
+    NoMercy.Plugins.Abstractions.PluginEncodeResult Queued(System.String)
+    NoMercy.Plugins.Abstractions.PluginEncodeResult Refused(System.String)
+    string JobId
+    string Refusal
+    string ToString()
+    Void .ctor(System.String,System.String)
+    Void Deconstruct(System.String&,System.String&)
+class NoMercy.Plugins.Abstractions.PluginFormField
+    bool Multiple
+    bool Required
+    string Accept
+    string Label
+    string Name
+    string Placeholder
+    string Type
+    System.Collections.Generic.List[NoMercy.Plugins.Abstractions.PluginFormOption] Options
+    System.Object Value
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginFormFieldType
+    string Checkbox
+    string File
+    string Folder
+    string Number
+    string Password
+    string Select
+    string Text
+    string Toggle
+    System.Collections.Generic.IReadOnlySet[string] All
+class NoMercy.Plugins.Abstractions.PluginFormOption
+    string Label
+    string Value
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginGrant
+    string Everything
+class NoMercy.Plugins.Abstractions.PluginGrantKind
+    string Capability
+    string ForCapability(System.String)
+    string LibraryWrite
+    string NetworkHost
+    string PlayerSource
+class NoMercy.Plugins.Abstractions.PluginGrantRequest
+    bool Equals(NoMercy.Plugins.Abstractions.PluginGrantRequest)
+    bool Equals(System.Object)
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginGrantRequest <Clone>$()
+    string Kind
+    string Reason
+    string ToString()
+    string Value
+    System.DateTime RequestedAt
+    System.Ulid PluginId
+    Void .ctor(System.Ulid,System.String,System.String,System.String,System.DateTime)
+    Void Deconstruct(System.Ulid&,System.String&,System.String&,System.String&,System.DateTime&)
+class NoMercy.Plugins.Abstractions.PluginHookCapability
+    string Auth
+    string Encoder
+    string LibraryWrite
+    string MediaSource
+    string Metadata
+    string ScheduledTask
+    string Storage
+    string Ui
+    System.Collections.Generic.IReadOnlySet[string] Elevated
+class NoMercy.Plugins.Abstractions.PluginHubMessage
+    string ConnectionId
+    string Method
+    string UserId
+    System.Text.Json.Nodes.JsonNode Payload
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginIdJsonConverter
+    bool CanConvert(System.Type)
+    bool HandleNull
+    System.Type Type
+    System.Ulid Read(System.Text.Json.Utf8JsonReader&,System.Type,System.Text.Json.JsonSerializerOptions)
+    System.Ulid ReadAsPropertyName(System.Text.Json.Utf8JsonReader&,System.Type,System.Text.Json.JsonSerializerOptions)
+    Void .ctor()
+    Void Write(System.Text.Json.Utf8JsonWriter,System.Ulid,System.Text.Json.JsonSerializerOptions)
+    Void WriteAsPropertyName(System.Text.Json.Utf8JsonWriter,System.Ulid,System.Text.Json.JsonSerializerOptions)
+class NoMercy.Plugins.Abstractions.PluginInfo
+    bool ContributesServices
+    bool Trusted
+    bool Verified
+    NoMercy.Plugins.Abstractions.PluginCapabilities Capabilities
+    NoMercy.Plugins.Abstractions.PluginStatus Status
+    string AssemblyPath
+    string Author
+    string Description
+    string ManifestPath
+    string Name
+    string ProjectUrl
+    string TargetAbi
+    System.Ulid Id
+    System.Version Version
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginJobFinished
+    bool Equals(NoMercy.Plugins.Abstractions.PluginJobFinished)
+    bool Equals(System.Object)
+    bool Succeeded
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginJobFinished <Clone>$()
+    string Failure
+    string JobId
+    string ToString()
+    Void .ctor(System.String,System.Boolean,System.String)
+    Void Deconstruct(System.String&,System.Boolean&,System.String&)
+enum NoMercy.Plugins.Abstractions.PluginJobState
+    bool Equals(System.Object)
+    bool HasFlag(System.Enum)
+    int CompareTo(System.Object)
+    int GetHashCode()
+    int value__
+    NoMercy.Plugins.Abstractions.PluginJobState Failed
+    NoMercy.Plugins.Abstractions.PluginJobState Finished
+    NoMercy.Plugins.Abstractions.PluginJobState Queued
+    NoMercy.Plugins.Abstractions.PluginJobState Running
+    NoMercy.Plugins.Abstractions.PluginJobState Unknown
+    string ToString()
+    string ToString(System.IFormatProvider)
+    string ToString(System.String,System.IFormatProvider)
+    string ToString(System.String)
+    System.TypeCode GetTypeCode()
+class NoMercy.Plugins.Abstractions.PluginJobStatus
+    bool Equals(NoMercy.Plugins.Abstractions.PluginJobStatus)
+    bool Equals(System.Object)
+    bool Settled
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginJobState State
+    NoMercy.Plugins.Abstractions.PluginJobStatus <Clone>$()
+    string Failure
+    string JobId
+    string ToString()
+    System.Nullable[System.DateTimeOffset] FinishedAt
+    Void .ctor(System.String,NoMercy.Plugins.Abstractions.PluginJobState,System.String,System.Nullable`1[[System.DateTimeOffset, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+    Void Deconstruct(System.String&,NoMercy.Plugins.Abstractions.PluginJobState&,System.String&,System.Nullable`1[[System.DateTimeOffset, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]&)
+class NoMercy.Plugins.Abstractions.PluginKind
+    bool DrawsUi(System.String)
+    bool IsKnown(System.String)
+    bool IsTopLevel(System.String)
+    string Addon
+    string Dashboard
+    string Library
+    string Music
+    string Settings
+    string Video
+    System.String[] All
+class NoMercy.Plugins.Abstractions.PluginLayout
+    bool IsKnown(System.String)
+    string Form
+    string Grid
+    string Immersive
+    string ListDetail
+    string Standard
+    string Wide
+    System.String[] All
+class NoMercy.Plugins.Abstractions.PluginLibrary
+    bool Equals(NoMercy.Plugins.Abstractions.PluginLibrary)
+    bool Equals(System.Object)
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginLibrary <Clone>$()
+    string Id
+    string Title
+    string ToString()
+    string Type
+    Void .ctor(System.String,System.String,System.String)
+    Void Deconstruct(System.String&,System.String&,System.String&)
+class NoMercy.Plugins.Abstractions.PluginLibraryAccessDeniedException
+    int HResult
+    string HelpLink
+    string Message
+    string Path
+    string Source
+    string StackTrace
+    string ToString()
+    System.Collections.IDictionary Data
+    System.Exception GetBaseException()
+    System.Exception InnerException
+    System.Reflection.MethodBase TargetSite
+    System.Type GetType()
+    Void .ctor(System.String,System.String)
+    Void GetObjectData(System.Runtime.Serialization.SerializationInfo,System.Runtime.Serialization.StreamingContext)
+class NoMercy.Plugins.Abstractions.PluginLibraryEpisode
+    bool Equals(NoMercy.Plugins.Abstractions.PluginLibraryEpisode)
+    bool Equals(System.Object)
+    bool HasFile
+    int EpisodeNumber
+    int GetHashCode()
+    int Id
+    int SeasonNumber
+    int ShowId
+    NoMercy.Plugins.Abstractions.PluginLibraryEpisode <Clone>$()
+    string Title
+    string ToString()
+    System.Nullable[System.DateTime] AirDate
+    Void .ctor(System.Int32,System.Int32,System.Int32,System.String,System.Nullable`1[[System.DateTime, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]],System.Boolean)
+    Void Deconstruct(System.Int32&,System.Int32&,System.Int32&,System.String&,System.Nullable`1[[System.DateTime, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]&,System.Boolean&)
+class NoMercy.Plugins.Abstractions.PluginLibraryFile
+    bool Equals(NoMercy.Plugins.Abstractions.PluginLibraryFile)
+    bool Equals(System.Object)
+    int GetHashCode()
+    int ShowId
+    NoMercy.Plugins.Abstractions.PluginLibraryFile <Clone>$()
+    string Path
+    string Quality
+    string ToString()
+    System.Nullable[int] EpisodeNumber
+    System.Nullable[int] SeasonNumber
+    Void .ctor(System.Int32,System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]],System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]],System.String,System.String)
+    Void Deconstruct(System.Int32&,System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]&,System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]&,System.String&,System.String&)
+class NoMercy.Plugins.Abstractions.PluginLibraryMovie
+    bool Equals(NoMercy.Plugins.Abstractions.PluginLibraryMovie)
+    bool Equals(System.Object)
+    bool HasFile
+    int GetHashCode()
+    int Id
+    NoMercy.Plugins.Abstractions.PluginLibraryMovie <Clone>$()
+    string Folder
+    string LibraryId
+    string Title
+    string ToString()
+    System.Nullable[int] Year
+    Void .ctor(System.Int32,System.String,System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]],System.String,System.String,System.Boolean)
+    Void Deconstruct(System.Int32&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]&,System.String&,System.String&,System.Boolean&)
+class NoMercy.Plugins.Abstractions.PluginLibraryShow
+    bool Equals(NoMercy.Plugins.Abstractions.PluginLibraryShow)
+    bool Equals(System.Object)
+    int EpisodeCount
+    int GetHashCode()
+    int HaveEpisodeCount
+    int Id
+    NoMercy.Plugins.Abstractions.PluginLibraryShow <Clone>$()
+    string Folder
+    string LibraryId
+    string Title
+    string ToString()
+    System.Nullable[int] Year
+    Void .ctor(System.Int32,System.String,System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]],System.String,System.String,System.Int32,System.Int32)
+    Void Deconstruct(System.Int32&,System.String&,System.Nullable`1[[System.Int32, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]&,System.String&,System.String&,System.Int32&,System.Int32&)
+class NoMercy.Plugins.Abstractions.PluginLifecycle
+    bool CanTransition(NoMercy.Plugins.Abstractions.PluginStatus,NoMercy.Plugins.Abstractions.PluginStatus)
+    Void Transition(NoMercy.Plugins.Abstractions.PluginInfo,NoMercy.Plugins.Abstractions.PluginStatus)
+class NoMercy.Plugins.Abstractions.PluginLoadResult
+    bool Equals(NoMercy.Plugins.Abstractions.PluginLoadResult)
+    bool Equals(System.Object)
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.IPlugin Instance
+    NoMercy.Plugins.Abstractions.PluginLoadResult <Clone>$()
+    string Name
+    string ToString()
+    string Version
+    System.Ulid PluginId
+    Void .ctor(System.Ulid,System.String,System.String,NoMercy.Plugins.Abstractions.IPlugin)
+    Void Deconstruct(System.Ulid&,System.String&,System.String&,NoMercy.Plugins.Abstractions.IPlugin&)
+class NoMercy.Plugins.Abstractions.PluginManifest
+    bool AutoEnabled
+    NoMercy.Plugins.Abstractions.PluginCapabilities Capabilities
+    NoMercy.Plugins.Abstractions.PluginTranslations Translations
+    string Assembly
+    string Author
+    string Description
+    string Name
+    string ProjectUrl
+    string Signature
+    string TargetAbi
+    string Version
+    System.Ulid Id
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginNavEntry
+    bool AppearsOn(System.String)
+    string Icon
+    string Label
+    string Route
+    string Section
+    System.Collections.Generic.List[string] Surfaces
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginNavigation
+    NoMercy.Plugins.Abstractions.PluginActionIntent To(System.String)
+    NoMercy.Plugins.Abstractions.PluginActionIntent ToApp(System.String)
+    string RelativeKey
+    string Resolve(NoMercy.Plugins.Abstractions.PluginActionIntent,System.String,System.Ulid)
+    string RouteKey
+class NoMercy.Plugins.Abstractions.PluginNetworkCapability
+    System.Collections.Generic.List[string] Hosts
+    Void .ctor()
+enum NoMercy.Plugins.Abstractions.PluginOperation
+    bool Equals(System.Object)
+    bool HasFlag(System.Enum)
+    int CompareTo(System.Object)
+    int GetHashCode()
+    int value__
+    NoMercy.Plugins.Abstractions.PluginOperation Disable
+    NoMercy.Plugins.Abstractions.PluginOperation Enable
+    NoMercy.Plugins.Abstractions.PluginOperation Install
+    NoMercy.Plugins.Abstractions.PluginOperation Uninstall
+    NoMercy.Plugins.Abstractions.PluginOperation Update
+    string ToString()
+    string ToString(System.IFormatProvider)
+    string ToString(System.String,System.IFormatProvider)
+    string ToString(System.String)
+    System.TypeCode GetTypeCode()
+class NoMercy.Plugins.Abstractions.PluginPlaybackCommand
+    bool IsKnown(System.String)
+    string Next
+    string Pause
+    string Play
+    string Previous
+    string Stop
+    System.String[] All
+class NoMercy.Plugins.Abstractions.PluginPlaybackSource
+    bool IsLive
+    string Artist
+    string ArtworkUrl
+    string Title
+    string Url
+    System.Ulid PluginId
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginPlaybackState
+    bool IsPlaying
+    string Device
+    string Title
+    System.Nullable[System.Ulid] OwnedByPlugin
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginRepositoryEntry
+    string Author
+    string Description
+    string Name
+    string ProjectUrl
+    System.Collections.Generic.List[NoMercy.Plugins.Abstractions.PluginVersionEntry] Versions
+    System.Ulid Id
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginRepositoryInfo
+    bool Enabled
+    bool Trusted
+    string Name
+    string Url
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginRepositoryManifest
+    string Name
+    string Url
+    System.Collections.Generic.List[NoMercy.Plugins.Abstractions.PluginRepositoryEntry] Plugins
+    Void .ctor()
+enum NoMercy.Plugins.Abstractions.PluginRestartReason
+    bool Equals(System.Object)
+    bool HasFlag(System.Enum)
+    int CompareTo(System.Object)
+    int GetHashCode()
+    int value__
+    NoMercy.Plugins.Abstractions.PluginRestartReason AssemblyStillLoaded
+    NoMercy.Plugins.Abstractions.PluginRestartReason ContributesServices
+    NoMercy.Plugins.Abstractions.PluginRestartReason None
+    NoMercy.Plugins.Abstractions.PluginRestartReason OwnsRoutes
+    string ToString()
+    string ToString(System.IFormatProvider)
+    string ToString(System.String,System.IFormatProvider)
+    string ToString(System.String)
+    System.TypeCode GetTypeCode()
+class NoMercy.Plugins.Abstractions.PluginRestartRequirement
+    bool Equals(NoMercy.Plugins.Abstractions.PluginRestartRequirement)
+    bool Equals(System.Object)
+    bool Required
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginRestartReason Reasons
+    NoMercy.Plugins.Abstractions.PluginRestartRequirement <Clone>$()
+    NoMercy.Plugins.Abstractions.PluginRestartRequirement None
+    string ToString()
+    System.Collections.Generic.IReadOnlyList[string] Explain()
+    Void .ctor(NoMercy.Plugins.Abstractions.PluginRestartReason)
+    Void Deconstruct(NoMercy.Plugins.Abstractions.PluginRestartReason&)
+class NoMercy.Plugins.Abstractions.PluginRoute
+    bool ExistsOn(System.String)
+    string Build(System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+    string Label
+    string Layout
+    string LayoutFor(System.String)
+    string Name
+    string Path
+    System.Collections.Generic.Dictionary[string,string] LayoutBySurface
+    System.Collections.Generic.Dictionary[string,string] Match(System.String)
+    System.Collections.Generic.List[string] Surfaces
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginRouteMatch
+    bool Equals(NoMercy.Plugins.Abstractions.PluginRouteMatch)
+    bool Equals(System.Object)
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginRoute Route
+    NoMercy.Plugins.Abstractions.PluginRouteMatch <Clone>$()
+    string Param(System.String)
+    string ToString()
+    System.Collections.Generic.IReadOnlyDictionary[string,string] Parameters
+    Void .ctor(NoMercy.Plugins.Abstractions.PluginRoute,System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+    Void Deconstruct(NoMercy.Plugins.Abstractions.PluginRoute&,System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]]&)
+class NoMercy.Plugins.Abstractions.PluginRoutes
+    string PatternFor(System.String)
+    string PrefixFor(System.String,System.Ulid)
+class NoMercy.Plugins.Abstractions.PluginRouteTable
+    NoMercy.Plugins.Abstractions.PluginActionIntent GoTo(System.String,System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+    NoMercy.Plugins.Abstractions.PluginRouteMatch Resolve(System.String)
+    string PathTo(System.String,System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+    System.Collections.Generic.IEnumerable[NoMercy.Plugins.Abstractions.PluginRoute] On(System.String)
+    System.Collections.Generic.IReadOnlyList[NoMercy.Plugins.Abstractions.PluginRoute] Routes
+    Void .ctor(NoMercy.Plugins.Abstractions.PluginRoute[])
+class NoMercy.Plugins.Abstractions.PluginScheduledJob
+    bool AllowConcurrent
+    bool Equals(NoMercy.Plugins.Abstractions.PluginScheduledJob)
+    bool Equals(System.Object)
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginScheduledJob <Clone>$()
+    string CronExpression
+    string Name
+    string ToString()
+    Void .ctor(System.String,System.String,System.Boolean)
+    Void Deconstruct(System.String&,System.String&,System.Boolean&)
+enum NoMercy.Plugins.Abstractions.PluginStatus
+    bool Equals(System.Object)
+    bool HasFlag(System.Enum)
+    int CompareTo(System.Object)
+    int GetHashCode()
+    int value__
+    NoMercy.Plugins.Abstractions.PluginStatus Active
+    NoMercy.Plugins.Abstractions.PluginStatus Deleted
+    NoMercy.Plugins.Abstractions.PluginStatus Disabled
+    NoMercy.Plugins.Abstractions.PluginStatus Malfunctioned
+    string ToString()
+    string ToString(System.IFormatProvider)
+    string ToString(System.String,System.IFormatProvider)
+    string ToString(System.String)
+    System.TypeCode GetTypeCode()
+class NoMercy.Plugins.Abstractions.PluginStorageLocation
+    bool Equals(NoMercy.Plugins.Abstractions.PluginStorageLocation)
+    bool Equals(System.Object)
+    bool Writable
+    int GetHashCode()
+    NoMercy.Plugins.Abstractions.PluginStorageLocation <Clone>$()
+    string Id
+    string Kind
+    string Name
+    string ToString()
+    Void .ctor(System.String,System.String,System.String,System.Boolean)
+    Void Deconstruct(System.String&,System.String&,System.String&,System.Boolean&)
+class NoMercy.Plugins.Abstractions.PluginSurface
+    bool IsKnown(System.String)
+    string Mobile
+    string Tv
+    string Web
+    System.String[] All
+class NoMercy.Plugins.Abstractions.PluginSurfaceViews
+    NoMercy.Plugins.Abstractions.PluginView Fallback
+    NoMercy.Plugins.Abstractions.PluginView For(System.String)
+    NoMercy.Plugins.Abstractions.PluginView Mobile
+    NoMercy.Plugins.Abstractions.PluginView Tv
+    NoMercy.Plugins.Abstractions.PluginView Web
+    System.Collections.Generic.IEnumerable[string] Adapted()
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginSystemResult
+    bool Ok
+    bool Refused
+    bool Unsupported
+    NoMercy.Plugins.Abstractions.PluginSystemResult Done(System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+    NoMercy.Plugins.Abstractions.PluginSystemResult Failed(System.String)
+    NoMercy.Plugins.Abstractions.PluginSystemResult NotAllowed(System.String)
+    NoMercy.Plugins.Abstractions.PluginSystemResult NotOffered(System.String)
+    string Reason
+    System.Collections.Generic.IReadOnlyDictionary[string,System.Object] Data
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginTableAction
+    bool ShouldSerializeAction()
+    bool ShouldSerializeIcon()
+    bool ShouldSerializeVariant()
+    NoMercy.Plugins.Abstractions.PluginActionIntent Action
+    string Icon
+    string Label
+    string Variant
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginTableCellType
+    string Actions
+    string Badge
+    string Bytes
+    string Duration
+    string Progress
+    string Rate
+    string Text
+    System.Collections.Generic.IReadOnlySet[string] All
+class NoMercy.Plugins.Abstractions.PluginTableColumn
+    string Align
+    string Cell
+    string Key
+    string Label
+    string Width
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginTranslationProblem
+    string Detail
+    string Locale
+    string ToString()
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginTranslations
+    string Path
+    string Source
+    System.Collections.Generic.List[string] Locales
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginTranslationValidator
+    System.Collections.Generic.List[NoMercy.Plugins.Abstractions.PluginTranslationProblem] Validate(NoMercy.Plugins.Abstractions.PluginTranslations,System.Func`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]])
+class NoMercy.Plugins.Abstractions.PluginUiCapability
+    System.Collections.Generic.List[NoMercy.Plugins.Abstractions.PluginUiMount] Mounts
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginUiMount
+    bool AppearsOn(System.String)
+    bool RequestsTopLevel
+    string Icon
+    string Kind
+    string Label
+    string Route
+    string Section
+    System.Collections.Generic.List[string] Surfaces
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginUiSection
+    string Addon
+    string Dashboard
+    string Library
+    string Music
+    string OrFallback(System.String)
+    string Settings
+    string Video
+    System.Collections.Generic.IReadOnlySet[string] All
+class NoMercy.Plugins.Abstractions.PluginVersionEntry
+    string Changelog
+    string Checksum
+    string DownloadUrl
+    string TargetAbi
+    string Version
+    System.Nullable[System.DateTime] Timestamp
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginView
+    bool ShouldSerializeWebView()
+    int RefreshInterval
+    NoMercy.Plugins.Abstractions.PluginWebViewRef WebView
+    string Layout
+    System.Collections.Generic.List[NoMercy.Plugins.Abstractions.PluginComponent] Components
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginViewRequest
+    string Route
+    string Surface
+    string UserId
+    System.Collections.Generic.Dictionary[string,string] Query
+    Void .ctor()
+class NoMercy.Plugins.Abstractions.PluginViews
+    NoMercy.Plugins.Abstractions.PluginComponent Badge(System.String,System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginComponent Button(System.String,System.String,NoMercy.Plugins.Abstractions.PluginActionIntent,System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginComponent Card(System.String,System.String,System.String,System.String,NoMercy.Plugins.Abstractions.PluginActionIntent)
+    NoMercy.Plugins.Abstractions.PluginComponent Container(System.String,NoMercy.Plugins.Abstractions.PluginComponent[])
+    NoMercy.Plugins.Abstractions.PluginComponent DestructiveButton(System.String,System.String,NoMercy.Plugins.Abstractions.PluginActionIntent,System.String,System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginComponent Detail(System.String,System.String,System.String,System.String,NoMercy.Plugins.Abstractions.PluginComponent[])
+    NoMercy.Plugins.Abstractions.PluginComponent EmptyState(System.String,System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginComponent Form(System.String,System.String,NoMercy.Plugins.Abstractions.PluginActionIntent,NoMercy.Plugins.Abstractions.PluginFormField[])
+    NoMercy.Plugins.Abstractions.PluginComponent Grid(System.String,NoMercy.Plugins.Abstractions.PluginComponent[])
+    NoMercy.Plugins.Abstractions.PluginComponent Image(System.String,System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginComponent List(System.String,NoMercy.Plugins.Abstractions.PluginComponent[])
+    NoMercy.Plugins.Abstractions.PluginComponent Progress(System.String,System.Nullable`1[[System.Double, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]],System.String)
+    NoMercy.Plugins.Abstractions.PluginComponent Row(System.String,NoMercy.Plugins.Abstractions.PluginComponent[])
+    NoMercy.Plugins.Abstractions.PluginComponent Row(System.String,System.Collections.Generic.IReadOnlyDictionary`2[[System.String, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e],[System.Object, System.Private.CoreLib, Version=10.0.0.0, Culture=neutral, PublicKeyToken=7cec85d7bea7798e]],NoMercy.Plugins.Abstractions.PluginActionIntent)
+    NoMercy.Plugins.Abstractions.PluginComponent Spinner(System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginComponent Table(System.String,System.Collections.Generic.IReadOnlyList`1[[NoMercy.Plugins.Abstractions.PluginTableColumn, NoMercy.Plugins.Abstractions, Version=0.1.479.0, Culture=neutral, PublicKeyToken=null]],System.Collections.Generic.IReadOnlyList`1[[NoMercy.Plugins.Abstractions.PluginComponent, NoMercy.Plugins.Abstractions, Version=0.1.479.0, Culture=neutral, PublicKeyToken=null]],System.String)
+    NoMercy.Plugins.Abstractions.PluginComponent Text(System.String,System.String,System.String)
+    NoMercy.Plugins.Abstractions.PluginView Declarative(NoMercy.Plugins.Abstractions.PluginComponent[])
+    NoMercy.Plugins.Abstractions.PluginView Declarative(System.Int32,NoMercy.Plugins.Abstractions.PluginComponent[])
+    NoMercy.Plugins.Abstractions.PluginView PerSurface(System.String,NoMercy.Plugins.Abstractions.PluginView,NoMercy.Plugins.Abstractions.PluginView,NoMercy.Plugins.Abstractions.PluginView,NoMercy.Plugins.Abstractions.PluginView)
+    NoMercy.Plugins.Abstractions.PluginView WebView(System.String)
+class NoMercy.Plugins.Abstractions.PluginWebViewRef
+    string EntryUrl
+    Void .ctor()

@@ -7,7 +7,7 @@ its own identity (`docs/01-plugin.md`).
 edited. If something the plugin needs is not in the contract, note it under **Blocked** in
 `PROGRESS.md` and ask — do not work around it and do not change the server.
 
-The full exported surface is in `docs/reference/plugin-abi-0.1.478.txt`.
+The full exported surface is in `docs/reference/plugin-abi-0.1.479.txt`.
 
 ## The file listing is a task
 
@@ -105,12 +105,41 @@ The plugin does not import into the library. It stages the finished video and di
 job the dashboard's *Add content* button dispatches. `FileRescanJob` only re-walks existing library
 folders and cannot see a file staged elsewhere.
 
-**The plugin asks through `Core/Ports/IEncodeGateway`, and everything below is one implementation of
-it.** The cadence hands over a staged file, the episode it is, the show it belongs to and where that
-show's episodes already are, and learns only whether the ask was taken. It names no type from this
-page. When #30 and #35 land, the contract implementation is a second class beside this one and a
-single line where the plugin is composed — `EncodeDispatch` is then deleted whole, and it is the only
-reflection in the plugin, so when it goes there is none.
+**The plugin asks through `Core/Ports/IEncodeGateway`, and there are two implementations of it.**
+The cadence hands over a staged file, the episode it is, the show it belongs to and where that
+show's episodes already are, and learns whether the ask was taken and which job was queued. It names
+no type from this page.
+
+**`ContractEncodeGateway` is the one to read.** It calls `IPluginEncoder.EncodeAsync` with the
+staged file, the show's library and the server's own id for the episode — `PluginLibraryEpisode.Id`
+— and asks for no folder at all: a server holding the episode row knows where that show's files are
+better than this plugin does. It reflects nothing and names no server type that is not in
+`NoMercy.Plugins.Abstractions`. media-server #30 and #35, both closed on 30 August 2026, are what
+made it possible; contract `0.1.479` is the first release carrying them.
+
+An episode the server named no id for is refused rather than asked for with none. A null id tells
+the server to identify the file again from its name, which is a text search on whatever a parser
+reads out of it: the encode registers against no row, the queue counter moves, the library stays
+empty, and from outside it looks like an encode still running.
+
+**`EncodeDispatch`, below, is the older way and is still chosen for a server that does not offer
+`IPluginEncoder`.** `EncodeGateway.For` picks between them and says in the log which it picked. It
+is the only reflection in the plugin, and when there are no servers left that need it, it is deleted
+whole and there is none. That is a decision about who is running what.
+
+### What became of the job
+
+`IPluginJobs.StatusAsync` answers with `Queued`, `Running`, `Finished`, `Failed` or `Unknown`, and
+with the server's own words when it failed. The plugin keeps the job id on the grab — a restart used
+to lose which encode a grab was waiting on, and eleven of the owner's waited on jobs the encoder had
+already thrown away while the queue sat empty.
+
+Without it the plugin can see one thing: whether the library has the episode yet. A dead encode and
+a slow one look the same from there, and both are waited out for six hours before the grab fails and
+the episode goes back to missing — the same gigabytes downloaded again for a job that was never
+going to finish. That six hours is still the backstop for a server that will not say.
+
+media-server #31, closed on 30 August 2026.
 
 An implementation that refuses must say why in the log and the journal before it returns. The caller
 learns nothing but "not taken" and acts the same way whatever the reason — leave the file staged,

@@ -132,7 +132,7 @@ on servers running a release, so it compiles against what those servers carry. A
 repacking the same version number, clear that package's NuGet cache entry or the old one is used
 and nothing says so.
 
-The full exported surface is in `docs/reference/plugin-abi-0.1.478.txt`.
+The full exported surface is in `docs/reference/plugin-abi-0.1.479.txt`.
 
 ## Deploying
 
