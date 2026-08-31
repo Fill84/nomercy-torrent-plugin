@@ -49,15 +49,6 @@ public sealed class HostLibrary(IPluginLibraryQuery query) : ILibrary
         return shows;
     }
 
-    public async Task<IReadOnlyList<string>> GetShowFilesAsync(int showId, CancellationToken ct)
-    {
-        return
-        [
-            .. (await query.GetShowFilesAsync(showId, ct))
-                .Select(file => file.Path)
-                .Where(path => !string.IsNullOrWhiteSpace(path)),
-        ];
-    }
 
     public async Task<IReadOnlyList<Episode>> GetEpisodesAsync(int showId, CancellationToken ct)
     {

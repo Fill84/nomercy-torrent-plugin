@@ -17,7 +17,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 public sealed class RecordingEncoder : IEncodeGateway
 {
     /// <summary>Everything it was asked for, in order.</summary>
-    public List<(string StagedFile, EpisodeKey Episode, Show Show, string? Existing)> Asked { get; } = [];
+    public List<(string StagedFile, EpisodeKey Episode, Show Show)> Asked { get; } = [];
 
     /// <summary>Whether it takes what it is asked. False is a server refusing.</summary>
     public bool Takes { get; set; } = true;
@@ -29,10 +29,9 @@ public sealed class RecordingEncoder : IEncodeGateway
         string stagedFile,
         EpisodeKey episode,
         Show show,
-        string? existing,
         CancellationToken ct)
     {
-        Asked.Add((stagedFile, episode, show, existing));
+        Asked.Add((stagedFile, episode, show));
 
         return Task.FromResult(Takes ? new EncodeAsk(true, JobId) : EncodeAsk.No);
     }

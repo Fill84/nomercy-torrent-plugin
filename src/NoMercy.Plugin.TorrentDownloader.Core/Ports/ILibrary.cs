@@ -39,15 +39,4 @@ public interface ILibrary
     /// </summary>
     Task<IReadOnlyList<Episode>> GetEpisodesAsync(int showId, CancellationToken ct);
 
-    /// <summary>
-    /// Where this show's episodes already are, as full paths.
-    /// </summary>
-    /// <remarks>
-    /// A library can have more than one folder — the owner's has two, on
-    /// different drives — and an encode has to be sent to the one the show
-    /// really lives in. Taking the library's first folder sent every episode to
-    /// a drive the server could not reach, and every encode failed with
-    /// "could not find a part of the path".
-    /// </remarks>
-    Task<IReadOnlyList<string>> GetShowFilesAsync(int showId, CancellationToken ct);
 }

@@ -52,7 +52,7 @@ public class TheEncodeIsAskedThroughAPortTests : IDisposable
 
         await Tick(grabs, encoder);
 
-        (string StagedFile, EpisodeKey Episode, Show Show, string? Existing) asked =
+        (string StagedFile, EpisodeKey Episode, Show Show) asked =
             Assert.Single(encoder.Asked);
 
         Assert.Equal(Staged, asked.StagedFile);
@@ -62,10 +62,6 @@ public class TheEncodeIsAskedThroughAPortTests : IDisposable
         // anime library and a television one in the tv library.
         Assert.Equal(TelevisionLibrary, asked.Show.LibraryId);
         Assert.Equal(LibraryKind.Television, asked.Show.Kind);
-
-        // Where the show's episodes already are, so the encode goes to the
-        // folder it really lives in. A library can have several.
-        Assert.Equal(@"E:\tv\Silo (2023)\S03E01.mkv", asked.Existing);
 
         // And the grab is waiting on it, which is what says the ask was taken.
         StoredDownload waiting = Assert.Single(await grabs.OpenAsync(CancellationToken.None));

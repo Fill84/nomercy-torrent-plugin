@@ -87,17 +87,10 @@ public interface IEncodeGateway
     /// the tv library, because the server decided the media type when the show
     /// was filed and this plugin follows it rather than choosing.
     /// </param>
-    /// <param name="existing">
-    /// A path where this show's episodes already are, when it has any. A
-    /// library can have more than one folder — the owner's has two, on
-    /// different drives — and the encode has to go to the one the show really
-    /// lives in.
-    /// </param>
     /// <param name="ct">Cancellation.</param>
     Task<EncodeAsk> DispatchAsync(
         string stagedFile,
         EpisodeKey episode,
         Show show,
-        string? existing,
         CancellationToken ct);
 }

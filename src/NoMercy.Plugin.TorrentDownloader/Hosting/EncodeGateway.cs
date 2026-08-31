@@ -80,7 +80,6 @@ public static class EncodeGateway
             string stagedFile,
             EpisodeKey episode,
             Show show,
-            string? existing,
             CancellationToken ct)
         {
             string name = Path.GetFileName(stagedFile);

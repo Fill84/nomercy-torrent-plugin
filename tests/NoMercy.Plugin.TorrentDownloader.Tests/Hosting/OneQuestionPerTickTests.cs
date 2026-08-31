@@ -46,8 +46,6 @@ public class OneQuestionPerTickTests : IDisposable
         FakeProvider server = new();
         StandingEngine engine = new();
 
-        List<(string Path, string Id)> listed = [];
-
         for (int number = 1; number <= 4; number++)
         {
             EpisodeKey key = new(Silo, 3, number);
@@ -60,9 +58,6 @@ public class OneQuestionPerTickTests : IDisposable
 
             engine.Holding(Finished(hash, release), new TorrentFile(release + ".mkv", Length));
 
-            // The server's own listing of the intake folder, which is what says
-            // a staged file is one it will encode.
-            listed.Add((Staged(key), (4400 + number).ToString()));
         }
 
 
@@ -75,10 +70,6 @@ public class OneQuestionPerTickTests : IDisposable
         Assert.Equal(1, query.Shows);
         Assert.Equal(1, query.Libraries);
 
-        // Where the show's episodes already are decides which of a library's
-        // folders the encode is sent to, and one tick has one answer for that
-        // too.
-        Assert.Equal(1, query.Files);
     }
 
     /// <remarks>

@@ -40,7 +40,7 @@ public class TheContractEncoderTests
         FakeProvider server = new();
 
         EncodeAsk ask = await Gateway(encoder, server)
-            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 6), Show(), null, CancellationToken.None);
+            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 6), Show(), CancellationToken.None);
 
         Assert.True(ask.Taken);
 
@@ -78,7 +78,7 @@ public class TheContractEncoderTests
         FakeProvider server = new();
 
         EncodeAsk ask = await Gateway(encoder, server)
-            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 6), Show(), null, CancellationToken.None);
+            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 6), Show(), CancellationToken.None);
 
         Assert.False(ask.Taken);
         Assert.Contains(
@@ -103,7 +103,7 @@ public class TheContractEncoderTests
         // Season three, episode nine: a real episode of the show, and one this
         // library answer carries no id for.
         EncodeAsk ask = await Gateway(encoder, server)
-            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 9), Show(), null, CancellationToken.None);
+            .DispatchAsync(@"D:\intake\Silo.mkv", new(Silo, 3, 9), Show(), CancellationToken.None);
 
         Assert.False(ask.Taken);
         Assert.Empty(encoder.Asked);
@@ -150,7 +150,6 @@ public class TheContractEncoderTests
             @"D:\intake\Silo.mkv",
             new(Silo, 3, 6),
             Show(),
-            null,
             CancellationToken.None);
 
         Assert.False(ask.Taken);

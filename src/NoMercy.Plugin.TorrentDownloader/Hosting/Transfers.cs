@@ -389,11 +389,7 @@ public sealed class Transfers(
             return;
         }
 
-        // Where this show's episodes already are, so the encode goes to the
-        // folder it really lives in. A library can have several.
-        string? existing = (await thisTick.GetShowFilesAsync(episode.ShowId, ct)).FirstOrDefault();
-
-        EncodeAsk asked = await dispatch.DispatchAsync(staged, episode, show, existing, ct);
+        EncodeAsk asked = await dispatch.DispatchAsync(staged, episode, show, ct);
 
         if (!asked.Taken)
         {

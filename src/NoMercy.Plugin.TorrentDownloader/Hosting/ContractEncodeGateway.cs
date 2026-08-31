@@ -29,12 +29,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// plugin.
 /// </para>
 /// <para>
-/// <strong>The folder is not asked for.</strong> The reflecting one had to
-/// choose which folder of a library a show lives in, because it was building
-/// the job itself. The contract takes the library and the media id, and a
-/// server holding the episode row knows better than this plugin where that
-/// show's files are — so <c>existing</c> is not used here, and that is the
-/// point rather than an omission.
+/// <strong>No folder is chosen here.</strong> The reflecting one had to pick
+/// which folder of a library a show lives in, because it was building the job
+/// itself, and it asked the server for the show's files on every dispatch to do
+/// it. The contract takes the library and the media id: a server holding the
+/// episode row knows where that show's files are, and the question is not asked
+/// any more.
 /// </para>
 /// </remarks>
 public sealed class ContractEncodeGateway(
@@ -47,7 +47,6 @@ public sealed class ContractEncodeGateway(
         string stagedFile,
         EpisodeKey episode,
         Show show,
-        string? existing,
         CancellationToken ct)
     {
         string name = Path.GetFileName(stagedFile);
