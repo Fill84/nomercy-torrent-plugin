@@ -59,7 +59,18 @@ public sealed class LiveSnapshot : IDisposable
     }
 
     /// <summary>What every page renders from.</summary>
-    public sealed record Payload(ActivitySnapshot Activity, CycleStatus Cycle);
+    /// <param name="Activity">What the journal holds.</param>
+    /// <param name="Cycle">Where the search cycle stands.</param>
+    /// <param name="At">
+    /// When this push was made, and the reason it is here: a download moves its
+    /// byte count without touching the journal or the cycle, so every push
+    /// while one is running carried a payload identical to the last. A receiver
+    /// with any reason to skip a message it has already seen would draw the
+    /// figures of the moment the page was opened and never move again — which
+    /// is exactly what the owner saw. This differs on every push, so no two are
+    /// the same message.
+    /// </param>
+    public sealed record Payload(ActivitySnapshot Activity, CycleStatus Cycle, DateTimeOffset At);
 
     /// <summary>
     /// Something moved. The push follows within <see cref="MinimumInterval"/>;
@@ -112,7 +123,7 @@ public sealed class LiveSnapshot : IDisposable
 
         // Read outside the lock: the journal takes its own, and holding two in
         // one order here and the other order there is how a deadlock is built.
-        Payload payload = new(_journal.Snapshot(), _cycle());
+        Payload payload = new(_journal.Snapshot(), _cycle(), _time.GetUtcNow());
 
         _ = Send(payload);
     }
