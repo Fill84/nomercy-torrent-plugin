@@ -6,6 +6,18 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **S10-09 is done but for its version and its tag, and those are the owner's to give.**
 
+**Library membership is not the rule, and the attempt is worth reading before anyone tries a third
+time.** On 31 August 2026 `Ownership.Theirs` was changed from "has a file" to "is in a library", on
+the grounds that media-server #34 and #36 had closed and the rows nobody asked for were gone. The
+check that said so asked the wrong table: `LibraryTv` holds fifty-five shows and every one has a
+file, but the plugin reads membership from `Tvs.LibraryId`, which holds sixty-seven. The twelve in
+between are exactly those rows. Within a minute of the plugin starting, the owner saw it offering to
+fetch every episode of The Simpsons — a folder, eight hundred and eighty-seven episodes, not one
+file. It was undone the same hour.
+
+What #34 and #36 gave is a newly added show being visible, which is not the same as a way to tell a
+show the owner added from a row the server made. Until there is one, having a file is the rule.
+
 **There is no reflection anywhere in this plugin.** `EncodeDispatch.cs` is deleted — 588 lines that
 named `IJobDispatcher`, `VideoEncodeJob`, `MediaContext` and `IFileListService` by hand because
 there was no other way to ask. It broke four times on server changes it could not see coming, and

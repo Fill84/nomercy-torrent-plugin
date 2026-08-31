@@ -482,7 +482,7 @@ public sealed class Transfers(
             // library remembers it for both.
             foreach (int show in open.Covers.Select(one => one.ShowId).Distinct())
             {
-                theirs &= Ownership.Theirs(show, await thisTick.GetShowsAsync(ct));
+                theirs &= Ownership.Theirs(await thisTick.GetEpisodesAsync(show, ct));
             }
 
             if (theirs)

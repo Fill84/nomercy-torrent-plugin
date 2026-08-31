@@ -12,40 +12,39 @@ public class MissingRefreshTests
 
     /// <remarks>
     /// <para>
-    /// <strong>A show in the library is one the owner has, from the day it is
-    /// added.</strong> A show just added has nothing on disk, and it is the case
-    /// most worth having: every episode of it is a gap.
+    /// <strong>A show the owner has none of is not a show they have.</strong>
+    /// The server keeps rows for shows nobody asked for, in the same table,
+    /// against the same library id, with a folder and a full episode list.
+    /// Nothing in the row says which is which; having a file does.
     /// </para>
     /// <para>
-    /// Having a file was the rule until 30 August 2026, because the server kept
-    /// rows for shows nobody asked for — same table, same library id, a folder
-    /// and a full episode list, and nothing in the row to tell them apart.
-    /// Taking every show was tried on 24 August and within the hour the owner
-    /// was on 479 grabs, Family Guy alone claiming 456. media-server #36 stopped
-    /// identification importing shows on a guess and #34 made a newly added show
-    /// visible; on the owner's server the next day the television library held
-    /// fifty-five shows and not one without a file, so the rows that made the
-    /// old rule necessary were gone.
+    /// Taking every show in the library instead was tried on 24 August 2026 and
+    /// the owner's plugin was on 479 grabs within the hour, Family Guy alone
+    /// claiming 456 missing episodes. It was tried again on 31 August, on the
+    /// grounds that media-server #34 and #36 had made membership safe, and
+    /// undone the same hour: those rows are still there. Sixty-seven shows
+    /// carry a library id on the owner's server and fifty-five of them have a
+    /// file, and the first thing the plugin offered to fetch was every episode
+    /// of The Simpsons.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AShowJustAddedIsSearchedForOnTheDayItIsAdded()
+    public async Task AShowWithNotOneEpisodeOnDiskIsNotOneTheOwnerHas()
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
             .Episode(1, 1, 1, hasFile: true, airDate: new DateOnly(2020, 1, 1))
             .Episode(1, 1, 2, airDate: new DateOnly(2020, 1, 8))
 
-            // Added this morning: in the library, and not one file yet.
-            .Show(2, "Dark Matter")
+            // A row the server keeps: a folder, a full episode list, no file.
+            .Show(2, "The Simpsons")
             .Episode(2, 1, 1, airDate: new DateOnly(2020, 1, 1))
             .Episode(2, 1, 2, airDate: new DateOnly(2020, 1, 8));
 
         IReadOnlyList<TrackedEpisode> tracked = await Derive(library);
 
-        // Both shows, and every episode of the one with nothing on disk.
-        Assert.Contains(tracked, episode => episode.ShowTitle == "Silo");
-        Assert.Equal(2, tracked.Count(episode => episode.ShowTitle == "Dark Matter"));
+        Assert.NotEmpty(tracked);
+        Assert.All(tracked, episode => Assert.Equal("Silo", episode.ShowTitle));
     }
 
     /// <remarks>

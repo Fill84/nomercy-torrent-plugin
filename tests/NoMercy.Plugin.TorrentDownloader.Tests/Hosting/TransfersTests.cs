@@ -980,18 +980,16 @@ public class TransfersTests : IDisposable
             // encode job will not take anything else. "library-tv" made every
             // test here agree with a plugin that could never dispatch.
             .Library(TelevisionLibrary, "Television", "tv")
+            .Show(41, "Silo", TelevisionLibrary, year: 2023)
+
             // Whether the encode has landed. It is the only thing the plugin
             // can see that says the job finished.
             .Episode(41, 3, 6, hasFile: encoded)
-            .Episode(41, 1, 1, hasFile: true);
 
-        // Whether the owner has this show at all, which since media-server #34
-        // and #36 is whether it is in a library. A show that is in none is one
-        // they removed, or one this plugin was never for.
-        if (owned)
-        {
-            query = query.Show(41, "Silo", TelevisionLibrary, year: 2023);
-        }
+            // Whether the owner has this show at all: one episode on disk is
+            // what says so, and a show with none is one the server keeps a row
+            // for that nobody asked for.
+            .Episode(41, 1, 1, hasFile: owned);
 
         return new(
             engine,
