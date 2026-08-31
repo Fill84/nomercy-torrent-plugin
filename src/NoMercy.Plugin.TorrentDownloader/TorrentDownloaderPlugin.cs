@@ -333,7 +333,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
             // Where the server will say what became of an encode. Without it a
             // failed job and a slow one look the same and both are waited out.
-            jobs: EncodeGateway.JobsOf(Context.Services));
+            jobs: EncodeGateway.JobsOf(Context.Services),
+
+            // What adds a show the owner does not have yet. Until this, a pack
+            // for one could not be dispatched at all: an encode is asked for by
+            // an episode id and a show with no row has none.
+            admission: new ShowAdmission(Context.Services, Context.Logger));
 
         await _transfers.TickAsync(settings.IncompleteFolder, settings.IntakeFolder, ct);
     }

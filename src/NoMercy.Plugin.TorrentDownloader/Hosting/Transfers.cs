@@ -34,7 +34,8 @@ public sealed class Transfers(
     IActivityJournal journal,
     ILogger logger,
     TimeProvider? time = null,
-    IEncodeJobs? jobs = null)
+    IEncodeJobs? jobs = null,
+    ShowAdmission? admission = null)
 {
     /// <summary>
     /// How long an encode is given before it is given up on.
@@ -293,11 +294,23 @@ public sealed class Transfers(
 
                 if (covers.Count == 0)
                 {
-                    // Nothing the server has heard of. The owner asked for this
-                    // torrent by name, so it is handed over for the server to
-                    // identify — the same thing the dashboard's Add content
-                    // does with a file a person points it at, and the only
-                    // thing left once there is no episode row to point at.
+                    // Nothing the owner has. The show is looked up and added,
+                    // which is the one thing that turns this into an ordinary
+                    // grab: once it is in a library it has episodes, and an
+                    // episode has the id an encode is asked for by. Handing the
+                    // files over without one asked the server to guess, and on
+                    // 31 August 2026 it guessed nine times and wrote nothing.
+                    //
+                    // Nothing else happens this tick. The show arrives through
+                    // the server's own import, and the next tick sees it like
+                    // any other — matched by name, covered, staged, dispatched.
+                    if (await AdmittedAsync(files, thisTick, ct))
+                    {
+                        return null;
+                    }
+
+                    // Only where that could not be done: the files go over as
+                    // they are and the server is asked to work them out.
                     if (await IdentifiedAsync(finished, files, incompleteFolder, thisTick, ct))
                     {
                         return null;
@@ -842,6 +855,57 @@ public sealed class Transfers(
 
             journal.Finished(ActivityStage.Dispatch, sent.ReleaseTitle, "encoded into the library, and the copies deleted");
         }
+    }
+
+    /// <summary>
+    /// Adds the show a torrent names, so its episodes can be dispatched.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An encode is asked for by the server's own episode id, and a show that
+    /// is in no library has no episodes and no ids — so a pack for one could
+    /// not be dispatched at all, however plainly its files named it. This looks
+    /// the show up with the server's own metadata providers and imports it into
+    /// the library its files read as, which is exactly what the dashboard does
+    /// when a person adds content.
+    /// </para>
+    /// <para>
+    /// False where there is no library of that kind, where the plugin cannot
+    /// reach the server's providers, or where no provider knows the show. The
+    /// caller then falls back to handing the files over as they are.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> AdmittedAsync(
+        IReadOnlyList<TorrentFile> files,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        if (admission is null || Staging.Claims(files) is not { } claimed)
+        {
+            return false;
+        }
+
+        LibraryKind kind = Staging.Reads(files);
+
+        Library? into = (await thisTick.GetLibrariesAsync(ct)).FirstOrDefault(one => one.Kind == kind);
+
+        if (into is null)
+        {
+            return false;
+        }
+
+        if (await admission.AddAsync(claimed.Title, claimed.Year, into, ct) is not string added)
+        {
+            return false;
+        }
+
+        journal.Finished(
+            ActivityStage.Download,
+            claimed.Title,
+            $"was in no library, so it was looked up and added to {into.Name} as {added}; "
+            + "its episodes are dispatched on the next pass");
+
+        return true;
     }
 
     /// <summary>

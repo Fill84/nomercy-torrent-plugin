@@ -1,3 +1,6 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
@@ -26,7 +29,7 @@ public sealed record Staged(string Path, EpisodeKey Episode, long Length);
 /// episodes they are for, which is testable without a disk.
 /// </para>
 /// </remarks>
-public static class Staging
+public static partial class Staging
 {
     /// <summary>
     /// What counts as video.
@@ -131,6 +134,41 @@ public static class Staging
     /// with the one thing they need to act on — the name to add.
     /// </remarks>
     /// <summary>
+    /// The show a torrent's files claim to be of, and its year.
+    /// </summary>
+    /// <remarks>
+    /// For a torrent naming a show that is in no library: it is what the plugin
+    /// asks the metadata providers about, so that the show can be added and the
+    /// episodes dispatched by their own ids like any other. Null where the files
+    /// name no show at all, which is a torrent nothing can be done with.
+    /// </remarks>
+    public static (string Title, int? Year)? Claims(IReadOnlyList<TorrentFile> files)
+    {
+        foreach (TorrentFile file in Wanted(files))
+        {
+            ReleaseName name = ReleaseName.Parse(System.IO.Path.GetFileName(file.Path));
+
+            if (!string.IsNullOrWhiteSpace(name.Title))
+            {
+                // The year off the name itself: ReleaseName does not carry one,
+                // and without it a title on its own matches every remake there
+                // has ever been. Nineteen or twenty hundred, because a four
+                // digit number in a release name is otherwise a resolution or
+                // a bitrate.
+                Match year = Made().Match(name.Original);
+
+                return (
+                    name.Title,
+                    year.Success
+                        ? int.Parse(year.Groups[1].Value, CultureInfo.InvariantCulture)
+                        : null);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Which kind of library a torrent's files read as, for a show nothing
     /// knows yet.
     /// </summary>
@@ -165,6 +203,10 @@ public static class Staging
 
         return LibraryKind.Anime;
     }
+
+    /// <summary>A year in a release name, which is the show's and not a number.</summary>
+    [GeneratedRegex(@"[.\s(\[]((?:19|20)\d{2})[.\s)\]]", RegexOptions.CultureInvariant)]
+    private static partial Regex Made();
 
     public static IReadOnlyList<string> Names(IReadOnlyList<TorrentFile> files)
     {
