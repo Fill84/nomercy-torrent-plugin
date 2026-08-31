@@ -121,8 +121,34 @@ public static class Staging
     /// being placed somewhere plausible.
     /// </para>
     /// </remarks>
-    /// <param name="files">Every file in the torrent, video or not.</param>
-    /// <param name="shows">The shows the server offers, which is what may be matched.</param>
+    /// <summary>
+    /// What the videos in a torrent say they are shows of, matched or not.
+    /// </summary>
+    /// <remarks>
+    /// So a torrent that names no show the owner has can say which show it does
+    /// name. "Nothing in it names an episode of a show in a library" is true and
+    /// leaves the owner nowhere: "the files name Dark Matter" is the same fact
+    /// with the one thing they need to act on — the name to add.
+    /// </remarks>
+    public static IReadOnlyList<string> Names(IReadOnlyList<TorrentFile> files)
+    {
+        List<string> named = [];
+
+        foreach (TorrentFile file in Wanted(files))
+        {
+            ReleaseName name = ReleaseName.Parse(System.IO.Path.GetFileName(file.Path));
+
+            if (name.Season is null || string.IsNullOrWhiteSpace(name.Title) || named.Contains(name.Title))
+            {
+                continue;
+            }
+
+            named.Add(name.Title);
+        }
+
+        return named;
+    }
+
     public static IReadOnlyList<EpisodeKey> Discover(IReadOnlyList<TorrentFile> files, IReadOnlyList<Show> shows)
     {
         List<EpisodeKey> found = [];

@@ -276,8 +276,17 @@ public sealed class Transfers(
                     // check is cheap and the answer changes the moment the show
                     // is added, so it goes on being asked; saying so every
                     // minute would bury the page it is written on.
-                    string reason =
-                        "nothing in it names an episode of a show in a library, so it was left where it is";
+                    // Naming what the files say they are, because the owner's
+                    // next move is to add that show to a library and there is
+                    // no other way for them to know which one. Left as "nothing
+                    // in it names an episode of a show in a library" it is a
+                    // true sentence that ends the conversation.
+                    IReadOnlyList<string> named = Staging.Names(files);
+
+                    string reason = named.Count == 0
+                        ? "nothing in it names an episode at all, so it was left where it is"
+                        : $"it holds episodes of {string.Join(", ", named)}, which is in no library, "
+                          + "so it was left where it is — add the show and it will be taken on";
 
                     journal.Failed(ActivityStage.Download, finished.ReleaseTitle, reason);
 

@@ -604,7 +604,11 @@ public class TransfersTests : IDisposable
         // written on within a day.
         IReadOnlyList<HistoryRow> history = await grabs.HistoryAsync(CancellationToken.None);
 
-        Assert.Single(history, one => (one.Detail ?? string.Empty).Contains("in a library", StringComparison.Ordinal));
+        // Naming the show the files say they are, because adding that show is
+        // the owner's next move and there is no other way for them to know
+        // which one to add.
+        Assert.Single(history, one => (one.Detail ?? string.Empty).Contains("Dark Matter", StringComparison.Ordinal)
+                                      && (one.Detail ?? string.Empty).Contains("no library", StringComparison.Ordinal));
 
         // And not on the Skipped page, which is releases the profile refused:
         // every row there carries a control that grabs the release anyway, and
