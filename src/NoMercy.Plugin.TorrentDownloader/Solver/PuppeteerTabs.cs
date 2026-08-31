@@ -98,9 +98,17 @@ public sealed class PuppeteerTabs : IBrowserTabs
 
             _logger.LogDebug("Opening a tab for {Host}.", host);
 
+            IPage page = await _connected.NewPageAsync();
+
+            // Counted once the page exists, never before it. A page that fails
+            // to open — a browser that died, a connection lost — would leave a
+            // tab counted that nothing can ever close, and a browser counted
+            // busy for ever is one that never closes again. That is the whole
+            // of the idle close, gone silently, in the one path that only runs
+            // when something has already gone wrong.
             Interlocked.Increment(ref _open);
 
-            return new PuppeteerTab(await _connected.NewPageAsync(), Closed);
+            return new PuppeteerTab(page, Closed);
         }
         finally
         {
