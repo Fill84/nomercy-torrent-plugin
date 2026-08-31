@@ -737,6 +737,115 @@ public class TransfersTests : IDisposable
         Assert.DoesNotContain(TelevisionLibrary, line.Detail ?? string.Empty, StringComparison.Ordinal);
     }
 
+    /// <remarks>
+    /// <para>
+    /// A handed-over pack covers no episode — that is precisely why it was
+    /// handed over — and the rule that finishes a grab reads "every episode it
+    /// covers has a file". Over no episodes that holds vacuously, so the tick
+    /// after the handover called the encode landed and deleted the torrent and
+    /// everything it had downloaded.
+    /// </para>
+    /// <para>
+    /// On 31 August 2026 that was 36 GB of Dark Matter, two minutes after it was
+    /// handed over — and while the server was still reading those very files,
+    /// because a handover gives the encoder their paths in the download folder
+    /// rather than a copy.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AHandedOverPackIsNotDeletedWhileItsEncodesAreStillRunning()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string first = Downloaded("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+        string second = Downloaded("Dark.Matter.2024.S01E02.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(first), 900_000_000),
+            new TorrentFile(Path.GetFileName(second), 900_000_000));
+
+        FakeProvider server = Server();
+
+        Transfers transfers = Transfers(
+            engine,
+            grabs,
+            server,
+            encoder: new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
+            jobs: new SayingJobs(new(EncodeJobState.Running, null)));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // Removing the torrent with its files is the deletion: that call is
+        // what took the 36 GB, and the download folder is the engine's to empty.
+        Assert.Empty(engine.Removed);
+    }
+
+    /// <remarks>
+    /// And a server that cannot say deletes nothing at all. There is no episode
+    /// to watch for and no job to ask about, so there is nothing that could ever
+    /// say the encode finished — and "it has been a while" is not that.
+    /// </remarks>
+    [Fact]
+    public async Task AHandedOverPackIsNeverDeletedByAServerThatCannotSayWhetherItsEncodesFinished()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string only = Downloaded("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(only), 900_000_000));
+
+        FakeProvider server = Server();
+
+        // No IPluginJobs, which is every server before 0.1.479.
+        Transfers transfers = Transfers(engine, grabs, server, encoder: new RecordingEncoder());
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(engine.Removed);
+    }
+
+    /// <remarks>
+    /// When every job it was given says it is finished, then it goes: the
+    /// torrent, its download, and the grab with them. That is the one thing
+    /// that ends a handover, and it is the server saying so.
+    /// </remarks>
+    [Fact]
+    public async Task AHandedOverPackIsFinishedWhenTheServerSaysEveryOneOfItsEncodesIs()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string first = Downloaded("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+        string second = Downloaded("Dark.Matter.2024.S01E02.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(first), 900_000_000),
+            new TorrentFile(Path.GetFileName(second), 900_000_000));
+
+        FakeProvider server = Server();
+
+        Transfers transfers = Transfers(
+            engine,
+            grabs,
+            server,
+            encoder: new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
+            jobs: new SayingJobs(new(EncodeJobState.Finished, null)));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Contains(engine.Removed, one => one.DeleteFiles);
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
     /// <summary>A server that says the same thing about every job.</summary>
     private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
     {

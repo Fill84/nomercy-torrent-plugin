@@ -234,6 +234,16 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **A handed-over pack deleted itself.** A grab handed to a library to be identified covers no
+  episode, and the rule that ends a grab reads "every episode it covers has a file" — which over no
+  episodes is true of nothing. The tick after the handover called the encode landed and removed the
+  torrent with its files: 36 GB of Dark Matter, two minutes after handing it over and while the
+  server was still reading those very files, because a handover gives the encoder paths in the
+  download folder rather than a copy. A coverless grab is now ended only by the jobs it was given,
+  every one of them held space-separated in `encode_job` and every one asked; where the server names
+  no job or cannot be asked, nothing is ever deleted. `StillWaitingAsync` asks the same way, so a
+  pack whose jobs die is failed rather than waited out.
+
 - **The History page said nothing.** A file handed to a library for the server to identify has no
   episode to name, and it was written with a key of noughts: ten rows reading `Series S00E00` for
   one pack, none of them saying which file. It carries no episode now and the line names the file.

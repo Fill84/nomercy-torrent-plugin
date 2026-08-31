@@ -749,14 +749,30 @@ public sealed class Transfers(
                 continue;
             }
 
-            bool landed = true;
+            bool landed;
 
-            foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
+            if (sent.Covers.Count == 0)
             {
-                IReadOnlyList<Episode> episodes = await thisTick.GetEpisodesAsync(show.Key, ct);
+                // Handed over for the server to identify, so there is no episode
+                // to watch for — and the rule below is "every episode it covers
+                // has a file", which over no episodes is true of nothing. That
+                // vacuous truth deleted a 36 GB pack two minutes after handing
+                // it over, while the server was still reading those very files:
+                // a handover gives the encoder their paths in the download
+                // folder, not a copy. Only the jobs it was given can end it.
+                landed = await StandingAsync(sent, ct) is { State: EncodeJobState.Finished };
+            }
+            else
+            {
+                landed = true;
 
-                landed &= show.All(wanted => episodes.Any(one =>
-                    one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile));
+                foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
+                {
+                    IReadOnlyList<Episode> episodes = await thisTick.GetEpisodesAsync(show.Key, ct);
+
+                    landed &= show.All(wanted => episodes.Any(one =>
+                        one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile));
+                }
             }
 
             if (!landed)
@@ -780,22 +796,6 @@ public sealed class Transfers(
         }
     }
 
-    /// <summary>
-    /// Gives up on an encode the library never received.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Not dispatched a second time. A second job for a file the encoder may
-    /// still be working on is the one thing worse than waiting, and nothing
-    /// here can tell a job that failed from one still running — the plugin
-    /// cannot see the queue.
-    /// </para>
-    /// <para>
-    /// The episode goes back to missing so it can be found again, and the
-    /// staged file is left where it is: if the encode does land later, the
-    /// refresh sees the file and the episode stops being missing on its own.
-    /// </para>
-    /// </remarks>
     /// <summary>
     /// Hands a torrent's videos to a library for the server to identify.
     /// </summary>
@@ -836,6 +836,11 @@ public sealed class Transfers(
             return false;
         }
 
+        // Every job the server names, because every one of them is reading a
+        // file out of the download folder and the pack cannot go until they are
+        // all done with it.
+        List<string> queued = [];
+
         bool any = false;
 
         foreach (Staged file in Staging.Wanted(files).Select(one => new Staged(one.Path, new(0, 0, 0), one.Length)))
@@ -858,6 +863,11 @@ public sealed class Transfers(
 
             any = true;
 
+            if (asked.JobId is string job)
+            {
+                queued.Add(job);
+            }
+
             // No episode: there is none, and that is what was handed over.
             // A key of noughts here drew "Series S00E00" on the History page.
             await grabs.DispatchedAsync(
@@ -872,6 +882,16 @@ public sealed class Transfers(
         if (any)
         {
             await grabs.StateAsync(finished.InfoHash, GrabState.Dispatched, ct);
+
+            if (queued.Count > 0)
+            {
+                await grabs.EncodeJobAsync(finished.InfoHash, string.Join(' ', queued), ct);
+            }
+
+            // The clock starts here, as it does for a dispatch: an encode is
+            // waited on from the moment it was asked for.
+            _waiting[finished.InfoHash] = (time ?? TimeProvider.System).GetUtcNow();
+
             _unplaceable.Remove(finished.InfoHash);
         }
 
@@ -885,6 +905,22 @@ public sealed class Transfers(
     /// </remarks>
     private readonly HashSet<string> _unplaceable = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Gives up on an encode the library never received.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Not dispatched a second time. A second job for a file the encoder may
+    /// still be working on is the one thing worse than waiting, and nothing
+    /// here can tell a job that failed from one still running — the plugin
+    /// cannot see the queue.
+    /// </para>
+    /// <para>
+    /// The episode goes back to missing so it can be found again, and the
+    /// staged file is left where it is: if the encode does land later, the
+    /// refresh sees the file and the episode stops being missing on its own.
+    /// </para>
+    /// </remarks>
     private async Task StillWaitingAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
     {
         DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();
@@ -901,9 +937,8 @@ public sealed class Transfers(
         // waited out for six hours before the episode goes back to missing and
         // the same gigabytes are downloaded again. media-server #31, which this
         // plugin opened, is what makes the difference sayable.
-        if (jobs is not null && sent.EncodeJobId is string job)
         {
-            EncodeJob? standing = await jobs.StatusAsync(job, ct);
+            EncodeJob? standing = await StandingAsync(sent, ct);
 
             if (standing is { State: EncodeJobState.Failed })
             {
@@ -978,6 +1013,62 @@ public sealed class Transfers(
 
         logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, reason);
         journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, reason);
+    }
+
+    /// <summary>
+    /// What the server says about every encode a grab is waiting on, as one
+    /// answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One for a grab the plugin named an episode for, and one per file for a
+    /// pack handed over to be identified — nine of them for a season. They are
+    /// held in the one column space-separated, which a job id never contains,
+    /// so a row written when a grab could only have one still reads as itself.
+    /// </para>
+    /// <para>
+    /// Failed if any failed, because one dead encode is the answer whatever the
+    /// others are doing; otherwise still going if any is; finished only when
+    /// every one of them is. Null where nothing can be said — no server to ask,
+    /// no job named, or a job the server no longer knows — and null is never
+    /// "finished": a pack is deleted on that answer.
+    /// </para>
+    /// </remarks>
+    private async Task<EncodeJob?> StandingAsync(StoredDownload sent, CancellationToken ct)
+    {
+        if (jobs is null || sent.EncodeJobId is not string named)
+        {
+            return null;
+        }
+
+        EncodeJob? going = null;
+        bool asked = false;
+
+        foreach (string job in named.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            asked = true;
+
+            EncodeJob? standing = await jobs.StatusAsync(job, ct);
+
+            if (standing is null)
+            {
+                // A job this server does not know. It cannot be called finished
+                // and it cannot be called failed, so the whole grab is unknown.
+                return null;
+            }
+
+            if (standing.State == EncodeJobState.Failed)
+            {
+                return standing;
+            }
+
+            if (standing.State != EncodeJobState.Finished)
+            {
+                going = standing;
+            }
+        }
+
+        return asked ? going ?? new EncodeJob(EncodeJobState.Finished, null) : null;
     }
 
     /// <summary>Takes a file away, and never takes the caller down with it.</summary>
