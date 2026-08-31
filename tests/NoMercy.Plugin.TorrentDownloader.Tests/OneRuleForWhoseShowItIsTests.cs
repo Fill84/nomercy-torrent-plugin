@@ -102,7 +102,7 @@ public class OneRuleForWhoseShowItIsTests : IDisposable
                 grabs,
                 library,
                 new Stager(server.Journal, server.Log),
-                new EncodeDispatch(server, server.Journal, server.Log),
+                EncodeGateway.For(server, library, server.Journal, server.Log),
                 server.Journal,
                 server.Log,
                 TimeProvider.System)

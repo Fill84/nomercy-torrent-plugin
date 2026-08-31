@@ -57,7 +57,7 @@ public class TransfersTests : IDisposable
 
         Assert.True(File.Exists(Staged), "It was never staged.");
         Assert.False(File.Exists(episode), "The download was left where it was.");
-        Assert.NotNull(server.Dispatcher.Job);
+        Assert.NotNull(server.Encoder.Job);
     }
 
     /// <remarks>
@@ -95,7 +95,7 @@ public class TransfersTests : IDisposable
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
         Assert.True(File.Exists(Staged), "It was never staged.");
-        Assert.NotNull(server.Dispatcher.Job);
+        Assert.NotNull(server.Encoder.Job);
 
         // And it says which episode it turned out to be, in the store rather
         // than only in this tick: the steps that mark the episode arrived and
@@ -199,13 +199,14 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-        // The server knows nothing about it yet, so the encode is refused.
-        server.Files.Matches = [];
+        // The server refuses this one, for a reason that can change: an encoder
+        // busy, a preset missing, a library it will not write to yet.
+        server.Encoder.Refusal = "the encoder is not ready for that library";
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
         Assert.True(File.Exists(staged), "It was never staged.");
-        Assert.Null(server.Dispatcher.Job);
+        Assert.Null(server.Encoder.Job);
 
         StoredDownload waiting = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
 
@@ -216,12 +217,12 @@ public class TransfersTests : IDisposable
         // to stage again would have nothing to copy and would say so.
         Assert.False(File.Exists(episode));
 
-        // Now the server knows it, and the next tick asks again.
-        server.Files.Matches = [(staged, "4417")];
+        // Now it will take it, and the next tick asks again.
+        server.Encoder.Refusal = null;
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.NotNull(server.Dispatcher.Job);
+        Assert.NotNull(server.Encoder.Job);
         Assert.Equal(
             GrabState.Dispatched,
             Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
@@ -378,7 +379,7 @@ public class TransfersTests : IDisposable
 
         await Transfers(new StandingEngine(), grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.NotNull(server.Dispatcher.Job);
+        Assert.NotNull(server.Encoder.Job);
 
         // And it is being waited on now, so the copies go when the library has
         // it rather than being left for ever.
@@ -492,7 +493,7 @@ public class TransfersTests : IDisposable
 
         await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Equal(1, server.Dispatcher.Dispatches);
+        Assert.Equal(1, server.Encoder.Dispatches);
     }
 
     /// <remarks>
@@ -605,7 +606,7 @@ public class TransfersTests : IDisposable
         // Left where it is: nothing staged, nothing dispatched, and the grab
         // still open so it is picked up the day the show is added.
         Assert.False(File.Exists(Staged), "It was staged into a library it does not belong to.");
-        Assert.Null(server.Dispatcher.Job);
+        Assert.Null(server.Encoder.Job);
         Assert.NotEmpty(await grabs.OpenAsync(CancellationToken.None));
 
         // And said once, on the page that keeps it. Twice would bury the page
@@ -668,7 +669,7 @@ public class TransfersTests : IDisposable
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
 
         // Once, and not dispatched again on the way out.
-        Assert.Equal(1, server.Dispatcher.Dispatches);
+        Assert.Equal(1, server.Encoder.Dispatches);
     }
 
     /// <remarks>
@@ -712,7 +713,7 @@ public class TransfersTests : IDisposable
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Equal(1, server.Dispatcher.Dispatches);
+        Assert.Equal(1, server.Encoder.Dispatches);
 
         // The same release under the site's name for it, as a second staging
         // left behind. It is a copy of what was already dispatched.
@@ -723,7 +724,7 @@ public class TransfersTests : IDisposable
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Equal(1, server.Dispatcher.Dispatches);
+        Assert.Equal(1, server.Encoder.Dispatches);
     }
 
     /// <remarks>
@@ -814,13 +815,13 @@ public class TransfersTests : IDisposable
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Equal(1, server.Dispatcher.Dispatches);
+        Assert.Equal(1, server.Encoder.Dispatches);
 
         // Once, and then waited on: this is recovery from a restart, not a
         // second chance on every tick.
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Equal(1, server.Dispatcher.Dispatches);
+        Assert.Equal(1, server.Encoder.Dispatches);
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
@@ -942,7 +943,7 @@ public class TransfersTests : IDisposable
             grabs,
             new HostLibrary(query),
             new Stager(server.Journal, server.Log),
-            new EncodeDispatch(server, server.Journal, server.Log),
+            EncodeGateway.For(server, new HostLibrary(query), server.Journal, server.Log),
             server.Journal,
             server.Log,
             clock ?? TimeProvider.System,

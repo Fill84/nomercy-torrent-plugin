@@ -13,15 +13,20 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The second implementation of <see cref="IEncodeGateway"/>, beside
-/// <see cref="EncodeDispatch"/>, which reaches into the server by name because
-/// there was no other way to ask. This plugin opened two media-server issues
-/// about that and both were closed on 30 August 2026: #30 gives plugins
-/// <see cref="IPluginEncoder"/>, so an encode is asked for rather than
-/// assembled out of <c>IJobDispatcher</c> and <c>VideoEncodeJob</c>; #35 puts
-/// the server's own episode id in the library answer, so the row no longer has
-/// to be dug out of <c>MediaContext</c>. There is no reflection in this file
-/// and no server type named in it that does not come from the contract.
+/// The only implementation of <see cref="IEncodeGateway"/>. What it replaced —
+/// <c>EncodeDispatch</c>, 588 lines of it — reached into the server by name,
+/// because there was no other way to ask: <c>IJobDispatcher</c> to queue with,
+/// <c>VideoEncodeJob</c> to queue, <c>MediaContext</c> to find the episode row
+/// in. It broke four times on server changes it could not see coming.
+/// </para>
+/// <para>
+/// This plugin opened two media-server issues about that and both closed on
+/// 30 August 2026: #30 gives plugins <see cref="IPluginEncoder"/>, so an encode
+/// is asked for rather than assembled; #35 puts the server's own episode id in
+/// the library answer, so the row is handed over rather than looked up. There
+/// is no reflection in this file, no server type named in it that does not come
+/// from the contract — and, since the old one was deleted, none anywhere in the
+/// plugin.
 /// </para>
 /// <para>
 /// <strong>The folder is not asked for.</strong> The reflecting one had to

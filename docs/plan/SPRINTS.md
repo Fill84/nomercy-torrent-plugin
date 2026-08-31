@@ -1393,7 +1393,9 @@ should install and it stands in the way of the real 0.4.0.
 
 0.4.0 is not a date. It is the version where this plugin stops reaching into the server by name.
 
-It waits on five media-server issues, and none of them is this repository's to close:
+**All five media-server issues it waited on were closed on 30 August 2026**, and the contract that
+carries them is `0.1.479`, which this repository builds against. Steps 1 to 4 are done. Step 5 is
+the version and the tag, and step 6 says when: only when the owner asks.
 
 | Issue | What it gives |
 | --- | --- |
@@ -1403,14 +1405,18 @@ It waits on five media-server issues, and none of them is this repository's to c
 | #34 | a newly added show is visible, so membership can be the rule |
 | #37 | deleting a show stops leaving its subtree behind |
 
-1. When #30 and #35 land: a second implementation of `IEncodeGateway` that uses the contract, beside
-   the reflecting one. **S10-06** is what makes that an addition rather than surgery.
-2. `EncodeDispatch.cs` and every constant in it go. That file is the only reflection in the plugin;
-   when it goes there is none.
-3. When #36 and #34 land: `Ownership.Theirs` becomes library membership. **S10-01** is what makes
-   that one line rather than two.
-4. `docs/09-host-contract.md` describes the contract that shipped, and the ABI dump is regenerated
-   from the released server.
+1. **Done.** `ContractEncodeGateway` uses `IPluginEncoder` and `PluginLibraryEpisode.Id`, and
+   `EncodeGateway.For` chooses between it and the reflecting one per server. It cost a class and one
+   line of composition, with no line of `Transfers` touched — which is what **S10-06** was for.
+2. **Done.** `EncodeDispatch.cs` is deleted — 588 lines, and every server type this plugin ever
+   named by hand with it. There is no reflection anywhere in the plugin. A server that does not
+   offer `IPluginEncoder` is told so, once, in the log and the journal, rather than guessed at: it
+   needs contract `0.1.479` or newer.
+3. **Done.** `Ownership.Theirs` is library membership. Measured before it was changed: the owner's
+   television library held fifty-five shows and not one without a file, so the rows that made the
+   old rule necessary are gone. A show is in scope the day it is added.
+4. **Done.** `docs/09-host-contract.md` describes what runs, and the ABI dump is taken from
+   `0.1.479` — the dump before it was `0.1.478` and carried none of these contracts.
 5. `Directory.Build.props` and `plugin.json` say `0.4.0`, and the tag names the commit that proved
    it on the owner's server.
 6. Only when the owner asks.

@@ -115,24 +115,22 @@ public class TheContractEncoderTests
 
     /// <remarks>
     /// <para>
-    /// Which way this server can be asked. A server that offers
-    /// <c>IPluginEncoder</c> is asked through it; one that does not is still
-    /// asked the old way, because this plugin is installed on servers the owner
-    /// has not upgraded and an encode that stops working is a library that
-    /// stops filling.
+    /// A server that offers <c>IPluginEncoder</c> is asked through it, and
+    /// there is no other way to ask any more: <c>EncodeDispatch</c> is deleted
+    /// and with it the last reflection in this plugin.
     /// </para>
     /// <para>
-    /// The reflecting one goes when there are no such servers left, and that is
-    /// a decision about who is running what — not a technical one.
+    /// A server too old to offer it is told so rather than guessed at. Left to
+    /// return nothing, downloads would go on finishing and staging and every
+    /// one of them would wait in the intake folder for an encode that could
+    /// never be asked for — which is the shape of failure this plugin exists
+    /// not to have.
     /// </para>
     /// </remarks>
     [Fact]
-    public void TheContractIsUsedWhereTheServerOffersItAndReflectionWhereItDoesNot()
+    public async Task AServerWithoutTheContractIsToldSoRatherThanGuessedAt()
     {
         FakeProvider server = new();
-
-        Assert.IsType<EncodeDispatch>(
-            EncodeGateway.For(server, new HostLibrary(new FakeLibraryQuery()), server.Journal, server.Log));
 
         Assert.IsType<ContractEncodeGateway>(
             EncodeGateway.For(
@@ -140,10 +138,30 @@ public class TheContractEncoderTests
                 new HostLibrary(new FakeLibraryQuery()),
                 server.Journal,
                 server.Log));
+
+        // Nothing at all on offer, which is every server before 0.1.479.
+        IEncodeGateway none = EncodeGateway.For(
+            new Offering(null),
+            new HostLibrary(new FakeLibraryQuery()),
+            server.Journal,
+            server.Log);
+
+        EncodeAsk ask = await none.DispatchAsync(
+            @"D:\intake\Silo.mkv",
+            new(Silo, 3, 6),
+            Show(),
+            null,
+            CancellationToken.None);
+
+        Assert.False(ask.Taken);
+        Assert.Contains(
+            server.Journal.Snapshot().History,
+            one => one.Outcome == ActivityOutcome.Failed
+                   && (one.Detail ?? string.Empty).Contains("IPluginEncoder", StringComparison.Ordinal));
     }
 
-    /// <summary>A server that offers the encoder, and nothing else.</summary>
-    private sealed class Offering(IPluginEncoder encoder) : IServiceProvider
+    /// <summary>A server that offers the encoder, or one that offers nothing.</summary>
+    private sealed class Offering(IPluginEncoder? encoder) : IServiceProvider
     {
         public object? GetService(Type serviceType)
         {
@@ -160,7 +178,7 @@ public class TheContractEncoderTests
 
             // Named by the server and carrying no id of its own, which is what
             // an older answer looks like.
-            .Episode(Silo, 3, 9);
+            .Episode(Silo, 3, 9, id: 0);
 
         return new(encoder, new HostLibrary(query), server.Journal, server.Log);
     }

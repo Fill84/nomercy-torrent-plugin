@@ -73,7 +73,12 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
         string? title = "An episode",
         DateTime? airDate = null,
         bool hasFile = false,
-        int id = 0)
+
+        // media-server #35: a server answering with an episode names its id.
+        // Null takes one from the numbers, which is what a real answer does in
+        // the only way that matters here — it is not nought. Nought is a server
+        // too old to name one, and the encode gateway refuses that out loud.
+        int? id = null)
     {
         if (!_episodes.TryGetValue(showId, out List<PluginLibraryEpisode>? list))
         {
@@ -81,7 +86,10 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
             _episodes[showId] = list;
         }
 
-        list.Add(new(showId, season, number, title, airDate, hasFile) { Id = id });
+        list.Add(new(showId, season, number, title, airDate, hasFile)
+        {
+            Id = id ?? ((showId * 1000) + (season * 100) + number),
+        });
         return this;
     }
 

@@ -3,6 +3,7 @@ using NoMercy.Data.Repositories;
 using NoMercy.MediaProcessing.Files;
 using NoMercy.MediaProcessing.Jobs;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 
@@ -114,6 +115,58 @@ public sealed class FakeFiles : IFileListService
     }
 }
 
+/// <summary>The server's own encoder, as the contract offers it.</summary>
+/// <remarks>
+/// It replaced a fake of <c>IJobDispatcher</c> and the job type that went with
+/// it, which is what the plugin had to build for itself before media-server #30.
+/// </remarks>
+public sealed class FakeEncoder : IPluginEncoder
+{
+    private readonly List<(string File, string Library, string? Media, string? Preset)> _asked = [];
+    private readonly List<(string File, string Library, string? Media, string? Preset)> _queued = [];
+
+    /// <summary>Everything it was asked to encode, in order.</summary>
+    public IReadOnlyList<(string File, string Library, string? Media, string? Preset)> Asked => _asked;
+
+    /// <summary>Why it will not take it, or null to take it.</summary>
+    public string? Refusal { get; set; }
+
+    /// <summary>The last ask it took, or null where it took none.</summary>
+    /// <remarks>
+    /// Taken, not merely asked. A refusal is an ask that queued nothing, and a
+    /// test that could not tell them apart would call a refused encode a
+    /// dispatched one.
+    /// </remarks>
+    public (string File, string Library, string? Media, string? Preset)? Job =>
+        _queued.Count == 0 ? null : _queued[^1];
+
+    /// <summary>How many encodes it really queued.</summary>
+    /// <remarks>
+    /// Counted, not just kept: one release with eight grab rows dispatched
+    /// eight identical jobs and the last one looked exactly like the first.
+    /// </remarks>
+    public int Dispatches => _queued.Count;
+
+    public Task<PluginEncodeResult> EncodeAsync(
+        string file,
+        string libraryId,
+        string? mediaId = null,
+        string? presetId = null,
+        CancellationToken ct = default)
+    {
+        _asked.Add((file, libraryId, mediaId, presetId));
+
+        if (Refusal is not null)
+        {
+            return Task.FromResult(PluginEncodeResult.Refused(Refusal));
+        }
+
+        _queued.Add((file, libraryId, mediaId, presetId));
+
+        return Task.FromResult(PluginEncodeResult.Queued("01KZGKX2G0966V80H26EKGG5T1"));
+    }
+}
+
 public sealed class FakeDispatcher : IJobDispatcher
 {
     public object? Job { get; private set; }
@@ -144,6 +197,8 @@ public sealed class FakeProvider : IServiceProvider, IServiceScopeFactory, IServ
     public FakeLibraries Libraries { get; } = new();
 
     public FakeFiles Files { get; } = new();
+
+    public FakeEncoder Encoder { get; } = new();
 
     public FakeDispatcher Dispatcher { get; } = new();
 
@@ -206,6 +261,11 @@ public sealed class FakeProvider : IServiceProvider, IServiceScopeFactory, IServ
         if (serviceType == typeof(NoMercy.Database.MediaContext))
         {
             return Media;
+        }
+
+        if (serviceType == typeof(IPluginEncoder))
+        {
+            return Encoder;
         }
 
         return serviceType == typeof(IJobDispatcher) ? Dispatcher : null;

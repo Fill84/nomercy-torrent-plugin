@@ -4,7 +4,23 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**0.3.16 is tagged. S10-09 is next, and it is not this repository's to start.**
+**S10-09 is done but for its version and its tag, and those are the owner's to give.**
+
+**There is no reflection anywhere in this plugin.** `EncodeDispatch.cs` is deleted — 588 lines that
+named `IJobDispatcher`, `VideoEncodeJob`, `MediaContext` and `IFileListService` by hand because
+there was no other way to ask. It broke four times on server changes it could not see coming, and
+those four are why media-server #30 and #35 were opened. No server type is named anywhere in `src/`
+that does not come from `NoMercy.Plugins.Abstractions`.
+
+The encode is asked for through `IPluginEncoder` with the server's own episode id, what became of a
+job is asked through `IPluginJobs`, library membership is the rule for whose show it is, folders are
+chosen rather than typed, and a folder that cannot be written names the places the server can. That
+is every one of the five closed media-server issues, except writing through `IPluginStorage`, which
+cannot be adopted while the encode is asked for with an absolute path.
+
+A server without the contract is told so, once, and needs `0.1.479` or newer.
+
+Nothing here is released. The version says `0.3.18`, and it moves when the owner says so.
 
 **What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
 was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at

@@ -1,32 +1,38 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
 /// <summary>
-/// Which way this server can be asked for an encode.
+/// How this server can be asked for an encode.
 /// </summary>
 /// <remarks>
 /// <para>
 /// One line of composition, which is what <see cref="IEncodeGateway"/> was made
-/// a port for. A server that offers <see cref="IPluginEncoder"/> is asked
-/// through the contract and nothing is reflected at all; a server that does not
-/// is asked the way it always was.
+/// a port for. There is one implementation now and it calls
+/// <see cref="IPluginEncoder"/>: no server type is named that does not come from
+/// <c>NoMercy.Plugins.Abstractions</c>, and there is no reflection anywhere in
+/// this plugin.
 /// </para>
 /// <para>
-/// <strong>The old way stays until nobody is running an old server.</strong>
-/// This plugin is installed on servers the owner does not control the upgrade
-/// of, and an encode that stops working is a library that stops filling. When
-/// <see cref="EncodeDispatch"/> goes it goes whole — it is the only reflection
-/// in the plugin — and that is a decision about who is running what rather than
-/// a technical one.
+/// <strong>What went with it.</strong> <c>EncodeDispatch</c> was 588 lines that
+/// reached into the server by name — <c>IJobDispatcher</c>, <c>VideoEncodeJob</c>,
+/// <c>MediaContext</c> — because there was no other way to ask. It broke four
+/// times on server changes it could not see coming, which is why media-server
+/// #30 and #35 were opened, and it is deleted whole now that they are closed.
+/// </para>
+/// <para>
+/// A server too old to offer the contract is told so, once, in words the owner
+/// can act on. Guessing at the old way instead is what this plugin no longer
+/// does.
 /// </para>
 /// </remarks>
 public static class EncodeGateway
 {
-    /// <summary>Picks the way this server can be asked, and says which it was.</summary>
+    /// <summary>The gateway for this server, or one that says why there is none.</summary>
     public static IEncodeGateway For(
         IServiceProvider services,
         ILibrary library,
@@ -35,19 +41,18 @@ public static class EncodeGateway
     {
         if (services.GetService(typeof(IPluginEncoder)) is IPluginEncoder encoder)
         {
-            logger.LogInformation(
-                "The server offers IPluginEncoder, so encodes are asked for through the contract.");
-
             return new ContractEncodeGateway(encoder, library, journal, logger);
         }
 
-        // Said once, at the level the owner reads, because it is the difference
-        // between an episode named by the server's own id and one the server
-        // has to identify again from a file name.
-        logger.LogInformation(
-            "This server does not offer IPluginEncoder, so encodes are dispatched the older way.");
+        // Said at the level the owner reads, because nothing else they can see
+        // says it: downloads would go on finishing and staging, and every one
+        // of them would sit in the intake folder waiting for an encode that
+        // could never be asked for.
+        logger.LogWarning(
+            "This server does not offer IPluginEncoder, so no encode can be asked for. "
+            + "The plugin needs a server carrying plugin contract 0.1.479 or newer.");
 
-        return new EncodeDispatch(services, journal, logger);
+        return new NoEncoder(journal, logger);
     }
 
     /// <summary>Whether this server will say what became of a job, and how to ask.</summary>
@@ -58,5 +63,36 @@ public static class EncodeGateway
     public static IEncodeJobs? JobsOf(IServiceProvider services)
     {
         return services.GetService(typeof(IPluginJobs)) is IPluginJobs jobs ? new HostEncodeJobs(jobs) : null;
+    }
+
+    /// <summary>
+    /// The gateway for a server that cannot be asked at all.
+    /// </summary>
+    /// <remarks>
+    /// It refuses and says why, which is what every implementation of the port
+    /// owes its caller: the caller learns only "not taken" and leaves the file
+    /// staged, so a refusal that says nothing is an episode that never arrives
+    /// with nothing anywhere to explain it.
+    /// </remarks>
+    private sealed class NoEncoder(IActivityJournal journal, ILogger logger) : IEncodeGateway
+    {
+        public Task<EncodeAsk> DispatchAsync(
+            string stagedFile,
+            EpisodeKey episode,
+            Show show,
+            string? existing,
+            CancellationToken ct)
+        {
+            string name = Path.GetFileName(stagedFile);
+
+            const string Reason =
+                "this server does not offer IPluginEncoder, so no encode can be asked for; "
+                + "it needs plugin contract 0.1.479 or newer";
+
+            logger.LogWarning("No encode was dispatched for {File}: {Reason}.", name, Reason);
+            journal.Failed(ActivityStage.Download, name, Reason);
+
+            return Task.FromResult(EncodeAsk.No);
+        }
     }
 }

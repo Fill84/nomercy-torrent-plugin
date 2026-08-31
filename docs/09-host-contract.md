@@ -122,10 +122,8 @@ the server to identify the file again from its name, which is a text search on w
 reads out of it: the encode registers against no row, the queue counter moves, the library stays
 empty, and from outside it looks like an encode still running.
 
-**`EncodeDispatch`, below, is the older way and is still chosen for a server that does not offer
-`IPluginEncoder`.** `EncodeGateway.For` picks between them and says in the log which it picked. It
-is the only reflection in the plugin, and when there are no servers left that need it, it is deleted
-whole and there is none. That is a decision about who is running what.
+`EncodeGateway.For` composes it, and there is nothing else for it to compose: the reflecting
+implementation is gone.
 
 ### What became of the job
 
@@ -146,60 +144,18 @@ learns nothing but "not taken" and acts the same way whatever the reason — lea
 ask again next tick — so a silent refusal is an episode that never arrives with nothing anywhere
 saying why. Three of the owner's ended up in a folder nobody was watching exactly that way.
 
-Reached by name through `IServiceProvider`, never by reference — referencing the encoder and the EF
-model would make them part of this plugin's ABI, which is what the plugin contract exists to avoid.
+### What it replaced
 
-```
-IJobDispatcher      "NoMercy.MediaProcessing.Jobs.IJobDispatcher"
-VideoEncodeJob      "NoMercy.MediaProcessing.Jobs.MediaJobs.VideoEncodeJob"
-ILibraryRepository  "NoMercy.Data.Repositories.ILibraryRepository"
-IFileListService    "NoMercy.MediaProcessing.Files.IFileListService"
-```
+`EncodeDispatch` did all of the above by reflection, because there was no other way to ask:
+`IJobDispatcher` to queue with, `VideoEncodeJob` to queue, `MediaContext` and `IFileListService` to
+find the episode row. It was 588 lines, and it broke four times on server changes it could not see
+coming — an ambiguous `ILibraryRepository`, a Lite query that came back folderless, a scoped service
+asked of the root provider, and a media id sent as an empty string that made the job find no episode
+and return without a word.
 
-Traps, every one measured:
+It is deleted. Those four are why media-server #30 and #35 were opened, and the file went the day
+they closed. **There is no reflection anywhere in this plugin**, and no server type is named that
+does not come from `NoMercy.Plugins.Abstractions`.
 
-- **`ILibraryRepository` is ambiguous.** Two interfaces share the name.
-  `NoMercy.MediaProcessing.Libraries.ILibraryRepository` is **not registered** — the server registers
-  the concrete `MediaProcessingLibraryRepository`. Asking for it resolves to nothing and every encode
-  is refused with "library X was not found" about a library that is right there. A short-name
-  fallback cannot save this: two types share the name.
-- **Use `GetLibraryByIdAsync`, not the Lite variant.** Lite includes nothing, so the library comes
-  back folderless and the encode is refused for having nowhere to go — on a library with two folders.
-  The full one includes `FolderLibraries`.
-- **Resolve inside a scope.** The repository is scoped because it opens a database context. A scoped
-  service asked of the root provider is an exception or a null. Cadences are not requests and have no
-  scope; make one.
-- **`Id` must be the server's own media id, as a string.** `VideoEncodeJob` looks media up by
-  `Id.ToInt()` and returns without a word when nothing matches. It was the int `0` once, which threw
-  out of the reflection call, and an empty string once, which made the job find no episode and return
-  in silence — the queue counter moved and the encode never ran.
-- **Get that id from the server, not from the filename.**
-  `IFileListService.GetFilesInDirectory(folder, libraryType)` — the two-argument overload; the
-  three-argument one takes a storage driver, which is for a folder on a remote share. Walk the
-  results, match on full path, read `item.Match.Id`. If nothing matched, **do not dispatch**: a job
-  with no id is silently dropped, which reports success and leaves the episode in a folder nobody is
-  watching.
-- **The library is the show's own**, from `PluginLibraryShow.LibraryId`. That is what puts an anime
-  episode in the anime library and a television episode in the tv library — the media type was
-  decided by the server when the show was filed, and this plugin follows it rather than choosing.
-- **Folder** is the library's *first* `FolderLibraries` entry, with no preference between them.
-  Preferring one whose `Folder.Path` is non-empty is wrong: a real library's second folder is a `Z:`
-  drive whose location lives on its storage driver, and the dialog lists it happily.
-
-Fields set on the job, exactly what `ServerController.AddFiles` sets:
-
-```
-LibraryId       = the show's own LibraryId
-FolderId        = first FolderLibraries entry's FolderId
-Id              = the match's Id, as a string
-InputFile       = Path.GetFullPath(stagedFile)
-SourceDriverId  = left unset                    (a finished download is on this machine)
-PresetId        = library.EncodePresetId        (null keeps the folder's own presets)
-```
-
-Then `IJobDispatcher.Dispatch(job, job.QueueName, job.Priority)` — the three-argument overload.
-
-Nothing in this path throws. An encode that cannot be queued is one download left staged and a line
-in the log naming exactly what could not be found. It used to throw out of a reflection call and
-unwind the whole transfers cadence, so one type mismatch stopped every download in flight from being
-looked at.
+A server that does not offer `IPluginEncoder` is told so — once, in the log and the journal — rather
+than guessed at. It needs plugin contract `0.1.479` or newer.

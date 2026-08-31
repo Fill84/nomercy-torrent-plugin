@@ -71,7 +71,7 @@ public class OneQuestionPerTickTests : IDisposable
 
         // The tick really did the work, or the counts below are the counts of a
         // tick that did nothing.
-        Assert.Equal(4, server.Dispatcher.Dispatches);
+        Assert.Equal(4, server.Encoder.Dispatches);
 
         Assert.Equal(1, query.Shows);
         Assert.Equal(1, query.Libraries);
@@ -217,7 +217,7 @@ public class OneQuestionPerTickTests : IDisposable
             grabs,
             new HostLibrary(query),
             new Stager(server.Journal, server.Log),
-            new EncodeDispatch(server, server.Journal, server.Log),
+            EncodeGateway.For(server, new HostLibrary(query), server.Journal, server.Log),
             server.Journal,
             server.Log,
             TimeProvider.System);
