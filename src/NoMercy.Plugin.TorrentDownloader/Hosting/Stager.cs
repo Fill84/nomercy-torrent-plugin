@@ -134,6 +134,16 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         // makes a second copy of one episode impossible.
         string destination = Path.Combine(into, Named(source, file, show, resolution));
 
+        // Copied under a name nothing can mistake for an episode, and given the
+        // episode's name only once every byte is there. The destination used to
+        // be opened before a byte was read, so a copy that stopped part way — a
+        // server shutting down mid-tick is enough — left a truncated file in the
+        // intake folder under exactly the name a finished one has. The sweep of
+        // that folder matches what it finds against the grabs by release name
+        // and dispatches whatever one is waiting on, so the next start handed
+        // the encoder half an episode and called it done.
+        string part = Path.Combine(into, $".nomercy-{Guid.NewGuid():n}.part");
+
         try
         {
             Directory.CreateDirectory(into);
@@ -146,21 +156,26 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
             // mode has to allow what the existing handle already has — and that
             // is why nothing had ever reached the owner's library.
             await using (FileStream reading = new(source, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
-            await using (FileStream writing = new(destination, FileMode.Create, FileAccess.Write, FileShare.None))
+            await using (FileStream writing = new(part, FileMode.Create, FileAccess.Write, FileShare.None))
             {
                 await reading.CopyToAsync(writing, ct).ConfigureAwait(false);
             }
 
-            long copied = new FileInfo(destination).Length;
+            long copied = new FileInfo(part).Length;
 
             if (copied != file.Length)
             {
                 // A copy that ran out of disk half way leaves a file of the
                 // wrong length and no exception at all on some file systems.
-                File.Delete(destination);
+                File.Delete(part);
 
                 throw new IOException($"copied {copied} bytes of {file.Length}");
             }
+
+            // The one step that makes the episode appear, and it is a rename:
+            // there is no moment at which anything can see a partial file under
+            // this name.
+            File.Move(part, destination, overwrite: true);
 
             // The copy is the staging, and it is done. What happens to the
             // download afterwards cannot undo it: the torrent client is still
@@ -194,6 +209,28 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
             journal.Failed(ActivityStage.Download, Path.GetFileName(source), reason);
 
             return new(file, null, reason);
+        }
+        finally
+        {
+            // Including when the tick was cancelled, which is not caught above
+            // and must not be — a stopping server is not a staging failure.
+            // What it must not do is leave the part behind.
+            Discard(part);
+        }
+    }
+
+    /// <summary>Takes a part-copy away, and never takes the caller down with it.</summary>
+    private void Discard(string part)
+    {
+        try
+        {
+            File.Delete(part);
+        }
+        catch (Exception whatever) when (whatever is IOException or UnauthorizedAccessException)
+        {
+            // A part that will not delete is rubbish in a folder, under a name
+            // nothing dispatches. Saying so is the whole of what is owed.
+            logger.LogWarning("{Part} could not be removed.", part);
         }
     }
 }

@@ -24,6 +24,55 @@ public class StagerTests : IDisposable
     /// The file arrives in the intake folder under its own name, whole, and is
     /// gone from the download folder afterwards.
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// A copy that does not finish leaves nothing behind under the name a
+    /// finished one would have. The destination was opened with
+    /// <c>FileMode.Create</c> before a byte was read, so a copy stopped part
+    /// way — the server shutting down mid-tick is enough — left a truncated
+    /// file in the intake folder carrying exactly the name the episode would
+    /// have had.
+    /// </para>
+    /// <para>
+    /// The tick's own sweep of that folder matches what it finds against the
+    /// grabs by release name, and dispatches anything a grab is waiting on. So
+    /// the next start would have handed the encoder a half-copied episode and
+    /// called it done.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ACopyThatDoesNotFinishLeavesNothingUnderTheFinishedName()
+    {
+        byte[] content = Content(3 * 1024 * 1024);
+        string from = Folder("incomplete");
+        string into = Path.Combine(_root, "intake");
+
+        await File.WriteAllBytesAsync(Path.Combine(from, "Silo.S03E06.mkv"), content);
+
+        using CancellationTokenSource stopped = new();
+
+        await stopped.CancelAsync();
+
+        try
+        {
+            await new Stager(new ActivityJournal(), new CapturingLogger()).MoveAsync(
+                [new("Silo.S03E06.mkv", Episode(6), content.Length)],
+                from,
+                into,
+                show: null,
+                resolution: null,
+                stopped.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            // Which is what a stopping server does to every tick in flight.
+        }
+
+        Assert.False(
+            Directory.Exists(into) && Directory.EnumerateFiles(into, "*.mkv").Any(),
+            "a half-copied episode was left under the name a finished one would have");
+    }
+
     [Fact]
     public async Task AStagedFileArrivesWholeAndLeavesTheDownloadFolder()
     {
