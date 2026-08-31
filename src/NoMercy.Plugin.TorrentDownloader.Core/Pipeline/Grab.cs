@@ -62,6 +62,13 @@ public sealed record Grabbed(GrabResult Result, string? InfoHash, string? Reason
 /// </remarks>
 public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJournal journal)
 {
+    /// <summary>How many bytes this cycle has already promised the disk.</summary>
+    /// <remarks>
+    /// One Grab is made per cycle, so this is exactly the span over which the
+    /// free space the disk reports has not yet caught up with what was taken.
+    /// </remarks>
+    private long _committed;
+
     /// <summary>
     /// Takes on one copy.
     /// </summary>
@@ -114,6 +121,11 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
 
             journal.Finished(ActivityStage.Download, copy.Title, $"grabbed from {copy.Source}");
 
+            // Counted against the disk from here, for as long as this cycle
+            // lasts. A grab lives exactly one cycle, which is the span over
+            // which the disk has not caught up with what was taken.
+            _committed += copy.SizeBytes ?? 0;
+
             return new(GrabResult.Taken, handle.InfoHash, null);
         }
         catch (Exception refused) when (refused is not OperationCanceledException)
@@ -137,7 +149,19 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
     /// </remarks>
     private string? Room(ReleaseCopy copy, string folder)
     {
-        if (copy.SizeBytes is not long needed || space.FreeBytes(folder) is not long free || free >= needed)
+        if (copy.SizeBytes is not long needed || space.FreeBytes(folder) is not long measured)
+        {
+            return null;
+        }
+
+        // Less what this cycle has already taken. Free space is what the disk
+        // says now, and a torrent taken a moment ago has downloaded almost none
+        // of itself yet — so ten grabs in one cycle were each measured against
+        // the same number, every one of them passed, and together they filled
+        // the disk. That is the one thing this check exists to stop.
+        long free = measured - _committed;
+
+        if (free >= needed)
         {
             return null;
         }

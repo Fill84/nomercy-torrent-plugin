@@ -83,6 +83,45 @@ public class GrabTests
     /// share with no room, and refusing every grab on one would be a plugin
     /// that had quietly stopped working.
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// What this cycle has already taken counts against the disk. Free space is
+    /// what the disk says now, and a torrent taken a moment ago has downloaded
+    /// almost none of itself yet — so ten grabs in one cycle each measured
+    /// against the same free space, every one of them passed, and together they
+    /// filled the disk.
+    /// </para>
+    /// <para>
+    /// That is the whole of what this check is for: a torrent that fills the
+    /// disk takes the media server with it. Checking one at a time against a
+    /// number that does not move yet is not checking.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WhatThisCycleHasAlreadyTakenCountsAgainstTheDisk()
+    {
+        FakeEngine engine = new();
+
+        // Room for two of them and not a byte more.
+        Grab grab = new(engine, Room(9_000_000_000), new ActivityJournal());
+
+        Assert.Equal(
+            GrabResult.Taken,
+            (await grab.TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None)).Result);
+
+        Assert.Equal(
+            GrabResult.Taken,
+            (await grab.TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None)).Result);
+
+        Grabbed third = await grab.TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None);
+
+        Assert.Equal(GrabResult.NoRoom, third.Result);
+
+        // And it says what is really left rather than what the disk says, which
+        // is the number the owner would otherwise be arguing with.
+        Assert.Contains("953.7 MB", third.Reason!, StringComparison.Ordinal);
+    }
+
     [Fact]
     public async Task ASpaceNobodyCanMeasureIsNotTakenForNoSpace()
     {
