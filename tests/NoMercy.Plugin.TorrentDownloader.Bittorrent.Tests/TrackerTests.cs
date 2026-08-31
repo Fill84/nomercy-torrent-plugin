@@ -308,6 +308,90 @@ public class TrackerTests
         return File.ReadAllBytes(Path.Combine(directory!.FullName, "tests", "fixtures", name));
     }
 
+    /// <remarks>
+    /// <para>
+    /// One tracker that never answers is one tracker. BEP 15 says to wait
+    /// <c>15 * 2^n</c> seconds over eight tries, which is half an hour on a
+    /// dead one — and the announce is a single <c>Task.WhenAll</c>, so every
+    /// tracker with peers to hand over waited that half hour too. Worse, the
+    /// cancellation that ended it went straight past the catch, so
+    /// <c>AnnounceAsync</c> threw and the caller got nothing from anybody.
+    /// </para>
+    /// <para>
+    /// Measured on 31 August 2026 against the owner's Dark Matter pack, whose
+    /// magnet carries eighteen trackers with several years dead: no announce
+    /// came back at all for the first two and a half minutes, and the torrent
+    /// sat at no peers with an empty swarm column while four trackers had three
+    /// hundred seeds to give.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATrackerThatNeverAnswersDoesNotTakeTheOthersDownWithIt()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 31, 20, 0, 0, TimeSpan.Zero));
+        SilentAndSpeaking wire = new();
+
+        TrackerSet trackers = new(wire, clock);
+
+        Task<IReadOnlyList<TrackerResult>> announcing = trackers.AnnounceAsync(
+            ["http://silent.test/announce", "http://speaking.test/announce"],
+            Request(AnnounceEvent.Started),
+            CancellationToken.None);
+
+        await wire.Speaking;
+
+        // Long past the one tracker's deadline and nowhere near BEP 15's eight
+        // tries, which is the whole point: the others are not made to wait it
+        // out, and neither is the caller.
+        clock.Advance(TrackerSet.Deadline + TimeSpan.FromSeconds(1));
+
+        IReadOnlyList<TrackerResult> answers = await announcing;
+
+        Assert.Equal(2, answers.Count);
+
+        // The one that spoke is heard, with its peers.
+        Assert.NotNull(Assert.Single(answers, one => one.Tracker.Contains("speaking", StringComparison.Ordinal)).Response);
+
+        // And the one that did not says so, rather than throwing.
+        TrackerResult silent = Assert.Single(answers, one => one.Tracker.Contains("silent", StringComparison.Ordinal));
+
+        Assert.Null(silent.Response);
+        Assert.NotNull(silent.Failure);
+    }
+
+    /// <summary>One tracker that answers at once and one that never does.</summary>
+    private sealed class SilentAndSpeaking : ITrackerTransport
+    {
+        private readonly TaskCompletionSource _spoken = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        /// <summary>Completes once the tracker that answers has answered.</summary>
+        public Task Speaking => _spoken.Task;
+
+        public async Task<byte[]> GetAsync(Uri address, CancellationToken ct)
+        {
+            if (address.Host.Contains("silent", StringComparison.Ordinal))
+            {
+                // Never. Not a refusal, not an error — the silence of a machine
+                // that has not been there for years.
+                await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+            }
+
+            _spoken.TrySetResult();
+
+            return Encoding.ASCII.GetBytes("d8:intervali1800e5:peers0:e");
+        }
+
+        public Task<byte[]> ExchangeAsync(
+            string host,
+            int port,
+            byte[] datagram,
+            TimeSpan patience,
+            CancellationToken ct)
+        {
+            throw new NotSupportedException("This test is over HTTP.");
+        }
+    }
+
     /// <summary>
     /// The wire, answering with what real trackers really sent.
     /// </summary>

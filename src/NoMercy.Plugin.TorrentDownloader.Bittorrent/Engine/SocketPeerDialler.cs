@@ -57,6 +57,10 @@ public sealed class SocketPeerDialler(TimeSpan patience, PeerEncryption encrypti
                     Handshake.Write(infoHash, peerId),
                     _random,
                     encryption,
+
+                    // Half the dial, so a peer that ignores the negotiation
+                    // still leaves time for the handshake in the clear.
+                    patience / 2,
                     waiting.Token)
                 .ConfigureAwait(false);
 

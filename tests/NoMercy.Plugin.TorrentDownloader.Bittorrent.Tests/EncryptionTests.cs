@@ -453,6 +453,61 @@ public class EncryptionTests
     }
 
     /// <remarks>
+    /// <para>
+    /// A peer that does not speak MSE does not refuse it. It takes the
+    /// ninety-six bytes of key, makes nothing of them, and says nothing back —
+    /// and silence is not one of the exceptions the fallback was catching, so
+    /// the whole dial's patience drained into the wait and the cancellation
+    /// went straight past it. Every peer of that sort was thrown away.
+    /// </para>
+    /// <para>
+    /// Measured on 31 August 2026 against the owner's Dark Matter swarm: five
+    /// of seventeen reachable peers connected, against ten of seventeen with
+    /// encryption switched off altogether. With the encrypted attempt on its
+    /// own clock it was thirteen of nineteen.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APeerThatSaysNothingToTheNegotiationStillGetsTheHandshakeInTheClear()
+    {
+        List<PeerWire> attempts = [];
+
+        MseLink link = await PeerDial.ConnectAsync(
+            _ =>
+            {
+                PeerWire wire = new();
+
+                attempts.Add(wire);
+
+                // The first attempt is answered with nothing at all. The second
+                // — the one in the clear — is answered with a handshake.
+                if (attempts.Count > 1)
+                {
+                    Task.Run(async () =>
+                    {
+                        await wire.Receiver.WriteAsync(Handshake.Write(Ubuntu, TheirId), Cancellation);
+                        await wire.Receiver.FlushAsync(Cancellation);
+                    });
+                }
+
+                return Task.FromResult<Stream>(wire.Initiator);
+            },
+            Ubuntu,
+            Handshake.Write(Ubuntu, PeerId),
+            RandomNumberGenerator.Create(),
+            PeerEncryption.Allowed,
+
+            // Its own budget for the encrypted attempt, short because the peer
+            // is never going to answer it.
+            TimeSpan.FromMilliseconds(250),
+            Cancellation);
+
+        Assert.Equal(MseMethod.Plaintext, link.Method);
+        Assert.Equal(2, attempts.Count);
+        Assert.Equal(Handshake.Write(Ubuntu, PeerId), attempts[1].Sent);
+    }
+
+    /// <remarks>
     /// Encrypted first, in the clear second, and the peer is used either way.
     /// A client that gave up on a peer that would not do MSE would throw away
     /// half a swarm; one that never tried it is refused by the other half.
@@ -482,6 +537,7 @@ public class EncryptionTests
             Handshake.Write(Ubuntu, PeerId),
             RandomNumberGenerator.Create(),
             PeerEncryption.Allowed,
+            TimeSpan.FromSeconds(5),
             Cancellation);
 
         Assert.Equal(MseMethod.Plaintext, link.Method);
@@ -533,6 +589,7 @@ public class EncryptionTests
             Handshake.Write(Ubuntu, PeerId),
             RandomNumberGenerator.Create(),
             PeerEncryption.Required,
+            TimeSpan.FromSeconds(5),
             Cancellation));
 
         // Dialled once and given up on, where Allowed dials a second time.
@@ -569,6 +626,7 @@ public class EncryptionTests
             Handshake.Write(Ubuntu, PeerId),
             RandomNumberGenerator.Create(),
             PeerEncryption.Disabled,
+            TimeSpan.FromSeconds(5),
             Cancellation);
 
         Assert.Equal(MseMethod.Plaintext, link.Method);

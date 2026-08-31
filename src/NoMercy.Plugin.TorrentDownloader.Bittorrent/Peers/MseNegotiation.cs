@@ -511,6 +511,11 @@ public static class PeerDial
     /// <param name="handshake">This client's BitTorrent handshake.</param>
     /// <param name="random">Where the key and the padding come from.</param>
     /// <param name="encryption">What the owner will agree to.</param>
+    /// <param name="encrypting">
+    /// How long the encrypted attempt may take before the clear one is worth
+    /// more than finishing it. Ignored where encryption is required, which has
+    /// no second attempt to save time for.
+    /// </param>
     /// <param name="ct">Cancellation.</param>
     public static async Task<MseLink> ConnectAsync(
         Func<CancellationToken, Task<Stream>> connect,
@@ -518,10 +523,22 @@ public static class PeerDial
         byte[] handshake,
         RandomNumberGenerator random,
         PeerEncryption encryption,
+        TimeSpan encrypting,
         CancellationToken ct)
     {
         if (encryption != PeerEncryption.Disabled)
         {
+            // Its own clock. A peer that does not speak MSE does not refuse it:
+            // it takes the ninety-six bytes, makes nothing of them, and says
+            // nothing back. Without this the whole dial's patience was spent
+            // waiting for that silence and the cancellation went straight past
+            // the fallback below — so every peer that would have talked in the
+            // clear was lost. Measured on 31 August 2026 against the owner's
+            // Dark Matter swarm: five of seventeen reachable peers with the
+            // fallback unreachable, ten of seventeen without encryption at all.
+            using CancellationTokenSource own = new(encrypting);
+            using CancellationTokenSource trying = CancellationTokenSource.CreateLinkedTokenSource(ct, own.Token);
+
             Stream encrypted = await connect(ct).ConfigureAwait(false);
 
             try
@@ -540,11 +557,11 @@ public static class PeerDial
                             ? MseMethod.Rc4
                             : MseMethod.Plaintext | MseMethod.Rc4,
                         random,
-                        ct)
+                        encryption == PeerEncryption.Required ? ct : trying.Token)
                     .ConfigureAwait(false);
             }
             catch (Exception refusal) when (refusal is MseRefusedException or PeerProtocolException or IOException
-                                                or EndOfStreamException
+                                                or EndOfStreamException or OperationCanceledException
                                             && !ct.IsCancellationRequested)
             {
                 await encrypted.DisposeAsync().ConfigureAwait(false);

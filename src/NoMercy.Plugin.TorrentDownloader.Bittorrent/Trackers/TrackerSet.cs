@@ -68,19 +68,58 @@ public sealed class TrackerSet(ITrackerTransport transport, TimeProvider time)
         return await Task.WhenAll(trackers.Select(tracker => AnnounceOneAsync(tracker, request, ct)));
     }
 
+    /// <summary>How long one tracker is given, every retry of it together.</summary>
+    /// <remarks>
+    /// <para>
+    /// BEP 15 says to wait <c>15 * 2^n</c> seconds before retransmitting, over
+    /// eight tries. That is thirty-two minutes spent on a tracker that is not
+    /// there — and an announce is one <see cref="Task.WhenAll(Task[])"/>, so
+    /// every tracker that <em>was</em> going to answer waited those thirty-two
+    /// minutes with it.
+    /// </para>
+    /// <para>
+    /// A magnet off a public indexer carries eighteen trackers and several of
+    /// them are years dead. Measured on 31 August 2026 against the owner's Dark
+    /// Matter pack: no announce came back at all for the first two and a half
+    /// minutes, and the one that ended it was a deadline above this throwing —
+    /// which the catch below did not take, so the whole announce came back
+    /// empty and the torrent sat at no peers with no swarm count while four
+    /// trackers had three hundred seeds to hand over.
+    /// </para>
+    /// <para>
+    /// Forty-five seconds is one connect, one announce and one retry of each at
+    /// <see cref="Patience"/>. A tracker slower than that is one the swarm can
+    /// be found without.
+    /// </para>
+    /// </remarks>
+    public static readonly TimeSpan Deadline = TimeSpan.FromSeconds(45);
+
     /// <summary>Announces to one, whichever protocol it speaks.</summary>
     public async Task<TrackerResult> AnnounceOneAsync(
         string tracker,
         AnnounceRequest request,
         CancellationToken ct)
     {
+        // Its own clock, so one tracker cannot hold the announce open for the
+        // rest of them, and the injected TimeProvider so this is testable
+        // without waiting forty-five real seconds.
+        using CancellationTokenSource own = new(Deadline, time);
+        using CancellationTokenSource waiting = CancellationTokenSource.CreateLinkedTokenSource(ct, own.Token);
+
         try
         {
             AnnounceResponse response = tracker.StartsWith("udp:", StringComparison.OrdinalIgnoreCase)
-                ? await UdpAsync(tracker, request, ct)
-                : HttpAnnounce.Read(await transport.GetAsync(HttpAnnounce.Address(tracker, request), ct));
+                ? await UdpAsync(tracker, request, waiting.Token)
+                : HttpAnnounce.Read(await transport.GetAsync(HttpAnnounce.Address(tracker, request), waiting.Token));
 
             return new(tracker, response, response.Failure);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            // This tracker's deadline, not the caller's. It used to go straight
+            // past the catch below and out of AnnounceAsync, which took every
+            // other tracker's answer with it.
+            return new(tracker, null, $"It did not answer within {Deadline.TotalSeconds:0} seconds.");
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
