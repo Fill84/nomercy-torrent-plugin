@@ -919,7 +919,8 @@ public sealed class BittorrentEngine(
 
         logger.LogInformation(
             "{Name}: {Answered} of {Asked} trackers answered with {Addresses} addresses; "
-            + "{Peers} peers connected, {Seeds} of them seeds; the swarm has {SwarmSeeds} seeds and {SwarmPeers} peers.",
+            + "{Peers} peers connected, {Seeds} of them seeds; the swarm has {SwarmSeeds} seeds and {SwarmPeers} peers; "
+            + "the DHT knows {Nodes} nodes.",
             progress.Name ?? held.Name,
             said.Count(one => one.Peers is not null),
             said.Count,
@@ -927,7 +928,14 @@ public sealed class BittorrentEngine(
             progress.Peers,
             progress.Seeds,
             held.Run.SwarmSeeds?.ToString(CultureInfo.InvariantCulture) ?? "an unknown number of",
-            held.Run.SwarmPeers?.ToString(CultureInfo.InvariantCulture) ?? "an unknown number of");
+            held.Run.SwarmPeers?.ToString(CultureInfo.InvariantCulture) ?? "an unknown number of",
+
+            // Said every announce rather than once at boot. The one line there
+            // was reported the table straight after the bootstrap - two routers
+            // and the eight contacts each hands over - and was read, by me, as
+            // a table that had stopped growing. Whether it does is a thing to
+            // measure, so here it is measured.
+            _dht?.Table.Count ?? 0);
 
         foreach (TrackerSaid one in said.Where(one => one.Failure is not null))
         {
