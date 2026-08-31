@@ -1,4 +1,4 @@
-# NoMercy Torrent Downloader — 0.3.9
+# NoMercy Torrent Downloader
 
 A NoMercy media-server plugin. Every episode that is missing from a TV or anime library and has
 already aired gets downloaded and handed to the encoder, without anybody at the keyboard — and the
@@ -7,6 +7,16 @@ owner can see it happening.
 A rewrite of 0.3.4, keeping the same plugin id so it upgrades in place. The old plugin at
 `../nomercy-torrent-plugin` is reference for what each site does and for what went wrong; no code is
 carried over.
+
+**It needs a media server carrying plugin contract `0.1.479` or newer.** That is the release where
+`IPluginEncoder` and `PluginLibraryEpisode.Id` landed, and this plugin asks for an encode through
+them and no other way. On an older server it loads, downloads and stages, and every staged episode
+waits in the intake folder for an encode that cannot be asked for — so it says so in the log and the
+journal instead, once, rather than leaving the owner to find out from an empty library.
+
+The version this repository is on is in `Directory.Build.props`, `plugin.json` and `PluginIdentity`,
+and a test holds all three together. It is not written here, because a number in prose is one that
+goes stale — this heading said 0.3.9 for three releases.
 
 ## Start here
 
@@ -134,8 +144,8 @@ the plugin simply did not appear in its list, because the host resolves a plugin
 beside the plugin, found none, and reported nothing. Tests hold the built output against what the
 dependency file names and against what the solution really builds.
 
-Afterwards, `0.3.9` is what the log line says when the plugin wakes: the manifest, the code and the
-compiled file all carry the version and a test holds the three together.
+Afterwards, the version is what the log line says when the plugin wakes: the manifest, the code and
+the compiled file all carry it and a test holds the three together.
 
 ## Releasing
 
