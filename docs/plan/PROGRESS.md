@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Current: `S11-04`.** Sprint 11 is the five things standing between this build and the first
+**Current: `S11-05`, and it is the owner's.** Sprint 11 is the five things standing between this build and the first
 end-to-end run watched on the owner's own server. `docs/plan/SPRINTS.md` § Sprint 11 opens with a
 correction it is built on, and it is the one thing to read before starting: **the encode job does
 not add a show.** `PluginEncoder` puts `mediaId` straight into `VideoEncodeJob.Id`, and
@@ -248,12 +248,30 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-01` The plugin looks a show up. It never adds one.
 - [x] `S11-02` The health tool counts a release once
 - [x] `S11-03` A doc block belongs to the member under it
-- [ ] `S11-04` The test that failed once
+- [x] `S11-04` The test that failed once
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-04` The test that failed once: not reproduced, and two that could fail on timing fixed.**
+  There is no record of which test it was and no captured output — `TestResults` holds nothing — so
+  there was nothing to debug from. The whole suite was run six times over and clean, on top of five
+  more full runs while the sprint was done, and the socket-heavy Bittorrent assembly twenty times
+  clean on its own. **It did not reproduce, and nothing was invented to explain it.**
+  What the reading did find is two tests able to fail for a timing reason, which `CLAUDE.md`
+  § Testing forbids whether or not either was the one.
+  **`PipelineDepthTests`** nudged the client forty times, waited a flat two seconds and asserted it
+  had asked for exactly four pieces — so a machine busy enough to have delivered three of the four
+  failed it for a reason that has nothing to do with the pipeline. It now waits until four have been
+  asked for, bounded by the test's own token, and only then holds half a second to prove it asks for
+  no more; both regressions still bite, one through the wait and one through the count.
+  **`SocketTransportTests.ATrackerThatIsNotThereSaysSoAtOnceRatherThanWaiting`** compared the elapsed
+  time against the patience itself, so "the refusal was honoured" and "the patience ran out" were
+  separated by nothing: a refusal delivered in a millisecond and a continuation held up for two
+  seconds read the same. Ten seconds to wait and two to answer in, which is a thousandfold margin on
+  a path that takes a millisecond.
 
 - **`S11-03` A doc block describes the member under it.** Eighteen places in `src/` carried two or
   three `<summary>` blocks in one run of `///` lines. Every one was a block pasted above a member it

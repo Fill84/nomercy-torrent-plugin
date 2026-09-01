@@ -84,10 +84,19 @@ public class SocketTransportTests
             port = ((IPEndPoint)nobody.Client.LocalEndPoint!).Port;
         }
 
-        // Short, so that a machine which does not deliver the refusal costs
-        // this suite two seconds rather than fifteen. Whether the answer is
-        // fast is asserted below against this same figure.
-        TimeSpan patience = TimeSpan.FromSeconds(2);
+        // Two figures, not one. It used to assert against the patience itself,
+        // so "the refusal was honoured" and "the patience ran out" were
+        // separated by nothing at all: a refusal delivered in a millisecond and
+        // a continuation held up for two seconds by a busy machine are the same
+        // reading, and the test failed for a reason that had nothing to do with
+        // the transport. Ten seconds to wait and two to answer in leaves a
+        // thousandfold margin on a path that really takes a millisecond.
+        //
+        // Short-ish rather than the plugin's own fifteen, so that a machine
+        // which does not deliver the refusal costs this suite ten seconds once.
+        TimeSpan patience = TimeSpan.FromSeconds(10);
+
+        TimeSpan promptly = TimeSpan.FromSeconds(2);
 
         long started = Stopwatch.GetTimestamp();
 
@@ -125,8 +134,10 @@ public class SocketTransportTests
 
         // At once, which is the whole point: the machine answered a datagram
         // sent to a closed port with a refusal, and waiting out the patience
-        // for an answer already given is a cycle spent on nothing.
-        Assert.True(took < patience, $"The refusal was delivered but it still waited {took.TotalSeconds:0.0}s.");
+        // for an answer already given is a cycle spent on nothing. Two seconds
+        // out of ten, so this says the refusal was acted on and never that the
+        // machine was busy.
+        Assert.True(took < promptly, $"The refusal was delivered but it still waited {took.TotalSeconds:0.0}s.");
     }
 
     /// <remarks>

@@ -110,11 +110,19 @@ public class PipelineDepthTests : IDisposable
             await peer.SendAsync(PeerMessage.Have(nudge), stopping.Token);
         }
 
-        // Long enough for every one of those to have been answered, and far
-        // short of the minute a piece is given back after — a piece released
-        // and claimed again is a different fault and would be counted here as
-        // this one.
-        await Task.Delay(TimeSpan.FromSeconds(2), stopping.Token);
+        // Until it has asked for as many as the pipeline allows, and only then
+        // a moment longer to prove it asks for no more. It waited a flat two
+        // seconds and counted, which made the answer depend on how busy the
+        // machine was: a client that had asked for three of its four when the
+        // clock ran out failed this for a reason that was nothing to do with
+        // the pipeline.
+        await Counting(asked, TorrentSession.Pipeline, stopping.Token);
+
+        // Far short of the minute a piece is given back after — a piece
+        // released and claimed again is a different fault and would be counted
+        // here as this one. A client walking the whole file list does it in
+        // this window many times over, which is what the count below catches.
+        await Task.Delay(TimeSpan.FromMilliseconds(500), stopping.Token);
 
         int distinct;
 
@@ -137,6 +145,37 @@ public class PipelineDepthTests : IDisposable
         // times the piece length — megabytes on any real torrent — which is
         // why four is enough and why fewer would not be.
         Assert.Equal(TorrentSession.Pipeline, distinct);
+    }
+
+    /// <summary>Waits until that many pieces have been asked for, or says so.</summary>
+    /// <remarks>
+    /// Bounded by the test's own token, so a client that asks for fewer than
+    /// the pipeline allows fails here with the number it reached rather than
+    /// hanging or being read as a passing count somewhere below.
+    /// </remarks>
+    private static async Task Counting(HashSet<int> asked, int wanted, CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            lock (asked)
+            {
+                if (asked.Count >= wanted)
+                {
+                    return;
+                }
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(20), CancellationToken.None);
+        }
+
+        int reached;
+
+        lock (asked)
+        {
+            reached = asked.Count;
+        }
+
+        Assert.Fail($"It asked for {reached} pieces and never reached {wanted}.");
     }
 
     public void Dispose()
