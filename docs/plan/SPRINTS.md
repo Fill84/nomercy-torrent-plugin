@@ -1670,6 +1670,33 @@ for work that was finished the whole time and is sitting on disk under the right
 and a finished job that wrote nothing still is not. Read first: `docs/09-host-contract.md`
 § What became of the job.
 
+## S11-08 · A pack keeps every file it staged
+
+Watched on the owner's server, and it cost eight episodes.
+
+Nine encodes were dispatched at 12:22:40 on 1 September 2026. Between 12:22:41 and 12:22:46 the sweep
+of the intake folder deleted eight of the nine staged files — *"no grab of this plugin's is waiting on
+it"* — one second after the encoder had been pointed at them. Every one of those encodes failed for
+want of its input, the grab failed with them, and one episode reached the library. The download
+folder was never touched: 37 GB, all nine files, intact.
+
+`StageAsync` writes a file per episode, records **one** of them and answers with **one**. So the
+tick's set of files something is waiting on held one path out of nine, and the sweep took the rest.
+The store held one path too, which is the second half of the same fault: a restart re-asked all nine
+episodes against the same video.
+
+1. `StoredDownload.StagedPath` becomes `StagedPaths`. Newline-separated in the column it already has,
+   because that is the one character neither platform allows in a path — and a row written by the old
+   code carries no newline, so it reads back as the single path it always meant.
+2. `StageAsync` answers with every file it wrote, and the tick spares all of them.
+3. `FinishAsync` deletes all of them, rather than leaving eight for the sweep to puzzle over.
+4. `AskAgainAsync` and `StillWaitingAsync` ask for each episode against **the file named for it**,
+   never the first of them. `Landed.Wrote` decides which, which is the rule `S11-07` already reads
+   the library with.
+
+**Done when** a pack's staged files all survive the tick that staged them, and each episode asked for
+again points at its own file. Read first: `Transfers.LeftBehindAsync`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

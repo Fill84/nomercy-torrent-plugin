@@ -252,11 +252,27 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-04` The test that failed once
 - [x] `S11-06` The show is added the way Add content adds it
 - [x] `S11-07` An encode filed under the wrong episode is still done
+- [x] `S11-08` A pack keeps every file it staged
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-08` A pack keeps every file it staged.** Watched on the owner's server and it cost eight
+  episodes: nine encodes dispatched at 12:22:40 on 1 September 2026, and between 12:22:41 and
+  12:22:46 the sweep of the intake folder deleted eight of the nine staged files — one second after
+  the encoder had been pointed at them. Every one of those encodes then failed for want of its input,
+  the grab failed with them, and one episode reached the library. **The 37 GB in the download folder
+  was never touched**, so nothing had to be fetched again.
+  Two faults, one cause: `StageAsync` wrote nine files, recorded **one** and answered with **one**, so
+  the tick's list of what something is waiting on held one — and the store held one too, which meant
+  a restart pointed all nine episodes at the same video. `StoredDownload.StagedPath` is
+  `StagedPaths` now, kept newline-separated in the column it already had (a row written by the old
+  code has no newline and reads back as the one path it always was), staging answers with all of
+  them, and each episode is re-asked against the file named for it — `Landed.Wrote` decides which,
+  the same rule `S11-07` reads the library with. A grab of one episode never showed any of this,
+  because the one path recorded was the only path there was.
 
 - **`S11-07` An encode the server filed under the wrong episode is still done.** The owner watched the
   Downloads page say `encoding` for South Park S15E12 while the server's dashboard said no task was

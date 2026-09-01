@@ -207,7 +207,7 @@ public class TransfersTests : IDisposable
         StoredDownload waiting = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
 
         Assert.Equal(GrabState.Staged, waiting.State);
-        Assert.Equal(staged, waiting.StagedPath);
+        Assert.Equal([staged], waiting.StagedPaths);
 
         // The download is gone from the incomplete folder, so a tick that tried
         // to stage again would have nothing to copy and would say so.
@@ -379,7 +379,7 @@ public class TransfersTests : IDisposable
         StoredDownload waiting = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
 
         Assert.Equal(GrabState.Dispatched, waiting.State);
-        Assert.Equal(staged, waiting.StagedPath);
+        Assert.Equal([staged], waiting.StagedPaths);
     }
 
     /// <remarks>
@@ -403,7 +403,7 @@ public class TransfersTests : IDisposable
         await Grabbed(grabs);
 
         // Staged, the encode refused, and then the file taken away.
-        await grabs.StagedAsync(Hash, Staged, CancellationToken.None);
+        await grabs.StagedAsync(Hash, [Staged], CancellationToken.None);
 
         await Transfers(new StandingEngine(), grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -992,6 +992,121 @@ public class TransfersTests : IDisposable
         Assert.NotEmpty(await grabs.OpenAsync(CancellationToken.None));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Every file a pack stages is one something is waiting on.</strong>
+    /// Staging wrote nine episodes into the intake folder, recorded one of them
+    /// and answered with that one, so the tick's list of files something is
+    /// waiting on held one — and the sweep that clears the folder deleted the
+    /// other eight, one second after their encodes had been asked for. Every
+    /// one of those encodes then failed for want of the file it was pointed at.
+    /// </para>
+    /// <para>
+    /// It happened on 1 September 2026 to a nine-episode Dark Matter pack: nine
+    /// dispatched at 12:22:40, eight cleared between 12:22:41 and 12:22:46, and
+    /// one episode in the library at the end of it. A grab of one episode never
+    /// showed it, because the one path recorded was the only path there was.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task EveryFileAPackStagesSurvivesTheSweepThatFollowsIt()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string first = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        string second = Downloaded("Silo.S03E07.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(first), 900_000_000),
+            new TorrentFile(Path.GetFileName(second), 900_000_000));
+
+        FakeProvider server = Server();
+        RecordingEncoder encoder = new();
+
+        FakeLibraryQuery query = new FakeLibraryQuery()
+            .Library(TelevisionLibrary, "Television", "tv")
+            .Show(41, "Silo", TelevisionLibrary, year: 2023)
+            .Episode(41, 3, 6, hasFile: false)
+            .Episode(41, 3, 7, hasFile: false)
+            .Episode(41, 1, 1, hasFile: true);
+
+        Transfers transfers = new(
+            engine,
+            grabs,
+            new HostLibrary(query),
+            new Stager(server.Journal, server.Log),
+            encoder,
+            server.Journal,
+            server.Log,
+            TimeProvider.System);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // Both episodes asked for, each pointed at its own file.
+        Assert.Equal(2, encoder.Asked.Count);
+        Assert.Equal(2, encoder.Asked.Select(one => one.StagedFile).Distinct(StringComparer.Ordinal).Count());
+
+        // And both files still in the intake folder when the tick is over. The
+        // sweep runs inside the same tick as the staging, so this is the whole
+        // of the fault: an encode was asked for and its file taken away.
+        Assert.All(
+            encoder.Asked,
+            one => Assert.True(File.Exists(one.StagedFile), $"{Path.GetFileName(one.StagedFile)} was swept away after its encode was asked for."));
+    }
+
+    /// <remarks>
+    /// And a pack asked for again after a restart points each episode at its
+    /// own file. The store kept one path for a whole pack, so every episode was
+    /// re-dispatched against the same video — nine encodes of one episode, each
+    /// registered against a different row.
+    /// </remarks>
+    [Fact]
+    public async Task APackAskedForAgainPointsEachEpisodeAtItsOwnFile()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        Directory.CreateDirectory(Intake);
+
+        string first = Path.Combine(Intake, "Silo.2023.S03E06.1080p.mkv");
+        string second = Path.Combine(Intake, "Silo.2023.S03E07.1080p.mkv");
+
+        await File.WriteAllTextAsync(first, "one");
+        await File.WriteAllTextAsync(second, "two");
+
+        await grabs.CoversAsync(Hash, [new(41, 3, 6), new(41, 3, 7)], CancellationToken.None);
+        await grabs.StagedAsync(Hash, [first, second], CancellationToken.None);
+
+        FakeProvider server = Server();
+        RecordingEncoder encoder = new();
+
+        FakeLibraryQuery query = new FakeLibraryQuery()
+            .Library(TelevisionLibrary, "Television", "tv")
+            .Show(41, "Silo", TelevisionLibrary, year: 2023)
+            .Episode(41, 3, 6, hasFile: false)
+            .Episode(41, 3, 7, hasFile: false)
+            .Episode(41, 1, 1, hasFile: true);
+
+        Transfers transfers = new(
+            new StandingEngine(),
+            grabs,
+            new HostLibrary(query),
+            new Stager(server.Journal, server.Log),
+            encoder,
+            server.Journal,
+            server.Log,
+            TimeProvider.System);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(2, encoder.Asked.Count);
+
+        Assert.Contains(encoder.Asked, one => one.Episode.Number == 6 && one.StagedFile == first);
+        Assert.Contains(encoder.Asked, one => one.Episode.Number == 7 && one.StagedFile == second);
+    }
+
     /// <summary>A server that says the same thing about every job.</summary>
     private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
     {
@@ -1174,7 +1289,7 @@ public class TransfersTests : IDisposable
         await File.WriteAllBytesAsync(Staged, new byte[2048]);
 
         // Dispatched by the run before this one, which is all the store keeps.
-        await grabs.StagedAsync(Hash, Staged, CancellationToken.None);
+        await grabs.StagedAsync(Hash, [Staged], CancellationToken.None);
         await grabs.StateAsync(Hash, GrabState.Dispatched, CancellationToken.None);
 
         FakeProvider server = Server();

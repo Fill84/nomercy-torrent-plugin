@@ -100,7 +100,7 @@ public class OneQuestionPerTickTests : IDisposable
         EpisodeKey dispatched = new(Silo, 3, 2);
 
         await Grabbed(grabs, dispatched, "Silo.S03E02.1080p.WEB.H264-CAKES", Hash(2));
-        await grabs.StagedAsync(Hash(2), Staged(dispatched), CancellationToken.None);
+        await grabs.StagedAsync(Hash(2), [Staged(dispatched)], CancellationToken.None);
         await grabs.StateAsync(Hash(2), GrabState.Dispatched, CancellationToken.None);
 
         StandingEngine engine = new StandingEngine().Holding(Downloading(Hash(1)));

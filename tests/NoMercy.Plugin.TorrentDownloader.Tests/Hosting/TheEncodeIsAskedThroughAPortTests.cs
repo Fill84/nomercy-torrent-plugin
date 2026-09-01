@@ -92,7 +92,7 @@ public class TheEncodeIsAskedThroughAPortTests : IDisposable
         StoredDownload left = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
 
         Assert.Equal(GrabState.Staged, left.State);
-        Assert.Equal(Staged, left.StagedPath);
+        Assert.Equal([Staged], left.StagedPaths);
         Assert.True(File.Exists(Staged), "The staged file went, so the next tick has nothing to offer.");
     }
 

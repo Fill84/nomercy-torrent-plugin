@@ -119,14 +119,17 @@ public sealed class Transfers(
 
         // Staging says what it wrote, because the next step needs to know and
         // used to read the open grabs a second time to find out.
+        //
+        // Every file, not the first. A pack stages an episode per file and
+        // answered with one of them, so the sweep below saw eight files nothing
+        // was waiting on and deleted them a second after their encodes had been
+        // asked for — nine dispatched at 12:22:40 on 1 September 2026, eight
+        // gone by 12:22:46, one episode in the library at the end of it.
         List<string> justStaged = [];
 
         foreach (StoredDownload finished in plan.Stage)
         {
-            if (await StageAsync(finished, incompleteFolder, intakeFolder, thisTick, ct) is string written)
-            {
-                justStaged.Add(written);
-            }
+            justStaged.AddRange(await StageAsync(finished, incompleteFolder, intakeFolder, thisTick, ct));
         }
 
         // Every staged file something is waiting on: what the store knew at the
@@ -139,7 +142,7 @@ public sealed class Transfers(
         // costs nothing: it fails precisely because its staged file is no longer
         // there, so no entry in the folder can match it.
         HashSet<string> waited = new(
-            open.Select(one => one.StagedPath).OfType<string>().Concat(justStaged),
+            open.SelectMany(one => one.StagedPaths).Concat(justStaged),
             StringComparer.OrdinalIgnoreCase);
 
         await AskAgainAsync(stored, thisTick, ct);
@@ -264,11 +267,12 @@ public sealed class Transfers(
     /// and the episode is looked for again.
     /// </remarks>
     /// <returns>
-    /// Where it put the episode, or null when it put nothing. The tick needs
-    /// this: a file staged a moment ago is one something is waiting on, and
-    /// reading the open grabs again was the other way of finding that out.
+    /// Every file it put in the intake folder, which is empty when it put
+    /// none. The tick needs all of them: a file staged a moment ago is one
+    /// something is waiting on, and the sweep deletes what nothing is waiting
+    /// on.
     /// </returns>
-    private async Task<string?> StageAsync(
+    private async Task<IReadOnlyList<string>> StageAsync(
         StoredDownload finished,
         string incompleteFolder,
         string intakeFolder,
@@ -316,7 +320,7 @@ public sealed class Transfers(
                     // dispatched by each episode's own id.
                     if (await AddedAsync(files, thisTick, ct))
                     {
-                        return null;
+                        return [];
                     }
 
                     // Only where that could not be done: no library of the kind
@@ -325,7 +329,7 @@ public sealed class Transfers(
                     // and left exactly where the owner put it.
                     await UnplaceableAsync(finished, files, ct);
 
-                    return null;
+                    return [];
                 }
 
                 // No longer unplaceable, if it ever was: the show has been
@@ -367,7 +371,7 @@ public sealed class Transfers(
             {
                 // Nothing reached the intake folder, so nothing is done with.
                 // Marking it done would lose the download and the episode.
-                return null;
+                return [];
             }
 
             // Staged, and said so before the encode is asked for. The copy has
@@ -375,23 +379,23 @@ public sealed class Transfers(
             // is a separate question with its own answer, and a grab that
             // claimed to be done the moment the file was copied forgot every
             // encode that was refused.
-            StagedResult first = moved.First(one => one.Moved);
+            string[] staged = [.. moved.Where(one => one.Moved).Select(one => one.Path!)];
 
-            await grabs.StagedAsync(finished.InfoHash, first.Path!, ct);
+            await grabs.StagedAsync(finished.InfoHash, staged, ct);
 
             foreach (StagedResult one in moved.Where(one => one.Moved))
             {
                 await DispatchAsync(finished.InfoHash, one.File.Episode, one.Path!, thisTick, ct);
             }
 
-            return first.Path;
+            return staged;
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
             logger.LogWarning("{Release} could not be staged: {Reason}", finished.ReleaseTitle, wrong.Message);
             journal.Failed(ActivityStage.Download, finished.ReleaseTitle, wrong.Message);
 
-            return null;
+            return [];
         }
     }
 
@@ -564,14 +568,14 @@ public sealed class Transfers(
     {
         foreach (StoredDownload staged in stored.Where(one => one.State == GrabState.Staged))
         {
-            if (staged.StagedPath is not string path)
+            if (staged.StagedPaths.Count == 0)
             {
                 // Staged by a version that did not record where. The folder is
                 // read directly for those, which is LeftBehindAsync.
                 continue;
             }
 
-            if (!File.Exists(path))
+            if (staged.StagedPaths.FirstOrDefault(one => !File.Exists(one)) is string missing)
             {
                 // Gone. The encode was never taken and there is nothing left to
                 // offer, so there is nothing to wait for — and waiting is what
@@ -580,7 +584,7 @@ public sealed class Transfers(
                 //
                 // Whether the owner moved it or something deleted it cannot be
                 // told from here, and either way the library does not have it.
-                string reason = $"{Path.GetFileName(path)} was staged and is no longer there";
+                string reason = $"{Path.GetFileName(missing)} was staged and is no longer there";
 
                 await grabs.FailedAsync(
                     staged.InfoHash,
@@ -595,8 +599,16 @@ public sealed class Transfers(
                 continue;
             }
 
+            // Each episode against the file staged for it, never against the
+            // first of them: a pack asked for nine encodes over one path put
+            // nine episodes in the library from the same video.
             foreach (EpisodeKey episode in staged.Covers)
             {
+                if (Staged(staged, episode) is not string path)
+                {
+                    continue;
+                }
+
                 await DispatchAsync(staged.InfoHash, episode, path, thisTick, ct);
             }
         }
@@ -688,14 +700,14 @@ public sealed class Transfers(
                 continue;
             }
 
-            if (put.StagedPath is not null)
+            if (put.StagedPaths.Count > 0)
             {
                 Discard(entry, $"a second copy of {put.ReleaseTitle}");
 
                 continue;
             }
 
-            await grabs.StagedAsync(put.InfoHash, entry, ct);
+            await grabs.StagedAsync(put.InfoHash, [entry], ct);
 
             foreach (EpisodeKey episode in put.Covers)
             {
@@ -839,7 +851,10 @@ public sealed class Transfers(
                 continue;
             }
 
-            if (sent.StagedPath is string path)
+            // Every one of them. A pack staged nine and recorded one, so
+            // eight were left in the intake folder for the sweep to puzzle over
+            // on every tick after.
+            foreach (string path in sent.StagedPaths)
             {
                 Delete(path);
             }
@@ -1061,6 +1076,23 @@ public sealed class Transfers(
             + "so it was left where it is — add the show and it will be taken on";
     }
 
+    /// <summary>Which of a grab's staged files is the one for this episode.</summary>
+    /// <remarks>
+    /// By the numbers in its own name, which is what the stager wrote it under.
+    /// A grab of one episode has one file and it is that one; a pack has an
+    /// episode per file, and pointing every dispatch at the first of them would
+    /// put the same video in the library nine times over.
+    /// </remarks>
+    private static string? Staged(StoredDownload grab, EpisodeKey episode)
+    {
+        if (grab.StagedPaths.Count == 1 && grab.Covers.Count == 1)
+        {
+            return grab.StagedPaths[0];
+        }
+
+        return grab.StagedPaths.FirstOrDefault(one => Landed.Wrote(episode, [one]));
+    }
+
     /// <summary>Torrents already reported as naming no show the owner has, and the words used.</summary>
     /// <remarks>
     /// Per run, like the encode clock beside it. A restart says it once more,
@@ -1153,9 +1185,9 @@ public sealed class Transfers(
             // library having the episode ends both.
             _waiting[sent.InfoHash] = now;
 
-            if (sent.StagedPath is string staged && File.Exists(staged))
+            foreach (EpisodeKey episode in sent.Covers)
             {
-                foreach (EpisodeKey episode in sent.Covers)
+                if (Staged(sent, episode) is string staged && File.Exists(staged))
                 {
                     await DispatchAsync(sent.InfoHash, episode, staged, thisTick, ct);
                 }

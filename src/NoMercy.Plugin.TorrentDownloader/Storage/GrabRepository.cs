@@ -113,6 +113,17 @@ public sealed class GrabRepository(Store database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>Where a grab staged its episodes, as the column holds them.</summary>
+    /// <remarks>
+    /// Newline-separated, which is the one character neither platform allows in
+    /// a path. A row written when only the first was kept has no newline in it
+    /// and reads back as the single path it always was.
+    /// </remarks>
+    private static IReadOnlyList<string> Staged(string column)
+    {
+        return [.. column.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+    }
+
     /// <summary>Everything not finished with, as recovery needs it.</summary>
     public async Task<IReadOnlyList<StoredDownload>> OpenAsync(CancellationToken ct)
     {
@@ -138,7 +149,7 @@ public sealed class GrabRepository(Store database)
                 Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState state) ? state : GrabState.Grabbed)
             {
                 Covers = Covered(reader.GetString(4)),
-                StagedPath = reader.IsDBNull(5) ? null : reader.GetString(5),
+                StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
                 EncodeJobId = reader.IsDBNull(6) ? null : reader.GetString(6),
             });
         }
@@ -180,7 +191,7 @@ public sealed class GrabRepository(Store database)
                 Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState state) ? state : GrabState.Grabbed)
             {
                 Covers = Covered(reader.GetString(4)),
-                StagedPath = reader.IsDBNull(5) ? null : reader.GetString(5),
+                StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
                 EncodeJobId = reader.IsDBNull(6) ? null : reader.GetString(6),
             });
         }
@@ -282,7 +293,7 @@ public sealed class GrabRepository(Store database)
     /// tick, and a grab that said where without saying so would be staged all
     /// over again.
     /// </remarks>
-    public async Task StagedAsync(string infoHash, string path, CancellationToken ct)
+    public async Task StagedAsync(string infoHash, IReadOnlyList<string> paths, CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);
         await using SqliteCommand command = connection.CreateCommand();
@@ -299,7 +310,11 @@ public sealed class GrabRepository(Store database)
             WHERE info_hash = $hash;
             """;
 
-        command.Parameters.AddWithValue("$path", path);
+        // Newline-separated, because that is the one character a path on
+        // neither platform can hold. A row written by a version that kept only
+        // the first path reads back as the one path it has, which is what it
+        // always meant.
+        command.Parameters.AddWithValue("$path", string.Join('\n', paths));
         command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
 
         await command.ExecuteNonQueryAsync(ct);

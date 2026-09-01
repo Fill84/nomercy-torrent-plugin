@@ -69,14 +69,26 @@ public sealed record StoredDownload(string InfoHash, string Magnet, string Relea
     public string? EncodeJobId { get; init; }
 
     /// <summary>
-    /// Where its episode was copied to, once it has been.
+    /// Where its episodes were copied to, once they have been.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// So a dispatch that failed can be asked for again without copying
-    /// gigabytes a second time, and so the file can be deleted once the library
-    /// has the episode rather than left to be found again on every start.
+    /// gigabytes a second time, and so the files can be deleted once the
+    /// library has the episodes rather than left to be found again on every
+    /// start.
+    /// </para>
+    /// <para>
+    /// <strong>Every one of them, not the first.</strong> A pack stages an
+    /// episode per file, and one path recorded for nine of them made the other
+    /// eight look like files nothing was waiting on: the sweep of the intake
+    /// folder deleted them one second after their encodes had been asked for,
+    /// and every one of those encodes failed for want of what it was pointed
+    /// at. Nine dispatched at 12:22:40 on 1 September 2026, eight cleared by
+    /// 12:22:46, one episode in the library at the end of it.
+    /// </para>
     /// </remarks>
-    public string? StagedPath { get; init; }
+    public IReadOnlyList<string> StagedPaths { get; init; } = [];
 }
 
 /// <summary>
