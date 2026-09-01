@@ -695,6 +695,101 @@ public class BittorrentEngineTests : IDisposable
         }
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Removing one torrent's files removes that torrent's files.</strong>
+    /// It deleted the download folder — <c>Directory.Delete(folder, recursive)</c>
+    /// where <c>folder</c> is the folder every torrent downloads into, not the
+    /// one this torrent made. So finishing one grab, or the owner cancelling
+    /// one download, took every other download on the machine with it.
+    /// </para>
+    /// <para>
+    /// It really happened, on 2 September 2026: the owner's download folder held
+    /// two torrents' folders and three resume files, and after one grab was
+    /// finished with there was one folder left and nothing else. Nothing
+    /// irreplaceable went, because the others were already in the library — with
+    /// three downloads in flight it would have wiped two of them mid-download.
+    /// </para>
+    /// <para>
+    /// And what it does delete, it deletes wholly: the videos, whatever else the
+    /// release shipped, the folder the torrent made for itself, and the resume
+    /// and metadata files kept beside it. A cancelled download leaves nothing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task RemovingOneTorrentLeavesEveryOtherDownloadAlone()
+    {
+        using BittorrentEngine engine = Started();
+
+        Directory.CreateDirectory(_folder);
+
+        string file = Path.Combine(_folder, "archive.torrent");
+        File.WriteAllBytes(file, Fixture("archive-multifile.torrent"));
+
+        TorrentHandle handle = await engine.AddAsync(
+            Request with { Source = file, DownloadFolder = _folder },
+            CancellationToken.None);
+
+        // Whatever else is in the download folder: another torrent's work, and
+        // the file this one was added from.
+        string somebodyElse = Path.Combine(_folder, "Some.Other.Release-GRP");
+
+        Directory.CreateDirectory(somebodyElse);
+        await File.WriteAllTextAsync(Path.Combine(somebodyElse, "episode.mkv"), "not this torrent's");
+
+        // The session has to be open for there to be anything of its own on
+        // disk, and asking what it wants is what opens it.
+        _ = await engine.FilesAsync(handle.InfoHash, CancellationToken.None);
+        _ = await engine.StatusAsync(CancellationToken.None);
+
+        await engine.RemoveAsync(handle.InfoHash, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(Directory.Exists(_folder), "the download folder itself was deleted.");
+        Assert.True(Directory.Exists(somebodyElse), "another download's folder was deleted.");
+        Assert.True(
+            File.Exists(Path.Combine(somebodyElse, "episode.mkv")),
+            "another download's file was deleted.");
+        Assert.True(File.Exists(file), "a file in the download folder that is nobody's was deleted.");
+    }
+
+    /// <remarks>
+    /// The other half, and the owner's own rule: a download that is removed with
+    /// its files leaves nothing behind at all — not the videos, not the text
+    /// files a release ships with, and not the folder it made for itself.
+    /// </remarks>
+    [Fact]
+    public async Task ARemovedTorrentLeavesNothingOfItsOwnBehind()
+    {
+        using BittorrentEngine engine = Started();
+
+        Directory.CreateDirectory(_folder);
+
+        string file = Path.Combine(_folder, "archive.torrent");
+        File.WriteAllBytes(file, Fixture("archive-multifile.torrent"));
+
+        TorrentHandle handle = await engine.AddAsync(
+            Request with { Source = file, DownloadFolder = _folder },
+            CancellationToken.None);
+
+        _ = await engine.FilesAsync(handle.InfoHash, CancellationToken.None);
+        _ = await engine.StatusAsync(CancellationToken.None);
+
+        IReadOnlyList<TorrentFile> mine = await engine.FilesAsync(handle.InfoHash, CancellationToken.None);
+
+        Assert.NotEmpty(mine);
+
+        // The folder the torrent made for itself, and something a release
+        // brings along that is not a video and was never downloaded by us.
+        string own = Path.Combine(_folder, mine[0].Path.Split('/')[0]);
+
+        Directory.CreateDirectory(own);
+        await File.WriteAllTextAsync(Path.Combine(own, "read.me.txt"), "shipped with the release");
+
+        await engine.RemoveAsync(handle.InfoHash, deleteFiles: true, CancellationToken.None);
+
+        Assert.False(Directory.Exists(own), $"{own} was left behind.");
+    }
+
     private static byte[] Fixture(string name)
     {
         DirectoryInfo? directory = new(AppContext.BaseDirectory);

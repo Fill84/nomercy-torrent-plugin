@@ -256,11 +256,34 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-09` A pack is encoded in episode order
 - [x] `S11-10` Three pack faults, found by watching a pack go through
 - [x] `S11-11` The plugin cannot hold the server up
+- [x] `S11-12` A removed torrent takes its own files and nobody else's
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-12` Removing one torrent's files deleted the download folder.** The worst thing found in this
+  sprint, and it had shipped in every build. `RemoveAsync` handed `Run.Folder()` to
+  `Directory.Delete(folder, recursive: true)` — and `Folder()` is the folder **every** torrent
+  downloads into, not the one this torrent made. So finishing one grab, or the owner cancelling one
+  download, deleted every other download on the machine. It happened on 2 September 2026: the owner's
+  folder held two torrents' folders and three resume files, and one grab being finished with left one
+  folder and nothing else. Nothing irreplaceable went — the others were already in the library — but
+  with three downloads in flight it would have wiped two of them mid-download, and it is why Dark
+  Matter had to be fetched again after an unrelated grab finished.
+  What belongs to a torrent is its own file list: a multi-file torrent owns the folder of its own
+  name and everything under it, a single-file one owns one file. The download folder is never
+  touched. **A torrent's name is not trusted with a path** — the folder is resolved and checked to be
+  under the download folder first, because a torrent that calls itself `..` otherwise names the
+  owner's disk. And the owner's rule is met: a cancelled download leaves nothing of its own — the
+  videos, whatever else the release shipped, the folder it made, and its resume and metadata files.
+  A torrent that never had metadata wrote nothing, because the files are created when the session
+  opens and a session cannot open without the file list.
+  **Two regressions of `S11-11` were caught by the suite and fixed here.** Opening the session
+  without the lock made `Session()` answer null to the caller that triggered it, so the first peer to
+  arrive was dropped instead of being asked for pieces; a caller that needs the session now waits on
+  a signal rather than on the lock, which is what the whole change was for.
 
 - **`S11-11` The plugin can no longer make the server hang, and it really did.** The owner said it for
   hours and was right every time; it was read as load and it was not. Opening a torrent's session

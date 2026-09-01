@@ -261,6 +261,9 @@ public sealed class TorrentRun : IDisposable
     /// </remarks>
     private bool _verifying;
 
+    /// <summary>Set while nobody is opening the session, so a caller can wait on it.</summary>
+    private readonly ManualResetEventSlim _opened = new(true);
+
     /// <summary>How many peers one DHT search asks for.</summary>
     /// <remarks>
     /// The same fifty a tracker is asked for. More than a swarm's worth of
@@ -878,10 +881,16 @@ public sealed class TorrentRun : IDisposable
             _disk = null;
         }
 
+        // Let go of anybody waiting on the session before the token is
+        // cancelled: a run being disposed while it is being opened must not
+        // leave a caller sitting on the half hour.
+        _opened.Set();
+
         // Outside the lock: cancelling runs continuations, and one of them
         // taking this lock on the way out would deadlock against it.
         _stopping.Cancel();
         _stopping.Dispose();
+        _opened.Dispose();
     }
 
     /// <summary>
@@ -1293,102 +1302,116 @@ public sealed class TorrentRun : IDisposable
     /// </remarks>
     private TorrentSession? Session()
     {
-        TorrentMetadata torrent;
-        IReadOnlyList<TorrentFileEntry> keeping;
-
-        lock (_lock)
+        while (true)
         {
-            if (_session is not null)
-            {
-                return _session;
-            }
+            TorrentMetadata torrent;
+            IReadOnlyList<TorrentFileEntry> keeping;
 
-            if (_torrent is null || _verifying)
-            {
-                // Already being opened by whoever got here first. Answering
-                // null is what a caller that has no session yet already
-                // handles, and it is the whole reason this can be done without
-                // the lock.
-                return null;
-            }
-
-            keeping = _choose is null ? _torrent.Files : _choose(_torrent.Files);
-
-            if (keeping.Count == 0)
-            {
-                _nothingWanted = true;
-
-                // Nothing in it is worth a byte. Said rather than started: the
-                // caller stops this torrent and blames it, and creating a
-                // session that wants no pieces would report itself finished
-                // the moment it existed.
-                return null;
-            }
-
-            torrent = _torrent;
-            _verifying = true;
-        }
-
-        TorrentDisk disk;
-        Bitfield have;
-
-        try
-        {
-            // **Outside the lock, and that is the whole point.** With no resume
-            // file to go by this reads and SHA-1s every piece on disk: minutes
-            // for a season pack, half an hour for a big one. It used to run
-            // inside the lock, and everything that asks this run anything takes
-            // that same lock — including Progress, which the engine's
-            // StatusAsync calls for every torrent while holding its own lock,
-            // which is what the Downloads page is rendered from, in the
-            // server's own request thread.
-            //
-            // So opening a 37 GB torrent stopped the plugin's pages answering
-            // at all, the owner's dashboard dropped its connection and picked
-            // it up again, and the whole server looked hung. It happened on
-            // every restart, because a torrent with no resume file is hashed
-            // again every time.
-            disk = new(torrent, _folder);
-            disk.Create();
-
-            have = (_verify ?? Verified)(torrent, disk);
-        }
-        catch
-        {
             lock (_lock)
             {
-                _verifying = false;
+                if (_session is not null)
+                {
+                    return _session;
+                }
+
+                if (_torrent is null)
+                {
+                    return null;
+                }
+
+                if (_verifying)
+                {
+                    // Somebody else is reading the disk. Waited for below with
+                    // the lock let go, so a caller that really needs the
+                    // session still gets it and everything that only wants to
+                    // ask this run something is answered meanwhile.
+                    goto waiting;
+                }
+
+                keeping = _choose is null ? _torrent.Files : _choose(_torrent.Files);
+
+                if (keeping.Count == 0)
+                {
+                    _nothingWanted = true;
+
+                    // Nothing in it is worth a byte. Said rather than started:
+                    // the caller stops this torrent and blames it, and creating
+                    // a session that wants no pieces would report itself
+                    // finished the moment it existed.
+                    return null;
+                }
+
+                torrent = _torrent;
+                _verifying = true;
+
+                _opened.Reset();
             }
 
-            throw;
-        }
-
-        lock (_lock)
-        {
-            _verifying = false;
-
-            if (_session is not null)
+            try
             {
-                return _session;
+                // **Outside the lock, and that is the whole point.** With no
+                // resume file to go by this reads and SHA-1s every piece on
+                // disk: minutes for a season pack. It used to run inside the
+                // lock, and everything that asks this run anything takes that
+                // same lock — including Progress, which the engine's StatusAsync
+                // calls for every torrent while holding its own lock, which is
+                // what the Downloads page is rendered from, in the media
+                // server's own request thread.
+                //
+                // So opening a 37 GB torrent stopped the plugin's pages
+                // answering at all, the owner's dashboard dropped its
+                // connection and picked it up again, and the whole server
+                // looked hung. On every restart, because a torrent with no
+                // resume file is hashed again every time.
+                TorrentDisk disk = new(torrent, _folder);
+                disk.Create();
+
+                Bitfield have = (_verify ?? Verified)(torrent, disk);
+
+                lock (_lock)
+                {
+                    _disk = disk;
+
+                    _session ??= new(
+                        torrent,
+                        disk,
+                        have,
+                        keeping.Count == torrent.Files.Count ? null : torrent.PiecesOf(keeping),
+                        time: _time,
+                        limits: _limits,
+
+                        // What the session is told about, this run dials. The
+                        // session owns no sockets on purpose.
+                        met: addresses => _ = MeetAsync(addresses, _stopping.Token));
+
+                    return _session;
+                }
+            }
+            finally
+            {
+                lock (_lock)
+                {
+                    _verifying = false;
+                }
+
+                _opened.Set();
             }
 
-            _disk = disk;
+        waiting:
 
-            _session = new(
-                torrent,
-                disk,
-                have,
-                keeping.Count == torrent.Files.Count ? null : torrent.PiecesOf(keeping),
-                time: _time,
-                limits: _limits,
-
-                // What the session is told about, this run dials. The session
-                // owns no sockets on purpose.
-                met: addresses => _ = MeetAsync(addresses, _stopping.Token));
-
-            return _session;
+            // Never for ever: a pass that faulted sets this on its way out, and
+            // this is a fallback for a thread that should never be left here.
+            _opened.Wait(Opening);
         }
     }
+
+    /// <summary>The longest a caller waits on somebody else opening the session.</summary>
+    /// <remarks>
+    /// Long, because it is a read of every byte on disk and a big torrent takes
+    /// its time. It is a backstop and not a schedule: whoever is opening sets
+    /// this the moment it is done, faulted or not.
+    /// </remarks>
+    private static readonly TimeSpan Opening = TimeSpan.FromMinutes(30);
 
     /// <summary>
     /// What is on disk, hashed, when there is no resume file to go by.

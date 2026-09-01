@@ -1776,6 +1776,37 @@ hashed again every time.
 **Done when** every call a page makes answers while a torrent is being verified. Read first:
 `src/NoMercy.Plugin.TorrentDownloader.Bittorrent/Engine/TorrentRun.cs`.
 
+## S11-12 · A removed torrent takes its own files and nobody else's
+
+The worst thing found in this sprint, and it had shipped in every build.
+
+```csharp
+Delete(held.Run.Folder(), infoHash);   //  Directory.Delete(folder, recursive: true)
+```
+
+`Folder()` is the folder **every** torrent downloads into. So finishing one grab, or the owner
+cancelling one download, deleted every other download on the machine. On 2 September 2026 the owner's
+download folder held two torrents' folders and three resume files; after one grab was finished with,
+it held one folder and nothing else. Nothing irreplaceable went, because the others were already in
+the library — with three downloads in flight it would have wiped two of them mid-download. It is also
+why Dark Matter started downloading again after an unrelated grab finished: its files had been taken
+by that grab's cleanup.
+
+1. What belongs to a torrent is its own file list. A torrent of several files owns the folder of its
+   own name and everything under it — including whatever the release shipped that was never
+   downloaded, which is the owner's "no leftovers". A torrent of one file owns one file.
+2. The download folder is never deleted, by anything, for any reason.
+3. A torrent's name is not trusted with a path: the folder is resolved and checked to be under the
+   download folder before a byte is removed, because a torrent that calls itself `..` otherwise names
+   the owner's disk.
+4. The resume and metadata files go with it, and the metadata is read before they do — it is what a
+   torrent re-added from a magnet knows its own files by.
+5. A torrent that never had metadata wrote nothing: the files are created when the session opens, and
+   a session cannot open without the file list.
+
+**Done when** removing one torrent with its files leaves every other download untouched and nothing
+of its own behind. Read first: `BittorrentEngine.RemoveAsync`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

@@ -444,16 +444,22 @@ public sealed class BittorrentEngine(
             }
         }
 
-        // Outside the lock: disposing a run waits on nothing, but the folder it
-        // may be asked to delete is a disk operation and the rest of the client
+        // What it wrote is its file list, and that is read before the resume
+        // keeper forgets it: the copy kept beside the download is what a run
+        // that was re-added from a magnet knows its own files by.
+        TorrentMetadata? torrent = held.Run.Torrent ?? Remembered(infoHash, []);
+
+        // Outside the lock: disposing a run waits on nothing, but the files it
+        // may be asked to delete are a disk operation and the rest of the client
         // must not stop for it.
         held.Run.Dispose();
-        resume?.Forget(infoHash);
 
         if (deleteFiles)
         {
-            Delete(held.Run.Folder(), infoHash);
+            Delete(held.Run.Folder(), torrent, infoHash);
         }
+
+        resume?.Forget(infoHash);
 
         return Task.CompletedTask;
     }
@@ -1278,25 +1284,95 @@ public sealed class BittorrentEngine(
         return left <= 0 ? TimeSpan.Zero : TimeSpan.FromSeconds(left / progress.DownloadRateBytesPerSecond);
     }
 
-    /// <summary>Deletes what a removed torrent downloaded, when it was asked for.</summary>
+    /// <summary>
+    /// Everything one torrent wrote, and nothing anybody else did.
+    /// </summary>
     /// <remarks>
+    /// <para>
     /// Nothing here throws. Removing a torrent has already happened by the time
-    /// the files are reached, and a folder that cannot be deleted must not undo
-    /// it or take the caller down.
+    /// the files are reached, and something that cannot be deleted must not
+    /// undo it or take the caller down.
+    /// </para>
+    /// <para>
+    /// <strong>This deleted the download folder.</strong> It was handed
+    /// <c>Run.Folder()</c>, which is the folder every torrent downloads into,
+    /// and emptied it recursively — so finishing one grab, or the owner
+    /// cancelling one download, took every other download on the machine with
+    /// it. On 2 September 2026 the owner's folder held two torrents and three
+    /// resume files, and one grab being finished with left one folder and
+    /// nothing else.
+    /// </para>
+    /// <para>
+    /// What belongs to a torrent is its own file list. A torrent of several
+    /// files puts them in a folder of its own name, and everything under that
+    /// folder is its own — including the text files a release ships with, which
+    /// were never downloaded and would otherwise be left behind. A torrent of
+    /// one file wrote one file.
+    /// </para>
+    /// <para>
+    /// <strong>A name is not to be trusted with a path.</strong> The folder is
+    /// resolved and checked to be under the download folder before anything is
+    /// deleted: a torrent that calls itself <c>..</c> otherwise names the
+    /// owner's disk.
+    /// </para>
     /// </remarks>
-    private void Delete(string folder, string infoHash)
+    private void Delete(string folder, TorrentMetadata? torrent, string infoHash)
     {
+        if (torrent is null)
+        {
+            // Nothing of its own can be on disk. The files are created when the
+            // session is opened and a session cannot be opened without the file
+            // list, so a torrent that never had metadata has written nothing —
+            // and the download folder is every torrent's, never this one's to
+            // delete.
+            logger.LogInformation("{Hash} was removed, and it had written nothing to delete.", infoHash);
+
+            return;
+        }
+
         try
         {
-            if (Directory.Exists(folder))
+            if (torrent.Files.Count > 1)
             {
-                Directory.Delete(folder, recursive: true);
+                string own = Path.Combine(folder, torrent.Name);
+
+                if (Inside(folder, own) && Directory.Exists(own))
+                {
+                    Directory.Delete(own, recursive: true);
+                }
+
+                return;
+            }
+
+            foreach (TorrentFileEntry file in torrent.Files)
+            {
+                string path = Path.Combine(
+                    folder,
+                    torrent.PathUnderFolder(file).Replace('/', Path.DirectorySeparatorChar));
+
+                if (Inside(folder, path) && File.Exists(path))
+                {
+                    File.Delete(path);
+                }
             }
         }
         catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException)
         {
             logger.LogWarning("{Hash} was removed and its files could not be deleted: {Reason}", infoHash, wrong.Message);
         }
+    }
+
+    /// <summary>Whether a path is really under the download folder.</summary>
+    /// <remarks>
+    /// Resolved rather than compared as text, because a torrent's own name goes
+    /// into it and a name is whatever the person who made the torrent typed.
+    /// </remarks>
+    private static bool Inside(string folder, string path)
+    {
+        string root = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        string full = Path.GetFullPath(path);
+
+        return full.Length > root.Length && full.StartsWith(root, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>One torrent this client is holding, and what only it knows.</summary>
