@@ -843,6 +843,19 @@ public sealed class Transfers(
                 continue;
             }
 
+            // Both, never one. The library having every episode says the encode
+            // landed; the job still running says the server is not finished
+            // with the file it was given, and a download taken away under a job
+            // that is still reading it is the fault that cost the owner 36 GB.
+            // Where the server cannot say, the library is the proof and it is
+            // the stronger of the two.
+            if (await StandingAsync(sent, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
+            {
+                await StillWaitingAsync(sent, thisTick, ct);
+
+                continue;
+            }
+
             if (sent.StagedPath is string path)
             {
                 Delete(path);
