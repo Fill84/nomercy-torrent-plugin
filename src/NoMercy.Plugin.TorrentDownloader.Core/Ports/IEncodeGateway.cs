@@ -2,36 +2,6 @@ using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
-/// <summary>
-/// How this plugin asks the media server to encode a staged episode into the
-/// owner's library.
-/// </summary>
-/// <remarks>
-/// <para>
-/// This is the last thing the plugin does and the only thing it exists for: it
-/// stages a finished video and asks the server to take it. Everything else the
-/// plugin asks of the server already sits behind a port here — the library, the
-/// torrent client, the name pool, the source ledger, the journal — and for a
-/// while this one did not, so the cadence that keeps the owner's library
-/// filling named a concrete host class.
-/// </para>
-/// <para>
-/// <strong>It is the one part already scheduled to change.</strong>
-/// media-server #30 gives plugins <c>IPluginEncoder</c>, so an encode can be
-/// asked for without reaching into <c>IJobDispatcher</c> and
-/// <c>VideoEncodeJob</c> by name; #35 puts the episode's id in the contract, so
-/// the row no longer has to be read out of <c>MediaContext</c>. Between them
-/// every line of reflection in the plugin goes.
-/// </para>
-/// <para>
-/// <strong>What that day looks like.</strong> A second implementation of this
-/// interface beside the first, and one line where the plugin is composed. The
-/// reflecting one stays until the owner is on a server that has the contract,
-/// and then it is deleted whole — no line of <c>Transfers</c> is touched either
-/// way. That is what this interface is for; it is not a seam invented for a
-/// test.
-/// </para>
-/// </remarks>
 /// <summary>What came of asking for an encode.</summary>
 /// <param name="Taken">Whether the server took it. False leaves the file staged.</param>
 /// <param name="JobId">
@@ -50,6 +20,35 @@ public sealed record EncodeAsk(bool Taken, string? JobId)
     public static EncodeAsk No { get; } = new(false, null);
 }
 
+/// <summary>
+/// How this plugin asks the media server to encode a staged episode into the
+/// owner's library.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This is the last thing the plugin does and the only thing it exists for: it
+/// stages a finished video and asks the server to take it. Everything else the
+/// plugin asks of the server already sits behind a port here — the library, the
+/// torrent client, the name pool, the source ledger, the journal — and for a
+/// while this one did not, so the cadence that keeps the owner's library
+/// filling named a concrete host class.
+/// </para>
+/// <para>
+/// <strong>It has one method, and that is the whole of what the plugin may ask
+/// for.</strong> There was a second — hand a file over with no id and let the
+/// server work out what it is — and the server's own source says it does
+/// nothing: the id goes into <c>VideoEncodeJob.Id</c>, which resolves against
+/// <c>Movies.Id</c> or <c>Episodes.Id</c> and nothing else, so with no id the
+/// job returns having done no work while the queue records it finished. An
+/// episode this plugin cannot name is an episode it does not ask for.
+/// </para>
+/// <para>
+/// <strong>The port earned itself.</strong> The day the contract landed, the
+/// reflecting implementation was replaced by a class beside it and one line
+/// where the plugin is composed, with no line of <c>Transfers</c> touched. It
+/// is not a seam invented for a test.
+/// </para>
+/// </remarks>
 public interface IEncodeGateway
 {
     /// <summary>
@@ -98,28 +97,4 @@ public interface IEncodeGateway
         Episode episode,
         Show show,
         CancellationToken ct);
-
-    /// <summary>
-    /// Hands a staged file to a library and lets the server work out what it
-    /// is.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// For the one case the plugin cannot name an episode for: a torrent the
-    /// owner added by hand whose files are of a show the server has never
-    /// heard of. There is no row to point at, so there is no id to send, and
-    /// the server identifies the file from its name — which is exactly what the
-    /// dashboard's own <em>Add content</em> does with a file a person points it
-    /// at.
-    /// </para>
-    /// <para>
-    /// It is a guess, and it is the owner's guess: they pasted the magnet. The
-    /// search chain never comes here, because there the plugin knows the
-    /// episode and a guess would be the fault media-server #35 was opened for.
-    /// </para>
-    /// </remarks>
-    /// <param name="stagedFile">The video, waiting in the intake folder.</param>
-    /// <param name="library">Which library it goes to.</param>
-    /// <param name="ct">Cancellation.</param>
-    Task<EncodeAsk> IdentifyAsync(string stagedFile, Library library, CancellationToken ct);
 }

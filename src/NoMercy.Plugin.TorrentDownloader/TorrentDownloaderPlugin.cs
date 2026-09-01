@@ -335,10 +335,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // failed job and a slow one look the same and both are waited out.
             jobs: EncodeGateway.JobsOf(Context.Services),
 
-            // What adds a show the owner does not have yet. Until this, a pack
-            // for one could not be dispatched at all: an encode is asked for by
-            // an episode id and a show with no row has none.
-            admission: Admission());
+            // What names a show the owner does not have yet, so the line on the
+            // History page says which show to add. It only ever names one:
+            // adding it is the server's own import, dispatched by a person.
+            lookup: Lookup());
 
         await _transfers.TickAsync(settings.IncompleteFolder, settings.IntakeFolder, ct);
     }
@@ -1305,14 +1305,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _live?.Changed();
     }
 
-    /// <summary>What adds a show the owner does not have, having said whether it can.</summary>
-    private ShowAdmission Admission()
+    /// <summary>What names a show the owner does not have, having said whether it can.</summary>
+    private ShowLookup Lookup()
     {
-        ShowAdmission admission = new(Context.Services, Context.Logger);
+        ShowLookup lookup = new(Context.Services, Context.Logger);
 
-        admission.Ready();
+        lookup.Ready();
 
-        return admission;
+        return lookup;
     }
 
     private CycleStatus CurrentCycle()

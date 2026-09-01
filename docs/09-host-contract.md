@@ -105,10 +105,9 @@ The plugin does not import into the library. It stages the finished video and di
 job the dashboard's *Add content* button dispatches. `FileRescanJob` only re-walks existing library
 folders and cannot see a file staged elsewhere.
 
-**The plugin asks through `Core/Ports/IEncodeGateway`, and there are two implementations of it.**
-The cadence hands over a staged file, the episode it is, the show it belongs to and where that
-show's episodes already are, and learns whether the ask was taken and which job was queued. It names
-no type from this page.
+**The plugin asks through `Core/Ports/IEncodeGateway`, and it has one method.** The cadence hands
+over a staged file, the episode it is and the show it belongs to, and learns whether the ask was
+taken and which job was queued. It names no type from this page.
 
 **`ContractEncodeGateway` is the one to read.** It calls `IPluginEncoder.EncodeAsync` with the
 staged file, the show's library and the server's own id for the episode — `PluginLibraryEpisode.Id`
@@ -117,13 +116,24 @@ better than this plugin does. It reflects nothing and names no server type that 
 `NoMercy.Plugins.Abstractions`. media-server #30 and #35, both closed on 30 August 2026, are what
 made it possible; contract `0.1.479` is the first release carrying them.
 
-An episode the server named no id for is refused rather than asked for with none. A null id tells
-the server to identify the file again from its name, which is a text search on whatever a parser
-reads out of it: the encode registers against no row, the queue counter moves, the library stays
-empty, and from outside it looks like an encode still running.
+**An episode the plugin cannot name an id for is not asked for at all.** Read the server's own
+source rather than the doc comment on `mediaId`: `PluginEncoder` puts the id verbatim into
+`VideoEncodeJob.Id`, and `VideoEncodeJob.GetFileMetaData` resolves it against `Movies.Id` or
+`Episodes.Id` and nothing else — both keyed by the provider's own id, `DatabaseGeneratedOption.None`.
+No id resolves no row, so `Success` is false and every caller returns having done no work, while the
+queue records the job as finished. That is what the owner watched on 31 August 2026: nine files, nine
+jobs finished inside two minutes, an empty library. A show id would not help either; there is nowhere
+on that path that a `Tv` row is created.
 
-`EncodeGateway.For` composes it, and there is nothing else for it to compose: the reflecting
-implementation is gone.
+So the gateway has no second method and the plugin has no way to hand a file over unnamed.
+`EncodeGateway.For` composes the one implementation, and there is nothing else for it to compose:
+the reflecting implementation is gone.
+
+**Adding a show is `ShowImportJob`, and it is the server's.** `InboxRoutingService` moves the file
+into the library's folder and dispatches it; that is the dashboard's *Add content*. The plugin looks
+a show up through `IInboxMetadataProbe.SearchTvAsync` so it can say which one to add, and it does not
+add it. See `Hosting/ShowLookup.cs`, which is the only reflection left anywhere in the plugin and is
+there because the contract offers no way to ask a provider anything.
 
 ### What became of the job
 
@@ -154,8 +164,14 @@ asked of the root provider, and a media id sent as an empty string that made the
 and return without a word.
 
 It is deleted. Those four are why media-server #30 and #35 were opened, and the file went the day
-they closed. **There is no reflection anywhere in this plugin**, and no server type is named that
-does not come from `NoMercy.Plugins.Abstractions`.
+they closed. **Nothing on the way to an encode reflects any more**, and no server type is named on
+that path that does not come from `NoMercy.Plugins.Abstractions`.
+
+**One file still reflects, and it is `Hosting/ShowLookup.cs`.** It asks
+`IInboxMetadataProbe.SearchTvAsync` what a show really is, so a torrent for a show in no library can
+say which show to add. The contract offers no way to ask a provider anything, so there is nothing to
+call. It is guarded at every step and it only ever produces a sentence: a server that renames that
+type loses the provider's spelling and gets the file's own, and nothing else changes.
 
 A server that does not offer `IPluginEncoder` is told so — once, in the log and the journal — rather
 than guessed at. It needs plugin contract `0.1.479` or newer.

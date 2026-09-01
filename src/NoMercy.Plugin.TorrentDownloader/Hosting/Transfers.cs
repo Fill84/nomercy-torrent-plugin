@@ -35,7 +35,7 @@ public sealed class Transfers(
     ILogger logger,
     TimeProvider? time = null,
     IEncodeJobs? jobs = null,
-    ShowAdmission? admission = null)
+    ShowLookup? lookup = null)
 {
     /// <summary>
     /// How long an encode is given before it is given up on.
@@ -55,15 +55,6 @@ public sealed class Transfers(
     /// only needs while it is running.
     /// </remarks>
     private readonly Dictionary<string, DateTimeOffset> _waiting = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Shows this run has already asked the server to add.</summary>
-    /// <remarks>
-    /// Held rather than written down: a restart is a good enough reason to ask
-    /// again, and by then either the import finished — in which case the show
-    /// is in a library and this is never reached — or it did not, and asking
-    /// once more is the right thing.
-    /// </remarks>
-    private readonly HashSet<string> _admitted = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
@@ -303,64 +294,23 @@ public sealed class Transfers(
 
                 if (covers.Count == 0)
                 {
-                    // Nothing the owner has. The show is looked up and added,
-                    // which is the one thing that turns this into an ordinary
-                    // grab: once it is in a library it has episodes, and an
-                    // episode has the id an encode is asked for by. Handing the
-                    // files over without one asked the server to guess, and on
-                    // 31 August 2026 it guessed nine times and wrote nothing.
+                    // Nothing the owner has, so nothing happens to it. The
+                    // plugin fills a library the owner has built and does not
+                    // build it: adding a show is the server's own
+                    // ShowImportJob, dispatched from the dashboard by a person.
                     //
-                    // Nothing else happens this tick. The show arrives through
-                    // the server's own import, and the next tick sees it like
-                    // any other — matched by name, covered, staged, dispatched.
-                    if (await AdmittedAsync(files, thisTick, ct))
-                    {
-                        return null;
-                    }
-
-                    // Only where that could not be done: the files go over as
-                    // they are and the server is asked to work them out.
-                    if (await IdentifiedAsync(finished, files, incompleteFolder, thisTick, ct))
-                    {
-                        return null;
-                    }
-
-
-                    // Written down, not only said. Nothing in it names an
-                    // episode of a show the owner has — the usual cause being a
-                    // pack pasted in for a show not added to a library yet —
-                    // and guessing where to put it is worse than leaving it
-                    // where the owner put it. It goes to the History page
-                    // because the journal is memory: a torrent that sits at
-                    // finished for a week with no reason anywhere is exactly
-                    // what this plugin exists not to do.
+                    // Nor are the files handed over for the server to work out.
+                    // PluginEncoder writes the media id straight into
+                    // VideoEncodeJob.Id and that job resolves it against
+                    // Movies.Id or Episodes.Id and nothing else, so a file sent
+                    // with no id resolves no row, the job returns having done no
+                    // work, and the queue records it finished. On 31 August 2026
+                    // that was nine files, nine jobs finished inside two
+                    // minutes, and nothing written to the library.
                     //
-                    // Once per run, and the tick that follows says nothing. The
-                    // check is cheap and the answer changes the moment the show
-                    // is added, so it goes on being asked; saying so every
-                    // minute would bury the page it is written on.
-                    // Naming what the files say they are, because the owner's
-                    // next move is to add that show to a library and there is
-                    // no other way for them to know which one. Left as "nothing
-                    // in it names an episode of a show in a library" it is a
-                    // true sentence that ends the conversation.
-                    IReadOnlyList<string> named = Staging.Names(files);
-
-                    string reason = named.Count == 0
-                        ? "nothing in it names an episode at all, so it was left where it is"
-                        : $"it holds episodes of {string.Join(", ", named)}, which is in no library, "
-                          + "so it was left where it is — add the show and it will be taken on";
-
-                    journal.Failed(ActivityStage.Download, finished.ReleaseTitle, reason);
-
-                    if (_unplaceable.Add(finished.InfoHash))
-                    {
-                        await grabs.NotedAsync(
-                            finished.ReleaseTitle,
-                            reason,
-                            (time ?? TimeProvider.System).GetUtcNow(),
-                            ct);
-                    }
+                    // So it is named, said out loud, and left exactly where the
+                    // owner put it.
+                    await UnplaceableAsync(finished, files, ct);
 
                     return null;
                 }
@@ -880,183 +830,86 @@ public sealed class Transfers(
     }
 
     /// <summary>
-    /// Adds the show a torrent names, so its episodes can be dispatched.
+    /// Says which show a torrent holds that the owner has not got, and leaves
+    /// it where it is.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// An encode is asked for by the server's own episode id, and a show that
-    /// is in no library has no episodes and no ids — so a pack for one could
-    /// not be dispatched at all, however plainly its files named it. This looks
-    /// the show up with the server's own metadata providers and imports it into
-    /// the library its files read as, which is exactly what the dashboard does
-    /// when a person adds content.
+    /// Written down, not only said. A torrent that sits at finished for a week
+    /// with no reason anywhere is exactly what this plugin exists not to do, and
+    /// the journal is memory: the History page is where it stays.
     /// </para>
     /// <para>
-    /// False where there is no library of that kind, where the plugin cannot
-    /// reach the server's providers, or where no provider knows the show. The
-    /// caller then falls back to handing the files over as they are.
+    /// <strong>It names the show, because that is the owner's next move.</strong>
+    /// "Nothing in it names an episode of a show in a library" is true and
+    /// leaves them nowhere. The providers' own spelling where the server offers
+    /// them — <em>Dark Matter (2024)</em> — is the name typed into Add content;
+    /// the file's own spelling where it does not.
+    /// </para>
+    /// <para>
+    /// <strong>The providers are asked once.</strong> This runs on every tick
+    /// for as long as the torrent sits there, which is once a minute, and the
+    /// answer cannot change without the show being added — at which point this
+    /// is never reached again. The words are kept with the torrent and said
+    /// again from memory.
     /// </para>
     /// </remarks>
-    private async Task<bool> AdmittedAsync(
-        IReadOnlyList<TorrentFile> files,
-        LibraryThisTick thisTick,
-        CancellationToken ct)
-    {
-        if (admission is null || Staging.Claims(files) is not { } claimed)
-        {
-            return false;
-        }
-
-        // Asked once. The import runs on the server's own queue and a show does
-        // not appear the moment it is dispatched, so a tick a minute later
-        // still finds it in no library — and without this that dispatched the
-        // same import again, and again, for as long as the queue took.
-        if (!_admitted.Add(claimed.Title))
-        {
-            return true;
-        }
-
-        LibraryKind kind = Staging.Reads(files);
-
-        Library? into = (await thisTick.GetLibrariesAsync(ct)).FirstOrDefault(one => one.Kind == kind);
-
-        if (into is null)
-        {
-            return false;
-        }
-
-        if (await admission.AddAsync(claimed.Title, claimed.Year, into, ct) is not string added)
-        {
-            return false;
-        }
-
-        journal.Finished(
-            ActivityStage.Download,
-            claimed.Title,
-            $"was in no library, so it was looked up and added to {into.Name} as {added}; "
-            + "its episodes are dispatched on the next pass");
-
-        return true;
-    }
-
-    /// <summary>
-    /// Hands a torrent's videos to a library for the server to identify.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Only ever for a torrent added by hand: the search chain records the
-    /// episodes it chose, so a finished grab covering none of them is one the
-    /// owner pasted in. There is no episode row to name, so the server is asked
-    /// to work the file out from its name — a guess, and the owner's own, since
-    /// they asked for this torrent.
-    /// </para>
-    /// <para>
-    /// <strong>From where they are, not from the intake folder.</strong> Staging
-    /// them first would put nine files in a folder whose sweep deletes whatever
-    /// no grab is waiting on, and a pack's files are named per episode while its
-    /// grab is named for the season: they would not match, and the next tick
-    /// would delete the download. The encoder takes a path and does not care
-    /// which folder it is in.
-    /// </para>
-    /// <para>
-    /// False where there is nowhere to put it, which is the case the caller then
-    /// reports: no library of the kind the files read as.
-    /// </para>
-    /// </remarks>
-    private async Task<bool> IdentifiedAsync(
+    private async Task UnplaceableAsync(
         StoredDownload finished,
         IReadOnlyList<TorrentFile> files,
-        string incompleteFolder,
-        LibraryThisTick thisTick,
         CancellationToken ct)
     {
-        LibraryKind kind = Staging.Reads(files);
-
-        Library? into = (await thisTick.GetLibrariesAsync(ct)).FirstOrDefault(one => one.Kind == kind);
-
-        if (into is null)
+        if (!_unplaceable.TryGetValue(finished.InfoHash, out string? reason))
         {
-            return false;
-        }
+            reason = await ReasonAsync(files, ct);
 
-        // Every job the server names, because every one of them is reading a
-        // file out of the download folder and the pack cannot go until they are
-        // all done with it.
-        List<string> queued = [];
+            _unplaceable[finished.InfoHash] = reason;
 
-        bool any = false;
-
-        foreach (Staged file in Staging.Wanted(files).Select(one => new Staged(one.Path, new(0, 0, 0), one.Length)))
-        {
-            string path = Path.Combine(
-                incompleteFolder,
-                file.Path.Replace('/', Path.DirectorySeparatorChar));
-
-            if (!File.Exists(path))
-            {
-                continue;
-            }
-
-            EncodeAsk asked = await dispatch.IdentifyAsync(path, into, ct);
-
-            if (!asked.Taken)
-            {
-                continue;
-            }
-
-            any = true;
-
-            if (asked.JobId is string job)
-            {
-                queued.Add(job);
-            }
-
-            // No episode: there is none, and that is what was handed over.
-            // A key of noughts here drew "Series S00E00" on the History page.
-            await grabs.DispatchedAsync(
-                null,
-                null,
-                Path.GetFileName(path),
-                into.Name,
+            await grabs.NotedAsync(
+                finished.ReleaseTitle,
+                reason,
                 (time ?? TimeProvider.System).GetUtcNow(),
                 ct);
         }
 
-        if (any)
-        {
-            // Done rather than dispatched, because there is nothing left for
-            // this plugin to do and nothing it could wait for: it does not know
-            // which episodes these files became, so it can never see them
-            // arrive. Leaving it dispatched put it in front of a step that
-            // deletes what it is finished with, and that step cost the owner
-            // the same pack twice.
-            await grabs.StateAsync(finished.InfoHash, GrabState.Done, ct);
-
-            if (queued.Count > 0)
-            {
-                await grabs.EncodeJobAsync(finished.InfoHash, string.Join(' ', queued), ct);
-            }
-
-            _unplaceable.Remove(finished.InfoHash);
-
-            // Said out loud, because the download stays where it is and the
-            // owner is the one who decides when it goes.
-            journal.Finished(
-                ActivityStage.Dispatch,
-                finished.ReleaseTitle,
-                $"handed to {into.Name} for the server to identify; the download is left in place, "
-                + "because this plugin cannot tell whether the server kept it");
-        }
-
-        return any;
+        journal.Failed(ActivityStage.Download, finished.ReleaseTitle, reason);
     }
 
-    /// <summary>Torrents already reported as naming no show the owner has.</summary>
+    /// <summary>Why a torrent was left alone, in words the owner can act on.</summary>
+    private async Task<string> ReasonAsync(IReadOnlyList<TorrentFile> files, CancellationToken ct)
+    {
+        IReadOnlyList<string> named = Staging.Names(files);
+
+        if (named.Count == 0)
+        {
+            return "nothing in it names an episode at all, so it was left where it is";
+        }
+
+        // The providers' spelling where there is one to be had. A release name
+        // is not a title: "Dark.Matter.2024" is what the files say and
+        // "Dark Matter (2024)" is what the owner has to find in Add content.
+        FoundShow? found = lookup is null || Staging.Claims(files) is not { } claimed
+            ? null
+            : await lookup.FindAsync(claimed.Title, claimed.Year, ct);
+
+        string called = found is null
+            ? string.Join(", ", named)
+            : found.Year is int made
+                ? $"{found.Title} ({made})"
+                : found.Title;
+
+        return $"it holds episodes of {called}, which is in no library, "
+            + "so it was left where it is — add the show and it will be taken on";
+    }
+
+    /// <summary>Torrents already reported as naming no show the owner has, and the words used.</summary>
     /// <remarks>
     /// Per run, like the encode clock beside it. A restart says it once more,
-    /// which is a line on a page rather than a fault.
+    /// which is a line on a page rather than a fault. The words are kept as
+    /// well as the fact, because working them out asks the server's metadata
+    /// providers and a tick a minute must not do that.
     /// </remarks>
-    private readonly HashSet<string> _unplaceable = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _unplaceable = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Gives up on an encode the library never received.

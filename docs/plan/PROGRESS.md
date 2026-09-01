@@ -4,6 +4,15 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**Current: `S11-02`.** Sprint 11 is the five things standing between this build and the first
+end-to-end run watched on the owner's own server. `docs/plan/SPRINTS.md` § Sprint 11 opens with a
+correction it is built on, and it is the one thing to read before starting: **the encode job does
+not add a show.** `PluginEncoder` puts `mediaId` straight into `VideoEncodeJob.Id`, and
+`GetFileMetaData` resolves that against `Movies.Id` or `Episodes.Id` and nothing else — so a show id
+matches nothing, a null matches nothing, and the job returns having done no work while the queue
+records it finished. Adding a show is `ShowImportJob` and nothing else, and that is the server's to
+dispatch. Read against contract `0.1.481`.
+
 **S10-09 is done but for its version and its tag, and those are the owner's to give.**
 
 **Library membership is not the rule, and the attempt is worth reading before anyone tries a third
@@ -18,11 +27,16 @@ file. It was undone the same hour.
 What #34 and #36 gave is a newly added show being visible, which is not the same as a way to tell a
 show the owner added from a row the server made. Until there is one, having a file is the rule.
 
-**There is no reflection anywhere in this plugin.** `EncodeDispatch.cs` is deleted — 588 lines that
+**Nothing on the way to an encode reflects.** `EncodeDispatch.cs` is deleted — 588 lines that
 named `IJobDispatcher`, `VideoEncodeJob`, `MediaContext` and `IFileListService` by hand because
 there was no other way to ask. It broke four times on server changes it could not see coming, and
-those four are why media-server #30 and #35 were opened. No server type is named anywhere in `src/`
-that does not come from `NoMercy.Plugins.Abstractions`.
+those four are why media-server #30 and #35 were opened.
+
+**One file reflects, and it produces a sentence.** `Hosting/ShowLookup.cs` asks
+`IInboxMetadataProbe.SearchTvAsync` what a show really is, so a torrent for a show in no library can
+say which show to add; the contract offers no way to ask a provider anything. A server that renames
+that type loses the provider's spelling and gets the file's own, and nothing else changes. It is the
+only place in `src/` that names a server type not in `NoMercy.Plugins.Abstractions`.
 
 The encode is asked for through `IPluginEncoder` with the server's own episode id, what became of a
 job is asked through `IPluginJobs`, library membership is the rule for whose show it is, folders are
@@ -230,9 +244,32 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S10-08` Release 0.3.9
 - [ ] `S10-09` Release 0.4.0 — on the contract, with no reflection left
 
+### Sprint 11 — What the first watched run has to be run against
+- [x] `S11-01` The plugin looks a show up. It never adds one.
+- [ ] `S11-02` The health tool counts a release once
+- [ ] `S11-03` A doc block belongs to the member under it
+- [ ] `S11-04` The test that failed once
+- [ ] `S11-05` One run, watched — the owner's
+
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-01` The plugin adds nothing, and hands nothing over unnamed.** `ShowAdmission` searched the
+  server's providers and then dispatched `ShowImportJob(tmdbId, libraryId)` by reflection, which is
+  the call the dashboard's *Add content* makes: the plugin decided, off a title parsed out of a file
+  name, that a show belonged in the owner's library. It is `ShowLookup` now and it only names one.
+  **And the plan this came from was wrong about the way out.** It said to pass the found id as the
+  encoder's `mediaId` so the encode job would add the show. It will not: `PluginEncoder` puts the id
+  verbatim into `VideoEncodeJob.Id`, and `GetFileMetaData` resolves that against `Movies.Id` or
+  `Episodes.Id` and nothing else, both keyed by the provider's own id. A show id matches neither. Nor
+  does no id — which is why `IEncodeGateway.IdentifyAsync` went with it: handing files over unnamed
+  resolves no row, the job returns having done no work, and the queue records it finished. That is
+  the 31 August run, line for line: nine files, nine jobs finished inside two minutes, an empty
+  library. A pack for a show in no library is now named and left exactly where it is, with the
+  providers' own spelling on the History page — *Dark Matter (2024)*, which is what the owner types
+  into Add content — asked once per torrent per run and not once a minute. Read against contract
+  `0.1.481`. `Staging.Reads` went with the branch that was its only caller.
 
 - **A handed-over pack deleted itself.** A grab handed to a library to be identified covers no
   episode, and the rule that ends a grab reads "every episode it covers has a file" — which over no

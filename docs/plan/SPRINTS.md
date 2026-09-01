@@ -1423,3 +1423,199 @@ the version and the tag, and step 6 says when: only when the owner asks.
 
 **Done when** the plugin names no server type it does not get from
 `NoMercy.Plugins.Abstractions` — and the owner says so. Read first: `docs/09-host-contract.md`.
+
+# Sprint 11 — What the first watched run has to be run against
+
+Five things stand between this build and the first end-to-end run watched on the owner's own
+server. One is a policy the plugin breaks today; three are mess of this repository's own making; the
+last is the run itself, and it is the owner's.
+
+**Read before starting: the paragraph below. It corrects the plan this sprint was written from.**
+
+## The correction this sprint is built on
+
+The list this sprint comes from said: take the show id the metadata providers answer with, hand it
+to the encoder as `mediaId`, **and the encode job will add the show**. It will not, and the server
+says so in its own source.
+
+`IPluginEncoder.EncodeAsync(file, libraryId, mediaId, presetId, ct)` is implemented by
+`NoMercy.Data.Plugins.PluginEncoder`. It resolves the library, takes its first folder, and queues a
+`VideoEncodeJob` whose `Id` is the `mediaId` verbatim. `VideoEncodeJob.GetFileMetaData` then reads
+that id back exactly once, in one of two ways and no others:
+
+```csharp
+Movie?   movie   = ... context.Movies  .FirstOrDefaultAsync(x => x.Id == Id.ToInt())
+Episode? episode = ... context.Episodes.FirstOrDefaultAsync(x => x.Id == Id.ToInt())
+
+if (movie is null && episode is null)
+    return new() { Success = false };
+```
+
+and every caller of it does `if (!fileMetadata.Success) return;`. Both tables are keyed by the
+provider's own id with `DatabaseGeneratedOption.None`, so `Id` is a **movie id or an episode id** —
+never a show id. Nothing on that path creates a `Tv` row, a season, an episode or a library entry.
+
+Three things follow, and all three are load-bearing for this sprint.
+
+- **A show id sent as `mediaId` adds nothing.** It matches no episode; against a movie library it
+  could match an unrelated film, which is worse than doing nothing.
+- **`mediaId: null` adds nothing either**, and never did. `PluginEncoder` writes
+  `Id = mediaId ?? string.Empty`, `string.Empty.ToInt()` resolves no row, `Success` is false, and
+  `Handle` returns having done no work — while the queue records the job as finished. That is,
+  line for line, what the owner watched on 31 August 2026: nine files handed over, nine jobs
+  reported finished within two minutes, nothing written to the library.
+- **The only thing that adds a show is `ShowImportJob`**, dispatched by
+  `InboxRoutingService.DispatchImportJob` after the server has moved the file into the library
+  folder itself. That is the dashboard's *Add content*, and it is the server's to run.
+
+So there is no id to pass and no job to pass it to. The policy stands unchanged and is the whole of
+**S11-01**: the plugin looks a show up, says what it found, and adds nothing. Read against contract
+`0.1.481`, which is what the owner runs; `IPluginEncoder`, `PluginEncoder` and `VideoEncodeJob` are
+byte-identical to `0.1.479`.
+
+## S11-01 · The plugin looks a show up. It never adds one.
+
+`ShowAdmission` adds a show to a library. It searches the server's metadata providers, takes the
+nearest candidate, and dispatches `ShowImportJob(tmdbId, libraryId)` by reflection — the same call
+the dashboard makes when a person adds content. It is named for permission and it does not ask for
+any: it decides, on a release name parsed out of a file, that a show belongs in the owner's library.
+
+That is not this plugin's decision. **The plugin fills a library the owner has built. It does not
+build it.**
+
+What the lookup is still worth keeping for is the sentence it can write. "It holds episodes of
+`Dark.Matter`, which is in no library" is parsed off a file name and may be a mangling of one;
+"the providers know it as Dark Matter (2024)" is the name the owner will type into *Add content*.
+
+1. `Hosting/ShowAdmission.cs` becomes `Hosting/ShowLookup.cs`. `AddAsync` becomes
+   `FindAsync(string title, int? year, CancellationToken ct)` and answers a `FoundShow(string Title,
+   int? Year, int ProviderId)` or null. `Dispatch`, `DispatcherType` and `ImportJobType` go with the
+   old name; `SearchAsync` and the candidate-picking rule are untouched, because choosing the wrong
+   show to *name* is the same fault as choosing the wrong one to add.
+2. `Ready()` names one thing, the probe, and says what the plugin can and cannot do with it: it can
+   say which show a torrent holds, and it cannot add it.
+3. `Transfers.AdmittedAsync` goes. In its place the unplaceable report — which already exists, is
+   already written once per run per torrent, and already goes to the Skipped page — carries the
+   looked-up name where there is one.
+4. `Transfers._admitted` goes with it. Nothing is asked of the server twice any more, and
+   `_unplaceable` already holds the "say it once" rule for the report that replaces it.
+5. **`IEncodeGateway.IdentifyAsync` goes, and `ContractEncodeGateway.IdentifyAsync` with it.** It
+   exists to hand a file over with `mediaId: null` and let the server work it out; the correction
+   above is the server's own source saying that does nothing at all, silently, and marks the grab
+   `Done` on the way. A torrent nothing can be named for is reported and left where it is — which
+   is what the branch below it already did, and the only branch that ever put files in the owner's
+   library by guessing is gone.
+6. `TransfersTests.APackForAShowTheServerDoesNotKnowIsHandedOverToBeIdentified` asserts the
+   behaviour being deleted. It becomes `APackForAShowInNoLibraryIsNamedAndLeftWhereItIs`: nothing
+   encoded, nothing staged, the download still on disk, the grab still open, and one line on the
+   History page naming the show.
+
+**Done when** no path in `src/` can cause a row to appear in the owner's library that the owner did
+not ask for, and a pack for a show in no library says which show to add. Read first:
+`docs/09-host-contract.md` § Dispatching an encode, and the correction above.
+
+## S11-02 · The health tool counts a release once
+
+`PageReleases.CountIn` answers "how many releases does this page appear to carry", read without the
+reader, so that a reader seeing nothing can be told from a site having nothing. On the capture of
+31 August 2026 it reported thirty releases on a TorrentBay page carrying fourteen and thirty-five on
+a LimeTorrents page carrying seventeen. It no longer flags either as broken — that was fixed by
+normalising the names — but the number in the report is still about twice the truth, and the report
+is a page the owner reads.
+
+Both over-counts have the same cause and it is not the normalisation. A name is grown outwards from
+each marker it contains, up to `Reach` characters either side, and a name holding three markers —
+`1080p`, `WEB-DL`, `H.264` — is grown three times from three different starting points. Where the
+name is longer than the reach, the three growths stop in three different places and the set counts
+three names. On top of that each row is written twice on the page in forms that survive
+normalisation differently: TorrentBay's title link is `<b>South Park S15E12</b>.HDTV.XviD-FQM`, so
+the run after the tag is `hdtv xvid fqm` while the `href` is the whole name with the torrent's id
+on the end; LimeTorrents' `href` ends `-torrent.html`.
+
+1. **Grow to the whole run.** `Reach` goes. A name is the maximal run of name characters around the
+   marker, so every marker inside one name grows to the same span and the span is deduplicated by
+   its position before it is ever read. The run is bounded by markup, quotes, slashes and commas —
+   none of which is a name character — so this is still linear and still cannot backtrack, which is
+   what `Reach` was there to guarantee.
+2. **One spelling.** `Plain` keeps only ASCII letters and digits and makes every other character a
+   separator, so `fqm[ettv]` and `fqm ettv` are one name. Tokens that are all digits go — a
+   torrent's id on the end of an `href` is the difference between the link and the text of it — and
+   so do the words a URL is made of and a release name is not: `html`, `torrent`, `magnet`,
+   `download`, `php`.
+3. **A name that is the tail of another name is that name.** `hdtv xvid fqm` is what is left of
+   `south park s15e12 hdtv xvid fqm` when the run starts after a highlight tag. Only the tail, never
+   the head: `south park s15e12 hdtv xvid fqm` is the head of `... fqm vtv avi` and those are two
+   releases.
+4. It under-counts and never over-counts, and the comment says so: two rows carrying the same
+   release under different ids are one name, and one name is what it reports.
+5. A test over `tests/fixtures/torrentbay.html` and `tests/fixtures/limetorrents.html` that runs the
+   real check and asserts the count does not exceed the rows the reader read. Both fail on today's
+   code. Not a test over every capture: a reader that caps its rows at a hundred reads fewer rows
+   than the page carries, and rightly.
+
+**Done when** neither captured page reports more releases than its reader reads. Read first:
+`tools/SourceHealth/PageReleases.cs`.
+
+## S11-03 · A doc block belongs to the member under it
+
+Eighteen places in `src/` carry two or three `<summary>` blocks in one run of `///` lines. Every one
+is a block that was pasted above a member it does not describe, and in most cases the member it does
+describe is a few lines further down with no doc block at all — `Staging.Names` and
+`Staging.Discover` are both documented above `Staging.Claims`.
+
+Nothing here changes behaviour and nothing here is cosmetic either: a doc block over the wrong
+member is a false statement in the place a reader looks first.
+
+1. Each of the eighteen is read, and each stacked block either moves to the member it describes or
+   goes, where the member below already says the same thing.
+2. By hand. A script that moves doc blocks moves them to the wrong members.
+3. The detector that found them runs clean afterwards: no run of `///` lines in `src/` holds more
+   than one `<summary>`.
+
+**Done when** no file in `src/` has two summaries in one doc comment, and no member that had a doc
+block has lost it. Read first: nothing.
+
+## S11-04 · The test that failed once
+
+One test failed once, at the end of August, and every run since has been clean. There is no record
+of which test it was and no captured output, so there is nothing to debug from — and a fix invented
+for a failure nobody can name is a change that cannot be shown to fix anything.
+
+What can be done is bounded, and it is worth doing:
+
+1. Run the whole suite six times over and record it. Seventeen clean runs is not proof, and it is
+   what there is.
+2. Read the tests that are structurally able to fail once in a hundred runs — a real socket, a real
+   clock, a real port — and judge each one. A test that can fail for a timing reason is a fault
+   whether or not it is the fault, and `CLAUDE.md` § Testing already forbids it.
+3. Fix what that reading finds, and write down what it did not find. **Invent nothing.** If no test
+   is able to fail for a timing reason, that is the answer and it goes in `PROGRESS.md` § Facts.
+
+**Done when** either a test able to fail on timing has been fixed, or it is written down that none
+was found and over how many runs. Read first: `CLAUDE.md` § Testing.
+
+## S11-05 · One run, watched — the owner's
+
+This build has never been on the server. Nothing below is this repository's to do.
+
+1. The owner stops the server; the build is deployed; the owner starts it.
+2. Dark Matter is at `done` with 37 GB on disk. Put back to `grabbed` it gives a verification round
+   rather than a fresh download, which is the cheapest way to watch the chain move.
+3. Watch one episode go the whole way: looked up, dispatched, encoded, in the library — and only
+   then cleared up.
+
+**Done when** the owner has seen it. Read first: `docs/01-plugin.md` § Deploying.
+
+## What is not this repository's, and is written down so it is not looked for here again
+
+Both were found while doing the above and neither has a fix that belongs in this plugin.
+
+- **South Park S15E12 is attached to the wrong episode.** The server's scanner files it under
+  episode `153785` — season 0, the special — where the episode the plugin dispatched is `153823`.
+  The plugin waits for `153823` to have a file, so the grab waits until that is corrected and then
+  gives up after six hours and looks for the episode again. The waiting is right; the attachment is
+  not.
+- **A magnet pasted into the Downloads page is cut at 1024 characters.** Not here: the field is a
+  `PluginFormFieldType.Text` with no length on it, `PluginFormField` in the contract carries no
+  length, and the dashboard's `PluginForm.vue` renders a bare `<input>` with no `maxlength`. It is
+  somewhere between the browser and the action payload, and it is outside this plugin either way.
