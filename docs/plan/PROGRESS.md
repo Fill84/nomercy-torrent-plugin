@@ -257,11 +257,29 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-10` Three pack faults, found by watching a pack go through
 - [x] `S11-11` The plugin cannot hold the server up
 - [x] `S11-12` A removed torrent takes its own files and nobody else's
+- [x] `S11-13` The profile is applied to names before an indexer is asked
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-13` Stage 3 of the architecture was never built.** `docs/03-architecture.md` has laid out
+  five stages since the first sprint: harvest, resolve, **judge the name**, find, judge the copy. The
+  third — *the profile applied to NAMES: slot, quality, codec, language, group, packs* — was never
+  wired in. The method existed, `ReleaseFilter.JudgeName`, and was only ever called on the copies that
+  came back. So every name the sources gave went to every indexer first and was judged afterwards.
+  The owner watched four indexers being asked for
+  `South.Park.S15E12.1.Prozent.German.DL.AC3D.1080p.BluRay.x264-JaJunge` with English only on. It is a
+  real PreDB name — their pool holds **2,238 names in other languages**, 1,803 from srrDB alone — and
+  every one of them cost a paced request at every indexer that carries the show, to have every row it
+  answered with thrown away one step later. Worse, `MaxSearchAttempts` caps how many names an episode
+  gets: each refused name ate a place a wanted one could have had.
+  **And the terms this plugin makes up for itself went first.** `"Silo S03"`, `"Silo"`,
+  `"Silo S03E06"` were asked ahead of every name the sources gave. They are guesses, and the sources
+  are the authority on what a release is called. They are the fallback now, and only that: asked when
+  the sources gave no name the profile will have, or when the names they gave found nothing anybody
+  is serving. Both cases are real — an episode nobody pre'd has no name to search for at all.
 
 - **`S11-12` Removing one torrent's files deleted the download folder.** The worst thing found in this
   sprint, and it had shipped in every build. `RemoveAsync` handed `Run.Folder()` to

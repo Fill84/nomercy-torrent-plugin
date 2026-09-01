@@ -1807,6 +1807,39 @@ by that grab's cleanup.
 **Done when** removing one torrent with its files leaves every other download untouched and nothing
 of its own behind. Read first: `BittorrentEngine.RemoveAsync`.
 
+## S11-13 · The profile is applied to names before an indexer is asked
+
+`docs/03-architecture.md` has described five stages since the first sprint:
+
+```
+  3 Judge the name    the profile applied to NAMES: slot, quality, codec, language, group, packs
+  4 Find              every indexer in parallel
+  5 Judge the copy    the profile applied to COPIES: seeders, size
+```
+
+Stage 3 was never wired in. `ReleaseFilter.JudgeName` exists and does exactly what stage 3 describes;
+it was only ever called on the copies that came back from stage 4.
+
+The owner watched four indexers being asked for
+`South.Park.S15E12.1.Prozent.German.DL.AC3D.1080p.BluRay.x264-JaJunge` with English only on. It is a
+correct scene release and a real PreDB name — a name database indexes every language — and their pool
+holds 2,238 names in languages the profile refuses, 1,803 of them from srrDB. Each one cost a paced
+request at every indexer carrying that show, and each one ate a place in `MaxSearchAttempts` that a
+wanted name could have had.
+
+1. Every name from the sources goes through `JudgeName` before an indexer is touched. The refusals
+   are kept, so an episode where every name was refused says that rather than reading as a search
+   that found nothing.
+2. Only what survives is put to the indexers.
+3. The terms this plugin makes up — the programme, the season, the episode as this plugin spells it —
+   used to be asked first and always. They are the fallback now: asked when the sources gave no name
+   the profile will have, or when the names they gave found nothing anybody is serving. Both happen —
+   an episode nobody pre'd has no name to search for at all.
+
+**Done when** no request carries a name the profile refuses, and the terms this plugin makes up are
+asked only after the source's own names have had their turn and come to nothing. Read first:
+`docs/03-architecture.md` § Stages.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

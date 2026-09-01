@@ -1,5 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
@@ -607,6 +608,138 @@ public class SearchCycleTests
                 address.Host == "www.limetorrents.lol" && address.AbsolutePath == "/search/all/Silo/"));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Stage 3 of docs/03-architecture.md: the profile applied to
+    /// names.</strong> It was never built. Every name the sources gave was put
+    /// to every indexer and only the rows that came back were judged, so a name
+    /// the owner could never accept cost a request at every site that carries
+    /// the show and had all of it thrown away one step later.
+    /// </para>
+    /// <para>
+    /// The name here is the owner's own, off their own dashboard on 2 September
+    /// 2026, and PreDB really does publish it — their pool held 2,238 names in
+    /// other languages. It is a correct scene release and it is not one they
+    /// will ever take, and no indexer should be asked about it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ANameTheProfileRefusesIsNeverPutToAnIndexer()
+    {
+        FakePool pool = new();
+
+        await pool.AddAsync(
+            [
+                Pooled("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB"),
+                Pooled("Silo.S03E06.1080p.WEB.H264-CAKES", "srrDB"),
+            ],
+            CancellationToken.None);
+
+        FakeFetch fetch = Answering();
+
+        await Cycle(fetch, new(), pool: pool).RunAsync(
+            [Silo(6)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        // Not one request anywhere carries it — not to an indexer, not to
+        // anybody. Asking cost four sites a paced request each on the owner's
+        // own server.
+        Assert.DoesNotContain(
+            fetch.Asked,
+            address => address.OriginalString.Contains("JaJunge", StringComparison.OrdinalIgnoreCase)
+                       || address.OriginalString.Contains("German", StringComparison.OrdinalIgnoreCase));
+
+        // And the name that is wanted was put to the indexer, so this is a rule
+        // about which names are asked for and not about asking for none.
+        Assert.Contains(
+            fetch.Asked,
+            address => address.OriginalString.Contains("Silo.S03E06.1080p.WEB.H264-CAKES", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The terms this plugin makes up for itself — the programme, the season,
+    /// the episode as this plugin spells it — are not asked at all while the
+    /// source's own name is answering. They used to go first and always, ahead
+    /// of every name the sources gave, which is not what the architecture
+    /// describes and spent the owner's <c>MaxSearchAttempts</c> on guesses.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task NothingThisPluginMakesUpIsAskedWhileTheSourcesNameAnswers()
+    {
+        FakePool pool = new();
+
+        await pool.AddAsync([Pooled("Silo.S03E06.1080p.WEB.H264-CAKES", "srrDB")], CancellationToken.None);
+
+        FakeFetch fetch = Answering();
+
+        await Cycle(fetch, new(), pool: pool).RunAsync(
+            [Silo(6)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        Assert.Contains(
+            fetch.Asked,
+            address => address.OriginalString.Contains("Silo.S03E06.1080p.WEB.H264-CAKES", StringComparison.Ordinal));
+
+        Assert.DoesNotContain(
+            fetch.Asked,
+            address => address.AbsolutePath is "/search/all/Silo/" or "/search/all/Silo S03/");
+    }
+
+    /// <remarks>
+    /// And they are asked when the sources leave nothing to ask for. Every name
+    /// here is one the profile refuses, so there is no release name to put to
+    /// an indexer — and an episode nobody pre'd in a language the owner reads
+    /// must still be looked for.
+    /// </remarks>
+    [Fact]
+    public async Task WhatThisPluginMakesUpIsAskedWhenTheSourcesLeaveNothing()
+    {
+        FakePool pool = new();
+
+        await pool.AddAsync(
+            [Pooled("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB")],
+            CancellationToken.None);
+
+        FakeFetch fetch = Answering();
+
+        await Cycle(fetch, new(), pool: pool).RunAsync(
+            [Silo(6)],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        Assert.Contains(
+            fetch.Asked,
+            address => address.AbsolutePath is "/search/all/Silo/" or "/search/all/Silo S03/");
+    }
+
+    /// <summary>One name in the pool, keyed the way the harvest keys it.</summary>
+    private static PooledName Pooled(string title, string source)
+    {
+        return new(
+            PoolKey.Of(ReleaseName.Parse(title))!,
+            title,
+            source,
+            DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>Where the first request matching this appears, or -1.</summary>
+    private static int Order(FakeFetch fetch, Func<Uri, bool> matches)
+    {
+        for (int at = 0; at < fetch.Asked.Count; at++)
+        {
+            if (matches(fetch.Asked[at]))
+            {
+                return at;
+            }
+        }
+
+        return -1;
+    }
+
     /// <summary>Where a download would land, if anything were downloading.</summary>
     private const string Folder = @"C:\downloads";
 
@@ -679,14 +812,15 @@ public class SearchCycleTests
         FakeTorrentEngine? engine,
         ActivityJournal? journal = null,
         SourceDefinition[]? sources = null,
-        long? free = null)
+        long? free = null,
+        FakePool? pool = null)
     {
         SourceCatalogue catalogue = SourceCatalogue.Build(sources ?? Sources, [], []);
         ActivityJournal writing = journal ?? new ActivityJournal();
         Readers readers = Readers.Shipped();
 
         return new(
-            new(catalogue, fetch, readers, new FakePool(), writing, TimeProvider.System),
+            new(catalogue, fetch, readers, pool ?? new FakePool(), writing, TimeProvider.System),
             new(catalogue, fetch, readers, writing),
             writing,
 

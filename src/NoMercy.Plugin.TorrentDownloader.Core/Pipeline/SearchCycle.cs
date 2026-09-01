@@ -276,48 +276,60 @@ public sealed class SearchCycle(
             //
             bool searched = false;
 
-            foreach ((string term, bool shelf) in Terms(episode, candidates, options.Profile))
-            {
-                if (!asked.TryGetValue(term, out IReadOnlyList<ReleaseCopy>? copies))
-                {
-                    copies = await find.SearchAsync(term, episode.Kind, ct);
-                    asked[term] = copies;
+            // **Stage 3 of docs/03-architecture.md, which was never built.** The
+            // profile applied to NAMES, before an indexer is touched: slot,
+            // quality, codec, language, group. It was only ever applied to the
+            // copies that came back, so a name the owner could never accept was
+            // asked of every indexer, waited out every host's pace, and had
+            // every row it returned thrown away.
+            //
+            // The owner watched four indexers being asked for
+            // South.Park.S15E12.1.Prozent.German.DL.AC3D.1080p.BluRay.x264-JaJunge
+            // on 2 September 2026 with English only on. It is a real scene
+            // release and a real PreDB name — their pool holds 2,238 names in
+            // other languages, and every one of them cost a request at every
+            // indexer that carries the show.
+            IReadOnlyList<string> wanted = Wanted(candidates, episode, decisions, refused);
 
-                    // Every copy, taken or not: a tracker on a release the
-                    // profile refused is serving the same swarm as the one it
-                    // accepted.
-                    trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
-
-                    // Only what a shelf answered is shared. A season or a
-                    // programme was asked for the whole of itself, so every gap
-                    // in it is entitled to the answer; an episode's own search
-                    // was asked about that episode, and letting its leftovers
-                    // settle another gap is how Sugar S02E08 came to be decided
-                    // by a stray row while the release everybody was seeding
-                    // went unfetched.
-                    if (shelf)
-                    {
-                        answered.AddRange(copies);
-                    }
-                }
-
-                searched = true;
-
-                gathered.AddRange(copies);
-
-            }
-
-            // Every name, on every indexer, before anything is taken. A site
-            // only answers about the name it was asked, so an indexer holding
-            // the release under a spelling the first term did not use is asked
-            // and still never finds it — and its trackers never reach the
-            // magnet. Two Lioness episodes sat at "fetching metadata" with no
-            // peer and no seed while the same release seeded through trackers
-            // only a later name would have found.
+            // The source's own names, on every indexer. A site only answers
+            // about the name it was asked, so an indexer holding the release
+            // under a spelling the first term did not use is asked and still
+            // never finds it — and its trackers never reach the magnet. Two
+            // Lioness episodes sat at "fetching metadata" with no peer and no
+            // seed while the same release seeded through trackers only a later
+            // name would have found.
             //
             // The cost is names times indexers rather than indexers, and it is
             // the per-host gate that keeps that civil: every request to a site
             // waits its turn behind that site's own pace, whoever asked for it.
+            if (wanted.Count > 0)
+            {
+                searched = true;
+
+                await AskAsync(wanted.Select(name => (name, false)), episode, gathered, answered, asked, trackers, ct);
+
+                if (await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, candidates, ct)
+                    is EpisodeOutcome fromTheSource)
+                {
+                    return fromTheSource with { Searched = true };
+                }
+            }
+
+            // **Only now, and only for what the names could not answer.** The
+            // sources are the authority on what a release is called, and the
+            // terms below are made up here — a show and a season, a show on its
+            // own, the episode as this plugin would spell it. They earn their
+            // place twice: an episode nobody pre'd has no name to search for at
+            // all, and a name that is right can still find nothing anybody is
+            // serving.
+            //
+            // They used to be asked first and always, ahead of every name the
+            // sources gave, which is not what the architecture describes and
+            // spent the owner's MaxSearchAttempts on guesses.
+            await AskAsync(Fallback(episode), episode, gathered, answered, asked, trackers, ct);
+
+            searched = true;
+
             if (await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, candidates, ct)
                 is EpisodeOutcome taken)
             {
@@ -462,69 +474,114 @@ public sealed class SearchCycle(
     }
 
     /// <summary>
-    /// What to ask the indexers, in the order it is worth asking.
+    /// Asks every indexer for each term, once per cycle per term.
+    /// </summary>
+    /// <remarks>
+    /// A shelf's answer is shared with every gap it could cover, because a
+    /// season or a programme was asked for the whole of itself. An episode's
+    /// own search was asked about that episode, and letting its leftovers
+    /// settle another gap is how Sugar S02E08 came to be decided by a stray row
+    /// while the release everybody was seeding went unfetched.
+    /// </remarks>
+    private async Task AskAsync(
+        IEnumerable<(string Term, bool Shelf)> terms,
+        TrackedEpisode episode,
+        List<ReleaseCopy> gathered,
+        List<ReleaseCopy> answered,
+        Dictionary<string, IReadOnlyList<ReleaseCopy>> asked,
+        List<string> trackers,
+        CancellationToken ct)
+    {
+        foreach ((string term, bool shelf) in terms)
+        {
+            if (!asked.TryGetValue(term, out IReadOnlyList<ReleaseCopy>? copies))
+            {
+                copies = await find.SearchAsync(term, episode.Kind, ct);
+                asked[term] = copies;
+
+                // Every copy, taken or not: a tracker on a release the profile
+                // refused is serving the same swarm as the one it accepted.
+                trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
+
+                if (shelf)
+                {
+                    answered.AddRange(copies);
+                }
+            }
+
+            gathered.AddRange(copies);
+        }
+    }
+
+    /// <summary>
+    /// Which of the source's names are worth asking an indexer for.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>A3 said the full release name and nothing else, and A3 is
-    /// wrong.</strong> On 22 August 2026 apibay answered
-    /// <c>Silo S03E08 1080p WEB H264 CAKES</c> with "No results returned" and
-    /// <c>Silo S03E08</c> with twelve rows, the first of them seeded by six
-    /// thousand. Four of the eight indexers that cycle read nothing at all off
-    /// a release every one of them was carrying, and the episode was reported
-    /// as though it did not exist. Both captures are in tests/fixtures.
+    /// <strong>The profile applied to names, which is stage 3 of
+    /// docs/03-architecture.md.</strong> It is the same rule that judges a copy
+    /// — <see cref="ReleaseFilter.JudgeName"/> — and it needs no network to say
+    /// that a German release is not wanted where English only is on, that a
+    /// 720p one is not 1080p, or that h265 is not h264.
     /// </para>
     /// <para>
-    /// The episode's own number first, because that is the question nearly
-    /// every search box can answer. Then the programme on its own, because
-    /// EZTV's box is labelled "Search title" and answers a release name with
-    /// nothing at all, and because one such answer carries every gap of that
-    /// programme this cycle is looking for. Then the release names, which are
-    /// exact and worth having wherever a site can use them.
+    /// A name refused here costs nothing. Asked for, it costs one request at
+    /// every indexer that carries the show, waits out each of their paces, and
+    /// has every row it answers with thrown away by the same rule one step
+    /// later.
     /// </para>
     /// <para>
-    /// What comes back is judged name by name against the profile, which is the
-    /// protection A3 was really asking for. 0.3.4 searched broadly and had no
-    /// rule saying a row had to be a release of the episode it was asked about,
-    /// so whatever came back well seeded was taken. This has that rule, and it
-    /// is <see cref="ReleaseFilter.IsFor"/>.
+    /// The reasons are kept, not thrown away: an episode where every name was
+    /// refused must be able to say so, or it reads as a search that found
+    /// nothing.
     /// </para>
     /// </remarks>
-    private static IEnumerable<(string Term, bool Shelf)> Terms(
+    private static IReadOnlyList<string> Wanted(
+        IReadOnlyList<string> candidates,
         TrackedEpisode episode,
-        IReadOnlyList<string> names,
-        Profile profile)
+        Decisions decisions,
+        List<string> refused)
     {
-        // Never more than the owner's own MaxSearchAttempts, counting only the
-        // terms that really cost something. The season and the programme are
-        // fetched once a cycle however many gaps fall through to them, so
-        // charging every gap for them would spend the whole allowance on two
-        // requests that were already paid for.
-        return Shelves()
-            .Select(term => (term, true))
-            .Concat(Every().Take(Math.Max(1, profile.MaxSearchAttempts)).Select(term => (term, false)));
+        List<string> worth = [];
 
-        IEnumerable<string> Shelves()
+        foreach (string candidate in candidates)
         {
-            yield return $"{episode.ShowTitle} S{episode.Key.Season:00}";
-            yield return episode.ShowTitle;
+            // The very judgement the ranking makes one step later, and it needs
+            // no network to make it.
+            Verdict verdict = decisions.JudgeName(ReleaseName.Parse(candidate), episode);
+
+            if (verdict.Accepted)
+            {
+                worth.Add(candidate);
+
+                continue;
+            }
+
+            refused.Add(verdict.Reason);
         }
 
-        IEnumerable<string> Every()
+        return worth;
+    }
+
+    /// <summary>
+    /// The terms this plugin makes up when the sources cannot answer.
+    /// </summary>
+    /// <remarks>
+    /// A show and a season, the show on its own, and the episode as this plugin
+    /// spells it. Asked only when the sources gave no name worth having, or
+    /// when the names they gave found nothing anybody is serving.
+    /// </remarks>
+    private static IEnumerable<(string Term, bool Shelf)> Fallback(TrackedEpisode episode)
+    {
+        yield return ($"{episode.ShowTitle} S{episode.Key.Season:00}", true);
+        yield return (episode.ShowTitle, true);
+        yield return ($"{episode.ShowTitle} {episode.Key}", false);
+
+        if (episode.Absolute is int absolute)
         {
-            yield return $"{episode.ShowTitle} {episode.Key}";
-
-            if (episode.Absolute is int absolute)
-            {
-                // An absolute-numbered release carries no season tag at all, so
-                // the form above finds none of them.
-                yield return $"{episode.ShowTitle} {absolute}";
-            }
-
-            foreach (string name in names)
-            {
-                yield return name;
-            }
+            // An absolute-numbered release carries no season tag at all, so the
+            // form above finds none of them.
+            yield return ($"{episode.ShowTitle} {absolute}", false);
         }
     }
 
