@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Current: `S11-02`.** Sprint 11 is the five things standing between this build and the first
+**Current: `S11-03`.** Sprint 11 is the five things standing between this build and the first
 end-to-end run watched on the owner's own server. `docs/plan/SPRINTS.md` § Sprint 11 opens with a
 correction it is built on, and it is the one thing to read before starting: **the encode job does
 not add a show.** `PluginEncoder` puts `mediaId` straight into `VideoEncodeJob.Id`, and
@@ -246,7 +246,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 11 — What the first watched run has to be run against
 - [x] `S11-01` The plugin looks a show up. It never adds one.
-- [ ] `S11-02` The health tool counts a release once
+- [x] `S11-02` The health tool counts a release once
 - [ ] `S11-03` A doc block belongs to the member under it
 - [ ] `S11-04` The test that failed once
 - [ ] `S11-05` One run, watched — the owner's
@@ -254,6 +254,20 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-02` The health tool counts a release once.** It said thirty releases on a TorrentBay page
+  carrying fourteen and thirty-five on a LimeTorrents page carrying seventeen. The cause was the
+  sixty-character reach: a name holding three markers was grown three times from three starting
+  points and stopped in three different places, so one release was counted three times. Runs now
+  grow to the whole span and are deduplicated by where they are; only letters and digits survive
+  normalisation, a word that is all digits goes with them — the difference between a link and its own
+  `href` is the torrent's id on the end — and so do the words a URL is built from, because
+  LimeTorrents ends every address `-torrent.html`. What is left is one release seen through two
+  windows that each carry an end the other does not, and two windows that agree on four words or half
+  the shorter of them are one release. On the two captures whose readers read every row it is now
+  fourteen against fourteen and thirteen against seventeen. **`health/report.md` is the record of the
+  31 August run and its numbers were counted by the old rule**; the tool fetches live, so it is right
+  again the next time it is run.
 
 - **`S11-01` The plugin adds nothing, and hands nothing over unnamed.** `ShowAdmission` searched the
   server's providers and then dispatched `ShowImportJob(tmdbId, libraryId)` by reflection, which is

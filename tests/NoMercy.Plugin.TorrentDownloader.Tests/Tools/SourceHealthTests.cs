@@ -407,6 +407,41 @@ public class SourceHealthTests
         Assert.True(PageReleases.CountIn(Fixture("nyaa-nothing.xml")) <= PageReleases.Few);
     }
 
+    /// <remarks>
+    /// <para>
+    /// And it counts each release once. The report prints this number beside
+    /// the rows the reader read, and on 31 August 2026 it said thirty releases
+    /// on a TorrentBay page carrying fourteen and thirty-five on a LimeTorrents
+    /// page carrying seventeen — a number an owner reads and cannot act on.
+    /// </para>
+    /// <para>
+    /// A page writes the same release several times over — the link's text, its
+    /// <c>href</c> with the torrent's id on the end, and the text again with
+    /// the search term wrapped in a highlight tag — and a name holding three
+    /// markers used to be grown three times from three starting points. These
+    /// two sources are the ones whose readers read every row on their page, so
+    /// the reader's own count is the truth to hold the count against. Sources
+    /// that stop at a hundred rows are not: their pages really do carry more.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("torrentbay.html", "torrentbay", "https://extranet.torrentbay.st/browse/?q=x")]
+    [InlineData("limetorrents.html", null, "https://www.limetorrents.lol/search/all/x/")]
+    public void APageIsNotSaidToCarryMoreReleasesThanItsReaderReads(string fixture, string? reader, string from)
+    {
+        SourceDefinition source = new("Under test", "site", from, Reader: reader);
+
+        string page = Fixture(fixture);
+
+        int rows = Readers.Shipped().For(source)!.Read(page, new(from)).Count;
+
+        Assert.True(rows > 0, $"{fixture}: the reader read nothing, so there is nothing to hold the count against.");
+
+        Assert.True(
+            PageReleases.CountIn(page) <= rows,
+            $"{fixture}: the page is said to carry {PageReleases.CountIn(page)} releases where its reader read {rows}.");
+    }
+
     private const string Term = "Silo S03E06";
 
     private static readonly SourceDefinition Limetorrents = new(
