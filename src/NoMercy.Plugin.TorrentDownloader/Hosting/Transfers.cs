@@ -56,6 +56,15 @@ public sealed class Transfers(
     /// </remarks>
     private readonly Dictionary<string, DateTimeOffset> _waiting = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Shows this run has already asked the server to add.</summary>
+    /// <remarks>
+    /// Held rather than written down: a restart is a good enough reason to ask
+    /// again, and by then either the import finished — in which case the show
+    /// is in a library and this is never reached — or it did not, and asking
+    /// once more is the right thing.
+    /// </remarks>
+    private readonly HashSet<string> _admitted = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
     /// <param name="intakeFolder">Where a finished episode is put for the encoder.</param>
@@ -896,6 +905,15 @@ public sealed class Transfers(
         if (admission is null || Staging.Claims(files) is not { } claimed)
         {
             return false;
+        }
+
+        // Asked once. The import runs on the server's own queue and a show does
+        // not appear the moment it is dispatched, so a tick a minute later
+        // still finds it in no library — and without this that dispatched the
+        // same import again, and again, for as long as the queue took.
+        if (!_admitted.Add(claimed.Title))
+        {
+            return true;
         }
 
         LibraryKind kind = Staging.Reads(files);
