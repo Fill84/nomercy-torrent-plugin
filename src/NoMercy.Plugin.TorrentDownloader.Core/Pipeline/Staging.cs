@@ -157,8 +157,17 @@ public static partial class Staging
                 // a bitrate.
                 Match year = Made().Match(name.Original);
 
+                // Without the year on the end of it. ReleaseName leaves it in
+                // the title — "Dark Matter 2024" — and a metadata provider
+                // asked for that finds nothing at all, which is exactly what
+                // happened on 1 September 2026: the show was never added and
+                // nine files went over unidentified instead.
+                string title = year.Success
+                    ? Titled().Replace(name.Title, string.Empty).Trim()
+                    : name.Title;
+
                 return (
-                    name.Title,
+                    title.Length > 0 ? title : name.Title,
                     year.Success
                         ? int.Parse(year.Groups[1].Value, CultureInfo.InvariantCulture)
                         : null);
@@ -203,6 +212,10 @@ public static partial class Staging
 
         return LibraryKind.Anime;
     }
+
+    /// <summary>A year left on the end of a title, which the provider is not asked for.</summary>
+    [GeneratedRegex(@"[\s.]*\(?(?:19|20)\d{2}\)?\s*$", RegexOptions.CultureInvariant)]
+    private static partial Regex Titled();
 
     /// <summary>A year in a release name, which is the show's and not a number.</summary>
     [GeneratedRegex(@"[.\s(\[]((?:19|20)\d{2})[.\s)\]]", RegexOptions.CultureInvariant)]
