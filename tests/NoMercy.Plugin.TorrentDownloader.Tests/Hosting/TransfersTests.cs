@@ -561,27 +561,29 @@ public class TransfersTests : IDisposable
 
     /// <remarks>
     /// <para>
-    /// A pack for a show that is in no library is named and left exactly where
-    /// it is. Nothing is handed over and nothing is added.
+    /// A pack for a show that is in no library gets the show added, which is the
+    /// one thing that turns it into an ordinary grab: once it is in a library it
+    /// has episodes, and an episode has the id an encode is asked for by.
     /// </para>
     /// <para>
-    /// <strong>Handing it over does nothing, and does it silently.</strong> The
+    /// It is the same call the dashboard's <em>Add content</em> makes, into the
+    /// library the files read as — numbered by season is television. Nothing
+    /// else happens on the tick that asks: the import runs on the server's own
+    /// queue, so the files stay where they are and the grab stays open until the
+    /// show lands.
+    /// </para>
+    /// <para>
+    /// <strong>And nothing is handed to the encoder unnamed.</strong> The
     /// server's <c>PluginEncoder</c> writes the <c>mediaId</c> straight into
-    /// <c>VideoEncodeJob.Id</c>, and that job resolves the id against
+    /// <c>VideoEncodeJob.Id</c>, and that job resolves it against
     /// <c>Movies.Id</c> or <c>Episodes.Id</c> and nothing else; with no id it
     /// resolves no row, returns having done no work, and the queue records the
     /// job as finished. On 31 August 2026 that was nine files handed over, nine
-    /// jobs reported finished inside two minutes, and nothing written to the
-    /// library.
-    /// </para>
-    /// <para>
-    /// <strong>And it is not added either.</strong> The one thing that adds a
-    /// show is <c>ShowImportJob</c>, and dispatching it is the server's. This
-    /// plugin fills a library the owner has built; it does not build it.
+    /// jobs reported finished inside two minutes, and an empty library.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task APackForAShowInNoLibraryIsNamedAndLeftWhereItIs()
+    public async Task APackForAShowInNoLibraryHasItsShowAdded()
     {
         GrabRepository grabs = await Grabs();
         await ByHand(grabs);
@@ -596,27 +598,95 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
         RecordingEncoder encoder = new();
+        RecordingImport imports = new();
 
-        await Transfers(engine, grabs, server, encoder: encoder)
+        await Transfers(engine, grabs, server, encoder: encoder, imports: imports)
             .TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        // No encode was asked for, by either name.
+        // The show, once, by the title and year its own files carry, into the
+        // television library — the files are numbered by season.
+        (string title, int? year, Library into) = Assert.Single(imports.Added);
+
+        Assert.Equal("Dark Matter", title);
+        Assert.Equal(2024, year);
+        Assert.Equal(LibraryKind.Television, into.Kind);
+
+        // No encode yet: there is no episode row to name one by until the import
+        // has run, and asking without one registers against nothing.
         Assert.Empty(encoder.Asked);
 
-        // Both files still where the download left them.
+        // Both files still where the download left them, and nothing staged, so
+        // the sweep of the intake folder has nothing of this pack to delete.
         Assert.True(File.Exists(first), "the first file was not left where it was");
         Assert.True(File.Exists(second), "the second file was not left where it was");
-
-        // And nothing was staged, so the sweep of the intake folder has nothing
-        // of this pack to find and nothing to delete.
         Assert.False(Directory.Exists(Intake) && Directory.EnumerateFiles(Intake).Any());
 
-        // Left open. Closing it put the grab in front of the step that deletes
-        // what it is finished with, and that step cost the owner 37 GB.
+        // Left open, so the tick after the import lands takes it on.
         Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+    }
 
-        // And the History page says which show to add, because that is the
-        // owner's next move and there is no other way for them to know it.
+    /// <remarks>
+    /// And it is asked for once, however long the import takes. The import runs
+    /// on the server's own queue, so a tick a minute later still finds the show
+    /// in no library — and without this that dispatched the same import again,
+    /// and again, for as long as the queue took.
+    /// </remarks>
+    [Fact]
+    public async Task TheShowIsAskedForOnceHoweverManyTicks()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string episode = Downloaded("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+        RecordingImport imports = new();
+
+        Transfers transfers = Transfers(engine, grabs, server, encoder: new RecordingEncoder(), imports: imports);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Single(imports.Added);
+    }
+
+    /// <remarks>
+    /// A show no provider knows is asked for again on the next tick rather than
+    /// remembered as done — nothing was dispatched, so there is nothing to wait
+    /// for — and the History page says which show its files name, because that
+    /// is then the only thing the owner can act on.
+    /// </remarks>
+    [Fact]
+    public async Task AShowNoProviderKnowsIsSaidOnTheHistoryPage()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string episode = Downloaded("Dark.Matter.2024.S01E01.1080p.ATVP.WEB-DL.H.264-FLUX.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+        RecordingImport imports = new() { Answers = null };
+
+        Transfers transfers = Transfers(engine, grabs, server, encoder: new RecordingEncoder(), imports: imports);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // Asked again, because nothing was dispatched and the answer can change.
+        Assert.Equal(2, imports.Added.Count);
+
+        Assert.True(File.Exists(episode), "the download was not left where it was");
+
+        // Said once, on the History page, naming the show the files claim to be.
         IReadOnlyList<HistoryRow> history = await grabs.HistoryAsync(CancellationToken.None);
 
         Assert.Single(history, one => (one.Detail ?? string.Empty).Contains("Dark Matter", StringComparison.Ordinal)
@@ -624,15 +694,13 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
-    /// And it is said once, however long the torrent sits there. This runs
-    /// every minute for as long as the show is not added, and working the line
-    /// out asks the server's metadata providers what the show really is — so a
-    /// second tick that said it again would both bury the page it is written on
-    /// and ask a provider sixty times an hour for an answer that cannot change
-    /// until the owner acts.
+    /// On a server that offers none of the parts that add a show, the pack is
+    /// left where it is and the History page says which show it holds — said
+    /// once, however long the torrent sits there. This runs every minute, and a
+    /// line a minute buries the page it is written on.
     /// </remarks>
     [Fact]
-    public async Task APackForAShowInNoLibraryIsSaidOnceHoweverManyTicks()
+    public async Task OnAServerThatCannotAddAShowThePackIsSaidOnceAndLeftAlone()
     {
         GrabRepository grabs = await Grabs();
         await ByHand(grabs);
@@ -1109,7 +1177,8 @@ public class TransfersTests : IDisposable
         bool owned = true,
         TimeProvider? clock = null,
         IEncodeJobs? jobs = null,
-        IEncodeGateway? encoder = null)
+        IEncodeGateway? encoder = null,
+        IShowImport? imports = null)
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
             // A real Ulid, because the server's library id is one and the
@@ -1136,7 +1205,8 @@ public class TransfersTests : IDisposable
             server.Journal,
             server.Log,
             clock ?? TimeProvider.System,
-            jobs);
+            jobs,
+            imports);
     }
 
     private async Task<GrabRepository> Grabs()

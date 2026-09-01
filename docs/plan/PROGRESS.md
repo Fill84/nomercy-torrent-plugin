@@ -32,11 +32,12 @@ named `IJobDispatcher`, `VideoEncodeJob`, `MediaContext` and `IFileListService` 
 there was no other way to ask. It broke four times on server changes it could not see coming, and
 those four are why media-server #30 and #35 were opened.
 
-**One file reflects, and it produces a sentence.** `Hosting/ShowLookup.cs` asks
-`IInboxMetadataProbe.SearchTvAsync` what a show really is, so a torrent for a show in no library can
-say which show to add; the contract offers no way to ask a provider anything. A server that renames
-that type loses the provider's spelling and gets the file's own, and nothing else changes. It is the
-only place in `src/` that names a server type not in `NoMercy.Plugins.Abstractions`.
+**One file reflects, and it adds a show the way the dashboard does.** `Hosting/ShowImport.cs` asks
+`IInboxMetadataProbe.SearchTvAsync` which show a torrent names and dispatches
+`DispatchJob<ShowImportJob>(id, libraryId)` for it — the same call *Add content* makes, and the only
+thing anywhere that puts a show in a library. The contract offers no way to ask a provider anything
+or to queue one of the server's jobs, so there is nothing else to call. It is the only place in
+`src/` that names a server type not in `NoMercy.Plugins.Abstractions`.
 
 The encode is asked for through `IPluginEncoder` with the server's own episode id, what became of a
 job is asked through `IPluginJobs`, library membership is the rule for whose show it is, folders are
@@ -245,15 +246,32 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [ ] `S10-09` Release 0.4.0 — on the contract, with no reflection left
 
 ### Sprint 11 — What the first watched run has to be run against
-- [x] `S11-01` The plugin looks a show up. It never adds one.
+- [x] `S11-01` Nothing is handed to the encoder unnamed — **corrected by** `S11-06`
 - [x] `S11-02` The health tool counts a release once
 - [x] `S11-03` A doc block belongs to the member under it
 - [x] `S11-04` The test that failed once
+- [x] `S11-06` The show is added the way Add content adds it
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-06` The show is added the way Add content adds it.** The owner's correction, and it is the
+  right one: the plugin is not supposed to keep its hands off the library, it is supposed to ask the
+  server to do the adding rather than doing it itself. That is one call —
+  `DispatchJob<ShowImportJob>(id, libraryId)` through `IJobDispatcher`, after
+  `IInboxMetadataProbe.SearchTvAsync` says which show the files name — and it is exactly what the
+  dashboard's *Add content* ends in. Nothing else happens on the tick that asks: the import runs on
+  the server's own queue, and the tick after it lands sees an ordinary grab, matched by name, covered,
+  staged and dispatched by each episode's own id. **No person is in that loop.**
+  `Core/Ports/IShowImport` is the seam, so the cadence is held to an outcome — which show, which
+  year, which library — rather than to reflection nothing can test; `Hosting/ShowImport.cs` is the
+  reflection, and the only reflection left in the plugin. Asked once per run per show, because the
+  import sits on a queue and a tick a minute later still finds the show missing. A show no provider
+  knows, or one with no library of its kind, is asked for again next tick and named on the History
+  page meanwhile. What `S11-01` got right stays: nothing is ever handed to the encoder with no media
+  id, because that resolves no row and the job finishes having written nothing.
 
 - **`S11-04` The test that failed once: not reproduced, and two that could fail on timing fixed.**
   There is no record of which test it was and no captured output — `TestResults` holds nothing — so
@@ -297,10 +315,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   31 August run and its numbers were counted by the old rule**; the tool fetches live, so it is right
   again the next time it is run.
 
-- **`S11-01` The plugin adds nothing, and hands nothing over unnamed.** `ShowAdmission` searched the
-  server's providers and then dispatched `ShowImportJob(tmdbId, libraryId)` by reflection, which is
-  the call the dashboard's *Add content* makes: the plugin decided, off a title parsed out of a file
-  name, that a show belonged in the owner's library. It is `ShowLookup` now and it only names one.
+- **`S11-01` Nothing is handed to the encoder unnamed. (Its other half was wrong — see `S11-06`.)**
+  This slice read "the plugin may add nothing" as "the plugin may not dispatch the import either",
+  and left a pack for an unknown show sitting with a line on the History page for the owner to act
+  on. That was wrong, and `S11-06` puts the import back: the plugin does not add a show, it asks the
+  server to, which is what *Add content* is. What stands from this slice is the encoder half.
   **And the plan this came from was wrong about the way out.** It said to pass the found id as the
   encoder's `mediaId` so the encode job would add the show. It will not: `PluginEncoder` puts the id
   verbatim into `VideoEncodeJob.Id`, and `GetFileMetaData` resolves that against `Movies.Id` or

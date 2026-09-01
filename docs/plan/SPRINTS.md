@@ -1606,6 +1606,37 @@ This build has never been on the server. Nothing below is this repository's to d
 
 **Done when** the owner has seen it. Read first: `docs/01-plugin.md` § Deploying.
 
+## S11-06 · The show is added the way Add content adds it — corrects S11-01
+
+**`S11-01` read the rule wrongly.** "The plugin may not add a show" is not "the plugin may not ask
+for one to be added". The owner's rule is that the plugin does not build a library by hand; it
+dispatches the server's own job with the right information and the server does the rest. That is
+precisely what the dashboard's *Add content* is, and the plugin is allowed to make the same call.
+
+So the encoder half of `S11-01` stands — a file handed over with no media id resolves no row and the
+job finishes having written nothing — and the import half is put back.
+
+1. `Core/Ports/IShowImport`: look a show up and ask for it to be imported, answering the title it
+   asked for or null. A port so the cadence is held to an outcome — which show, which year, which
+   library — instead of to reflection nothing can test.
+2. `Hosting/ShowImport.cs` implements it: `IInboxMetadataProbe.SearchTvAsync` for the show, then
+   `IJobDispatcher.DispatchJob<ShowImportJob>(id, libraryId)`. The only reflection in the plugin,
+   because the contract offers no way to ask a provider anything or to queue one of the server's own
+   jobs. `Ready()` names all three types at startup so a server missing one says so an hour before it
+   matters rather than an hour after.
+3. `Transfers` asks once per run per show. The import sits on the server's queue, so a tick a minute
+   later still finds the show in no library; without this it dispatched the same import every minute
+   for as long as the queue took.
+4. Nothing else happens on that tick. The files stay where they are and the grab stays open, and the
+   tick after the import lands takes it on like any other grab.
+5. Where it cannot be done — no library of that kind, no provider that knows the show, a server
+   without the parts — the pack is left alone and the History page names the show, once. The show is
+   asked for again next tick, because nothing was dispatched and the answer can change.
+
+**Done when** a pack for a show in no library ends with that show in the library and its episodes
+dispatched by their own ids, with nobody pressing anything. Read first: `docs/09-host-contract.md`
+§ Dispatching an encode.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

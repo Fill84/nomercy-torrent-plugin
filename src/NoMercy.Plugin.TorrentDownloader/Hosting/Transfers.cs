@@ -35,7 +35,7 @@ public sealed class Transfers(
     ILogger logger,
     TimeProvider? time = null,
     IEncodeJobs? jobs = null,
-    ShowLookup? lookup = null)
+    IShowImport? imports = null)
 {
     /// <summary>
     /// How long an encode is given before it is given up on.
@@ -294,22 +294,35 @@ public sealed class Transfers(
 
                 if (covers.Count == 0)
                 {
-                    // Nothing the owner has, so nothing happens to it. The
-                    // plugin fills a library the owner has built and does not
-                    // build it: adding a show is the server's own
-                    // ShowImportJob, dispatched from the dashboard by a person.
+                    // Nothing the owner has. The show is looked up and added,
+                    // which is the one thing that turns this into an ordinary
+                    // grab: once it is in a library it has episodes, and an
+                    // episode has the id an encode is asked for by.
                     //
-                    // Nor are the files handed over for the server to work out.
-                    // PluginEncoder writes the media id straight into
-                    // VideoEncodeJob.Id and that job resolves it against
-                    // Movies.Id or Episodes.Id and nothing else, so a file sent
-                    // with no id resolves no row, the job returns having done no
-                    // work, and the queue records it finished. On 31 August 2026
-                    // that was nine files, nine jobs finished inside two
-                    // minutes, and nothing written to the library.
+                    // It is the same call the dashboard's Add content makes —
+                    // DispatchJob<ShowImportJob>(id, libraryId) — and it is the
+                    // only thing that adds a show. Handing the files to the
+                    // encoder without an id does not: PluginEncoder writes the
+                    // media id straight into VideoEncodeJob.Id and that job
+                    // resolves it against Movies.Id or Episodes.Id and nothing
+                    // else, so no id resolves no row, the job returns having
+                    // done no work, and the queue records it finished. On 31
+                    // August 2026 that was nine files, nine jobs finished inside
+                    // two minutes, and nothing written to the library.
                     //
-                    // So it is named, said out loud, and left exactly where the
-                    // owner put it.
+                    // Nothing else happens this tick. The import runs on the
+                    // server's own queue, and the tick after it lands sees this
+                    // like any other grab — matched by name, covered, staged,
+                    // dispatched by each episode's own id.
+                    if (await AddedAsync(files, thisTick, ct))
+                    {
+                        return null;
+                    }
+
+                    // Only where that could not be done: no library of the kind
+                    // its files read as, no provider that knows the show, or a
+                    // server without the parts. Then it is named, said out loud,
+                    // and left exactly where the owner put it.
                     await UnplaceableAsync(finished, files, ct);
 
                     return null;
@@ -830,6 +843,85 @@ public sealed class Transfers(
     }
 
     /// <summary>
+    /// Adds the show a torrent names, so its episodes can be dispatched.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// An encode is asked for by the server's own episode id, and a show that
+    /// is in no library has no episodes and no ids — so a pack for one could
+    /// not be dispatched at all, however plainly its files named it. This looks
+    /// the show up with the server's own metadata providers and imports it into
+    /// the library its files read as, which is exactly what the dashboard does
+    /// when a person adds content.
+    /// </para>
+    /// <para>
+    /// <strong>Asked once per run.</strong> The import runs on the server's own
+    /// queue and a show does not appear the moment it is dispatched, so a tick a
+    /// minute later still finds it in no library — and without this that
+    /// dispatched the same import again, and again, for as long as the queue
+    /// took.
+    /// </para>
+    /// <para>
+    /// False where there is no library of that kind, where the plugin cannot
+    /// reach the server's providers, or where no provider knows the show. The
+    /// caller then says which show it holds and leaves it alone.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> AddedAsync(
+        IReadOnlyList<TorrentFile> files,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        if (imports is null || Staging.Claims(files) is not { } claimed)
+        {
+            return false;
+        }
+
+        if (!_added.Add(claimed.Title))
+        {
+            return true;
+        }
+
+        LibraryKind kind = Staging.Reads(files);
+
+        Library? into = (await thisTick.GetLibrariesAsync(ct)).FirstOrDefault(one => one.Kind == kind);
+
+        if (into is null)
+        {
+            // Asked for again on the next run rather than remembered as done:
+            // there is nothing to wait for, and the answer changes the day the
+            // owner makes a library of that kind.
+            _added.Remove(claimed.Title);
+
+            return false;
+        }
+
+        if (await imports.AddAsync(claimed.Title, claimed.Year, into, ct) is not string added)
+        {
+            _added.Remove(claimed.Title);
+
+            return false;
+        }
+
+        journal.Finished(
+            ActivityStage.Download,
+            claimed.Title,
+            $"was in no library, so it was looked up and added to {into.Name} as {added}; "
+            + "its episodes are dispatched on the next pass");
+
+        return true;
+    }
+
+    /// <summary>Shows this run has already asked the server to add.</summary>
+    /// <remarks>
+    /// Held rather than written down: a restart is a good enough reason to ask
+    /// again, and by then either the import finished — in which case the show
+    /// is in a library and this is never reached — or it did not, and asking
+    /// once more is the right thing.
+    /// </remarks>
+    private readonly HashSet<string> _added = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
     /// Says which show a torrent holds that the owner has not got, and leaves
     /// it where it is.
     /// </summary>
@@ -861,7 +953,7 @@ public sealed class Transfers(
     {
         if (!_unplaceable.TryGetValue(finished.InfoHash, out string? reason))
         {
-            reason = await ReasonAsync(files, ct);
+            reason = Reason(files);
 
             _unplaceable[finished.InfoHash] = reason;
 
@@ -876,7 +968,7 @@ public sealed class Transfers(
     }
 
     /// <summary>Why a torrent was left alone, in words the owner can act on.</summary>
-    private async Task<string> ReasonAsync(IReadOnlyList<TorrentFile> files, CancellationToken ct)
+    private static string Reason(IReadOnlyList<TorrentFile> files)
     {
         IReadOnlyList<string> named = Staging.Names(files);
 
@@ -885,20 +977,7 @@ public sealed class Transfers(
             return "nothing in it names an episode at all, so it was left where it is";
         }
 
-        // The providers' spelling where there is one to be had. A release name
-        // is not a title: "Dark.Matter.2024" is what the files say and
-        // "Dark Matter (2024)" is what the owner has to find in Add content.
-        FoundShow? found = lookup is null || Staging.Claims(files) is not { } claimed
-            ? null
-            : await lookup.FindAsync(claimed.Title, claimed.Year, ct);
-
-        string called = found is null
-            ? string.Join(", ", named)
-            : found.Year is int made
-                ? $"{found.Title} ({made})"
-                : found.Title;
-
-        return $"it holds episodes of {called}, which is in no library, "
+        return $"it holds episodes of {string.Join(", ", named)}, which is in no library, "
             + "so it was left where it is — add the show and it will be taken on";
     }
 

@@ -129,11 +129,15 @@ So the gateway has no second method and the plugin has no way to hand a file ove
 `EncodeGateway.For` composes the one implementation, and there is nothing else for it to compose:
 the reflecting implementation is gone.
 
-**Adding a show is `ShowImportJob`, and it is the server's.** `InboxRoutingService` moves the file
-into the library's folder and dispatches it; that is the dashboard's *Add content*. The plugin looks
-a show up through `IInboxMetadataProbe.SearchTvAsync` so it can say which one to add, and it does not
-add it. See `Hosting/ShowLookup.cs`, which is the only reflection left anywhere in the plugin and is
-there because the contract offers no way to ask a provider anything.
+**A show that is in no library is added first, with the server's own import job.** That is what makes
+an id exist to dispatch by. `Hosting/ShowImport.cs` asks `IInboxMetadataProbe.SearchTvAsync` which
+show the files name and then dispatches `DispatchJob<ShowImportJob>(id, libraryId)` — the same call
+the dashboard's *Add content* makes, and the only thing anywhere that puts a show in a library. The
+tick after the import lands sees an ordinary grab.
+
+It is the only reflection left in the plugin, and it is there because the contract offers no way to
+ask a provider anything or to queue one of the server's own jobs. Asked once per run per show: the
+import sits on the server's queue and a tick a minute later still finds the show missing.
 
 ### What became of the job
 
@@ -167,11 +171,12 @@ It is deleted. Those four are why media-server #30 and #35 were opened, and the 
 they closed. **Nothing on the way to an encode reflects any more**, and no server type is named on
 that path that does not come from `NoMercy.Plugins.Abstractions`.
 
-**One file still reflects, and it is `Hosting/ShowLookup.cs`.** It asks
-`IInboxMetadataProbe.SearchTvAsync` what a show really is, so a torrent for a show in no library can
-say which show to add. The contract offers no way to ask a provider anything, so there is nothing to
-call. It is guarded at every step and it only ever produces a sentence: a server that renames that
-type loses the provider's spelling and gets the file's own, and nothing else changes.
+**One file still reflects, and it is `Hosting/ShowImport.cs`.** It asks
+`IInboxMetadataProbe.SearchTvAsync` which show a torrent names and dispatches the server's own
+`ShowImportJob` for it, because the contract offers no way to ask a provider anything or to queue one
+of the server's jobs. Every step is guarded: a server that renames one of those three types says so,
+once, and a pack for a show in no library is left where it is with its show named on the History
+page.
 
 A server that does not offer `IPluginEncoder` is told so — once, in the log and the journal — rather
 than guessed at. It needs plugin contract `0.1.479` or newer.
