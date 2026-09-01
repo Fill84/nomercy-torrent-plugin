@@ -253,11 +253,19 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-06` The show is added the way Add content adds it
 - [x] `S11-07` An encode filed under the wrong episode is still done
 - [x] `S11-08` A pack keeps every file it staged
+- [x] `S11-09` A pack is encoded in episode order
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-09` A pack is encoded in episode order.** The owner asked for it while watching nine of them
+  queue as E06, E02, E07, E03, E08, E01. The order was the torrent's own — a pack lists its files
+  however the uploader made it — and staging and dispatch both walk `Staging.Choose`'s answer, so
+  that list is where the encoder's queue order is decided. It comes back sorted by season and then by
+  number. Nothing else changed: the matching is still by the episode in each file's own name, never
+  by position.
 
 - **`S11-08` A pack keeps every file it staged.** Watched on the owner's server and it cost eight
   episodes: nine encodes dispatched at 12:22:40 on 1 September 2026, and between 12:22:41 and

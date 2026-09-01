@@ -1697,6 +1697,23 @@ episodes against the same video.
 **Done when** a pack's staged files all survive the tick that staged them, and each episode asked for
 again points at its own file. Read first: `Transfers.LeftBehindAsync`.
 
+## S11-09 · A pack is encoded in episode order
+
+Asked for by the owner while watching nine episodes queue as E06, E02, E07, E03, E08, E01. Nobody
+watching a season wants that, and there was no reason for it: the order was simply the torrent's own,
+because a pack lists its files however the uploader made it.
+
+Staging and dispatch both walk what `Staging.Choose` answers, so that list is where the encoder's
+queue order is decided.
+
+1. `Choose` answers in episode order — season first, then the number, because a pack of two seasons
+   is still one pack.
+2. Nothing else moves. Each file is still matched to the episode named inside it and never by its
+   position, which is the rule that keeps episode four out of episode one's slot.
+
+**Done when** a pack listed in any order stages and dispatches from its first episode to its last.
+Read first: `Core/Pipeline/Staging.cs`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

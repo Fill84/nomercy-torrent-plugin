@@ -325,7 +325,13 @@ public static partial class Staging
             }
         }
 
-        return staged;
+        // In episode order, whatever order the torrent lists its files in. The
+        // caller stages and dispatches down this list, so this is where the
+        // encoder's queue order is decided — and a pack that begins at episode
+        // six queued six first and one of them last, which is not an order
+        // anybody watching a season wants. Season before number, because a pack
+        // of two seasons is still one pack.
+        return [.. staged.OrderBy(one => one.Episode.Season).ThenBy(one => one.Episode.Number)];
     }
 
     /// <summary>Every episode the grab covered that no file answered for.</summary>

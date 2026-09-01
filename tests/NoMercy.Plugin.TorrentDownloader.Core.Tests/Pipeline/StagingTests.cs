@@ -285,6 +285,41 @@ public class StagingTests
     /// than a pack that stages nothing at all.
     /// </para>
     /// </remarks>
+    /// <remarks>
+    /// <para>
+    /// <strong>A pack is staged and encoded in episode order.</strong> The
+    /// order used to be the torrent's own: a pack lists its files however the
+    /// uploader made it, and one that starts at episode six sends six to the
+    /// encoder first and one of them last. The owner's Dark Matter pack queued
+    /// as E06, E02, E07, … — nine episodes in no order anyone asked for.
+    /// </para>
+    /// <para>
+    /// The dispatch follows this list, so this is where the encoder's queue
+    /// order is decided. Season first and then the number, because a pack of
+    /// two seasons is still one pack.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void APackIsStagedInEpisodeOrderWhateverOrderTheTorrentListsIt()
+    {
+        IReadOnlyList<TorrentFile> scrambled =
+        [
+            File("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 4 * Gigabyte),
+            File("Silo.S03E02.1080p.WEB.H264-CAKES.mkv", 4 * Gigabyte),
+            File("Silo.S04E01.1080p.WEB.H264-CAKES.mkv", 4 * Gigabyte),
+            File("Silo.S03E10.1080p.WEB.H264-CAKES.mkv", 4 * Gigabyte),
+            File("Silo.S03E01.1080p.WEB.H264-CAKES.mkv", 4 * Gigabyte),
+        ];
+
+        IReadOnlyList<Staged> staged = Staging.Choose(
+            scrambled,
+            [new(41, 3, 6), new(41, 3, 2), new(41, 4, 1), new(41, 3, 10), new(41, 3, 1)]);
+
+        Assert.Equal(
+            [new(41, 3, 1), new(41, 3, 2), new(41, 3, 6), new(41, 3, 10), new(41, 4, 1)],
+            staged.Select(one => one.Episode));
+    }
+
     [Fact]
     public void TheOwnersOwnSeasonPackIsReadIntoItsNineEpisodes()
     {
