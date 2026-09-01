@@ -1107,6 +1107,156 @@ public class TransfersTests : IDisposable
         Assert.Contains(encoder.Asked, one => one.Episode.Number == 7 && one.StagedFile == second);
     }
 
+    /// <remarks>
+    /// <strong>Every dispatch's job is kept, not the last one.</strong> The
+    /// column overwrote, so a pack that asked for nine encodes remembered one
+    /// of them. The plugin then asked "is the encode still running?" about one
+    /// episode out of nine, read the whole pack as finished when that one was,
+    /// and dispatched all nine a second time on top of the eight still running.
+    /// </remarks>
+    [Fact]
+    public async Task EveryEpisodeOfAPackKeepsItsOwnEncodeJob()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        await grabs.CoversAsync(Hash, [new(41, 3, 6), new(41, 3, 7)], CancellationToken.None);
+
+        await grabs.EncodeJobAsync(Hash, new(41, 3, 6), "01KZGKX2G0966V80H26EKGG5T1", CancellationToken.None);
+        await grabs.EncodeJobAsync(Hash, new(41, 3, 7), "01KZGKX2G0966V80H26EKGG5T2", CancellationToken.None);
+
+        StoredDownload stored = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.Contains("01KZGKX2G0966V80H26EKGG5T1", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("01KZGKX2G0966V80H26EKGG5T2", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
+
+        // And an episode asked for a second time carries one job, the newer.
+        await grabs.EncodeJobAsync(Hash, new(41, 3, 6), "01KZGKX2G0966V80H26EKGG5T3", CancellationToken.None);
+
+        stored = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.DoesNotContain("01KZGKX2G0966V80H26EKGG5T1", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("01KZGKX2G0966V80H26EKGG5T2", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("01KZGKX2G0966V80H26EKGG5T3", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <strong>One episode's encode failing costs that episode and no other.</strong>
+    /// It used to fail the whole grab: on 1 September 2026 episode one's encode
+    /// died, the grab went with it, and the sweep then took the staged files of
+    /// all nine because a failed grab is waiting on nothing. The episode that
+    /// failed goes back to missing so it can be looked for again; the rest of
+    /// the pack is still being encoded and is left alone.
+    /// </remarks>
+    [Fact]
+    public async Task AFailedEncodeCostsItsOwnEpisodeAndNoOther()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        Directory.CreateDirectory(Intake);
+
+        string first = Path.Combine(Intake, "Silo.2023.S03E06.1080p.mkv");
+        string second = Path.Combine(Intake, "Silo.2023.S03E07.1080p.mkv");
+
+        await File.WriteAllTextAsync(first, "one");
+        await File.WriteAllTextAsync(second, "two");
+
+        await grabs.CoversAsync(Hash, [new(41, 3, 6), new(41, 3, 7)], CancellationToken.None);
+        await grabs.StagedAsync(Hash, [first, second], CancellationToken.None);
+        await grabs.EncodeJobAsync(Hash, new(41, 3, 6), "dead", CancellationToken.None);
+        await grabs.EncodeJobAsync(Hash, new(41, 3, 7), "alive", CancellationToken.None);
+        await grabs.StateAsync(Hash, GrabState.Dispatched, CancellationToken.None);
+
+        FakeProvider server = Server();
+
+        FakeLibraryQuery query = new FakeLibraryQuery()
+            .Library(TelevisionLibrary, "Television", "tv")
+            .Show(41, "Silo", TelevisionLibrary, year: 2023)
+            .Episode(41, 3, 6, hasFile: false)
+            .Episode(41, 3, 7, hasFile: false)
+            .Episode(41, 1, 1, hasFile: true);
+
+        Transfers transfers = new(
+            new StandingEngine().Holding(Finished() with { State = TorrentState.Finished }),
+            grabs,
+            new HostLibrary(query),
+            new Stager(server.Journal, server.Log),
+            new RecordingEncoder(),
+            server.Journal,
+            server.Log,
+            TimeProvider.System,
+            new PerJob(new()
+            {
+                ["dead"] = new(EncodeJobState.Failed, "the source has no audio stream"),
+                ["alive"] = new(EncodeJobState.Running, null),
+            }));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        StoredDownload after = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        // The one that died is off the grab and back to missing; the one still
+        // encoding is untouched, and so is the grab.
+        Assert.Equal([new EpisodeKey(41, 3, 7)], after.Covers);
+        Assert.NotEqual(GrabState.Failed, after.State);
+
+        // And neither file was taken away, because one of them is still being
+        // read and the other has only just stopped being.
+        Assert.True(File.Exists(first), "the failed episode's file was swept");
+        Assert.True(File.Exists(second), "the file of an encode still running was swept");
+    }
+
+    /// <remarks>
+    /// <strong>A file an encode is still reading is never swept.</strong> The
+    /// sweep decides on "is a grab waiting on this", and a grab that has just
+    /// failed is waiting on nothing — so it deleted the input of an encode that
+    /// was between its first bundle and its second, and that encode then failed
+    /// with "input file not found". The server saying a job is still going is
+    /// the only thing that knows.
+    /// </remarks>
+    [Fact]
+    public async Task AFileAnEncodeIsStillReadingIsNeverSwept()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        Directory.CreateDirectory(Intake);
+
+        string encoding = Path.Combine(Intake, "Silo.2023.S03E06.1080p.mkv");
+
+        await File.WriteAllTextAsync(encoding, "still being read");
+
+        await grabs.CoversAsync(Hash, [new(41, 3, 6)], CancellationToken.None);
+        await grabs.StagedAsync(Hash, [encoding], CancellationToken.None);
+        await grabs.EncodeJobAsync(Hash, new(41, 3, 6), "alive", CancellationToken.None);
+
+        // Finished with, as far as the grab goes — which is exactly the state
+        // that used to make the sweep take the file.
+        await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
+
+        FakeProvider server = Server();
+
+        Transfers transfers = Transfers(
+            new StandingEngine(),
+            grabs,
+            server,
+            jobs: new SayingJobs(new(EncodeJobState.Running, null)));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(encoding), "the input of a running encode was swept away under it");
+    }
+
+    /// <summary>A server that answers about each job by name.</summary>
+    private sealed class PerJob(Dictionary<string, EncodeJob> standing) : IEncodeJobs
+    {
+        public Task<EncodeJob?> StatusAsync(string jobId, CancellationToken ct)
+        {
+            return Task.FromResult(standing.GetValueOrDefault(jobId));
+        }
+    }
+
     /// <summary>A server that says the same thing about every job.</summary>
     private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
     {

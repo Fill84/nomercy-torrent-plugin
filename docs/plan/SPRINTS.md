@@ -1714,6 +1714,39 @@ queue order is decided.
 **Done when** a pack listed in any order stages and dispatches from its first episode to its last.
 Read first: `Core/Pipeline/Staging.cs`.
 
+## S11-10 · Three pack faults, found by watching a pack go through
+
+Nine episodes, seven landed, two died. The two are E01 and E05, and the chain that killed them starts
+in this plugin three times over. All three are pack-only, which is why a grab of one episode has
+never shown any of them.
+
+**1. One job id for nine dispatches.** `EncodeJobAsync` was `UPDATE grabs SET encode_job = $job`, so a
+pack kept the last id and threw eight away — verified in the owner's own row: 64 characters, one
+Ulid. The plugin asks the server "is the encode still running?" through that column, so it was asking
+about one episode out of nine. When that one finished it read the pack as finished and re-dispatched
+all nine on top of the eight still running.
+
+**2. One episode's failure failed the whole grab.** E01's encode died at 15:24:12 and the grab went
+with it, which is what made the eight good ones stop counting as work in progress.
+
+**3. The sweep took an input from under a running encode.** At 15:25:13 the server logged *"Encode
+finished in 84.3s"* — E05's **first bundle**. At 15:25:15 the plugin cleared E05's input, because a
+failed grab is waiting on nothing. At 15:34:50 the second bundle failed: *"Input file not found"*.
+`VideoEncodeJob` opens its input once per bundle, and nothing in the plugin knew that.
+
+1. Each dispatch writes its job against the episode it was for — `showXseasonXnumber:job`, space
+   separated, added rather than replacing. An untagged id from a row written before this still
+   answers for the whole grab, which is what it always meant.
+2. A failed encode costs its own episode: `UncoverAsync` takes it off the grab so it goes back to
+   missing and can be looked for again, the rest of the pack carries on, and only a release whose
+   every episode failed is refused for six hours.
+3. The sweep never takes a file while the server says a job that staged it is queued or running —
+   whatever became of that file's grab. That is the belt to the braces of (2): even a grab that has
+   properly finished cannot have its input pulled out from under an encode.
+
+**Done when** one failed episode of a pack costs that episode and nothing else, and no file is ever
+deleted while an encode is reading it. Read first: `docs/plan/PROGRESS.md` § Log, `S11-08`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

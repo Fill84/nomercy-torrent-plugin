@@ -467,7 +467,7 @@ public sealed class Transfers(
         // lose which encode this grab is waiting on. media-server #31.
         if (asked.JobId is string job)
         {
-            await grabs.EncodeJobAsync(infoHash, job, ct);
+            await grabs.EncodeJobAsync(infoHash, episode, job, ct);
         }
 
         // The clock starts here, not on the tick that next looks at it: an
@@ -676,6 +676,23 @@ public sealed class Transfers(
             }
 
             every ??= await grabs.EveryAsync(ct);
+
+            // Whatever became of its grab, a file an encode is still reading
+            // stays. This step decides on "is a grab waiting on this", and a
+            // grab that has just failed or finished is waiting on nothing — so
+            // on 1 September 2026 it deleted nine staged files a minute after
+            // one episode's encode died, and took episode five's input away
+            // between its first bundle and its second. The encoder opens its
+            // input once per bundle, and the server saying the job is still
+            // going is the only thing here that can know that.
+            StoredDownload? reading = every.FirstOrDefault(one =>
+                one.StagedPaths.Contains(entry, StringComparer.OrdinalIgnoreCase));
+
+            if (reading is not null
+                && await StandingAsync(reading, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
+            {
+                continue;
+            }
 
             // By the release, so the uploader's spelling of it and the name the
             // plugin chose come to the same thing.
@@ -1076,6 +1093,33 @@ public sealed class Transfers(
             + "so it was left where it is — add the show and it will be taken on";
     }
 
+    /// <summary>The job ids a grab is waiting on, or the ones for one episode of it.</summary>
+    /// <remarks>
+    /// A tagged id is <c>showXseasonXnumber:job</c>; an untagged one is from a
+    /// row written before a grab could hold more than one, and answers for
+    /// whatever it is asked about.
+    /// </remarks>
+    private static IEnumerable<string> Named(string column, EpisodeKey? episode)
+    {
+        foreach (string part in column.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int colon = part.IndexOf(':', StringComparison.Ordinal);
+
+            if (colon < 0)
+            {
+                yield return part;
+
+                continue;
+            }
+
+            if (episode is null
+                || string.Equals(part[..colon], GrabRepository.Tag(episode.Value), StringComparison.Ordinal))
+            {
+                yield return part[(colon + 1)..];
+            }
+        }
+    }
+
     /// <summary>Which of a grab's staged files is the one for this episode.</summary>
     /// <remarks>
     /// By the numbers in its own name, which is what the stager wrote it under.
@@ -1135,13 +1179,38 @@ public sealed class Transfers(
         // the same gigabytes are downloaded again. media-server #31, which this
         // plugin opened, is what makes the difference sayable.
         {
-            EncodeJob? standing = await StandingAsync(sent, ct);
+            // Episode by episode, because a pack is nine encodes and one of them
+            // failing says nothing about the other eight. It used to fail the
+            // whole grab: on 1 September 2026 episode one's encode died, the
+            // grab went with it, and a minute later the sweep took the staged
+            // files of all nine — including episode five's, which was between
+            // its first and second bundle and had been encoding happily.
+            List<EpisodeKey> lost = [];
 
-            if (standing is { State: EncodeJobState.Failed })
+            foreach (EpisodeKey episode in sent.Covers)
             {
+                if (await StandingAsync(sent, episode, ct) is not { State: EncodeJobState.Failed } dead)
+                {
+                    continue;
+                }
+
+                string why = dead.Failure ?? "the server gave up on the encode and said no more than that";
+
+                lost.Add(episode);
+
+                await grabs.UncoverAsync(sent.InfoHash, episode, ct);
+
+                logger.LogWarning("{Release} {Episode}: {Reason}", sent.ReleaseTitle, episode, why);
+                journal.Failed(ActivityStage.Dispatch, $"{sent.ReleaseTitle} {episode}", why);
+            }
+
+            if (lost.Count > 0 && lost.Count == sent.Covers.Count)
+            {
+                // Every one of them, so the release itself is the fault and is
+                // refused for a while. One episode of nine is not.
                 _waiting.Remove(sent.InfoHash);
 
-                string said = standing.Failure ?? "the server gave up on the encode and said no more than that";
+                string said = $"every encode this release was asked for failed, the last of them for {lost.Count} episodes";
 
                 await grabs.FailedAsync(sent.InfoHash, said, now, now + RefusedFor, ct);
 
@@ -1150,6 +1219,15 @@ public sealed class Transfers(
 
                 return;
             }
+
+            if (lost.Count > 0)
+            {
+                // The rest of the pack carries on, and the tick that follows
+                // reads the covers without the episodes that died.
+                return;
+            }
+
+            EncodeJob? standing = await StandingAsync(sent, ct);
 
             if (standing is { State: EncodeJobState.Queued or EncodeJobState.Running })
             {
@@ -1231,7 +1309,21 @@ public sealed class Transfers(
     /// "finished": a pack is deleted on that answer.
     /// </para>
     /// </remarks>
-    private async Task<EncodeJob?> StandingAsync(StoredDownload sent, CancellationToken ct)
+    private Task<EncodeJob?> StandingAsync(StoredDownload sent, CancellationToken ct)
+    {
+        return StandingAsync(sent, episode: null, ct);
+    }
+
+    /// <summary>
+    /// The same, about one episode of a pack.
+    /// </summary>
+    /// <remarks>
+    /// Each dispatch writes its job down against the episode it was for, so a
+    /// failure can be laid at that episode and the other eight can carry on.
+    /// A row written before the tags carries a bare job id and answers for the
+    /// whole grab, which is what it always meant.
+    /// </remarks>
+    private async Task<EncodeJob?> StandingAsync(StoredDownload sent, EpisodeKey? episode, CancellationToken ct)
     {
         if (jobs is null || sent.EncodeJobId is not string named)
         {
@@ -1241,7 +1333,7 @@ public sealed class Transfers(
         EncodeJob? going = null;
         bool asked = false;
 
-        foreach (string job in named.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        foreach (string job in Named(named, episode))
         {
             asked = true;
 

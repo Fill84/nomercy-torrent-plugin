@@ -254,11 +254,31 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-07` An encode filed under the wrong episode is still done
 - [x] `S11-08` A pack keeps every file it staged
 - [x] `S11-09` A pack is encoded in episode order
+- [x] `S11-10` Three pack faults, found by watching a pack go through
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-10` Three pack faults that cost the owner two episodes.** Watched end to end on 1 September
+  2026: seven of nine episodes landed, and E01 and E05 died in a chain that begins with the plugin.
+  **One job id per grab.** `EncodeJobAsync` overwrote, so nine dispatches kept one id — verified in
+  the owner's own row, 64 characters, one Ulid. The plugin therefore asked "is the encode still
+  running?" about one episode out of nine, read the pack as finished when that one was, and
+  dispatched all nine again on top of the eight still going. Each job is now written down against the
+  episode it was asked for, tagged `showXseasonXnumber:job`; an untagged id from an older row still
+  answers for the grab.
+  **One failure failed the pack.** E01's encode died at 15:24:12 and the whole grab went with it. A
+  failed encode now costs its own episode: that episode is taken off the grab and goes back to
+  missing, the rest carry on, and only a release whose every episode failed is refused for six hours.
+  **The sweep took an input from under a running encode.** At 15:25:13 the server logged
+  *"Encode finished in 84.3s"* for E05's first bundle; at 15:25:15 the plugin cleared its input,
+  because a failed grab is waiting on nothing; at 15:34:50 the second bundle failed with *"Input file
+  not found"*. `VideoEncodeJob` opens its input once per bundle. Nothing is swept now while the
+  server says a job that staged it is queued or running, whatever became of its grab.
+  All three are pack-only, which is why one episode per grab never showed them. **Nothing was lost:
+  the 37 GB stayed intact and the seven that landed each have one file on the right row.**
 
 - **`S11-09` A pack is encoded in episode order.** The owner asked for it while watching nine of them
   queue as E06, E02, E07, E03, E08, E01. The order was the torrent's own — a pack lists its files

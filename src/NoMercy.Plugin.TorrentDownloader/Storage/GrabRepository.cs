@@ -233,26 +233,110 @@ public sealed class GrabRepository(Store database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    /// <summary>Writes down the encode job a grab is now waiting on.</summary>
+    /// <summary>Writes down the encode job one of a grab's episodes is waiting on.</summary>
     /// <remarks>
-    /// So that a restart does not lose it. The one case worth answering is
-    /// exactly the one memory cannot: the plugin comes back, the grab is still
-    /// dispatched, and nothing knows whether the job died with the old process.
+    /// <para>
+    /// Written down rather than remembered, so that a restart does not lose it.
+    /// The one case worth answering is exactly the one memory cannot: the
+    /// plugin comes back, the grab is still dispatched, and nothing knows
+    /// whether the job died with the old process.
+    /// </para>
+    /// <para>
+    /// <strong>Added, never replacing.</strong> This overwrote, so a pack that
+    /// dispatched nine encodes kept the last of them and threw the other eight
+    /// away. The plugin then asked "is the encode still running?" about one
+    /// episode out of nine: when that one finished it read the whole pack as
+    /// finished, dispatched all nine a second time on top of the eight still
+    /// running, and two of the owner's episodes died in the collision on
+    /// 1 September 2026.
+    /// </para>
+    /// <para>
+    /// Each is tagged with the episode it belongs to, so a failure can be laid
+    /// at the episode that failed instead of at the whole pack. Space
+    /// separated, which no job id and no tag contains; a row written before the
+    /// tags carries a bare id and still reads as one job for the grab.
+    /// </para>
     /// </remarks>
-    public async Task EncodeJobAsync(string infoHash, string jobId, CancellationToken ct)
+    public async Task EncodeJobAsync(string infoHash, EpisodeKey episode, string jobId, CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);
         await using SqliteCommand command = connection.CreateCommand();
 
+        // Its own tag replaced rather than added twice: an episode asked for a
+        // second time has one job, the newer one.
         command.CommandText =
             """
-            UPDATE grabs SET encode_job = $job WHERE info_hash = $hash;
+            UPDATE grabs SET encode_job = TRIM(
+                COALESCE(
+                    (SELECT GROUP_CONCAT(part, ' ') FROM (
+                        SELECT part FROM (
+                            WITH split(part, rest) AS (
+                                SELECT '', COALESCE(encode_job, '') || ' '
+                                UNION ALL
+                                SELECT substr(rest, 1, instr(rest, ' ') - 1), substr(rest, instr(rest, ' ') + 1)
+                                FROM split WHERE rest <> ''
+                            )
+                            SELECT part FROM split
+                            WHERE part <> '' AND part NOT LIKE $tag || ':%'
+                        )
+                    )),
+                    '')
+                || ' ' || $tag || ':' || $job)
+            WHERE info_hash = $hash;
             """;
 
+        command.Parameters.AddWithValue("$tag", Tag(episode));
         command.Parameters.AddWithValue("$job", jobId);
         command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
 
         await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>How an episode is spelled inside the encode-job column.</summary>
+    public static string Tag(EpisodeKey episode)
+    {
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"{episode.ShowId}x{episode.Season}x{episode.Number}");
+    }
+
+    /// <summary>Takes one episode off a grab, leaving the rest of them alone.</summary>
+    /// <remarks>
+    /// For an encode that failed. The episode goes back to missing so it can be
+    /// looked for again, and every other episode of the pack carries on — one
+    /// bad episode used to fail the whole grab, which then counted as nothing
+    /// waiting on the staged files and took eight good ones down with it.
+    /// </remarks>
+    public async Task UncoverAsync(string infoHash, EpisodeKey episode, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand read = connection.CreateCommand();
+
+        read.CommandText = "SELECT covers FROM grabs WHERE info_hash = $hash;";
+        read.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+
+        if (await read.ExecuteScalarAsync(ct) is not string covers)
+        {
+            return;
+        }
+
+        EpisodeKey[] left =
+        [
+            .. Covered(covers).Where(one =>
+                one.ShowId != episode.ShowId || one.Season != episode.Season || one.Number != episode.Number),
+        ];
+
+        await using SqliteCommand write = connection.CreateCommand();
+
+        write.CommandText = "UPDATE grabs SET covers = $covers WHERE info_hash = $hash;";
+
+        write.Parameters.AddWithValue(
+            "$covers",
+            JsonSerializer.Serialize(left.Select(one => new[] { one.ShowId, one.Season, one.Number })));
+
+        write.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+
+        await write.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>Writes one line into the history and touches nothing else.</summary>
