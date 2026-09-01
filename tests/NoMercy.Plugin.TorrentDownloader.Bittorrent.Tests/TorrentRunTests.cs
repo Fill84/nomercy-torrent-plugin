@@ -586,6 +586,97 @@ public class TorrentRunTests : IDisposable
             ]);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Nothing waits on a run that is opening its session.</strong>
+    /// Opening one reads and hashes every piece already on disk when there is
+    /// no resume file to go by: minutes for a season pack. It used to happen
+    /// inside this run's own lock, and everything that asks a run anything
+    /// takes that lock — including <c>Progress</c>, which the engine's
+    /// <c>StatusAsync</c> calls for every torrent while holding its own lock,
+    /// which is what the plugin's Downloads page is rendered from, inside the
+    /// server's request thread.
+    /// </para>
+    /// <para>
+    /// So on 1 September 2026 a 37 GB torrent being opened stopped the plugin's
+    /// pages answering at all: the owner's dashboard dropped its connection and
+    /// picked it up again, and the whole media server looked hung. It happened
+    /// on every restart, because a torrent with no resume file is hashed again
+    /// every time.
+    /// </para>
+    /// <para>
+    /// The verifier here is held open on purpose and never released, which is
+    /// what makes this a statement about locking rather than about speed: if
+    /// the lock were held across it, the calls below could not return at all.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task NothingWaitsOnARunThatIsOpeningItsSession()
+    {
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+
+        using ManualResetEventSlim verifying = new(false);
+        using ManualResetEventSlim held = new(false);
+
+        using TorrentRun run = new(
+            ArchiveHash,
+            [],
+            _folder,
+            new TrackerSet(new AnsweringTrackers(), TimeProvider.System),
+            new NobodyDials(),
+            Id("NM0001"),
+            listenPort: 51413,
+            TimeProvider.System,
+            torrent,
+            verify: (_, _) =>
+            {
+                verifying.Set();
+                held.Wait(TimeSpan.FromSeconds(30));
+
+                return new(torrent.PieceCount);
+            });
+
+        // Opening runs on its own thread, as it does in the client: a peer that
+        // turned up, or the announce loop.
+        Task opening = Task.Run(() => _ = run.NothingWanted);
+
+        Assert.True(verifying.Wait(TimeSpan.FromSeconds(10)), "the session was never opened.");
+
+        // Everything the pages ask a run, asked while the disk is being read.
+        // Each of these takes the run's lock, and each would sit here until the
+        // hashing finished if the lock were held across it.
+        Task asking = Task.Run(() =>
+        {
+            _ = run.Progress();
+            _ = run.Torrent;
+            _ = run.Said;
+            _ = run.SwarmSeeds;
+            _ = run.Paused;
+        });
+
+        Assert.Same(
+            asking,
+            await Task.WhenAny(asking, Task.Delay(TimeSpan.FromSeconds(10))));
+
+        held.Set();
+
+        await Task.WhenAny(opening, Task.Delay(TimeSpan.FromSeconds(30)));
+    }
+
+    /// <summary>A dialler that never answers, for a run that must not need peers.</summary>
+    private sealed class NobodyDials : IPeerDialler
+    {
+        public Task<PeerConnection?> DialAsync(
+            PeerAddress address,
+            byte[] infoHash,
+            byte[] peerId,
+            int pieces,
+            CancellationToken ct)
+        {
+            return Task.FromResult<PeerConnection?>(null);
+        }
+    }
+
     private TorrentRun Run(
         AnsweringTrackers transport,
         IPeerDialler dialler,

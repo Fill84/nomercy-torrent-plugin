@@ -1747,6 +1747,35 @@ failed grab is waiting on nothing. At 15:34:50 the second bundle failed: *"Input
 **Done when** one failed episode of a pack costs that episode and nothing else, and no file is ever
 deleted while an encode is reading it. Read first: `docs/plan/PROGRESS.md` § Log, `S11-08`.
 
+## S11-11 · The plugin cannot hold the server up
+
+The owner said the plugin was hanging their server, repeatedly, from the first deploy onwards. It was
+read as load — a verification pass and seven Chrome processes on a busy machine — and it was not that.
+
+`TorrentRun.Session()` opened a torrent's session inside the run's own lock, and opening one calls
+`Verified`, which falls back to `Hashed` when there is no resume file: a read and a SHA-1 of every
+piece on disk. Thirty-seven gigabytes of that is minutes.
+
+Everything that asks a run anything takes the same lock — `Progress`, `Torrent`, `Said`,
+`SwarmSeeds`, `Paused`. `BittorrentEngine.StatusAsync` calls `Progress` for every torrent while
+holding the engine's own lock. The Downloads page is rendered from `StatusAsync`, in the media
+server's request thread. So the whole chain stopped, the dashboard's connection dropped and
+reconnected, and the server looked hung — every restart, because a torrent with no resume file is
+hashed again every time.
+
+1. `Session()` decides what to open under the lock, reads the disk with the lock let go, and takes it
+   again only to publish what it opened. A second caller arriving mid-pass is told there is no
+   session yet, which every caller already handles, rather than starting a second pass over the same
+   files.
+2. `NothingWanted` asked for the session from inside the lock, which would have held it across the
+   pass just as surely. It asks first and locks after.
+3. The verifier is a seam so the rule can be stated: a test holds one open and asserts that every
+   page-facing call still answers. It is a statement about locking, not about speed — with the lock
+   put back the test cannot finish at all.
+
+**Done when** every call a page makes answers while a torrent is being verified. Read first:
+`src/NoMercy.Plugin.TorrentDownloader.Bittorrent/Engine/TorrentRun.cs`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

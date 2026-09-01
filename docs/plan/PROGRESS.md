@@ -255,11 +255,29 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-08` A pack keeps every file it staged
 - [x] `S11-09` A pack is encoded in episode order
 - [x] `S11-10` Three pack faults, found by watching a pack go through
+- [x] `S11-11` The plugin cannot hold the server up
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-11` The plugin can no longer make the server hang, and it really did.** The owner said it for
+  hours and was right every time; it was read as load and it was not. Opening a torrent's session
+  reads and SHA-1s every piece already on disk when there is no resume file — minutes for a season
+  pack — and `TorrentRun.Session()` did that **inside the run's own lock**. Everything that asks a run
+  anything takes that lock, including `Progress()`, which `BittorrentEngine.StatusAsync` calls for
+  every torrent while holding the engine's lock, which is what the Downloads page is rendered from,
+  in the media server's own request thread. So a 37 GB torrent being opened stopped the plugin's
+  pages answering at all, the dashboard dropped its connection and picked it up again, and the server
+  looked hung. On every restart, because a torrent with no resume file is hashed again every time —
+  which is what the four-minute gaps after each deploy were.
+  The reading is done with the lock let go: what to open is decided under it, the disk pass runs
+  outside it, and the lock is taken again only to publish the result. A second caller is told there
+  is no session yet rather than starting a second pass. `NothingWanted` asked for the session from
+  inside the lock and had to move too. `TorrentRunTests.NothingWaitsOnARunThatIsOpeningItsSession`
+  holds a verifier open and asserts every page-facing call still answers — seen to hang for thirty
+  seconds with the lock put back.
 
 - **`S11-10` Three pack faults that cost the owner two episodes.** Watched end to end on 1 September
   2026: seven of nine episodes landed, and E01 and E05 died in a chain that begins with the plugin.
