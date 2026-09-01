@@ -61,4 +61,17 @@ public sealed class LibraryThisTick(ILibrary library) : ILibrary
         return episodes;
     }
 
+    public async Task<IReadOnlyList<string>> GetFilesAsync(int showId, CancellationToken ct)
+    {
+        if (_files.TryGetValue(showId, out IReadOnlyList<string>? known))
+        {
+            return known;
+        }
+
+        IReadOnlyList<string> files = await library.GetFilesAsync(showId, ct);
+
+        _files[showId] = files;
+
+        return files;
+    }
 }

@@ -87,4 +87,9 @@ public sealed class HostLibrary(IPluginLibraryQuery query) : ILibrary
             }),
         ];
     }
+
+    public async Task<IReadOnlyList<string>> GetFilesAsync(int showId, CancellationToken ct)
+    {
+        return [.. (await query.GetShowFilesAsync(showId, ct)).Select(file => file.Path)];
+    }
 }

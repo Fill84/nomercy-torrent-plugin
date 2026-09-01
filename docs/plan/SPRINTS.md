@@ -1637,15 +1637,50 @@ job finishes having written nothing — and the import half is put back.
 dispatched by their own ids, with nobody pressing anything. Read first: `docs/09-host-contract.md`
 § Dispatching an encode.
 
+## S11-07 · An encode the server filed under the wrong episode is still done
+
+The Downloads page said `encoding` for South Park S15E12 while the server said no task was running.
+Both were telling the truth about themselves, and neither described what had happened.
+
+Read out of the owner's own `media.db`: the plugin dispatched with `153823`, the server's own id for
+S15E12; the encoder logged `for 153823` and wrote
+`/South.Park.(1997)/South.Park.S15E12/South.Park.S15E12.1%.NoMercy.m3u8`; and the post-encode
+registration wrote its `VideoFiles` row against episode `153785` — season 0, "Chef Aid: Behind The
+Menu" — twice. Episode `153823` has no file at all.
+
+The plugin's only proof that an encode arrived is the library having the episode, so it waits. Six
+hours later it gives the episode back to the missing list and the same gigabytes are fetched again,
+for work that was finished the whole time and is sitting on disk under the right name.
+
+1. `ILibrary.GetFilesAsync(showId)` — every file the library holds for one show, by path. The
+   contract already answers it (`IPluginLibraryQuery.GetShowFilesAsync`), and it returns the misfiled
+   row too, because that row still belongs to the show.
+2. `Core/Pipeline/Landed.cs`: a file whose own name carries this season and this episode is this
+   episode. The whole path, since the encoder names the folder for it as well. The two numbers are
+   kept apart — `S12E15` is not `S15E12`.
+3. `Transfers.FinishAsync` asks it **only where the server has said the job is finished** and the
+   episode still shows no file. Read while a job is running, a file part-written would be taken for
+   one that arrived and the download deleted underneath the encoder: that is the 36 GB fault, and the
+   job status is what keeps this on the right side of it.
+4. Said out loud when it is taken. The owner's dashboard shows the episode under a season it does not
+   belong to, and nothing else on any page explains why.
+5. A finished job that wrote nothing at all is still not done, and still not deleted.
+
+**Done when** an encode the server finished and misfiled closes its grab instead of being waited out,
+and a finished job that wrote nothing still is not. Read first: `docs/09-host-contract.md`
+§ What became of the job.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.
 
-- **South Park S15E12 is attached to the wrong episode.** The server's scanner files it under
-  episode `153785` — season 0, the special — where the episode the plugin dispatched is `153823`.
-  The plugin waits for `153823` to have a file, so the grab waits until that is corrected and then
-  gives up after six hours and looks for the episode again. The waiting is right; the attachment is
-  not.
+- **South Park S15E12 is attached to the wrong episode.** Confirmed in the owner's own `media.db`:
+  the `VideoFiles` row for `/South.Park.(1997)/South.Park.S15E12/South.Park.S15E12.1%.NoMercy.m3u8`
+  names episode `153785` — season 0, "Chef Aid: Behind The Menu" — and there are two of it. Episode
+  `153823`, the real S15E12, has none. The plugin dispatched the right id and the encoder wrote the
+  right file; the post-encode registration is what put it on the wrong row. `S11-07` stops the plugin
+  waiting six hours and re-downloading over it, and says so on the page — but the row is still wrong,
+  and correcting it is the media server's.
 - **A magnet pasted into the Downloads page is cut at 1024 characters.** Not here: the field is a
   `PluginFormFieldType.Text` with no length on it, `PluginFormField` in the contract carries no
   length, and the dashboard's `PluginForm.vue` renders a bare `<input>` with no `maxlength`. It is

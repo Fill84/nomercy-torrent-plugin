@@ -879,6 +879,119 @@ public class TransfersTests : IDisposable
         Assert.DoesNotContain(engine.Removed, one => one.DeleteFiles);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>An encode the server finished and then filed against the wrong
+    /// episode is done.</strong> On 1 September 2026 the plugin dispatched South
+    /// Park S15E12 with the server's own id for it, <c>153823</c>; the encoder
+    /// logged <c>for 153823</c> and wrote
+    /// <c>South.Park.S15E12.1%.NoMercy.m3u8</c> into the show's own folder, and
+    /// the post-encode registration attached that file to episode
+    /// <c>153785</c> — season 0, "Chef Aid: Behind The Menu", twice over. The
+    /// real S15E12 was left with no file at all.
+    /// </para>
+    /// <para>
+    /// So the library said the episode was still missing, the queue was empty,
+    /// and the Downloads page said "encoding" for six hours before the plugin
+    /// gave up and downloaded the same episode again. The file was on disk under
+    /// the right name the whole time.
+    /// </para>
+    /// <para>
+    /// Only ever on a job the server has said is finished. Read while one is
+    /// running, a file being written would be taken for a file that arrived and
+    /// the download deleted underneath the encoder — the fault that cost 36 GB.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEncodeTheServerFiledUnderAnotherEpisodeIsStillDone()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        // Not seeding: a torrent still giving something back is left alone
+        // whatever the library says, and that guard would mask this one.
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        // The library never gains the episode — encoded: false — and the show's
+        // files carry one named for it, which is where the encoder really put
+        // it.
+        FakeLibraryQuery query = new FakeLibraryQuery()
+            .Library(TelevisionLibrary, "Television", "tv")
+            .Show(41, "Silo", TelevisionLibrary, year: 2023)
+            .Episode(41, 3, 6, hasFile: false)
+            .Episode(41, 1, 1, hasFile: true)
+
+            // Filed against season 1 episode 1, as the server's registration
+            // really does it, and named for the episode it really is.
+            .File(41, 1, 1, "/Silo.(2023)/Silo.S03E06/Silo.S03E06.The.Dive.NoMercy.m3u8");
+
+        Transfers transfers = new(
+            engine,
+            grabs,
+            new HostLibrary(query),
+            new Stager(server.Journal, server.Log),
+            new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
+            server.Journal,
+            server.Log,
+            TimeProvider.System,
+            new SayingJobs(new(EncodeJobState.Finished, null)));
+
+        // Staged and dispatched on the first, finished on the second.
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // Done, not waited out: the torrent is cleared up with its files and the
+        // grab is closed, so the episode is never looked for a second time.
+        Assert.Contains(engine.Removed, one => one.DeleteFiles);
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+
+        // And said out loud, because the owner's dashboard shows the episode
+        // under a season it does not belong to and nothing else explains it.
+        Assert.Contains(
+            server.Journal.Snapshot().History,
+            one => (one.Detail ?? string.Empty).Contains("under another episode", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// And a finished job that wrote nothing at all is not done. Nine of them
+    /// came back finished inside two minutes on 31 August 2026 and the library
+    /// gained not one file; taking a server's word for it there deleted 36 GB.
+    /// </remarks>
+    [Fact]
+    public async Task AFinishedJobThatWroteNothingIsNotDone()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        // Not seeding, so nothing but this rule can decide the outcome.
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        Transfers transfers = Transfers(
+            engine,
+            grabs,
+            server,
+            encoder: new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
+            jobs: new SayingJobs(new(EncodeJobState.Finished, null)));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.DoesNotContain(engine.Removed, one => one.DeleteFiles);
+        Assert.NotEmpty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
     /// <summary>A server that says the same thing about every job.</summary>
     private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
     {

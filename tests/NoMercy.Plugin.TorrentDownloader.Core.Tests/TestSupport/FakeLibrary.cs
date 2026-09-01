@@ -82,4 +82,9 @@ public sealed class FakeLibrary : ILibrary
     /// <summary>Where a show's episodes already are.</summary>
     public Dictionary<int, List<string>> Files { get; } = [];
 
+    public Task<IReadOnlyList<string>> GetFilesAsync(int showId, CancellationToken ct)
+    {
+        return Task.FromResult<IReadOnlyList<string>>([.. Files.GetValueOrDefault(showId, [])]);
+    }
+
 }

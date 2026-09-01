@@ -49,4 +49,16 @@ public interface ILibrary
     /// </summary>
     Task<IReadOnlyList<Episode>> GetEpisodesAsync(int showId, CancellationToken ct);
 
+    /// <summary>
+    /// Every file the library holds for one show, by the path it is at.
+    /// </summary>
+    /// <remarks>
+    /// For one question only: the server has said an encode finished and the
+    /// episode still has no file. The file the encoder wrote is named after the
+    /// episode it was asked for, so the paths say whether it arrived even when
+    /// the row the server attached it to says otherwise — which is what happened
+    /// to South Park S15E12 on 1 September 2026. See
+    /// <c>Core/Pipeline/Landed.cs</c>.
+    /// </remarks>
+    Task<IReadOnlyList<string>> GetFilesAsync(int showId, CancellationToken ct);
 }

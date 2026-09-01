@@ -251,11 +251,30 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-03` A doc block belongs to the member under it
 - [x] `S11-04` The test that failed once
 - [x] `S11-06` The show is added the way Add content adds it
+- [x] `S11-07` An encode filed under the wrong episode is still done
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-07` An encode the server filed under the wrong episode is still done.** The owner watched the
+  Downloads page say `encoding` for South Park S15E12 while the server's dashboard said no task was
+  running. It was neither: the plugin dispatched with the server's own id, `153823`, the encoder
+  logged `for 153823` and wrote `/South.Park.(1997)/South.Park.S15E12/South.Park.S15E12.1%.NoMercy.m3u8`,
+  and the post-encode registration attached that file to episode `153785` — season 0, "Chef Aid:
+  Behind The Menu" — twice over. So the real S15E12 had no file, the plugin's only proof of arrival is
+  the library having the episode, and it would have sat there for six hours before giving up and
+  downloading the same episode again. **Read out of the owner's own `media.db`, not inferred.**
+  The plugin now asks the show's files where the server says the job is finished and the episode still
+  shows none: a file whose own name carries that season and episode is that episode, whatever row it
+  was attached to. `Core/Pipeline/Landed.cs` is the rule and `ILibrary.GetFilesAsync` is what it reads.
+  **Only for a job the server has called finished** — read while one is running, a file being written
+  would be taken for one that arrived and the download deleted underneath the encoder, which is the
+  fault that cost 36 GB. It is said out loud when it is taken, because the owner's dashboard shows the
+  episode under a season it does not belong to and nothing else explains that. A finished job that
+  wrote nothing at all is still not done. **The misfiling itself is the media server's**, in the
+  post-encode registration, and that repository is read-only from here.
 
 - **`S11-06` The show is added the way Add content adds it.** The owner's correction, and it is the
   right one: the plugin is not supposed to keep its hands off the library, it is supposed to ask the

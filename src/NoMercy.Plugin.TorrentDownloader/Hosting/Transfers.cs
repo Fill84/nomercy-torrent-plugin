@@ -808,6 +808,17 @@ public sealed class Transfers(
                     one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile));
             }
 
+            // Whether the server still has work in hand for this grab. Asked
+            // once and used twice: to read a file the encoder wrote but filed
+            // against the wrong row, and to keep from deleting a download a job
+            // is still reading.
+            EncodeJob? standing = await StandingAsync(sent, ct);
+
+            if (!landed && standing is { State: EncodeJobState.Finished })
+            {
+                landed = await WroteItAnywayAsync(sent, thisTick, ct);
+            }
+
             if (!landed)
             {
                 await StillWaitingAsync(sent, thisTick, ct);
@@ -821,7 +832,7 @@ public sealed class Transfers(
             // that is still reading it is the fault that cost the owner 36 GB.
             // Where the server cannot say, the library is the proof and it is
             // the stronger of the two.
-            if (await StandingAsync(sent, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
+            if (standing is { State: EncodeJobState.Queued or EncodeJobState.Running })
             {
                 await StillWaitingAsync(sent, thisTick, ct);
 
@@ -920,6 +931,75 @@ public sealed class Transfers(
     /// once more is the right thing.
     /// </remarks>
     private readonly HashSet<string> _added = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a finished encode arrived under a row that is not the episode's.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Asked only of a job the server has said is finished, and only when the
+    /// episode still shows no file. The encoder names what it writes after the
+    /// episode it was asked for, so a file in the show's folders carrying this
+    /// season and episode is this episode, whatever row the registration
+    /// attached it to.
+    /// </para>
+    /// <para>
+    /// On 1 September 2026 South Park S15E12 was dispatched with the server's
+    /// own id for it, the encoder logged <c>for 153823</c> and wrote
+    /// <c>South.Park.S15E12.1%.NoMercy.m3u8</c>, and the registration attached
+    /// that file to episode <c>153785</c> — season 0. So the real S15E12 had no
+    /// file, the queue was empty, and the plugin showed "encoding" for six hours
+    /// before giving up and downloading the same episode a second time.
+    /// </para>
+    /// <para>
+    /// Said out loud when it is taken. The download is about to be deleted on
+    /// the strength of it, and an owner whose dashboard shows the episode under
+    /// the wrong season deserves the sentence that explains it.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> WroteItAnywayAsync(
+        StoredDownload sent,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        List<EpisodeKey> misfiled = [];
+
+        foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
+        {
+            IReadOnlyList<Episode> episodes = await thisTick.GetEpisodesAsync(show.Key, ct);
+            IReadOnlyList<string> files = await thisTick.GetFilesAsync(show.Key, ct);
+
+            foreach (EpisodeKey wanted in show)
+            {
+                if (episodes.Any(one =>
+                        one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile))
+                {
+                    continue;
+                }
+
+                if (!Landed.Wrote(wanted, files))
+                {
+                    return false;
+                }
+
+                misfiled.Add(wanted);
+            }
+        }
+
+        journal.Finished(
+            ActivityStage.Dispatch,
+            sent.ReleaseTitle,
+            $"the encode finished and the server filed {string.Join(", ", misfiled)} under another episode; "
+            + "the file is in the library under the right name, so this is done");
+
+        logger.LogWarning(
+            "{Release}: the encode finished and the server registered the file against another episode "
+            + "than {Episodes}. The file is there under the right name.",
+            sent.ReleaseTitle,
+            string.Join(", ", misfiled));
+
+        return true;
+    }
 
     /// <summary>
     /// Says which show a torrent holds that the owner has not got, and leaves
