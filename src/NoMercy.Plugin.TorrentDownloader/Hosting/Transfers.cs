@@ -155,15 +155,6 @@ public sealed class Transfers(
         }
     }
 
-    /// <summary>
-    /// Every torrent the client has given up on, blacklisted and put back.
-    /// </summary>
-    /// <remarks>
-    /// Both halves and one transaction, which is the store's business. Without
-    /// the blacklist the next cycle chooses the same release and fails the same
-    /// way for as long as the plugin runs; without the return the episodes look
-    /// grabbed for ever.
-    /// </remarks>
     /// <summary>How long a refusal about one moment stands before it runs out.</summary>
     /// <remarks>
     /// <para>
@@ -182,6 +173,15 @@ public sealed class Transfers(
     /// </remarks>
     public static readonly TimeSpan RefusedFor = TimeSpan.FromHours(6);
 
+    /// <summary>
+    /// Every torrent the client has given up on, blacklisted and put back.
+    /// </summary>
+    /// <remarks>
+    /// Both halves and one transaction, which is the store's business. Without
+    /// the blacklist the next cycle chooses the same release and fails the same
+    /// way for as long as the plugin runs; without the return the episodes look
+    /// grabbed for ever.
+    /// </remarks>
     private async Task<IReadOnlyList<string>> FailedAsync(
         IReadOnlyList<TorrentStatus> running,
         IReadOnlyList<StoredDownload> stored,

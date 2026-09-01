@@ -67,15 +67,6 @@ public sealed record TorrentMetadata(
     }
 
     /// <summary>
-    /// Which files a range of the stream falls in, and where in each.
-    /// </summary>
-    /// <remarks>
-    /// A piece pays no attention to where one file ends and the next begins:
-    /// the first piece of an ordinary multi-file torrent covers the end of a
-    /// thumbnail and the start of the thing you actually wanted, and a client
-    /// that wrote it to one file would corrupt both.
-    /// </remarks>
-    /// <summary>
     /// Where this file sits under the folder a torrent was downloaded into.
     /// </summary>
     /// <remarks>
@@ -137,6 +128,15 @@ public sealed record TorrentMetadata(
         return wanted;
     }
 
+    /// <summary>
+    /// Which files a range of the stream falls in, and where in each.
+    /// </summary>
+    /// <remarks>
+    /// A piece pays no attention to where one file ends and the next begins:
+    /// the first piece of an ordinary multi-file torrent covers the end of a
+    /// thumbnail and the start of the thing you actually wanted, and a client
+    /// that wrote it to one file would corrupt both.
+    /// </remarks>
     public IEnumerable<TorrentSlice> Slice(long offset, long length)
     {
         foreach (TorrentFileEntry file in Files)

@@ -76,10 +76,6 @@ public sealed record SourceDefinition(
     string? Note = null)
 {
     /// <summary>
-    /// Which libraries this source is worth asking about, or none at all for
-    /// every library.
-    /// </summary>
-    /// <summary>
     /// How many pages of one search are worth reading, and the parameter that
     /// asks for the next.
     /// </summary>
@@ -96,6 +92,10 @@ public sealed record SourceDefinition(
     /// <summary>How many pages to read, counting the first. One unless the catalogue says more.</summary>
     public int Pages { get; init; } = 1;
 
+    /// <summary>
+    /// Which libraries this source is worth asking about, or none at all for
+    /// every library.
+    /// </summary>
     /// <remarks>
     /// docs/05-sources.md scopes Nyaa to <em>indexer (anime)</em>. Empty means
     /// everywhere and not nowhere: saying nothing has to mean every library, or

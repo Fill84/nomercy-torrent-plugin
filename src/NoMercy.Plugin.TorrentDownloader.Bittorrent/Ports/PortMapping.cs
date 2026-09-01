@@ -206,7 +206,6 @@ public static class Upnp
     /// <summary>And on which port.</summary>
     public const int SearchPort = 1900;
 
-    /// <summary>The two kinds of gateway worth asking.</summary>
     /// <summary>
     /// How long a mapping is asked for.
     /// </summary>
@@ -217,6 +216,7 @@ public static class Upnp
     /// </remarks>
     public static TimeSpan Lifetime { get; } = TimeSpan.FromHours(2);
 
+    /// <summary>The two kinds of gateway worth asking.</summary>
     public static IReadOnlyList<string> Gateways { get; } =
     [
         "urn:schemas-upnp-org:service:WANIPConnection:1",

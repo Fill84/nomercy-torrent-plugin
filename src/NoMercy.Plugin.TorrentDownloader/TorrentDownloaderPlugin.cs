@@ -1284,15 +1284,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             : _engine.StatusAsync(ct);
     }
 
-    /// <summary>
-    /// What the status bar says about the search cycle.
-    /// </summary>
-    /// <remarks>
-    /// When a cycle has run, when it finished; before then, null — which the
-    /// page draws as "never run" rather than as nought. The time of the next
-    /// one stays unknown: a cadence's schedule belongs to the host that
-    /// registered it, and this plugin is never told it.
-    /// </remarks>
     /// <summary>Something moved, so the open pages are due a push.</summary>
     /// <remarks>
     /// Also called where the cycle itself starts and stops, because those move
@@ -1315,6 +1306,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return lookup;
     }
 
+    /// <summary>
+    /// What the status bar says about the search cycle.
+    /// </summary>
+    /// <remarks>
+    /// When a cycle has run, when it finished; before then, null — which the
+    /// page draws as "never run" rather than as nought. The time of the next
+    /// one stays unknown: a cadence's schedule belongs to the host that
+    /// registered it, and this plugin is never told it.
+    /// </remarks>
     private CycleStatus CurrentCycle()
     {
         return new(_running.Busy, _lastCycleAt, null);
@@ -1354,16 +1354,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// Says once, in the server's own log, which version is running.
-    /// </summary>
-    /// <remarks>
-    /// Once, not once per tick: transfers ticks every minute and a line a
-    /// minute is a line nobody reads. It answers the question a deploy leaves
-    /// open — a plugin's assembly is held open by a running server, so a copy
-    /// onto one that was not stopped fails and the old build stays, which looks
-    /// exactly like a deploy that worked (docs/01-plugin.md § Deploying).
-    /// </remarks>
-    /// <summary>
     /// Says something once, however many times a cadence ticks.
     /// </summary>
     /// <remarks>
@@ -1379,6 +1369,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
     }
 
+    /// <summary>
+    /// Says once, in the server's own log, which version is running.
+    /// </summary>
+    /// <remarks>
+    /// Once, not once per tick: transfers ticks every minute and a line a
+    /// minute is a line nobody reads. It answers the question a deploy leaves
+    /// open — a plugin's assembly is held open by a running server, so a copy
+    /// onto one that was not stopped fails and the old build stays, which looks
+    /// exactly like a deploy that worked (docs/01-plugin.md § Deploying).
+    /// </remarks>
     private void AnnounceOnce()
     {
         if (Interlocked.Exchange(ref _announced, 1) != 0)

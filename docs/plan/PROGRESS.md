@@ -4,7 +4,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Current: `S11-03`.** Sprint 11 is the five things standing between this build and the first
+**Current: `S11-04`.** Sprint 11 is the five things standing between this build and the first
 end-to-end run watched on the owner's own server. `docs/plan/SPRINTS.md` § Sprint 11 opens with a
 correction it is built on, and it is the one thing to read before starting: **the encode job does
 not add a show.** `PluginEncoder` puts `mediaId` straight into `VideoEncodeJob.Id`, and
@@ -247,13 +247,23 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 11 — What the first watched run has to be run against
 - [x] `S11-01` The plugin looks a show up. It never adds one.
 - [x] `S11-02` The health tool counts a release once
-- [ ] `S11-03` A doc block belongs to the member under it
+- [x] `S11-03` A doc block belongs to the member under it
 - [ ] `S11-04` The test that failed once
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-03` A doc block describes the member under it.** Eighteen places in `src/` carried two or
+  three `<summary>` blocks in one run of `///` lines. Every one was a block pasted above a member it
+  does not describe, and in most of them the member it did describe was a few lines down with no
+  block at all: `Staging.Names` and `Staging.Discover` were both documented above `Staging.Claims`,
+  `TorrentRun.DialAsync` and `TorrentRun.Request` above a constant, `GrabRepository.HistoryAsync`
+  above the limit it uses. Each block moved to the member it belongs to; the two on `SettingsStore`'s
+  constructor became `<param>` tags, which is what they were describing. `DocBlocksTests` walks
+  `src/` and fails on a run of `///` lines carrying more than one summary — seen to fail on a stacked
+  block put back deliberately.
 
 - **`S11-02` The health tool counts a release once.** It said thirty releases on a TorrentBay page
   carrying fourteen and thirty-five on a LimeTorrents page carrying seventeen. The cause was the

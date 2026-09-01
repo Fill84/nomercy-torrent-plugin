@@ -188,15 +188,6 @@ public sealed class GrabRepository(Store database)
         return all;
     }
 
-    /// <summary>
-    /// Records that a grab's episode is now in the intake folder.
-    /// </summary>
-    /// <remarks>
-    /// The path with the state, in one write. A grab that said it was staged
-    /// without saying where would have the file looked for by name on every
-    /// tick, and a grab that said where without saying so would be staged all
-    /// over again.
-    /// </remarks>
     /// <summary>Writes down which episodes a grab turned out to answer for.</summary>
     /// <remarks>
     /// For a torrent added by hand, which is recorded covering no episode
@@ -282,6 +273,15 @@ public sealed class GrabRepository(Store database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>
+    /// Records that a grab's episode is now in the intake folder.
+    /// </summary>
+    /// <remarks>
+    /// The path with the state, in one write. A grab that said it was staged
+    /// without saying where would have the file looked for by name on every
+    /// tick, and a grab that said where without saying so would be staged all
+    /// over again.
+    /// </remarks>
     public async Task StagedAsync(string infoHash, string path, CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);
@@ -832,13 +832,6 @@ public sealed class GrabRepository(Store database)
         return new(refused, total, wanted, rows);
     }
 
-    /// <summary>What the history says happened, newest first.</summary>
-    /// <remarks>
-    /// Every column, not the two the first caller wanted. The page says when a
-    /// thing happened, which episode it was about and why, and a reader that
-    /// answered only the event and the reason would have the page inventing the
-    /// other two.
-    /// </remarks>
     /// <summary>
     /// How many lines of history a page is given.
     /// </summary>
@@ -871,6 +864,13 @@ public sealed class GrabRepository(Store database)
         return await command.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>What the history says happened, newest first.</summary>
+    /// <remarks>
+    /// Every column, not the two the first caller wanted. The page says when a
+    /// thing happened, which episode it was about and why, and a reader that
+    /// answered only the event and the reason would have the page inventing the
+    /// other two.
+    /// </remarks>
     public async Task<IReadOnlyList<HistoryRow>> HistoryAsync(CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);

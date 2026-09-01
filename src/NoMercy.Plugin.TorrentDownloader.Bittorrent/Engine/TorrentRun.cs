@@ -215,6 +215,18 @@ public sealed class TorrentRun : IDisposable
 
     private bool _nothingWanted;
 
+    /// <summary>What the last announce got back, one line per tracker.</summary>
+    /// <remarks>
+    /// Kept because nothing else could say it. A torrent downloading at ten
+    /// megabytes a second wrote no line at all, and one sitting at nought wrote
+    /// the same nothing — so which trackers answered, how many addresses came
+    /// back and which of them were dead was knowable only by running a probe
+    /// beside the plugin. That is what an owner should be able to read.
+    /// </remarks>
+    private IReadOnlyList<TrackerSaid> _said = [];
+
+    private DateTimeOffset _saidAt;
+
     /// <summary>
     /// What the trackers say the whole swarm holds, as against what this client
     /// is connected to.
@@ -229,18 +241,6 @@ public sealed class TorrentRun : IDisposable
     /// The largest any tracker gave, because a tracker knows only its own
     /// members and the swarm is at least as big as the best-informed one says.
     /// </remarks>
-    /// <summary>What the last announce got back, one line per tracker.</summary>
-    /// <remarks>
-    /// Kept because nothing else could say it. A torrent downloading at ten
-    /// megabytes a second wrote no line at all, and one sitting at nought wrote
-    /// the same nothing — so which trackers answered, how many addresses came
-    /// back and which of them were dead was knowable only by running a probe
-    /// beside the plugin. That is what an owner should be able to read.
-    /// </remarks>
-    private IReadOnlyList<TrackerSaid> _said = [];
-
-    private DateTimeOffset _saidAt;
-
     private int? _swarmSeeds;
 
     private int? _swarmPeers;
@@ -296,7 +296,6 @@ public sealed class TorrentRun : IDisposable
         }
     }
 
-    /// <summary>What the trackers say the swarm holds, or null before one answered.</summary>
     /// <summary>How each tracker answered the last announce.</summary>
     public IReadOnlyList<TrackerSaid> Said
     {
@@ -321,6 +320,7 @@ public sealed class TorrentRun : IDisposable
         }
     }
 
+    /// <summary>What the trackers say the swarm holds, or null before one answered.</summary>
     public int? SwarmSeeds
     {
         get
@@ -901,7 +901,6 @@ public sealed class TorrentRun : IDisposable
         Interval = wanted > floor ? wanted : floor;
     }
 
-    /// <summary>What this client tells a tracker about itself.</summary>
     /// <summary>
     /// What is announced as still wanted before the metadata says otherwise.
     /// </summary>
@@ -912,6 +911,7 @@ public sealed class TorrentRun : IDisposable
     /// </remarks>
     private const long UnknownSize = 1L << 40;
 
+    /// <summary>What this client tells a tracker about itself.</summary>
     private AnnounceRequest Request()
     {
         RunProgress progress = Progress();
@@ -943,11 +943,6 @@ public sealed class TorrentRun : IDisposable
             AnnounceEvent.Started);
     }
 
-    /// <summary>Opens one conversation, or answers nothing.</summary>
-    /// <remarks>
-    /// A peer that will not talk is the ordinary case rather than a fault: most
-    /// of the addresses a tracker hands out are stale.
-    /// </remarks>
     /// <summary>
     /// Dials peers this run heard about from somewhere other than a tracker.
     /// </summary>
@@ -1016,6 +1011,11 @@ public sealed class TorrentRun : IDisposable
         }
     }
 
+    /// <summary>Opens one conversation, or answers nothing.</summary>
+    /// <remarks>
+    /// A peer that will not talk is the ordinary case rather than a fault: most
+    /// of the addresses a tracker hands out are stale.
+    /// </remarks>
     private async Task<PeerConnection?> DialAsync(PeerAddress address, CancellationToken ct)
     {
         try

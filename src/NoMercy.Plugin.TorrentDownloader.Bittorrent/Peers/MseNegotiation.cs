@@ -471,15 +471,6 @@ public sealed class Rc4Stream(Stream inner, Rc4 outgoing, Rc4 incoming) : Stream
 }
 
 /// <summary>
-/// Dialling a peer: encrypted first, and in the clear when it will not.
-/// </summary>
-/// <remarks>
-/// docs/06-torrent-client.md: allowed, never required. A peer that refuses
-/// encryption is still worth having, and a client that gave up on it would
-/// throw away half a swarm; a client that never tried encryption would be
-/// refused by the other half.
-/// </remarks>
-/// <summary>
 /// What this client will agree to when it dials a peer.
 /// </summary>
 /// <remarks>
@@ -499,6 +490,15 @@ public enum PeerEncryption
     Disabled,
 }
 
+/// <summary>
+/// Dialling a peer: encrypted first, and in the clear when it will not.
+/// </summary>
+/// <remarks>
+/// docs/06-torrent-client.md: allowed, never required. A peer that refuses
+/// encryption is still worth having, and a client that gave up on it would
+/// throw away half a swarm; a client that never tried encryption would be
+/// refused by the other half.
+/// </remarks>
 public static class PeerDial
 {
     /// <summary>Connects, agreeing whatever the peer will agree to.</summary>

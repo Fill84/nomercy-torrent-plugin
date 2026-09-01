@@ -102,45 +102,13 @@ public static partial class Staging
     public const long SampleUnder = 50L * 1024 * 1024;
 
     /// <summary>
-    /// Reads the episodes out of a torrent that was never told which it is for.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A torrent added by hand is recorded covering no episode, and deliberately
-    /// so: claiming one nobody chose would put that episode back to missing if
-    /// the download failed. docs/08-ui.md § Actions says what happens instead —
-    /// <c>AddTorrent</c> still runs the finished file through staging and the
-    /// encode dispatch, because a torrent added by hand is an episode like any
-    /// other — and this is the part that was missing. Without it a pack added by
-    /// hand downloaded in full and stopped: <see cref="Choose"/> is handed the
-    /// episodes and there were none, so nothing was moved and nothing was
-    /// dispatched.
-    /// </para>
-    /// <para>
-    /// It reads the file's own name, never the torrent's, and never its order.
-    /// A pack names its episodes in its files; the torrent's own name says only
-    /// that it is a season. Nothing is guessed: a video naming a show the owner
-    /// does not have, or naming no episode at all, yields nothing rather than
-    /// being placed somewhere plausible.
-    /// </para>
-    /// </remarks>
-    /// <summary>
-    /// What the videos in a torrent say they are shows of, matched or not.
-    /// </summary>
-    /// <remarks>
-    /// So a torrent that names no show the owner has can say which show it does
-    /// name. "Nothing in it names an episode of a show in a library" is true and
-    /// leaves the owner nowhere: "the files name Dark Matter" is the same fact
-    /// with the one thing they need to act on — the name to add.
-    /// </remarks>
-    /// <summary>
     /// The show a torrent's files claim to be of, and its year.
     /// </summary>
     /// <remarks>
     /// For a torrent naming a show that is in no library: it is what the plugin
-    /// asks the metadata providers about, so that the show can be added and the
-    /// episodes dispatched by their own ids like any other. Null where the files
-    /// name no show at all, which is a torrent nothing can be done with.
+    /// asks the metadata providers about, so the line on the History page can
+    /// name the show the owner has to add. Null where the files name no show at
+    /// all, which is a torrent nothing can be said about.
     /// </remarks>
     public static (string Title, int? Year)? Claims(IReadOnlyList<TorrentFile> files)
     {
@@ -185,6 +153,15 @@ public static partial class Staging
     [GeneratedRegex(@"[.\s(\[]((?:19|20)\d{2})[.\s)\]]", RegexOptions.CultureInvariant)]
     private static partial Regex Made();
 
+    /// <summary>
+    /// What the videos in a torrent say they are shows of, matched or not.
+    /// </summary>
+    /// <remarks>
+    /// So a torrent that names no show the owner has can say which show it does
+    /// name. "Nothing in it names an episode of a show in a library" is true and
+    /// leaves the owner nowhere: "the files name Dark Matter" is the same fact
+    /// with the one thing they need to act on — the name to add.
+    /// </remarks>
     public static IReadOnlyList<string> Names(IReadOnlyList<TorrentFile> files)
     {
         List<string> named = [];
@@ -204,6 +181,29 @@ public static partial class Staging
         return named;
     }
 
+    /// <summary>
+    /// Reads the episodes out of a torrent that was never told which it is for.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A torrent added by hand is recorded covering no episode, and deliberately
+    /// so: claiming one nobody chose would put that episode back to missing if
+    /// the download failed. docs/08-ui.md § Actions says what happens instead —
+    /// <c>AddTorrent</c> still runs the finished file through staging and the
+    /// encode dispatch, because a torrent added by hand is an episode like any
+    /// other — and this is the part that was missing. Without it a pack added by
+    /// hand downloaded in full and stopped: <see cref="Choose"/> is handed the
+    /// episodes and there were none, so nothing was moved and nothing was
+    /// dispatched.
+    /// </para>
+    /// <para>
+    /// It reads the file's own name, never the torrent's, and never its order.
+    /// A pack names its episodes in its files; the torrent's own name says only
+    /// that it is a season. Nothing is guessed: a video naming a show the owner
+    /// does not have, or naming no episode at all, yields nothing rather than
+    /// being placed somewhere plausible.
+    /// </para>
+    /// </remarks>
     public static IReadOnlyList<EpisodeKey> Discover(IReadOnlyList<TorrentFile> files, IReadOnlyList<Show> shows)
     {
         List<EpisodeKey> found = [];

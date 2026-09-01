@@ -138,7 +138,6 @@ public sealed class RateLimits(TimeProvider time)
         return Take(Download, Bucket(_download, infoHash), wanted);
     }
 
-    /// <summary>How much this torrent may send now.</summary>
     /// <summary>
     /// Holds the caller until that many bytes may move, and then takes them.
     /// </summary>
@@ -171,6 +170,7 @@ public sealed class RateLimits(TimeProvider time)
         }
     }
 
+    /// <summary>How much this torrent may send now.</summary>
     public long TakeUpload(string infoHash, long wanted)
     {
         return Take(Upload, Bucket(_upload, infoHash), wanted);

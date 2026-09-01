@@ -42,26 +42,27 @@ public sealed class SettingsStore
     /// </remarks>
     private int _saves;
 
-    /// <summary>
-    /// <c>volumeOf</c> answers which volume a path is on. It is a seam because
-    /// the alternative is a test that passes or fails on how many drives the
-    /// machine running it happens to have.
-    /// </summary>
-    /// <summary>
-    /// <c>storage</c> is the server's own list of places it can write.
-    /// </summary>
-    /// <remarks>
-    /// media-server #32, which this plugin opened and which names this exact
-    /// case: the intake folder is a string the owner typed, on whatever machine
-    /// the server happens to be. The facade cannot replace the check below —
-    /// that one creates the folder and writes a real file into it, which proves
-    /// more than any list can — but it can say where the server <em>can</em>
-    /// write when the typed path turns out to be somewhere it cannot. A refusal
-    /// the owner can act on rather than one they can only read.
+    /// <summary>The settings, with the two seams the tests need.</summary>
+    /// <param name="configuration">Where the settings are kept.</param>
+    /// <param name="secrets">Where a passkey is kept, which is never here.</param>
+    /// <param name="volumeOf">
+    /// Which volume a path is on. It is a seam because the alternative is a
+    /// test that passes or fails on how many drives the machine running it
+    /// happens to have.
+    /// </param>
+    /// <param name="storage">
+    /// The server's own list of places it can write. media-server #32, which
+    /// this plugin opened, names this exact case: the intake folder is a string
+    /// the owner typed, on whatever machine the server happens to be. The
+    /// facade cannot replace <see cref="CheckFolder"/> — that one creates the
+    /// folder and writes a real file into it, which proves more than any list
+    /// can — but it can say where the server <em>can</em> write when the typed
+    /// path turns out to be somewhere it cannot. A refusal the owner can act on
+    /// rather than one they can only read.
     ///
     /// Null on a server that offers no storage facade, and the refusal is then
     /// what it always was.
-    /// </remarks>
+    /// </param>
     public SettingsStore(
         IPluginConfiguration configuration,
         IPluginSecretStore secrets,
@@ -227,15 +228,6 @@ public sealed class SettingsStore
         return !string.Equals(_volumeOf(first), _volumeOf(second), StringComparison.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// Whether a folder can be written, found out by writing to it.
-    /// </summary>
-    /// <remarks>
-    /// Existence is not permission and neither is an attribute: a share that
-    /// has gone read-only, a full disk and a folder owned by another user all
-    /// look fine until something is written. The alternative is finding out at
-    /// three in the morning, when a finished transfer has nowhere to go.
-    /// </remarks>
     /// <summary>Where the server says it can write, named as the owner sees them.</summary>
     private async Task<string> WhereItCanWriteAsync(CancellationToken ct)
     {
@@ -266,6 +258,15 @@ public sealed class SettingsStore
         }
     }
 
+    /// <summary>
+    /// Whether a folder can be written, found out by writing to it.
+    /// </summary>
+    /// <remarks>
+    /// Existence is not permission and neither is an attribute: a share that
+    /// has gone read-only, a full disk and a folder owned by another user all
+    /// look fine until something is written. The alternative is finding out at
+    /// three in the morning, when a finished transfer has nowhere to go.
+    /// </remarks>
     private void CheckFolder(string which, string path, List<string> errors)
     {
         if (string.IsNullOrWhiteSpace(path))
