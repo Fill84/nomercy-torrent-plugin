@@ -80,11 +80,6 @@ public static class EncodeGateway
     /// </remarks>
     private sealed class NoEncoder(IActivityJournal journal, ILogger logger) : IEncodeGateway
     {
-        public Task<EncodeAsk> IdentifyAsync(string stagedFile, Library library, CancellationToken ct)
-        {
-            return Refuse(Path.GetFileName(stagedFile));
-        }
-
         public Task<EncodeAsk> DispatchAsync(
             string stagedFile,
             Episode episode,
