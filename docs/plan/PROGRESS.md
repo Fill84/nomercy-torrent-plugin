@@ -260,11 +260,25 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-13` The profile is applied to names before an indexer is asked
 - [x] `S11-14` A refusal says which refusal it is
 - [x] `S11-15` The plugin is beside the libraries as well as on the dashboard
+- [x] `S11-16` A fresh torrent does not hash its own empty files
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-16` A fresh torrent hashed its own empty files before it could ask anybody for a byte.**
+  Found by watching the owner add a 45 GB Rings of Power pack: it sat at *fetching metadata* for
+  minutes with the metadata long since on disk. `Session()` called `disk.Create()` — which sets every
+  file to its full length, sparse — and only then `Verified`, whose first question is whether there is
+  anything on disk. The files it had just made itself answered yes, so it read and SHA-1'd every piece
+  of forty-five gigabytes of sparse nothing, and the session was not published until it finished.
+  The order is swapped: verify, then create. A torrent with files already there is exactly what the
+  verification is for and they are read as before; a torrent with none answers at once.
+  **This is the fault that was underneath `S11-11`.** Before the lock was let go this ran inside it,
+  which is what made the whole server hang rather than one torrent take its time — so `S11-11` is
+  what made this one visible instead of catastrophic, and it did its job: the server stayed answering
+  throughout.
 
 - **`S11-15` The plugin is beside the libraries again, as well as on the dashboard.** Asked for by the
   owner, who remembered a sidebar button that had gone. Three addresses were in question and each has

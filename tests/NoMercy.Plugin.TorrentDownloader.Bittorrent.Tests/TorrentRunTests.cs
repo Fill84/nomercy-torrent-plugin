@@ -663,6 +663,57 @@ public class TorrentRunTests : IDisposable
         await Task.WhenAny(opening, Task.Delay(TimeSpan.FromSeconds(30)));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent with nothing on disk is not asked to hash its own empty
+    /// files.</strong> Opening a session creates every file at its full length,
+    /// sparse. That used to happen before the disk was verified, so the
+    /// verification's own question — is there anything here? — was answered by
+    /// the files it had just made, and it read and SHA-1'd every piece of them.
+    /// </para>
+    /// <para>
+    /// On 2 September 2026 that was a forty-five gigabyte season pack sitting at
+    /// "fetching metadata" while it hashed its own emptiness, before it could
+    /// ask a single peer for a byte.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ATorrentWithNothingOnDiskIsVerifiedBeforeItsFilesAreMade()
+    {
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+
+        bool anyFileExisted = true;
+
+        using TorrentRun run = new(
+            ArchiveHash,
+            [],
+            _folder,
+            new TrackerSet(new AnsweringTrackers(), TimeProvider.System),
+            new NobodyDials(),
+            Id("NM0001"),
+            listenPort: 51413,
+            TimeProvider.System,
+            torrent,
+            verify: (asked, disk) =>
+            {
+                anyFileExisted = asked.Files.Any(file => File.Exists(disk.PathOf(file)));
+
+                return new(asked.PieceCount);
+            });
+
+        _ = run.NothingWanted;
+
+        Assert.False(
+            anyFileExisted,
+            "the files were created before the disk was verified, so the verification hashed them.");
+
+        // And they are made: the session cannot write a block into a file that
+        // is not there.
+        Assert.True(
+            torrent.Files.Any(file => File.Exists(Path.Combine(_folder, torrent.PathUnderFolder(file)))),
+            "the files were never created.");
+    }
+
     /// <summary>A dialler that never answers, for a run that must not need peers.</summary>
     private sealed class NobodyDials : IPeerDialler
     {

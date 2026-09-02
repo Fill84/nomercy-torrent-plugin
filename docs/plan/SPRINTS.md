@@ -1869,6 +1869,38 @@ right there, and only a restart makes them one type again.
 **Still not proven:** which of the three the owner's 404 was. The server logs no requests, so there is
 nothing left to read. The next one will say so itself.
 
+## S11-16 · A fresh torrent does not hash its own empty files
+
+Watched live: a 45 GB Rings of Power season pack added by hand sat at *fetching metadata* for minutes
+after its metadata had arrived and its folder had been written.
+
+`Session()` did this:
+
+```csharp
+TorrentDisk disk = new(torrent, _folder);
+disk.Create();                                   // every file set to its full length, sparse
+Bitfield have = Verified(torrent, disk);         // "is there anything on disk?"
+```
+
+`Verified` falls back to `Hashed` when there is no resume file, and `Hashed` begins by asking whether
+any of the torrent's files exist with a length above zero. After `Create` they all do. So a torrent
+that had never downloaded a byte read and SHA-1'd every piece of its own sparse, empty files, and the
+session — which is what makes the torrent report anything but *fetching metadata* — was not published
+until that finished.
+
+1. Verify first, create second. Nothing else moves.
+2. A torrent with files already on disk is precisely what the verification is for; they are still
+   read, exactly as before.
+3. A torrent with none is answered in no time, and `Create` then makes the files for the first block
+   to go into.
+
+**This is the fault that was underneath `S11-11`.** It ran inside the run's lock until yesterday,
+which is why the whole server appeared to hang rather than one torrent taking its time. `S11-11` is
+what turned it from a hang into a slow start — and is what made it possible to see.
+
+**Done when** a torrent with nothing on disk opens its session without reading a byte of its own
+files. Read first: `docs/plan/PROGRESS.md` § Log, `S11-11`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

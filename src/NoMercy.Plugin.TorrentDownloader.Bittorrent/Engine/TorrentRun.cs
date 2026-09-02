@@ -1364,9 +1364,23 @@ public sealed class TorrentRun : IDisposable
                 // looked hung. On every restart, because a torrent with no
                 // resume file is hashed again every time.
                 TorrentDisk disk = new(torrent, _folder);
-                disk.Create();
 
+                // **Verified before Create, and the order is the whole point.**
+                // Create sets every file to its full length, so a verification
+                // that runs after it asks "is there anything on disk?" about
+                // files it has just made itself — and is answered yes. A fresh
+                // forty-five gigabyte season pack then had every piece of its
+                // own empty, sparse files read and SHA-1'd before it could ask
+                // a single peer for a byte, which is what the owner watched sit
+                // at "fetching metadata" on 2 September 2026.
+                //
+                // Nothing is lost by asking first. A torrent with files already
+                // on disk is exactly the one this is for, and they are there to
+                // be read; a torrent with none answers in no time and Create
+                // then makes them.
                 Bitfield have = (_verify ?? Verified)(torrent, disk);
+
+                disk.Create();
 
                 lock (_lock)
                 {
