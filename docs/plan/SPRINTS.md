@@ -1840,6 +1840,35 @@ wanted name could have had.
 asked only after the source's own names have had their turn and come to nothing. Read first:
 `docs/03-architecture.md` § Stages.
 
+## S11-14 · A refusal says which refusal it is
+
+The owner's *Run now* button answered 404 on 1 September 2026 and worked again later with nothing
+changed but restarts. Establishing which of three things it was took most of a day, because from
+outside they are one answer:
+
+1. the route was never registered — the server's business;
+2. the plugin is not loaded at all;
+3. the plugin is loaded, and it is a different type to the runtime than the endpoint was compiled
+   against.
+
+Every endpoint in both controllers answered `NotFound()` with no body, and an empty 404 is exactly
+what a route that does not exist looks like.
+
+The third is the one nobody guesses, and it fits what was seen. A plugin updated while the server
+runs is staged beside the old copy rather than unpacked over it — media-server #29 — and a type from
+one load context is not the same type as the identically named one from another. So
+`GetPluginInstance(id) as TorrentDownloaderPlugin` answers null against an instance that is sitting
+right there, and only a restart makes them one type again.
+
+1. `Controllers/LivePlugin.cs` answers with the plugin or with the reason there is none.
+2. All thirteen refusals carry it. The third names both types and says that a restart settles it.
+3. The status code does not change: what changes is that the answer says which of the three happened.
+
+**Done when** no endpoint here can answer 404 without saying why. Read first: nothing.
+
+**Still not proven:** which of the three the owner's 404 was. The server logs no requests, so there is
+nothing left to read. The next one will say so itself.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

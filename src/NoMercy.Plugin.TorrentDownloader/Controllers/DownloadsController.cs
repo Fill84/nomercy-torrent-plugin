@@ -49,9 +49,23 @@ public sealed record AllowReleaseRequest(int ShowId, int Season, int Episode, st
 /// </remarks>
 public sealed class DownloadsController(IPluginManager plugins) : PluginControllerBase
 {
-    /// <summary>The running plugin, or nothing when it is not loaded.</summary>
-    private TorrentDownloaderPlugin? Live =>
-        plugins.GetPluginInstance(PluginId) as TorrentDownloaderPlugin;
+    /// <summary>The running plugin, or nothing with a reason saying why not.</summary>
+    /// <remarks>
+    /// The reason matters as much as the refusal: an empty 404 reads exactly
+    /// like a route that was never registered. See <see cref="LivePlugin"/>.
+    /// </remarks>
+    private TorrentDownloaderPlugin? Live => LivePlugin.Of(plugins, PluginId, out _);
+
+    /// <summary>Why the plugin could not be reached, for the answer to carry.</summary>
+    private string Unreachable
+    {
+        get
+        {
+            _ = LivePlugin.Of(plugins, PluginId, out string refusal);
+
+            return refusal;
+        }
+    }
 
     /// <summary>
     /// Looks for one episode now, outside the cadence.
@@ -67,7 +81,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
 
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
         EpisodeKey episode = new(request.ShowId, request.Season, request.Episode);
 
@@ -84,7 +98,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
 
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
         return await plugin.PauseDownloadAsync(infoHash, ct)
             ? Status(true, "paused")
@@ -97,7 +111,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
 
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
         return await plugin.ResumeDownloadAsync(infoHash, ct)
             ? Status(true, "resumed")
@@ -119,7 +133,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
 
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
         return await plugin.CancelDownloadAsync(infoHash, ct)
             ? Status(true, "cancelled")
@@ -140,7 +154,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
 
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
         (string? InfoHash, string? Refusal) added = await plugin.AddTorrentAsync(request.Source, ct);
 
@@ -167,7 +181,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
 
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
         bool allowed = await plugin.AllowReleaseAsync(
             new EpisodeKey(request.ShowId, request.Season, request.Episode),

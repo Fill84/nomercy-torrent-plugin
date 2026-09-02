@@ -35,16 +35,30 @@ public sealed record SecretRequest(string Key, string Value);
 /// </remarks>
 public sealed class SettingsController(IPluginManager plugins) : PluginControllerBase
 {
-    /// <summary>The running plugin, or nothing when it is not loaded.</summary>
-    private TorrentDownloaderPlugin? Live =>
-        plugins.GetPluginInstance(PluginId) as TorrentDownloaderPlugin;
+    /// <summary>The running plugin, or nothing with a reason saying why not.</summary>
+    /// <remarks>
+    /// The reason matters as much as the refusal: an empty 404 reads exactly
+    /// like a route that was never registered. See <see cref="LivePlugin"/>.
+    /// </remarks>
+    private TorrentDownloaderPlugin? Live => LivePlugin.Of(plugins, PluginId, out _);
+
+    /// <summary>Why the plugin could not be reached, for the answer to carry.</summary>
+    private string Unreachable
+    {
+        get
+        {
+            _ = LivePlugin.Of(plugins, PluginId, out string refusal);
+
+            return refusal;
+        }
+    }
 
     [HttpGet("settings")]
     public async Task<IActionResult> Get(CancellationToken ct)
     {
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
 
         return Data(new SettingsResponse(
@@ -57,7 +71,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
     {
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
 
         SaveResult result = await plugin.Settings.SaveAsync(settings, ct);
@@ -93,7 +107,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
     {
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
 
         Settings settings = await plugin.Settings.LoadAsync(ct);
@@ -147,7 +161,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
     {
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
 
         await plugin.Settings.SetSecretAsync(request.Key, request.Value, ct);
@@ -160,7 +174,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
     {
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
 
         await plugin.Settings.ForgetSecretAsync(key, ct);
@@ -184,7 +198,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
 
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
 
         return plugin.StartRun()
@@ -204,7 +218,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
     {
         if (Live is not TorrentDownloaderPlugin plugin)
         {
-            return NotFound();
+            return NotFound(Unreachable);
         }
 
         return plugin.StopRun()

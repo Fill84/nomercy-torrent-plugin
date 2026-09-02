@@ -258,11 +258,26 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-11` The plugin cannot hold the server up
 - [x] `S11-12` A removed torrent takes its own files and nobody else's
 - [x] `S11-13` The profile is applied to names before an indexer is asked
+- [x] `S11-14` A refusal says which refusal it is
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-14` A refusal says which refusal it is.** The owner's *Run now* answered 404 and it took the
+  best part of a day to establish which of three things had happened, because from outside they are
+  the same answer: the route was never registered, the plugin is not loaded, or the plugin is loaded
+  and is a different type to the runtime than the endpoint was compiled against. Every endpoint
+  answered `NotFound()` with no body, and an empty 404 is exactly what a missing route looks like.
+  The third is the one nobody guesses and it fits what the owner saw: a plugin updated while the
+  server runs is staged beside the old copy rather than over it (media-server #29), and a type from
+  one load context is not the same type as the identically named one from another — so `as` answers
+  null against an instance sitting right there, and a restart settles it. Which is why it worked
+  again afterwards.
+  All thirteen refusals across both controllers now carry the reason, and the third names both types
+  and says to restart. **What the 404 was is still not proven** — the server logs no requests, so
+  there is nothing to read — but the next one will say so itself.
 
 - **`S11-13` Stage 3 of the architecture was never built.** `docs/03-architecture.md` has laid out
   five stages since the first sprint: harvest, resolve, **judge the name**, find, judge the copy. The

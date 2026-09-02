@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Controllers;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using NoMercy.Plugins.Abstractions;
 using NoMercy.Plugins.Mvc;
 using Xunit;
 
@@ -201,6 +202,86 @@ public class SettingsControllerTests
     /// The controller as the host builds one: from the server's container, on a
     /// request, on the route that says which plugin was asked for.
     /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A refusal says which refusal it is.</strong> Every endpoint here
+    /// answered <c>NotFound()</c> with no body when it could not reach the
+    /// plugin, and an empty 404 is exactly what a route that was never
+    /// registered looks like. The owner's <em>Run now</em> answered 404 on
+    /// 1 September 2026 and it took most of a day to establish which of three
+    /// things it was, because from outside they are the same answer.
+    /// </para>
+    /// <para>
+    /// This is the one the server is installed but not running: nothing holds an
+    /// instance for that id.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AnEndpointThatCannotReachThePluginSaysItIsNotLoaded()
+    {
+        // Asked under an id nothing answers for, which is what an unloaded
+        // plugin looks like to a controller.
+        SettingsController controller = new SettingsController(new LoadedPlugins(Initialised()))
+            .On(Ulid.NewUlid());
+
+        NotFoundObjectResult refused = Assert.IsType<NotFoundObjectResult>(controller.Run(CancellationToken.None));
+
+        Assert.Contains("not loaded", refused.Value?.ToString() ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
+    /// And this is the one nobody guesses. A plugin updated while the server ran
+    /// is loaded beside the old copy rather than over it, so the instance the
+    /// server holds and the type this endpoint was compiled against are two
+    /// types to the runtime however identically they are spelled — and
+    /// <c>as</c> answers null against an instance sitting right there. The
+    /// refusal says so, and says that a restart settles it.
+    /// </remarks>
+    [Fact]
+    public void AnEndpointHoldingAPluginFromAnotherLoadContextSaysSo()
+    {
+        using Stranger stranger = new();
+
+        SettingsController controller = new SettingsController(new LoadedPlugins(stranger))
+            .On(stranger.Id);
+
+        NotFoundObjectResult refused = Assert.IsType<NotFoundObjectResult>(controller.Run(CancellationToken.None));
+
+        string said = refused.Value?.ToString() ?? string.Empty;
+
+        Assert.Contains("load context", said, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Restart", said, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A plugin of another type under the same id.
+    /// </summary>
+    /// <remarks>
+    /// Standing in for this plugin's own class loaded in a second context, which
+    /// is a different type to the runtime and cannot be built here on purpose.
+    /// What the endpoint sees is the same either way: an instance it holds and
+    /// cannot cast.
+    /// </remarks>
+    private sealed class Stranger : IPlugin
+    {
+        public string Name => "Something else";
+
+        public string Description => "Not this plugin, as far as the runtime is concerned.";
+
+        public Ulid Id { get; } = Ulid.NewUlid();
+
+        public Version Version => new(1, 0);
+
+        public void Initialize(IPluginContext context)
+        {
+            _ = context;
+        }
+
+        public void Dispose()
+        {
+        }
+    }
+
     private static SettingsController For(TorrentDownloaderPlugin plugin)
     {
         return new SettingsController(new LoadedPlugins(plugin)).On(plugin.Id);
