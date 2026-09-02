@@ -1873,7 +1873,9 @@ nothing left to read. The next one will say so itself.
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.
 
-- **South Park S15E12 is attached to the wrong episode.** Confirmed in the owner's own `media.db`:
+- **South Park S15E12 is attached to the wrong episode.** Written up in full for the media server as
+  `docs/issues/media-server-post-encode-registration.md`, with the two lines that cause it, the
+  duplicate that comes with it, and three fixes in order. Confirmed in the owner's own `media.db`:
   the `VideoFiles` row for `/South.Park.(1997)/South.Park.S15E12/South.Park.S15E12.1%.NoMercy.m3u8`
   names episode `153785` — season 0, "Chef Aid: Behind The Menu" — and there are two of it. Episode
   `153823`, the real S15E12, has none. The plugin dispatched the right id and the encoder wrote the
