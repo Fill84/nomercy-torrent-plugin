@@ -1,8 +1,8 @@
 # A finished encode is registered against whatever its filename parses to, not against the episode it was made for
 
 Raised from `nomercy-torrent-refactor-plugin`, 2 September 2026. Everything below was read out of the
-owner's own `media.db` and `run-*.jsonl` on `beast-unit`, against media-server **v0.1.481**. Line
-numbers are that tag.
+owner's own `media.db` and `run-*.jsonl` on `beast-unit`. Read against media-server **v0.1.482**;
+every file named below is byte-identical to `v0.1.481`, so the line numbers hold for both.
 
 **This repository is read-only to the plugin's author.** The issue is written so it can be handed
 back and carried out in one pass without touching anything else.
@@ -68,7 +68,7 @@ the registration throws both away and re-derives the episode from the name. For
 `South.Park.S15E12.1%.NoMercy.m3u8` the resolver lands on season 0 episode 12 rather than season 15
 episode 12 — the `1%` is the episode's own title and the resolver reads it as part of the numbering.
 
-`VideoEncodeJob.ScanEncodedOutputWithRetryAsync` (`VideoEncodeJob.cs:~1351`) is the caller. It already
+`VideoEncodeJob.ScanEncodedOutputWithRetryAsync` (`VideoEncodeJob.cs:1350`) is the caller. It already
 holds `mediaId` and a `filterFileName`, and passes the id straight into `FindFiles`, where it is used
 for folder resolution and nothing else.
 
@@ -82,13 +82,19 @@ for folder resolution and nothing else.
 01M1E0VFFQZ7HZCE1NX5HX17DJ | 153785 | South.Park.(1997)/South.Park.S15E12
 ```
 
-Same `Folder`, same `Filename`, same episode, one absolute host path and one relative. The unique
-index is doing its job; the value it is keyed on is not written consistently. There are two places
-that build it — `FileManager.Storage.cs:199` and `:435` — each doing
-`hostFolder.Replace("\\", "/")` over a `hostFolder` composed differently.
+Same `Folder`, same `Filename`, same episode. One host-absolute path with a doubled `TV.Shows`
+segment, one library-relative. The unique index is doing its job; the value it is keyed on is not
+stable.
 
-Note also the doubled `TV.Shows/TV.Shows` in the first value, which looks like a third, smaller
-path-composition fault in whatever produced it.
+Both rows are written by the same line — `FileManager.Storage.cs:199`,
+`HostFolder = hostFolder.Replace("\\", "/")` — on two separate runs. `hostFolder` is derived at
+`:135` as `itemPath.Replace(fileName, "")`, over an `itemPath` that `:131` has just put through
+`StoragePathHelpers.RebaseToFolderRoot(itemPath, folder.Path)`. So the value depends on what the
+rebase produced that time, and it produced two different things for one file. `Folder` — `baseFolder`
+at `:140`, anchored on the show's own folder name — was stable across both runs; only `HostFolder`
+moved.
+
+The doubled `TV.Shows/TV.Shows` in the first value is the tell: that rebase misfired at least once.
 
 ## Three fixes, in order of what they are worth
 
@@ -113,9 +119,13 @@ already on the owner's disk — and assert the `VideoFiles` row carries the disp
 
 ### 2. Make `HostFolder` one value, so the unique index can do its work
 
-- One canonical form, written by both call sites: pick either the host-absolute path or the
-  library-relative one, and normalise at the single point where the row is built rather than at each
-  site.
+- One canonical form. `hostFolder` at `FileManager.Storage.cs:135` is whatever
+  `RebaseToFolderRoot` left behind that run; normalise it once, there, to one shape — either
+  host-absolute or library-relative, but the same one every time — so `:199` cannot write two
+  spellings of one folder.
+- The doubled `TV.Shows/TV.Shows` says `RebaseToFolderRoot` itself can produce a path that has been
+  rebased twice. Worth a look while you are in there; it is the likeliest source of the second
+  spelling.
 - Then the existing `(Filename, HostFolder)` unique index prevents the second row on its own; no new
   index is needed, and adding one would not have helped, because the values genuinely differ.
 - Migration: the rows already written need normalising, or the unique index will keep tolerating the
