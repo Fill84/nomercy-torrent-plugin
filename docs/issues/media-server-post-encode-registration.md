@@ -1,5 +1,7 @@
 # A finished encode is registered against whatever its filename parses to, not against the episode it was made for
 
+**Filed as media-server [#38](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/38).**
+
 Raised from `nomercy-torrent-refactor-plugin`, 2 September 2026. Everything below was read out of the
 owner's own `media.db` and `run-*.jsonl` on `beast-unit`. Read against media-server **v0.1.482**;
 every file named below is byte-identical to `v0.1.481`, so the line numbers hold for both.
