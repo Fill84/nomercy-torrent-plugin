@@ -169,14 +169,30 @@ public static class Pages
     [
         new()
         {
-            // Dashboard, not library. The section is what the server turns into
-            // the address the client links to, and the plugin never learns its
-            // own prefix — mounted under library, the cog in the dashboard's own
-            // plugin list opened this at /plugins/… while the title beside it
-            // went to /dashboard/plugins/…: two addresses for one plugin, from
-            // one row. It is also what the word means, since settings is where a
-            // plugin is set up and this is where it works.
+            // The section is what the server turns into the address the client
+            // links to, and the plugin never learns its own prefix. Dashboard is
+            // what the word means: server administration beside the other
+            // owner-only panels, where settings is where a plugin is set up
+            // rather than where it works.
             Section = PluginUiSection.Dashboard,
+            Label = PluginIdentity.Name,
+            Icon = "download",
+            Route = DashboardRoute,
+        },
+        new()
+        {
+            // And beside the libraries, because that is where the owner goes
+            // looking for what fills them. Asked for on 2 September 2026, after
+            // the entry that used to be here was taken away.
+            //
+            // **It was taken away for a reason, and the reason still stands.**
+            // Mounted under library *instead of* dashboard, the cog beside this
+            // plugin in the dashboard's own list opened it at /plugins/… while
+            // the title beside it went to /dashboard/plugins/… — two addresses
+            // for one plugin, from one row, and only one of them the page the
+            // owner was already on. Both mounts is what keeps that from coming
+            // back: the dashboard's own list still finds its dashboard page.
+            Section = PluginUiSection.Library,
             Label = PluginIdentity.Name,
             Icon = "download",
             Route = DashboardRoute,

@@ -259,11 +259,25 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-12` A removed torrent takes its own files and nobody else's
 - [x] `S11-13` The profile is applied to names before an indexer is asked
 - [x] `S11-14` A refusal says which refusal it is
+- [x] `S11-15` The plugin is beside the libraries as well as on the dashboard
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-15` The plugin is beside the libraries again, as well as on the dashboard.** Asked for by the
+  owner, who remembered a sidebar button that had gone. Three addresses were in question and each has
+  its own answer: `/plugins/{id}` works because the client keeps a deliberate top-level `PluginHost`
+  route; `/dashboard/plugins/{id}` works because the plugin mounts under `dashboard`;
+  `/libraries/plugins/{id}` can never work, because the section is `library` — the client registers
+  exactly `music`, `video`, `library`, `dashboard`, `settings`, all singular.
+  The library mount had been removed on purpose and the reason still stands, so it is added rather
+  than moved: mounted under `library` *instead of* `dashboard`, the cog beside this plugin in the
+  dashboard's own list opened it at `/plugins/…` while the title beside it went to
+  `/dashboard/plugins/…` — two addresses for one plugin from one row. Keeping both mounts is what
+  stops that returning. Two pages are mounted, in three sections; the test that counted entries now
+  states that rule instead, which is why it failed on this change.
 
 - **`S11-14` A refusal says which refusal it is.** The owner's *Run now* answered 404 and it took the
   best part of a day to establish which of three things had happened, because from outside they are

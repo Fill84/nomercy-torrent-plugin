@@ -113,11 +113,26 @@ public class ManifestTests
     /// </para>
     /// </remarks>
     [Fact]
-    public void ThePluginsOwnPageIsMountedOnTheDashboard()
+    public void ThePluginsOwnPageIsMountedOnTheDashboardAndBesideTheLibraries()
     {
-        PluginNavEntry own = Pages.NavEntries.First(entry => entry.Route == Pages.DashboardRoute);
+        string[] sections =
+        [
+            .. Pages.NavEntries
+                .Where(entry => entry.Route == Pages.DashboardRoute)
+                .Select(entry => entry.Section),
+        ];
 
-        Assert.Equal(PluginUiSection.Dashboard, own.Section);
+        // Both, and the dashboard one is what keeps the cog and the title in
+        // the dashboard's own plugin list pointing at one address.
+        Assert.Contains(PluginUiSection.Dashboard, sections);
+        Assert.Contains(PluginUiSection.Library, sections);
+
+        // And only sections every client is expected to render: an unknown one
+        // is not an error, it is quietly demoted to the add-ons page, where
+        // nobody would think to look for it.
+        Assert.All(
+            Pages.NavEntries,
+            entry => Assert.Contains(entry.Section, PluginUiSection.All));
     }
 
     /// <remarks>

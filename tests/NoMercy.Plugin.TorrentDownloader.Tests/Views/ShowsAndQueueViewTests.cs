@@ -146,8 +146,11 @@ public class ShowsAndQueueViewTests : IDisposable
 
     /// <remarks>
     /// Shows and Queue are reached from the dashboard, not from navigation. The
-    /// route table says they exist and which shell each wants; the two mounts
-    /// stay exactly the two the manifest declares.
+    /// route table says they exist and which shell each wants, and only two of
+    /// the eight pages are ever mounted: the plugin's own page and its settings.
+    /// Which sections those two are placed in is the manifest's business and
+    /// changes — this counted the entries instead, and said so by failing when
+    /// the plugin was put beside the libraries as well as on the dashboard.
     /// </remarks>
     [Fact]
     public void EveryPageIsDeclaredAndOnlyTwoAreMounted()
@@ -167,7 +170,11 @@ public class ShowsAndQueueViewTests : IDisposable
         Assert.Equal(PluginLayout.Wide, shows.Route.Layout);
         Assert.Equal(PluginLayout.Wide, settings.Route.Layout);
         Assert.Null(plugin.Routes.Resolve("/no-such-page"));
-        Assert.Equal(2, plugin.NavEntries.Count);
+
+        // Two pages, however many sections they are placed in.
+        Assert.Equal(
+            [Pages.DashboardRoute, Pages.SettingsRoute],
+            plugin.NavEntries.Select(entry => entry.Route).Distinct().Order());
     }
 
     private static IReadOnlyList<string> RowsOf(PluginView page, string tableId)
