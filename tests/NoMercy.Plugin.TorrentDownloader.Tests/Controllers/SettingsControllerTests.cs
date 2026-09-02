@@ -60,6 +60,38 @@ public class SettingsControllerTests
 
     /// <remarks>
     /// <para>
+    /// <strong>The only way a stored passkey comes back off the server.</strong>
+    /// The endpoint has no caller in this repository — the settings page sets a
+    /// secret and never clears one — so a sweep for dead code lands on it, and
+    /// deleting it would leave an owner who has pasted the wrong tracker passkey
+    /// with no way to take it back short of editing the store by hand.
+    /// </para>
+    /// <para>
+    /// It is reached over HTTP and nowhere else, which is exactly what makes it
+    /// look dead from inside. This is what says it is not.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASecretTheOwnerForgetsIsGoneFromTheSettingsResponse()
+    {
+        TorrentDownloaderPlugin plugin = Initialised();
+        SettingsController controller = For(plugin);
+
+        await controller.SetSecret(
+            new(SettingsStore.IndexerApiKey("own-1"), "hunter2"),
+            CancellationToken.None);
+
+        await controller.ForgetSecret(SettingsStore.IndexerApiKey("own-1"), CancellationToken.None);
+
+        OkObjectResult result = Assert.IsType<OkObjectResult>(await controller.Get(CancellationToken.None));
+        PluginDataResponse<SettingsResponse> response =
+            Assert.IsType<PluginDataResponse<SettingsResponse>>(result.Value);
+
+        Assert.DoesNotContain(SettingsStore.IndexerApiKey("own-1"), response.Data!.SecretsSet);
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>F1.</strong> 0.3.4 awaited the cycle inside the HTTP request, so
     /// it ran on the caller's cancellation token: a browser tab closed after
     /// half an hour threw away twenty-nine minutes of work. The cycle belongs

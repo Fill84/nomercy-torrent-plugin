@@ -26,9 +26,6 @@ public sealed class Browser(
     private IBrowserProcess? _process;
     private bool _disposed;
 
-    /// <summary>The stage it is on, once it has started. For the journal.</summary>
-    public string? StageName => _stage?.Name;
-
     /// <summary>
     /// Starts the browser, or answers the one already running.
     /// </summary>

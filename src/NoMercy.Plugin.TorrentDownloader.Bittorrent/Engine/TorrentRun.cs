@@ -1545,38 +1545,4 @@ public sealed class TorrentRun : IDisposable
 
         return stored.Trust(torrent, onDisk);
     }
-
-    /// <summary>
-    /// What to write down about this torrent, or nothing while there is nothing
-    /// worth writing.
-    /// </summary>
-    /// <remarks>
-    /// A torrent with no metadata has no piece count and nothing verified, and
-    /// a resume file for it would be a claim about a torrent nobody can
-    /// describe.
-    /// </remarks>
-    public ResumeData? ResumePoint()
-    {
-        lock (_lock)
-        {
-            if (_session is null || _torrent is null || _disk is null)
-            {
-                return null;
-            }
-
-            SessionProgress progress = _session.Progress();
-
-            return new(
-                _torrent.InfoHash,
-                _session.Verified,
-                progress.Uploaded,
-                progress.Downloaded,
-                [
-                    .. _torrent.Files
-                        .Select(file => new FileInfo(_disk.PathOf(file)))
-                        .Where(one => one.Exists)
-                        .Zip(_torrent.Files, (one, file) => new ResumeFile(file.Path, one.Length, one.LastWriteTimeUtc)),
-                ]);
-        }
-    }
 }

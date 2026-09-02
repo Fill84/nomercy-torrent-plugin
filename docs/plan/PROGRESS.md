@@ -261,11 +261,26 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-14` A refusal says which refusal it is
 - [x] `S11-15` The plugin is beside the libraries as well as on the dashboard
 - [x] `S11-16` A fresh torrent does not hash its own empty files
+- [x] `S11-17` No dead code, and no dead lookalike of a live method
 - [ ] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-17` The dead code is gone, and what only looked dead is now proved alive.**
+  `TorrentRun.ResumePoint` was a near-copy of `Resuming` that nothing called and that was wrong:
+  it filtered the files that do not exist out of the sizes and then zipped what survived against the
+  *unfiltered* file list, so file one was written down with file two's length and modification time.
+  A resume built from it would be distrusted on the next start and the whole torrent hashed again —
+  the same cost as `S11-16`, from the other end. It was one keystroke from being the live one.
+  Also removed: `ISourceReader.ByName`, whose comment claimed a test used it and no test did;
+  `ResumeKeeper.LastWritten`; `Browser.StageName`, whose comment said "for the journal" and which
+  the journal never read. **Kept, with reasons:** the Win32 struct fields in `DiesWithTheServer` and
+  `WindowsDesktopStage` are layout, not code — the API reads them by offset; `RegisterServices` is
+  an `IPlugin` member the host calls; and `SettingsController.ForgetSecret` is an HTTP route, the
+  only way an owner takes a mistyped tracker passkey back off the server. That last one now has a
+  test, because *reached only over HTTP* is precisely what makes something look dead from inside.
 
 - **`S11-16` A fresh torrent hashed its own empty files before it could ask anybody for a byte.**
   Found by watching the owner add a 45 GB Rings of Power pack: it sat at *fetching metadata* for

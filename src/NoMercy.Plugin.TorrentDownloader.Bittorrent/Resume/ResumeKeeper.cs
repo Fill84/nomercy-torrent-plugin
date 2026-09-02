@@ -23,9 +23,6 @@ public sealed class ResumeKeeper(string folder, TimeSpan interval, TimeProvider 
     /// <summary>Where the files live.</summary>
     public string Folder => folder;
 
-    /// <summary>When it last wrote, or null before it has.</summary>
-    public DateTimeOffset? LastWritten => _last == DateTimeOffset.MinValue ? null : _last;
-
     /// <summary>Writes if the interval has passed, and says whether it did.</summary>
     public bool Tick(IEnumerable<ResumeData> torrents)
     {

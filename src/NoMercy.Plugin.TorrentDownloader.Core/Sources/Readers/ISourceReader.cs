@@ -67,9 +67,6 @@ public sealed class Readers
             new TorznabReader());
     }
 
-    /// <summary>Every reader by name, for the test that keeps the catalogue honest.</summary>
-    public IReadOnlyDictionary<string, ISourceReader> ByName => _byName;
-
     /// <summary>
     /// The reader for <paramref name="name"/>, or null when nothing answers to
     /// it.

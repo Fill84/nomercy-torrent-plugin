@@ -1901,6 +1901,44 @@ what turned it from a hang into a slow start — and is what made it possible to
 **Done when** a torrent with nothing on disk opens its session without reading a byte of its own
 files. Read first: `docs/plan/PROGRESS.md` § Log, `S11-11`.
 
+## S11-17 · No dead code, and no dead lookalike of a live method
+
+Found while reading `TorrentRun` for `S11-16`. Two near-identical methods sit next to each other:
+
+```csharp
+public ResumeData? Resuming()    // called twice from BittorrentEngine. Correct.
+public ResumeData? ResumePoint() // called by nothing. Wrong.
+```
+
+`ResumePoint` filters the files that are not on disk out of the `FileInfo` sequence and then zips
+what is left against the **unfiltered** `_torrent.Files`, so with file one missing, file one is
+written down carrying file two's length and modification time. `Trust` compares those against the
+files as they are, finds they do not match and takes every piece covering them back to unverified —
+a whole torrent hashed again on the next start. That is `S11-16`'s cost arriving by another road,
+and the only thing keeping it away was that nobody called it.
+
+A sweep for anything else in the same state, over every member and every type in `src/`:
+
+1. Removed: `ResumePoint`; `ISourceReader.ByName`, documented as being "for the test that keeps the
+   catalogue honest" when no test named it; `ResumeKeeper.LastWritten`; `Browser.StageName`,
+   documented as "for the journal" and never read by it. A comment claiming a caller is not a
+   caller.
+2. Kept as layout: the fields of `JOBOBJECT_*` in `DiesWithTheServer` and `STARTUPINFO` in
+   `WindowsDesktopStage`. Win32 reads them by offset; removing an unreferenced one moves every field
+   after it and corrupts the call. They are declarations of a shape, not code.
+3. Kept as the host's: `RegisterServices` is on `IPlugin` — `docs/reference/plugin-abi-0.1.479.txt`
+   line 122 — and the server calls it.
+4. Kept and now tested: `SettingsController.ForgetSecret`, `[HttpDelete("settings/secrets/{key}")]`.
+   No page in this repository calls it, which is what puts it on the list, and it is the only way an
+   owner takes a mistyped tracker passkey back off the server without opening the store by hand.
+   Something reached only over HTTP looks dead from inside; a test is what tells the two apart.
+
+No unreferenced types anywhere. Private dead members cannot survive the build: it runs
+`-warnaserror`.
+
+**Done when** every member in `src/` is either reached, or is a shape something outside this
+repository reads. Read first: `docs/plan/PROGRESS.md` § Log, `S11-16`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.
