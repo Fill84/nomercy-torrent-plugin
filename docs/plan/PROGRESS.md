@@ -4,8 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Current: `S11-05`, and it is the owner's.** Sprint 11 is the five things standing between this build and the first
-end-to-end run watched on the owner's own server. `docs/plan/SPRINTS.md` § Sprint 11 opens with a
+**Current: nothing. Sprint 11 is finished.** Every slice is ticked, and `S11-05` — the end-to-end
+run watched on the owner's own server — was a forty-five gigabyte pack for a show the owner did not
+have, which went from a pasted magnet to eight episodes in the library with nobody pressing
+anything. What is left is not this repository's: media-server #38, and a version and a tag, which
+are the owner's to give. `docs/plan/SPRINTS.md` § Sprint 11 opens with a
 correction it is built on, and it is the one thing to read before starting: **the encode job does
 not add a show.** `PluginEncoder` puts `mediaId` straight into `VideoEncodeJob.Id`, and
 `GetFileMetaData` resolves that against `Movies.Id` or `Episodes.Id` and nothing else — so a show id
@@ -262,11 +265,27 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-15` The plugin is beside the libraries as well as on the dashboard
 - [x] `S11-16` A fresh torrent does not hash its own empty files
 - [x] `S11-17` No dead code, and no dead lookalike of a live method
-- [ ] `S11-05` One run, watched — the owner's
+- [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-05` The run was watched, and it was a forty-five gigabyte pack for a show the owner did not
+  have.** 2 September 2026, `beast-unit`, the Rings of Power season one pack pasted into the box by
+  hand. It went the whole way with nobody pressing anything, and every slice of this sprint is in it:
+  the grab was recorded `show_id=0, covers=[]` as a hand-added torrent is; on finishing, its file
+  names were read, no show of the owner's matched, `SearchTvAsync` found 84773 and
+  `DispatchJob<ShowImportJob>` asked for it once — not once a minute; the tick after the import landed
+  took it on as an ordinary grab; eight files staged in episode order; eight encode jobs, each tagged
+  with its own episode:
+  `84773x1x1:d1cd4c…  84773x1x2:3ead22…  …  84773x1x8:22ffbe…`; and `Episodes` now holds exactly one
+  `VideoFile` for each of season one's eight — not two, not none, and nothing under season 0.
+  Then the plugin carried on by itself and began filling season two, which is what an imported show
+  becoming an ordinary tracked show is supposed to look like. The pack's folder is gone from
+  `D:	orrent-downloads`; the "could not be deleted yet" line against a just-finished file is the
+  client still holding its own handles, is documented in `Stager.Removed`, and the sweep that follows
+  clears it.
 
 - **`S11-17` The dead code is gone, and what only looked dead is now proved alive.**
   `TorrentRun.ResumePoint` was a near-copy of `Resuming` that nothing called and that was wrong:
