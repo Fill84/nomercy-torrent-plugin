@@ -1977,6 +1977,30 @@ no trackers announces to nothing, which is why nothing failed and nothing was lo
 **Done when** a torrent whose magnet names no tracker announces, after a restart, to a tracker it
 learned before it. Read first: `docs/06-torrent-client.md` § Announcing.
 
+## S11-19 · The Downloads page says what has arrived, not only what is verified
+
+A piece counts when it is whole and hashes right. Rings of Power S02E06 has 8 MiB pieces; the swarm
+was giving four kilobytes a second, which is half an hour per piece, and blocks arrive spread across
+several pieces at once. So the page read
+
+```
+downloading   0% of 2.7 GB   0 B/s ↓
+```
+
+and it was true — nought of three hundred and forty-three pieces verified — while 8.7 MB had come in
+and the session held it as `Downloaded`. The owner asked twice why it was not downloading.
+
+1. `TorrentStatus` gains `Arrived`, filled from `RunProgress.Downloaded`.
+2. The progress cell appends `(8.3 MB in)` **only where `Arrived` is ahead of `BytesDone`**. A
+   torrent verifying as fast as it takes has nothing to add, and a second figure in every row is
+   clutter that hides the one row that needs it.
+
+Nothing else in that call was touched: `ErrorIsTheRelease` is passed by name so this carries only
+what it was asked to carry. See the Log for what that revealed.
+
+**Done when** a torrent with nothing verified and megabytes on disk says so on the page. Read first:
+`docs/08-ui.md` § Downloads.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

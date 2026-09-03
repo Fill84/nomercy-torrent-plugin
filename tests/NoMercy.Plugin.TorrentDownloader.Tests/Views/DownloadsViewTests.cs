@@ -240,4 +240,86 @@ public class DownloadsViewTests
     {
         return new(Hash, $"magnet:?xt=urn:btih:{Hash}", "Silo S03E06 1080p", GrabState.Grabbed);
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Nought per cent is not nothing arriving.</strong> A piece counts
+    /// when it is whole and hashes right, and a piece here is eight mebibytes.
+    /// Off a swarm giving four kilobytes a second that is half an hour per
+    /// piece, and the blocks come in spread across several at once — so a
+    /// torrent can take megabytes for hours and still be at nought verified,
+    /// truthfully.
+    /// </para>
+    /// <para>
+    /// The owner read <c>0% · 0 B/s</c> against Rings of Power S02E06 on
+    /// 3 September 2026 and asked, twice, why it was not downloading. It was:
+    /// 8.7 MB had arrived. The page knew — it is in the session as
+    /// <c>Downloaded</c> — and drew the one number that says nothing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ATorrentWithNothingVerifiedYetStillSaysWhatHasArrived()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "Silo S03E06 1080p",
+                    TorrentState.Downloading,
+                    BytesDone: 0,
+                    BytesTotal: 2_870_000_000,
+                    DownloadRateBytesPerSecond: 0,
+                    UploadRateBytesPerSecond: 0,
+                    Peers: 1,
+                    Seeds: 1,
+                    Ratio: 0,
+                    Eta: null,
+                    Error: null,
+                    Arrived: 8_700_000),
+                "D:\\incomplete"),
+        ]);
+
+        string row = string.Join(" ", Rendered.EveryValue(view));
+
+        Assert.Contains("0% of 2.7 GB", row, StringComparison.Ordinal);
+        Assert.Contains("8.3 MB in", row, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// And it is said only where it says something. A torrent whose bytes are
+    /// verified as fast as they land has nothing to add, and a second figure
+    /// beside the first in every row is clutter that makes the one row that
+    /// needs it harder to see.
+    /// </remarks>
+    [Fact]
+    public void ATorrentVerifyingEverythingThatArrivesDoesNotSayItTwice()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "Silo S03E06 1080p",
+                    TorrentState.Downloading,
+                    BytesDone: 2_000_000_000,
+                    BytesTotal: 4_000_000_000,
+                    DownloadRateBytesPerSecond: 5 * 1024 * 1024,
+                    UploadRateBytesPerSecond: 0,
+                    Peers: 24,
+                    Seeds: 9,
+                    Ratio: 0.35,
+                    Eta: null,
+                    Error: null,
+                    Arrived: 2_000_000_000),
+                "D:\\incomplete"),
+        ]);
+
+        string row = string.Join(" ", Rendered.EveryValue(view));
+
+        Assert.Contains("50% of 3.7 GB", row, StringComparison.Ordinal);
+        Assert.DoesNotContain(" in)", row, StringComparison.Ordinal);
+    }
 }

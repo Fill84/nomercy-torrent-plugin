@@ -265,9 +265,22 @@ public static class DownloadsView
             return Unknown;
         }
 
-        return string.Create(
+        string done = string.Create(
             CultureInfo.InvariantCulture,
             $"{transfer.BytesDone * 100.0 / total:0.#}% of {Bytes(total)}");
+
+        // A piece counts when it is whole and hashes right, and a piece is
+        // megabytes. Off a swarm giving kilobytes a second that is half an hour
+        // per piece, with blocks landing in several at once — so a torrent can
+        // take bytes for hours and be at nought per cent, truthfully. The owner
+        // read "0% of 2.7 GB" against a torrent with 8.7 MB in it and asked
+        // twice why it was not downloading.
+        //
+        // Only where the two differ. Said in every row it would be clutter, and
+        // clutter is what makes the one row that needs it hard to see.
+        return transfer.Arrived > transfer.BytesDone
+            ? $"{done} ({Bytes(transfer.Arrived)} in)"
+            : done;
     }
 
     private static string Rate(TorrentStatus? transfer)

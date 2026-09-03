@@ -111,6 +111,13 @@ public sealed record TorrentFile(string Path, long Length);
 /// nought is a dead release.
 /// </param>
 /// <param name="SwarmPeers">The same for the peers still downloading it.</param>
+/// <param name="Arrived">
+/// Bytes of pieces that have come in, whole or not. Ahead of
+/// <paramref name="BytesDone"/> while pieces are still being filled: a piece
+/// counts only once it is complete and hashes right, so a torrent taking
+/// megabytes off a slow swarm can sit at nought verified for hours and be
+/// telling the truth.
+/// </param>
 /// <param name="ErrorIsTheRelease">
 /// Whether <paramref name="Error"/> is a property of the release or of this
 /// moment. "There is no video file in it" is true of that torrent for ever and
@@ -136,7 +143,8 @@ public sealed record TorrentStatus(
     string? Error,
     int? SwarmSeeds = null,
     int? SwarmPeers = null,
-    bool ErrorIsTheRelease = false);
+    bool ErrorIsTheRelease = false,
+    long Arrived = 0);
 
 /// <summary>
 /// The torrent client, as the pipeline is allowed to see it.

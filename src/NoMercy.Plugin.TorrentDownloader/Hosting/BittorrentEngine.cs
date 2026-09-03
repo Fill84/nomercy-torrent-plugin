@@ -1237,7 +1237,12 @@ public sealed class BittorrentEngine(
             // nought out of nought is a dead release. One number cannot say
             // which, and the owner is reading it to decide whether to wait.
             held.Run.SwarmSeeds,
-            held.Run.SwarmPeers);
+            held.Run.SwarmPeers,
+
+            // Named, so this carries nothing it was not asked to carry:
+            // ErrorIsTheRelease is set on the Held and has never been passed
+            // here, which is its own fault and is not this one's to fix.
+            Arrived: progress.Downloaded);
     }
 
     /// <summary>Where one torrent stands, in the port's own words.</summary>

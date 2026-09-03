@@ -266,11 +266,27 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-16` A fresh torrent does not hash its own empty files
 - [x] `S11-17` No dead code, and no dead lookalike of a live method
 - [x] `S11-18` A torrent keeps the trackers it learned, across a restart
+- [x] `S11-19` The Downloads page says what has arrived, not only what is verified
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-19` Nought per cent is not nothing arriving.** A piece counts once it is whole and hashes
+  right, and a piece is megabytes; off a swarm giving kilobytes a second that is half an hour per
+  piece, with blocks landing in several at once. So a torrent takes bytes for hours and reads
+  `0% of 2.7 GB · 0 B/s`, truthfully, and looks stopped. The owner asked twice why Rings of Power
+  S02E06 was not downloading. It was: 8.7 MB had arrived, the session knew it as `Downloaded`, and
+  the page drew the one number that says nothing. `TorrentStatus.Arrived` carries it and the
+  progress cell adds `(8.3 MB in)` — **only where it is ahead of what is verified**, because said in
+  every row it is clutter and clutter hides the one row that needs it.
+- **Found while wiring that, not fixed, and it is the owner's call:** `Held.ErrorIsTheRelease` is set
+  at `BittorrentEngine.cs:1021` and has never been passed into the `TorrentStatus` that
+  `Transfers.cs:217` reads it from. It has therefore always been false, so **no torrent has ever been
+  refused for ever** — "there is no video file in it" is treated as being about tonight and comes
+  round again in six hours, the same as a swarm that did not answer. Connecting it is one argument;
+  it changes what gets blacklisted permanently, which is why it is not bundled here.
 
 - **`S11-18` A torrent keeps the trackers it learned, across a restart.**
   The trackers a torrent runs on are not the ones in its magnet: an indexer hands back a bare
