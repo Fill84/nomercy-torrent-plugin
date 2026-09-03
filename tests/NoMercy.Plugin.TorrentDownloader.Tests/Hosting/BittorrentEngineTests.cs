@@ -811,4 +811,143 @@ public class BittorrentEngineTests : IDisposable
 
         return engine;
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent keeps the trackers it learned, across a restart.</strong>
+    /// The trackers a torrent runs on are not the ones in its magnet. An indexer
+    /// hands back a bare <c>magnet:?xt=urn:btih:…&amp;dn=…</c> with no
+    /// <c>tr=</c> at all, and the fifty-nine this client ends up announcing to
+    /// are learned afterwards — off the torrent file, off the swarm. Only the
+    /// info dictionary was ever written down, so every restart handed the run
+    /// whatever the magnet said, which for such a torrent is nobody.
+    /// </para>
+    /// <para>
+    /// On 3 September 2026 that was Rings of Power S02E06 on the owner's server:
+    /// twenty-one of fifty-nine trackers answering before the restart, and after
+    /// it not one announce in thirty-six minutes — no error, nothing in the log,
+    /// because a client with no trackers has nobody to ask and nothing to say.
+    /// It ran on the DHT alone, found one peer, and took eight megabytes an hour
+    /// off a release that had come down at fourteen megabytes a second.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentKeepsTheTrackersItLearnedAcrossARestart()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-trackers-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            ResumeKeeper keeping = new(folder, TimeSpan.FromSeconds(1), TimeProvider.System);
+            byte[] file = Fixture("archive-multifile.torrent");
+            TorrentMetadata torrent = TorrentMetadata.Read(file);
+
+            keeping.Remember(torrent.InfoHash, Info(file));
+
+            // What the run before the restart wrote down: a tracker it had
+            // learned, which is in no magnet anybody holds.
+            keeping.Stop(
+            [
+                new ResumeData(torrent.InfoHash, new(torrent.PieceCount), 0, 0, [])
+                {
+                    Trackers = ["http://learned.invalid:6969/announce"],
+                },
+            ]);
+
+            RecordingTrackers trackers = new();
+
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                trackers,
+                new NoPeers(),
+                null,
+                keeping);
+
+            engine.Start();
+
+            // The magnet an indexer gives back: a hash, a name, and not one
+            // tracker.
+            await engine.AddAsync(
+                new(
+                    $"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever",
+                    [],
+                    folder,
+                    torrent.TotalLength),
+                CancellationToken.None);
+
+            await trackers.Asked.WaitAsync(TimeSpan.FromSeconds(20));
+
+            Assert.Contains(
+                trackers.Addresses,
+                address => address.Contains("learned.invalid", StringComparison.OrdinalIgnoreCase));
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>Trackers that answer nothing and write down who was asked.</summary>
+    /// <remarks>
+    /// Which trackers an announce goes to is the whole of what is under test,
+    /// and it is not on any status this engine offers. What the transport was
+    /// handed is.
+    /// </remarks>
+    private sealed class RecordingTrackers : ITrackerTransport
+    {
+        private readonly TaskCompletionSource _asked = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private readonly List<string> _addresses = [];
+        private readonly Lock _lock = new();
+
+        /// <summary>Completes the first time anything is really asked.</summary>
+        public Task Asked => _asked.Task;
+
+        /// <summary>Everything an announce was addressed to.</summary>
+        public IReadOnlyList<string> Addresses
+        {
+            get
+            {
+                lock (_lock)
+                {
+                    return [.. _addresses];
+                }
+            }
+        }
+
+        public Task<byte[]> GetAsync(Uri address, CancellationToken ct)
+        {
+            Note(address.OriginalString);
+
+            throw new HttpRequestException("nothing answered");
+        }
+
+        public Task<byte[]> ExchangeAsync(string host, int port, byte[] datagram, TimeSpan patience, CancellationToken ct)
+        {
+            Note($"{host}:{port}");
+
+            throw new TimeoutException($"{host}:{port} did not answer.");
+        }
+
+        private void Note(string address)
+        {
+            lock (_lock)
+            {
+                _addresses.Add(address);
+            }
+
+            _asked.TrySetResult();
+        }
+    }
 }

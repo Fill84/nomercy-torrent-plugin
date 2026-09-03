@@ -35,6 +35,19 @@ public sealed record ResumeData(
     long Downloaded,
     IReadOnlyList<ResumeFile> Files)
 {
+    /// <summary>
+    /// The trackers this torrent had learned when it was written down.
+    /// </summary>
+    /// <remarks>
+    /// Not the ones in its magnet. An indexer hands back a bare
+    /// <c>magnet:?xt=urn:btih:…&amp;dn=…</c> carrying no <c>tr=</c> at all, and
+    /// the trackers a torrent actually announces to are learned afterwards. Only
+    /// the info dictionary used to be written down, so a restart handed the run
+    /// whatever the magnet said — which for such a torrent is nobody, and a
+    /// client with nobody to ask announces to nothing and says nothing about it.
+    /// </remarks>
+    public IReadOnlyList<string> Trackers { get; init; } = [];
+
     /// <summary>What the file is called, per torrent.</summary>
     public static string FileName(string infoHash)
     {
@@ -51,6 +64,10 @@ public sealed record ResumeData(
             new("bitfield"u8.ToArray(), new BencodeBytes(Verified.Write())),
             new("uploaded"u8.ToArray(), new BencodeInteger(Uploaded)),
             new("downloaded"u8.ToArray(), new BencodeInteger(Downloaded)),
+            new("trackers"u8.ToArray(), new BencodeList(
+            [
+                .. Trackers.Select(one => new BencodeBytes(System.Text.Encoding.UTF8.GetBytes(one))),
+            ])),
             new("files"u8.ToArray(), new BencodeList(
             [
                 .. Files.Select(one => new BencodeDictionary(
@@ -108,7 +125,15 @@ public sealed record ResumeData(
             }
         }
 
-        return new(infoHash, verified, root.Number("uploaded") ?? 0, root.Number("downloaded") ?? 0, files);
+        return new(infoHash, verified, root.Number("uploaded") ?? 0, root.Number("downloaded") ?? 0, files)
+        {
+            Trackers =
+            [
+                .. (root["trackers"] as BencodeList)?.Items
+                    .OfType<BencodeBytes>()
+                    .Select(one => System.Text.Encoding.UTF8.GetString(one.Value)) ?? [],
+            ],
+        };
     }
 
     /// <summary>

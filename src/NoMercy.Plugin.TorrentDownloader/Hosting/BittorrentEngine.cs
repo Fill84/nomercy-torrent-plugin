@@ -304,13 +304,23 @@ public sealed class BittorrentEngine(
             // restart, and a swarm that has gone quiet cannot answer — so a
             // torrent already complete on disk is given up on for want of a
             // file list nobody had to ask for.
-            TorrentMetadata? known = torrent ?? Remembered(infoHash, trackers);
+            // Every tracker the run before this one had come to know. A magnet
+            // off an indexer names none, and the trackers a torrent actually
+            // announces to are learned after it is added — so without this a
+            // restart leaves it with nobody to ask, announcing to nothing and
+            // saying nothing about it, on the DHT alone. On 3 September 2026
+            // that was Rings of Power S02E06: twenty-one of fifty-nine trackers
+            // answering before the restart and not one announce in the thirty-six
+            // minutes after it.
+            IReadOnlyList<string> learned = resume?.Load(infoHash)?.Trackers ?? [];
+
+            TorrentMetadata? known = torrent ?? Remembered(infoHash, [.. trackers.Union(learned, StringComparer.OrdinalIgnoreCase)]);
 
             TorrentRun run = new(
                 Convert.FromHexString(infoHash),
 
                 // Everything anybody named for it, without duplicates.
-                [.. trackers.Union(request.Trackers, StringComparer.OrdinalIgnoreCase)],
+                [.. trackers.Union(request.Trackers, StringComparer.OrdinalIgnoreCase).Union(learned, StringComparer.OrdinalIgnoreCase)],
                 request.DownloadFolder,
                 new TrackerSet(transport, _time),
                 dialler,

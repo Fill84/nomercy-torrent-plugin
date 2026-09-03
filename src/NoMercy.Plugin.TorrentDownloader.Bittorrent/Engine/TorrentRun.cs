@@ -1504,7 +1504,13 @@ public sealed class TorrentRun : IDisposable
                         .Select(file => new FileInfo(_disk.PathOf(file)))
                         .Zip(_torrent.Files, (FileInfo now, TorrentFileEntry file) =>
                             new ResumeFile(file.Path, now.Exists ? now.Length : 0, now.Exists ? now.LastWriteTimeUtc : default)),
-                ]);
+                ])
+            {
+                // Every tracker this run has come to know, not the ones its
+                // magnet named. An indexer's magnet names none at all, and
+                // without this the next start hands the run nobody to ask.
+                Trackers = [.. _trackers],
+            };
         }
     }
 

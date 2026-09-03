@@ -1939,6 +1939,34 @@ No unreferenced types anywhere. Private dead members cannot survive the build: i
 **Done when** every member in `src/` is either reached, or is a shape something outside this
 repository reads. Read first: `docs/plan/PROGRESS.md` § Log, `S11-16`.
 
+## S11-18 · A torrent keeps the trackers it learned, across a restart
+
+Watched live. Rings of Power S02E06, before the restart:
+
+```
+21 of 59 trackers answered with 32 addresses; the swarm has 1 seeds and 2 peers
+```
+
+After it, in thirty-six minutes: no such line at all, no `Announcing failed`, no warning. The
+Downloads page stopped showing a swarm size and the download fell to a few kilobytes a second.
+
+The trackers a torrent announces to are **not** the ones in its magnet. That grab came off Torrentz2
+as `magnet:?xt=urn:btih:…&dn=…` with zero `tr=` parameters; the fifty-nine came afterwards. What is
+written down for a restart is the info dictionary alone — deliberately, because the info hash is
+taken over it and a tampered file must fail to hash — so `Remembered(infoHash, trackers)` rebuilt the
+metadata with whatever trackers the *caller* had, which on a re-add is the magnet's: none. A run with
+no trackers announces to nothing, which is why nothing failed and nothing was logged.
+
+1. `ResumeData` gains `Trackers`, written and read with the rest of the resume file. Not in the
+   `.info`: putting them there would stop it hashing to its own hash.
+2. `TorrentRun.Resuming` fills it from `_trackers` — what the run has come to know, not what it
+   started with.
+3. `BittorrentEngine.Take` reads them back and unions them into the run's list, alongside the
+   magnet's and the request's.
+
+**Done when** a torrent whose magnet names no tracker announces, after a restart, to a tracker it
+learned before it. Read first: `docs/06-torrent-client.md` § Announcing.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.
