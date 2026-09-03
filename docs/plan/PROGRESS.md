@@ -333,6 +333,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   Downloads page was right the whole time: it will not print a swarm size nobody told it, so the
   column that used to read "1 of 22" read "1". The trackers now travel in the resume file and are
   put back when the torrent is taken on again.
+  **Proved on the owner's server, 3 September 2026:** S02E06 was cancelled and grabbed again, and its
+  resume file came back carrying `trackers=59` where every earlier one carried none — `20 of 59
+  trackers answered with 425 addresses; the swarm has 52 seeds and 8 peers`, against the one seed and
+  four kilobytes a second it had crawled on with none. The swarm size is back on the page, which was
+  the symptom that started this.
 
 - **`S11-05` The run was watched, and it was a forty-five gigabyte pack for a show the owner did not
   have.** 2 September 2026, `beast-unit`, the Rings of Power season one pack pasted into the box by
