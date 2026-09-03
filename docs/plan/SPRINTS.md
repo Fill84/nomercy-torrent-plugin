@@ -2050,6 +2050,39 @@ makes what arrived a few bytes larger than what is verified. It is drawn only be
 **Done when** a torrent whose magnet names no tracker announces after being handed back. Read first:
 `docs/plan/PROGRESS.md` § Log, `S11-18`.
 
+## S11-23 · The cadence settings are the cadences the server registers
+
+The Settings page offers four — transfers, feed, search, maintenance — and refuses to save one that
+is not a cron. `Jobs` was this:
+
+```csharp
+public IReadOnlyList<PluginScheduledJob> Jobs { get; } =
+[
+    new(JobNames.Transfers, JobNames.TransfersCron),   // "* * * * *", always
+    ...
+];
+```
+
+A property initialiser over the constants. So the server registered `* * * * *` for transfers
+however the owner had it set, and all four fields were decoration.
+
+The owner found it from the other end: the dashboard announced the transfers tick every minute and
+they asked whether it could be turned down. The field for it existed and was ignored.
+
+1. `Jobs` reads the saved cadences, once, at startup. Not in `Initialize`, which touches no disk, and
+   not per read: the host asks while it is registering schedules and a cadence cannot change without
+   a restart anyway.
+2. Settings that cannot be read register the defaults and say so in the log, rather than registering
+   nothing and ticking nothing for ever.
+3. `CronExpression` — what a host with a single slot uses — follows the transfers cadence too.
+
+**The log line is not this plugin's.** "Torrent Downloader would poll configured clients for transfer
+progress" is in none of its three assemblies, in no log file on the owner's server, and in neither
+the media-server nor the app-web source. What this plugin controls is how often it is provoked.
+
+**Done when** the cadence the owner saved is the cadence the server is handed. Read first:
+`docs/04-domain.md` § Settings.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

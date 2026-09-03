@@ -106,27 +106,70 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// each of them separately. It names the fastest cadence so that a host
     /// with only the single slot still ticks the work that cannot wait.
     /// </summary>
-    public string CronExpression => JobNames.TransfersCron;
+    public string CronExpression => Jobs.First(job => job.Name == JobNames.Transfers).CronExpression;
 
     /// <summary>
-    /// All four, from the first version, though only some of them do anything
-    /// yet.
+    /// All four, at whatever the owner has them set to.
     /// </summary>
     /// <remarks>
-    /// Cadences are registered once, when the server starts. A job added to
-    /// this list in a later slice does not begin ticking when it is
-    /// implemented; it waits for the next restart. Declaring all four now costs
-    /// nothing and saves a restart nobody would connect to the cause.
-    /// The expressions are the defaults from docs/04-domain.md § Settings;
-    /// S0-05 lets the owner change them.
+    /// <para>
+    /// Cadences are registered once, when the server starts, so a change takes
+    /// effect on the next restart. A job added to this list in a later slice
+    /// does not begin ticking when it is implemented either; declaring all four
+    /// from the first version costs nothing and saves a restart nobody would
+    /// connect to the cause.
+    /// </para>
+    /// <para>
+    /// <strong>These used to be the constants in <c>JobNames</c>, so the four
+    /// cadence fields on the Settings page were decoration.</strong> The page
+    /// offers them and checks what is typed against a cron parser before it
+    /// will save it, and the server was handed <c>* * * * *</c> for transfers
+    /// regardless. The owner found it from the other end on 3 September 2026:
+    /// the dashboard announced the transfers tick every minute and they asked
+    /// whether it could be turned down. The field for it was already there and
+    /// already ignored.
+    /// </para>
     /// </remarks>
-    public IReadOnlyList<PluginScheduledJob> Jobs { get; } =
-    [
-        new(JobNames.Transfers, JobNames.TransfersCron),
-        new(JobNames.Feed, JobNames.FeedCron),
-        new(JobNames.Search, JobNames.SearchCron),
-        new(JobNames.Maintenance, JobNames.MaintenanceCron),
-    ];
+    public IReadOnlyList<PluginScheduledJob> Jobs => _jobs ??= Scheduled();
+
+    private IReadOnlyList<PluginScheduledJob>? _jobs;
+
+    /// <summary>The four cadences, from the owner's settings.</summary>
+    /// <remarks>
+    /// Read here rather than in <see cref="Initialize"/>, which touches no
+    /// disk, and once rather than per read: the host asks for this while it is
+    /// registering schedules, and a cadence cannot change without a restart
+    /// anyway. Blocking is a local JSON file, once, at startup.
+    /// </remarks>
+    private IReadOnlyList<PluginScheduledJob> Scheduled()
+    {
+        Cadences cadences = new();
+
+        try
+        {
+            if (_settings is not null)
+            {
+                cadences = _settings.LoadAsync(CancellationToken.None).GetAwaiter().GetResult().Cadences;
+            }
+        }
+        catch (Exception unreadable) when (unreadable is not OperationCanceledException)
+        {
+            // The defaults, and the server still schedules. Settings this
+            // plugin cannot read is a thing to say out loud on the pages, not a
+            // reason to register no cadence at all and tick nothing for ever.
+            _context?.Logger.LogWarning(
+                "The saved cadences could not be read, so the defaults are registered: {Reason}",
+                unreadable.Message);
+        }
+
+        return
+        [
+            new(JobNames.Transfers, cadences.Transfers),
+            new(JobNames.Feed, cadences.Feed),
+            new(JobNames.Search, cadences.Search),
+            new(JobNames.Maintenance, cadences.Maintenance),
+        ];
+    }
 
     public IReadOnlyList<PluginNavEntry> NavEntries => Pages.NavEntries;
 

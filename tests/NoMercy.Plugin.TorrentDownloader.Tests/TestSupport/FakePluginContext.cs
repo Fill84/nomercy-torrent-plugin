@@ -38,7 +38,12 @@ public sealed class FakePluginContext : IPluginContext
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
 
     /// <summary>The settings blob, as JSON, so a test can ask what reached it.</summary>
-    public FakeConfiguration Config { get; } = new();
+    /// <remarks>
+    /// Settable, so a second context can be given the first one's: a plugin
+    /// built over configuration that already exists is what a restart is, and
+    /// a cadence is read at startup and nowhere else.
+    /// </remarks>
+    public FakeConfiguration Config { get; init; } = new();
 
     public IPluginConfiguration Configuration => Config;
 

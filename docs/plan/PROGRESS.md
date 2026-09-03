@@ -270,11 +270,25 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-20` A refusal about the torrent reaches the thing that acts on it
 - [x] `S11-21` A port nobody could map is not a port that is shut
 - [x] `S11-22` A torrent handed back to the client keeps its trackers
+- [x] `S11-23` The cadence settings are the cadences the server registers
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-23` The four cadence fields on the Settings page were decoration.** They are offered, and
+  what is typed is checked against a cron parser before it will save — and `Jobs` was a property
+  initialiser over the constants in `JobNames`, so the server was handed `* * * * *` for transfers
+  whatever the owner had saved. Found from the other end: the dashboard announced the transfers tick
+  every single minute and the owner asked whether it could be turned down. The field for it was
+  already there and already ignored. `Jobs` now reads the saved cadences, once, at startup — which is
+  when the server registers a schedule, so a change takes effect on the next restart as it always
+  said it did. `CronExpression`, for a host with only one slot, follows the transfers cadence too.
+  **The log line itself is not this plugin's**: "Torrent Downloader would poll configured clients for
+  transfer progress" appears in none of its three assemblies, in no log file on the owner's server,
+  and in neither the media-server nor app-web source. What this plugin controls is how often it is
+  provoked.
 
 - **`S11-22` A torrent handed back to the client came back with no trackers, and `S11-18` did not
   cover it.** The trackers a torrent runs on are given to it on the first grab — the indexer's row

@@ -206,4 +206,57 @@ public class TorrentDownloaderPluginTests
 
         Assert.True(lifetime.IsCancellationRequested);
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The cadence settings did nothing at all.</strong> The Settings
+    /// page offers all four — transfers, feed, search, maintenance — and checks
+    /// what is typed against a cron parser before it will save it, and
+    /// <c>Jobs</c> was a property initialiser over the constants in
+    /// <c>JobNames</c>. So the server was handed <c>* * * * *</c> for transfers
+    /// whatever the owner had saved, and the four fields on that page were
+    /// decoration.
+    /// </para>
+    /// <para>
+    /// The owner found it from the other end, on 3 September 2026: the
+    /// dashboard announced the transfers tick every single minute and they
+    /// asked whether it could be turned down. The field for it was already
+    /// there and already ignored.
+    /// </para>
+    /// <para>
+    /// Read once, at startup, because that is when the server registers a
+    /// cadence — a change takes effect on the next restart, which is what
+    /// <c>Jobs</c> has always said.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheCadencesTheOwnerSavedAreTheCadencesTheServerIsGiven()
+    {
+        FakePluginContext host = new();
+
+        using TorrentDownloaderPlugin plugin = new();
+        plugin.Initialize(host);
+
+        Settings settings = await plugin.Settings.LoadAsync(CancellationToken.None);
+        settings.IncompleteFolder = Path.GetTempPath();
+        settings.IntakeFolder = Path.GetTempPath();
+        settings.Cadences.Transfers = "*/5 * * * *";
+        settings.Cadences.Feed = "*/30 * * * *";
+
+        SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+
+        Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+
+        // A second plugin over the same configuration, which is what the next
+        // start is.
+        using TorrentDownloaderPlugin restarted = new();
+        restarted.Initialize(new FakePluginContext { Config = host.Config });
+
+        Assert.Equal(
+            "*/5 * * * *",
+            restarted.Jobs.Single(job => job.Name == JobNames.Transfers).CronExpression);
+        Assert.Equal(
+            "*/30 * * * *",
+            restarted.Jobs.Single(job => job.Name == JobNames.Feed).CronExpression);
+    }
 }
