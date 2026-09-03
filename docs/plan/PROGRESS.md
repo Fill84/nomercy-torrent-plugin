@@ -269,12 +269,25 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-19` The Downloads page says what has arrived, not only what is verified
 - [x] `S11-20` A refusal about the torrent reaches the thing that acts on it
 - [x] `S11-21` A port nobody could map is not a port that is shut
-- [x] `S11-21` A port nobody could map is not a port that is shut
+- [x] `S11-22` A torrent handed back to the client keeps its trackers
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-22` A torrent handed back to the client came back with no trackers, and `S11-18` did not
+  cover it.** The trackers a torrent runs on are given to it on the first grab — the indexer's row
+  plus the owner's own list, by `Grab.TakeAsync`. `Transfers.AddAgainAsync`, which hands back a
+  torrent the client has lost, passed `[]`. So a torrent whose magnet carries no `tr=` — which is
+  what an indexer hands back — came back with nobody to announce to, for as long as it lived.
+  Dark Matter S02E02 on the owner's server, 3 September 2026: **one** announce line when it was first
+  grabbed, none after, `trackers=0` in its resume and no swarm size on the page, while Rings of Power
+  beside it announced every interval because its magnet happened to carry twenty-one. `S11-18` was
+  proved on exactly that torrent, which is how this got past it: **the case the fix was for was the
+  case the proof did not cover.** Also here: `S11-19`'s arrived-bytes clause showed on finished
+  torrents — `100% of 2.7 GB (2.7 GB in)` — because re-requesting a block that failed its hash makes
+  what arrived a few bytes larger than what is verified. It is drawn only below completion now.
 
 - **`S11-21` UPnP failing does not mean the port is shut, and the page said it did.**
   The owner's ports are forwarded on the router — **51413 to `beast-unit`, 51414 to their own
@@ -285,17 +298,6 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   it knows: the automatic mapping failed, and if the port is already forwarded there is nothing to
   do. And it can tell — `BittorrentEngine.Reached` is set the moment a peer arrives on the listening
   socket, which is proof the port is open and the only proof there is. Once one has, the notice goes.
-
-- **`S11-21` UPnP failing does not mean the port is shut, and the page said it did.**
-  The owner's ports are forwarded on the router — **51413 to `beast-unit`, 51414 to their own
-  machine** — and have been for months. UPnP and NAT-PMP refusing says one thing only: the router
-  will not open a port *by itself*. The Settings page read "The router would not open port 51413.
-  Forward TCP and UDP 51413 to this machine by hand", which was the one wrong thing on an otherwise
-  honest page, and the log said `could not be opened` at warning level to match. The plugin now
-  reports what it knows: the automatic mapping failed, and if the port is already forwarded there is
-  nothing to do. And it can tell — `BittorrentEngine.Reached` is set the moment a peer arrives on the
-  listening socket, which is proof the port is open and the only proof there is. Once one has, the
-  notice goes away.
 
 - **`S11-20` A refusal about the torrent now reaches the thing that acts on it.** There are two
   kinds: "no peer sent its metadata within five minutes" is about one evening, and "there is no video

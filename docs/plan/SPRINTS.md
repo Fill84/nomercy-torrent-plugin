@@ -2021,6 +2021,35 @@ about the release.
 **Done when** a torrent refused for its own contents says so to the pipeline. Read first:
 `docs/06-torrent-client.md` § Refusing a release.
 
+## S11-22 · A torrent handed back to the client keeps its trackers
+
+`S11-18` made the trackers survive in the resume file, and was proved on Rings of Power S02E06 —
+whose magnet carries twenty-one `tr=` of its own. Dark Matter S02E02, grabbed the same minute, came
+back with none:
+
+```
+Rings S02E06   trackers=59      announced every interval
+Dark Matter    trackers=0       one announce, ever
+```
+
+Its magnet carries no `tr=` at all, which is what an indexer hands back. The trackers such a torrent
+runs on are given to it on the first grab, by `Grab.TakeAsync`, from the indexer's row and the
+owner's own list. `Transfers.AddAgainAsync` — the path that hands a torrent back to the client after
+it has been lost — passed an empty list, so the torrent came back with nobody to announce to.
+
+1. `TickAsync` takes the owner's tracker list and hands it to `AddAgainAsync`.
+2. `TorrentDownloaderPlugin` passes `settings.Client.DefaultTrackers`, the same list the first grab
+   uses.
+
+**The lesson is about the proof, not the code.** `S11-18` was demonstrated on the one torrent that
+did not need it. A fix proved on a case that would have worked anyway is not proved.
+
+Also here: `S11-19`'s arrived-bytes clause showed on finished torrents, because a re-requested block
+makes what arrived a few bytes larger than what is verified. It is drawn only below completion now.
+
+**Done when** a torrent whose magnet names no tracker announces after being handed back. Read first:
+`docs/plan/PROGRESS.md` § Log, `S11-18`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.
