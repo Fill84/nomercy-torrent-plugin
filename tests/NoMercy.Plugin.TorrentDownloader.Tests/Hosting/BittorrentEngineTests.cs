@@ -950,4 +950,79 @@ public class BittorrentEngineTests : IDisposable
             _asked.TrySetResult();
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A refusal about the torrent has to reach the thing that acts on
+    /// it.</strong> There are two kinds. "No peer sent its metadata within five
+    /// minutes" is true of one evening and the release is worth asking for
+    /// again; "there is no video file in it" is true of that torrent for ever
+    /// and nothing will ever put one there. `Transfers` blacklists on exactly
+    /// that difference — for ever, or for six hours.
+    /// </para>
+    /// <para>
+    /// The engine knew which it was and never said. <c>Held.ErrorIsTheRelease</c>
+    /// was set where the refusal is made and was never passed into the status
+    /// the pipeline reads, so it arrived false every time and **no torrent has
+    /// ever been refused for ever** — a 1.2 GB executable named after an episode
+    /// came round again every six hours, for as long as the plugin ran.
+    /// </para>
+    /// <para>
+    /// The fixture is a scanned book: eight files, not one of them video, which
+    /// is what a fake release looks like from the inside.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentRefusedForItsOwnContentsSaysThatIsAboutTheRelease()
+    {
+        byte[] file = Fixture("archive-multifile.torrent");
+        TorrentMetadata torrent = TorrentMetadata.Read(file);
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-refused-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+
+            string path = Path.Combine(folder, "book.torrent");
+            File.WriteAllBytes(path, file);
+
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                new SilentTrackers(),
+                new NoPeers(),
+                null,
+                null);
+
+            engine.Start();
+
+            await engine.AddAsync(new(path, [], folder, torrent.TotalLength), CancellationToken.None);
+
+            TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))[0];
+
+            Assert.Equal(TorrentState.Error, status.State);
+            Assert.Contains("no video file", status.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+            // And this is the half that never arrived: the pipeline reads it to
+            // decide between a refusal for ever and one for six hours.
+            Assert.True(
+                status.ErrorIsTheRelease,
+                "the engine refused the torrent for its own contents and told the pipeline it was about tonight.");
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
 }

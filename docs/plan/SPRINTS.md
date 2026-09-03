@@ -2001,6 +2001,26 @@ what it was asked to carry. See the Log for what that revealed.
 **Done when** a torrent with nothing verified and megabytes on disk says so on the page. Read first:
 `docs/08-ui.md` § Downloads.
 
+## S11-20 · A refusal about the torrent reaches the thing that acts on it
+
+Found while wiring `S11-19`, and reported rather than bundled into it.
+
+`Transfers.cs:217` decides between a blacklist for ever and one for six hours by reading
+`status.ErrorIsTheRelease`. `BittorrentEngine.Refuse` sets that on the `Held` — it is the one refusal
+that is about the torrent and not about tonight, because nothing will ever put a video file into a
+torrent that has none. `Status()` never passed it on, so it arrived false every time.
+
+So the permanent blacklist has never once been reached. A fake release — a 1.2 GB executable named
+after an episode, 22 August 2026 — was treated exactly like a swarm that did not answer, and came
+round again every six hours for as long as the plugin ran.
+
+One argument. The test adds a torrent of a scanned book, eight files and not one of them video,
+which is what a fake release looks like from the inside, and asserts the status says the refusal is
+about the release.
+
+**Done when** a torrent refused for its own contents says so to the pipeline. Read first:
+`docs/06-torrent-client.md` § Refusing a release.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

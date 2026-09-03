@@ -267,11 +267,21 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-17` No dead code, and no dead lookalike of a live method
 - [x] `S11-18` A torrent keeps the trackers it learned, across a restart
 - [x] `S11-19` The Downloads page says what has arrived, not only what is verified
+- [x] `S11-20` A refusal about the torrent reaches the thing that acts on it
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-20` A refusal about the torrent now reaches the thing that acts on it.** There are two
+  kinds: "no peer sent its metadata within five minutes" is about one evening, and "there is no video
+  file in it" is true of that torrent for ever. `Transfers` blacklists on exactly that difference —
+  for ever, or for six hours. `Held.ErrorIsTheRelease` was set where the refusal is made and never
+  passed into the `TorrentStatus` the pipeline reads, so it arrived false every time and **nothing
+  had ever been refused for ever**: the 1.2 GB executable named after an episode came round again
+  every six hours for as long as the plugin ran. One argument, and a test that fails when it is taken
+  out again.
 
 - **`S11-19` Nought per cent is not nothing arriving.** A piece counts once it is whole and hashes
   right, and a piece is megabytes; off a swarm giving kilobytes a second that is half an hour per

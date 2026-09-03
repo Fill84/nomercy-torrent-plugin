@@ -1239,10 +1239,17 @@ public sealed class BittorrentEngine(
             held.Run.SwarmSeeds,
             held.Run.SwarmPeers,
 
-            // Named, so this carries nothing it was not asked to carry:
-            // ErrorIsTheRelease is set on the Held and has never been passed
-            // here, which is its own fault and is not this one's to fix.
-            Arrived: progress.Downloaded);
+            // Which kind of refusal this is. Set where the refusal is made and
+            // never passed here, so it arrived false every time and nothing was
+            // ever refused for ever: a torrent with no video file in it — a
+            // 1.2 GB executable named after an episode, on 22 August 2026 —
+            // came round again every six hours for as long as the plugin ran.
+            held.ErrorIsTheRelease,
+
+            // Bytes in, whole pieces or not. Drawn where it is ahead of what is
+            // verified, which is the only case in which a torrent looks stopped
+            // while it is not.
+            progress.Downloaded);
     }
 
     /// <summary>Where one torrent stands, in the port's own words.</summary>
