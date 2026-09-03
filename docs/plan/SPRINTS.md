@@ -1408,10 +1408,20 @@ the version and the tag, and step 6 says when: only when the owner asks.
 1. **Done.** `ContractEncodeGateway` uses `IPluginEncoder` and `PluginLibraryEpisode.Id`, and
    `EncodeGateway.For` chooses between it and the reflecting one per server. It cost a class and one
    line of composition, with no line of `Transfers` touched — which is what **S10-06** was for.
-2. **Done.** `EncodeDispatch.cs` is deleted — 588 lines, and every server type this plugin ever
-   named by hand with it. There is no reflection anywhere in the plugin. A server that does not
+2. **Done, and the sentence that stood here was wrong by `S11-06`.** `EncodeDispatch.cs` is deleted
+   — 588 lines, and every server type this plugin ever named by hand with it. A server that does not
    offer `IPluginEncoder` is told so, once, in the log and the journal, rather than guessed at: it
    needs contract `0.1.479` or newer.
+
+   This said "there is no reflection anywhere in the plugin", and it stopped being true the moment
+   `Hosting/ShowImport.cs` was written. That file reaches for `IInboxMetadataProbe.SearchTvAsync`
+   and `IJobDispatcher.DispatchJob<ShowImportJob>` by name, and it is the **only** reflection left.
+   It is deliberate and it is not a shortcut: the contract offers no way to ask a provider about a
+   show or to queue one of the server's own jobs, and without it a pack for a show the owner does
+   not have cannot be placed at all. `Ready()` names all three types at startup, so a server missing
+   one says so an hour before it matters. The heading of this slice therefore promises more than the
+   slice can deliver: **0.4.0 is the version where the encode path stops reaching into the server by
+   name**, which is done. Adding a show waits on the contract offering it.
 3. **Done.** `Ownership.Theirs` is library membership. Measured before it was changed: the owner's
    television library held fifty-five shows and not one without a file, so the rows that made the
    old rule necessary are gone. A show is in scope the day it is added.
