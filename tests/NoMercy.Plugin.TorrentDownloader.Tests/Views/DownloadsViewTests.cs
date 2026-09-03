@@ -322,4 +322,45 @@ public class DownloadsViewTests
         Assert.Contains("50% of 3.7 GB", row, StringComparison.Ordinal);
         Assert.DoesNotContain(" in)", row, StringComparison.Ordinal);
     }
+
+    /// <remarks>
+    /// And never on a torrent that is finished. The clause is there so nought
+    /// per cent does not read as nothing happening; on a complete torrent it
+    /// answers a question nobody has, and it appears at all only because
+    /// re-requested blocks make what arrived a few bytes larger than what is
+    /// verified. The owner read "100% of 2.7 GB (2.7 GB in)" and asked what was
+    /// going wrong, which is the fairest possible response to it.
+    /// </remarks>
+    [Fact]
+    public void AFinishedTorrentDoesNotSayWhatArrivedBesideWhatIsVerified()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "Silo S03E06 1080p",
+                    TorrentState.Finished,
+                    BytesDone: 2_870_000_000,
+                    BytesTotal: 2_870_000_000,
+                    DownloadRateBytesPerSecond: 0,
+                    UploadRateBytesPerSecond: 0,
+                    Peers: 0,
+                    Seeds: 0,
+                    Ratio: 0,
+                    Eta: null,
+                    Error: null,
+
+                    // A handful of bytes more than the file, which is what
+                    // re-requesting a block that failed its hash costs.
+                    Arrived: 2_870_004_096),
+                @"D:\incomplete"),
+        ]);
+
+        string row = string.Join(" ", Rendered.EveryValue(view));
+
+        Assert.Contains("100% of 2.7 GB", row, StringComparison.Ordinal);
+        Assert.DoesNotContain(" in)", row, StringComparison.Ordinal);
+    }
 }

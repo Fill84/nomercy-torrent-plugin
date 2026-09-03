@@ -58,9 +58,18 @@ public sealed class Transfers(
 
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
+    /// <param name="trackers">
+    /// The owner's own tracker list, handed to any torrent this tick has to add
+    /// again. Not in the magnet: an indexer's carries none, and the trackers a
+    /// torrent runs on are given to it on the first grab.
+    /// </param>
     /// <param name="intakeFolder">Where a finished episode is put for the encoder.</param>
     /// <param name="ct">The plugin's own lifetime, never a caller's request.</param>
-    public async Task TickAsync(string incompleteFolder, string intakeFolder, CancellationToken ct)
+    public async Task TickAsync(
+        string incompleteFolder,
+        string intakeFolder,
+        CancellationToken ct,
+        IReadOnlyList<string>? trackers = null)
     {
         // Everything the library is asked in this pass, asked once. It lives
         // for this tick and no longer: the server encodes while the plugin
@@ -102,7 +111,7 @@ public sealed class Transfers(
 
         foreach (StoredDownload lost in plan.Add)
         {
-            await AddAgainAsync(lost, incompleteFolder, ct);
+            await AddAgainAsync(lost, incompleteFolder, trackers ?? [], ct);
         }
 
         foreach (TorrentStatus unknown in plan.Stop)
@@ -232,7 +241,11 @@ public sealed class Transfers(
     /// are still on disk with the resume file beside them, so this costs a
     /// verification pass and not a download.
     /// </remarks>
-    private async Task AddAgainAsync(StoredDownload lost, string incompleteFolder, CancellationToken ct)
+    private async Task AddAgainAsync(
+        StoredDownload lost,
+        string incompleteFolder,
+        IReadOnlyList<string> trackers,
+        CancellationToken ct)
     {
         if (lost.Magnet.Length == 0)
         {
@@ -248,7 +261,13 @@ public sealed class Transfers(
 
         try
         {
-            await engine.AddAsync(new(lost.Magnet, [], incompleteFolder, null), ct);
+            // With the owner's trackers, which are not in the magnet. An
+            // indexer's carries none at all; the trackers a torrent runs on are
+            // handed to it on the first grab and were handed over as nothing
+            // here, so a torrent that came back this way had nobody to announce
+            // to for as long as it lived. Dark Matter S02E02 on 3 September
+            // 2026: one announce when it was grabbed, and never another.
+            await engine.AddAsync(new(lost.Magnet, trackers, incompleteFolder, null), ct);
         }
         catch (Exception refused) when (refused is not OperationCanceledException)
         {

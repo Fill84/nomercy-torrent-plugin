@@ -276,9 +276,13 @@ public static class DownloadsView
         // read "0% of 2.7 GB" against a torrent with 8.7 MB in it and asked
         // twice why it was not downloading.
         //
-        // Only where the two differ. Said in every row it would be clutter, and
-        // clutter is what makes the one row that needs it hard to see.
-        return transfer.Arrived > transfer.BytesDone
+        // Only where the two differ, and never on a torrent that has finished.
+        // A complete one is asked no question this answers, and it showed at
+        // all only because re-requesting a block that failed its hash makes
+        // what arrived a few bytes larger than what is verified: the owner read
+        // "100% of 2.7 GB (2.7 GB in)" and asked what was going wrong, which is
+        // the fairest possible response to it.
+        return transfer.Arrived > transfer.BytesDone && transfer.BytesDone < total
             ? $"{done} ({Bytes(transfer.Arrived)} in)"
             : done;
     }

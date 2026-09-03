@@ -147,6 +147,43 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>And with the trackers, which are not in the magnet.</strong> An
+    /// indexer hands back <c>magnet:?xt=urn:btih:…&amp;dn=…</c> and no
+    /// <c>tr=</c> at all; the trackers a torrent runs on come from the indexer
+    /// row and from the owner's own list, and are handed over on the first grab
+    /// by <c>Grab.TakeAsync</c>. This path handed over an empty list, so a
+    /// torrent that came back this way had nobody to announce to — for as long
+    /// as it lived.
+    /// </para>
+    /// <para>
+    /// Watched on the owner's server, 3 September 2026. Dark Matter S02E02
+    /// announced once to fifty-nine trackers when it was first grabbed and
+    /// never again: <c>trackers=0</c> in its resume file, no swarm size on the
+    /// page, and one announce line in the journal where the torrent beside it —
+    /// whose magnet happened to carry twenty-one — had them every interval.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AGrabTheClientHasLostComesBackWithItsTrackersAndNotWithNone()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        StandingEngine engine = new();
+
+        await Transfers(engine, grabs, Server())
+            .TickAsync(Incomplete, Intake, CancellationToken.None, ["udp://tracker.example.invalid:6969/announce"]);
+
+        TorrentRequest again = Assert.Single(engine.Taken);
+
+        Assert.Contains(
+            "udp://tracker.example.invalid:6969/announce",
+            again.Trackers,
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
     /// Something the plugin has no record of is stopped and its files kept. It
     /// may be half a film the owner has been waiting for, and a record can be
     /// lost by a restore of an older database.

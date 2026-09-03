@@ -340,7 +340,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // an episode id and a show with no row has none.
             imports: Imports());
 
-        await _transfers.TickAsync(settings.IncompleteFolder, settings.IntakeFolder, ct);
+        await _transfers.TickAsync(
+            settings.IncompleteFolder,
+            settings.IntakeFolder,
+            ct,
+
+            // For anything this tick has to add again: the magnet the store kept
+            // names no tracker, so without these it comes back with none.
+            settings.Client.DefaultTrackers);
     }
 
     /// <summary>Reads every feed into the name pool.</summary>
