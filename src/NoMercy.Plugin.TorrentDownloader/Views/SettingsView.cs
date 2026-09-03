@@ -41,7 +41,8 @@ public static class SettingsView
         Settings settings,
         IReadOnlyCollection<string> secretsSet,
         IReadOnlyList<string> problems,
-        PortMapResult? mapping = null)
+        PortMapResult? mapping = null,
+        bool reached = false)
     {
         HashSet<string> present = new(secretsSet, StringComparer.Ordinal);
 
@@ -52,7 +53,7 @@ public static class SettingsView
             [
                 .. problems.Select((string problem, int index) =>
                     Ui.Text($"problem-{index}", problem, "caption")),
-                .. Port(settings, mapping),
+                .. Port(settings, mapping, reached),
                 Folders(settings),
                 CadenceSection(settings.Cadences),
                 Quality(settings.Profile),
@@ -69,11 +70,17 @@ public static class SettingsView
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Nothing at all while it worked, and while it has not been tried. When
-    /// both UPnP and NAT-PMP have refused, it says so and says what to do about
-    /// it: the owner has to forward the port by hand, and a client nobody can
-    /// dial is one that downloads from the few peers it reaches out to and
-    /// seeds to nobody.
+    /// Nothing at all while it worked, while it has not been tried, and once a
+    /// peer has arrived on the port — that last one being proof, and the only
+    /// proof there is: nothing outside can reach a port that is shut.
+    /// </para>
+    /// <para>
+    /// <strong>UPnP and NAT-PMP failing does not mean the port is shut.</strong>
+    /// It means the router would not open it <em>by itself</em>. This said "the
+    /// router would not open port 51413" and told the owner to forward it by
+    /// hand, on a network where 51413 had been forwarded by hand for months —
+    /// so the one notice on this page was the one thing on it that was wrong,
+    /// which is how an owner learns to read past all of them.
     /// </para>
     /// <para>
     /// With the router's own words underneath, because "port mapping failed"
@@ -81,18 +88,19 @@ public static class SettingsView
     /// one of them is worth walking to the cupboard for.
     /// </para>
     /// </remarks>
-    private static IEnumerable<PluginComponent> Port(Settings settings, PortMapResult? mapping)
+    private static IEnumerable<PluginComponent> Port(Settings settings, PortMapResult? mapping, bool reached)
     {
-        if (mapping is null || mapping.Mapped)
+        if (mapping is null || mapping.Mapped || reached)
         {
             yield break;
         }
 
         yield return Ui.Text(
             "port-mapping",
-            $"The router would not open port {settings.Client.ListenPort}. "
-            + $"Forward TCP and UDP {settings.Client.ListenPort} to this machine by hand, "
-            + "or no peer will be able to reach it.",
+            $"Port {settings.Client.ListenPort} could not be opened automatically. "
+            + "If it is already forwarded on the router there is nothing to do — "
+            + "no peer has reached this machine on it yet, which is the only thing that would say so. "
+            + $"Otherwise, forward TCP and UDP {settings.Client.ListenPort} to this machine by hand.",
             "caption");
 
         if (mapping.Reason is string refused)

@@ -109,6 +109,15 @@ public sealed class BittorrentEngine(
     /// </remarks>
     public PortMapResult? Mapped { get; private set; }
 
+    /// <summary>Whether any peer has ever arrived on the listening socket.</summary>
+    /// <remarks>
+    /// Proof that the port is open, and the only proof there is: a mapping
+    /// protocol refusing says the router would not open the port by itself and
+    /// nothing about whether it is open. The Settings page stops asking for a
+    /// forward once somebody has come through it.
+    /// </remarks>
+    public bool Reached { get; private set; }
+
     /// <summary>Why it is not listening, when it is not.</summary>
     /// <remarks>
     /// Kept rather than thrown away: the Settings page says which port could
@@ -217,16 +226,21 @@ public sealed class BittorrentEngine(
                 return;
             }
 
-            // Not a failure of the client. Said once, in the router's own words,
-            // so the owner knows whether to change a setting on the router or
-            // to forward the port by hand.
-            logger.LogWarning("Port {Port} could not be opened: {Reason}", port, result.Reason);
+            // Not a failure of the client, and not a shut port either: it says
+            // the router would not open it by itself. Written as "could not be
+            // opened" it read as "your port is closed" to an owner who had
+            // forwarded it by hand months earlier.
+            logger.LogInformation(
+                "Port {Port} could not be opened automatically; if it is forwarded on the router "
+                + "there is nothing to do: {Reason}",
+                port,
+                result.Reason);
         }
         catch (Exception refused) when (refused is not OperationCanceledException || !ct.IsCancellationRequested)
         {
             Mapped = new(MappedBy.Nothing, port, refused.Message);
 
-            logger.LogWarning(refused, "Port {Port} could not be opened.", port);
+            logger.LogInformation(refused, "Port {Port} could not be opened automatically.", port);
         }
     }
 
@@ -800,6 +814,11 @@ public sealed class BittorrentEngine(
                 // is nothing left to accept on.
                 return;
             }
+
+            // A peer got through the door, so the port is reachable from
+            // outside whatever UPnP and NAT-PMP had to say about it. It is the
+            // only evidence there is either way.
+            Reached = true;
 
             _ = WelcomeAsync(arrived, ct);
         }

@@ -1123,7 +1123,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // asked it. Read off the field rather than through Engine():
                     // opening the Settings page must not start a torrent client
                     // that is not running.
-                    _engine?.Mapped);
+                    _engine?.Mapped,
+
+                    // And whether anybody has come through the port, which is
+                    // what says it is open however the mapping went.
+                    _engine?.Reached ?? false);
 
             case Pages.ShowsRoute:
                 return ShowsView.Render(ShowSummaries.Summarise(await Tracked(ct)));

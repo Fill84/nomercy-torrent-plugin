@@ -268,11 +268,34 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-18` A torrent keeps the trackers it learned, across a restart
 - [x] `S11-19` The Downloads page says what has arrived, not only what is verified
 - [x] `S11-20` A refusal about the torrent reaches the thing that acts on it
+- [x] `S11-21` A port nobody could map is not a port that is shut
+- [x] `S11-21` A port nobody could map is not a port that is shut
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-21` UPnP failing does not mean the port is shut, and the page said it did.**
+  The owner's ports are forwarded on the router — **51413 to `beast-unit`, 51414 to their own
+  machine** — and have been for months. UPnP and NAT-PMP refusing says one thing only: the router
+  will not open a port *by itself*. The Settings page read "The router would not open port 51413.
+  Forward TCP and UDP 51413 to this machine by hand", which was the one wrong thing on an otherwise
+  honest page, and the log said `could not be opened` at warning level to match. It now reports what
+  it knows: the automatic mapping failed, and if the port is already forwarded there is nothing to
+  do. And it can tell — `BittorrentEngine.Reached` is set the moment a peer arrives on the listening
+  socket, which is proof the port is open and the only proof there is. Once one has, the notice goes.
+
+- **`S11-21` UPnP failing does not mean the port is shut, and the page said it did.**
+  The owner's ports are forwarded on the router — **51413 to `beast-unit`, 51414 to their own
+  machine** — and have been for months. UPnP and NAT-PMP refusing says one thing only: the router
+  will not open a port *by itself*. The Settings page read "The router would not open port 51413.
+  Forward TCP and UDP 51413 to this machine by hand", which was the one wrong thing on an otherwise
+  honest page, and the log said `could not be opened` at warning level to match. The plugin now
+  reports what it knows: the automatic mapping failed, and if the port is already forwarded there is
+  nothing to do. And it can tell — `BittorrentEngine.Reached` is set the moment a peer arrives on the
+  listening socket, which is proof the port is open and the only proof there is. Once one has, the
+  notice goes away.
 
 - **`S11-20` A refusal about the torrent now reaches the thing that acts on it.** There are two
   kinds: "no peer sent its metadata within five minutes" is about one evening, and "there is no video
@@ -1780,6 +1803,14 @@ and note it here.
 ## Facts, measured
 
 Kept here so no slice re-discovers them.
+
+- **Both of the owner's ports are forwarded on the router, and have been for months.** `51413` to
+  `beast-unit`, where the server and this plugin run; `51414` to `Phill-PC`, the owner's own machine.
+  UPnP and NAT-PMP both fail on this network and always will — neither protocol answers — so a
+  mapping failure here is the ordinary case and says **nothing whatever** about whether the port is
+  open. It is open. Anything that reads a mapping failure as a shut port is wrong, and telling the
+  owner to forward a port they forwarded months ago is worse than saying nothing. `S11-21` is what
+  that cost.
 
 - The server runs on `beast-unit`; deploy over ssh with `scripts/deploy-to-server.ps1`. **That script
   does not exist until `S8-04` step 6.** Every slice before it that needs the plugin on the server

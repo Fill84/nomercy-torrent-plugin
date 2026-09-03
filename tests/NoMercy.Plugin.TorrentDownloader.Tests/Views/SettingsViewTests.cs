@@ -269,4 +269,58 @@ public class SettingsViewTests
                 StringComparison.Ordinal);
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The owner had already forwarded it, and the page kept telling
+    /// them to.</strong> UPnP and NAT-PMP failing says one thing only: the
+    /// router would not open the port <em>by itself</em>. It says nothing about
+    /// whether the port is open, and on this network it is — forwarded by hand,
+    /// 51413 to beast-unit and 51414 to the owner's own machine.
+    /// </para>
+    /// <para>
+    /// A peer arriving on the listening socket is proof, and it is the only
+    /// proof there is: nothing outside can reach a port that is shut. Once one
+    /// has, the page has nothing left to say, and saying it anyway is how a
+    /// notice teaches an owner to read past every notice.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void APortSomebodyHasAlreadyReachedIsNotOneToForwardByHand()
+    {
+        PluginView view = SettingsView.Render(
+            new(),
+            [],
+            [],
+            new(MappedBy.Nothing, 51413, "UPnP: no device answered the search"),
+
+            // Somebody dialled in and got through.
+            reached: true);
+
+        string page = string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]);
+
+        Assert.DoesNotContain("by hand", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("no peer will be able to reach it", page, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// And where nobody has arrived, what is said is what is known: the mapping
+    /// failed. Not that the port is shut — the plugin cannot see that from
+    /// here, and the owner who has already forwarded it needs to be told there
+    /// is nothing to do rather than told to do it again.
+    /// </remarks>
+    [Fact]
+    public void APortNobodyHasReachedSaysTheMappingFailedRatherThanThatThePortIsShut()
+    {
+        PluginView view = SettingsView.Render(
+            new(),
+            [],
+            [],
+            new(MappedBy.Nothing, 51413, "UPnP: no device answered the search"));
+
+        string page = string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]);
+
+        Assert.Contains("already forwarded", page, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("The router would not open port", page, StringComparison.Ordinal);
+    }
 }
