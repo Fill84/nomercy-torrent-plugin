@@ -2114,6 +2114,31 @@ owner's rule since 24 August 2026 is that a cancelled download leaves nothing be
 **Done when** a torrent the client has never been told about has its files deleted on request. Read
 first: `docs/06-torrent-client.md` § Removing.
 
+## S11-25 · A download no grab answers for is cleared
+
+`S11-24` stopped new leftovers being made. This clears the ones already on the disk.
+
+A grab that is cancelled or pruned takes its row with it, and its download stays: the folder, the
+`.info` beside it and the `.resume` beside that. Nothing ever asks for them again. The owner's rule
+since 24 August 2026 is that a download that is over leaves nothing behind.
+
+1. `BittorrentEngine.ForgetAbandoned(keep)` reads the `.info` files in the download folder, skips
+   every hash the store still has a grab for and every torrent the client is holding, and deletes
+   what is left — the torrent's own files, its metadata, its resume file.
+2. The maintenance pass calls it with every hash in the store. Maintenance runs daily and once at
+   every start, so a cancelled download is gone by the next restart at the latest.
+
+**Only what this plugin wrote.** A torrent is recognised by the metadata kept beside its download,
+and what is deleted is what that metadata names — so a folder the owner put in there is not a
+torrent, is recognised as nothing, and is left exactly where it is. That is why this reads `.info`
+files rather than the folder listing.
+
+**Held beats the store.** A torrent between being added and being written down is held by the client
+and has no grab yet; deleting it would be this sweep causing the fault it exists to clear.
+
+**Done when** a download whose grab is gone is cleared, and a folder the owner put there is not.
+Read first: `docs/plan/PROGRESS.md` § Log, `S11-24`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

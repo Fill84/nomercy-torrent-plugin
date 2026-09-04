@@ -508,6 +508,69 @@ public sealed class BittorrentEngine(
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Clears every download no grab answers for any more.
+    /// </summary>
+    /// <param name="keep">The hashes the store still has a grab for.</param>
+    /// <returns>What was cleared, so the caller can say so.</returns>
+    /// <remarks>
+    /// <para>
+    /// A download whose grab has gone — cancelled, or pruned — leaves its
+    /// folder, its metadata and its resume file behind, and nothing ever asks
+    /// for them again. On 5 September 2026 that was 8.6 GB of a season pack
+    /// cancelled days earlier, in a folder the owner had to clear by hand. The
+    /// rule since 24 August is that a download that is over leaves nothing.
+    /// </para>
+    /// <para>
+    /// <strong>Only what this plugin wrote itself.</strong> A torrent is
+    /// recognised by the metadata kept beside its download, and what is deleted
+    /// is what that metadata names. A folder the owner put in there is not a
+    /// torrent, is recognised as nothing, and is left exactly where it is —
+    /// which is why this reads the <c>.info</c> files rather than the folder
+    /// listing.
+    /// </para>
+    /// <para>
+    /// Anything the client is holding is kept whatever the store says: a
+    /// torrent between being added and being written down is held and not yet
+    /// grabbed, and deleting it from under itself would be this sweep causing
+    /// the fault it exists to clear.
+    /// </para>
+    /// </remarks>
+    public IReadOnlyList<string> ForgetAbandoned(IReadOnlyCollection<string> keep)
+    {
+        if (resume is null || !Directory.Exists(resume.Folder))
+        {
+            return [];
+        }
+
+        HashSet<string> answered = new(keep, StringComparer.OrdinalIgnoreCase);
+        List<string> cleared = [];
+
+        foreach (string path in Directory.EnumerateFiles(resume.Folder, "*.info"))
+        {
+            string infoHash = Path.GetFileNameWithoutExtension(path);
+
+            if (answered.Contains(infoHash))
+            {
+                continue;
+            }
+
+            lock (_lock)
+            {
+                if (_torrents.ContainsKey(infoHash))
+                {
+                    continue;
+                }
+            }
+
+            Delete(resume.Folder, Remembered(infoHash, []), infoHash);
+            resume.Forget(infoHash);
+            cleared.Add(infoHash);
+        }
+
+        return cleared;
+    }
+
     public Task<IReadOnlyList<TorrentFile>> FilesAsync(string infoHash, CancellationToken ct)
     {
         lock (_lock)

@@ -272,11 +272,24 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-22` A torrent handed back to the client keeps its trackers
 - [x] `S11-23` The cadence settings are the cadences the server registers
 - [x] `S11-24` A torrent the client no longer holds still has its files deleted
+- [x] `S11-25` A download no grab answers for is cleared
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-25` A download no grab answers for is cleared.** `S11-24` stopped new leftovers; this clears
+  the ones already there. A cancelled or pruned grab left its folder, its metadata and its resume
+  file behind with nothing left to ask for them — 8.6 GB of a season pack the owner cancelled sat in
+  their download folder for three days, and they had to clear it by hand. The maintenance pass now
+  hands the client every hash the store still holds a grab for, and the client clears the rest.
+  **Only what this plugin wrote.** A torrent is recognised by the metadata kept beside its download
+  and what is deleted is what that metadata names, so a folder the owner put there is recognised as
+  nothing and left where it is — which is why it reads the `.info` files rather than the folder
+  listing. Anything the client is holding is kept whatever the store says: a torrent between being
+  added and being written down is held and not yet grabbed, and deleting it from under itself would
+  be the sweep causing the fault it exists to clear.
 
 - **`S11-24` A torrent the client was no longer holding kept its files for ever.** `RemoveAsync`
   began by taking the torrent out of its table and **returning if it was not there** — so a removal

@@ -921,6 +921,25 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             Context.Logger.LogInformation("{Count} old refusals were cleared from the history.", gone);
         }
+
+        // Downloads no grab answers for any more. A cancelled or pruned grab
+        // used to leave its folder, its metadata and its resume file behind
+        // with nothing left to ask for them: 8.6 GB of a cancelled season pack
+        // sat in the owner's download folder for three days. Only what this
+        // plugin wrote is recognised, so a folder the owner put there is left
+        // where it is.
+        if (_engine is BittorrentEngine client)
+        {
+            IReadOnlyList<StoredDownload> every = await grabs.EveryAsync(ct);
+            IReadOnlyList<string> swept = client.ForgetAbandoned([.. every.Select(one => one.InfoHash)]);
+
+            foreach (string infoHash in swept)
+            {
+                Context.Logger.LogInformation(
+                    "{Hash} was cleared from the download folder: no grab of this plugin's answers for it.",
+                    infoHash);
+            }
+        }
     }
 
     /// <summary>

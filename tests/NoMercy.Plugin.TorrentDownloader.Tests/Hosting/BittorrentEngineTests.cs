@@ -1107,4 +1107,88 @@ public class BittorrentEngineTests : IDisposable
             }
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>What no grab answers for is not the owner's to house.</strong>
+    /// A download whose grab has gone — cancelled, or pruned — leaves its
+    /// folder, its metadata and its resume file behind, and nothing ever asks
+    /// for them again. On 5 September 2026 that was 8.6 GB of a season pack the
+    /// owner had cancelled days earlier, sitting in a download folder they had
+    /// to clear by hand.
+    /// </para>
+    /// <para>
+    /// Only what this plugin wrote itself. A torrent is recognised by the
+    /// metadata kept beside its download, and the files deleted are the ones
+    /// that metadata names — so a folder the owner put there is not a torrent,
+    /// is recognised as nothing, and is left exactly where it is.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ADownloadNoGrabAnswersForIsClearedAndOneStillGrabbedIsNot()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-sweep-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+
+            ResumeKeeper keeping = new(folder, TimeSpan.FromSeconds(1), TimeProvider.System);
+
+            byte[] abandonedFile = Fixture("archive-multifile.torrent");
+            byte[] keptFile = Fixture("ubuntu-desktop.torrent");
+            TorrentMetadata abandoned = TorrentMetadata.Read(abandonedFile);
+            TorrentMetadata kept = TorrentMetadata.Read(keptFile);
+
+            keeping.Remember(abandoned.InfoHash, Info(abandonedFile));
+            keeping.Remember(kept.InfoHash, Info(keptFile));
+
+            string abandonedFolder = Path.Combine(folder, abandoned.Name);
+            Directory.CreateDirectory(abandonedFolder);
+            await File.WriteAllTextAsync(Path.Combine(abandonedFolder, "left-behind"), "bytes");
+
+            // Something the owner put here themselves, which is not a torrent
+            // and is nobody's to delete.
+            string theirs = Path.Combine(folder, "the owner's own folder");
+            Directory.CreateDirectory(theirs);
+
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                new SilentTrackers(),
+                new NoPeers(),
+                null,
+                keeping);
+
+            engine.Start();
+
+            IReadOnlyList<string> cleared = engine.ForgetAbandoned([kept.InfoHash]);
+
+            Assert.Equal([abandoned.InfoHash], cleared);
+            Assert.False(Directory.Exists(abandonedFolder), "the abandoned download was left on the owner's disk.");
+            Assert.Null(keeping.Recall(abandoned.InfoHash));
+
+            // The one a grab still answers for is untouched, metadata and all.
+            Assert.NotNull(keeping.Recall(kept.InfoHash));
+
+            // And nothing that is not this plugin's was touched.
+            Assert.True(Directory.Exists(theirs), "a folder the owner put there was deleted.");
+            Assert.True(Directory.Exists(folder), "the download folder itself was deleted.");
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
 }
