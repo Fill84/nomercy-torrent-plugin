@@ -1025,4 +1025,86 @@ public class BittorrentEngineTests : IDisposable
             }
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent the client is no longer holding still has files on
+    /// disk.</strong> <c>RemoveAsync</c> began by taking the torrent out of the
+    /// table and returning if it was not there — so a removal asked for after a
+    /// restart, before the plugin had handed the torrent back, deleted nothing
+    /// at all and said nothing about it. The caller went on to mark the grab
+    /// done.
+    /// </para>
+    /// <para>
+    /// Measured on the owner's server, 5 September 2026: 9.4 GB in
+    /// <c>D:\torrent-downloads</c> that no grab answered for — a season pack of
+    /// 8.6 GB whose grab row was gone, and 594 MB belonging to a grab that had
+    /// been marked done and encoded days earlier. The owner's rule is that a
+    /// cancelled download leaves nothing behind, and this is the hole it was
+    /// leaving through.
+    /// </para>
+    /// <para>
+    /// The metadata is kept beside the download precisely so a torrent's own
+    /// files can be named without the client holding it, which is what makes
+    /// this deletable rather than a guess at a folder.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentTheClientNoLongerHoldsStillHasItsFilesDeleted()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-orphan-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+
+            ResumeKeeper keeping = new(folder, TimeSpan.FromSeconds(1), TimeProvider.System);
+            byte[] file = Fixture("archive-multifile.torrent");
+            TorrentMetadata torrent = TorrentMetadata.Read(file);
+
+            keeping.Remember(torrent.InfoHash, Info(file));
+
+            // What the download left behind: the torrent's own folder, under
+            // its own name, with one of its files in it.
+            string left = Path.Combine(folder, torrent.Name);
+            Directory.CreateDirectory(left);
+            await File.WriteAllTextAsync(Path.Combine(left, "half-a-download"), "bytes");
+
+            // An engine that has never been told about this torrent, which is
+            // what a restart leaves.
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                new SilentTrackers(),
+                new NoPeers(),
+                null,
+                keeping);
+
+            engine.Start();
+
+            await engine.RemoveAsync(torrent.InfoHash, deleteFiles: true, CancellationToken.None);
+
+            Assert.False(
+                Directory.Exists(left),
+                "the client was not holding the torrent, so its files were left on the owner's disk.");
+
+            // And the folder every torrent shares is not this one's to take.
+            Assert.True(Directory.Exists(folder), "the download folder itself was deleted.");
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
 }

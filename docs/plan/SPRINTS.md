@@ -2083,6 +2083,37 @@ the media-server nor the app-web source. What this plugin controls is how often 
 **Done when** the cadence the owner saved is the cadence the server is handed. Read first:
 `docs/04-domain.md` § Settings.
 
+## S11-24 · A torrent the client no longer holds still has its files deleted
+
+Measured on the owner's server: 9.4 GB in `D:	orrent-downloads` that no grab answered for.
+
+```
+8779 MB   Youkoso ... (Classroom of the Elite)   grab row gone
+ 594 MB   South Park S15E12 ... CtrlHD[TGx]      grab done, encoded days earlier
+```
+
+`RemoveAsync` opened with:
+
+```csharp
+if (!_torrents.Remove(infoHash, out held))
+{
+    return Task.CompletedTask;   // deleted nothing, said nothing
+}
+```
+
+So a removal asked for when the client was not holding the torrent — after a restart, before the
+plugin had handed it back — did nothing at all, and the caller went on to mark the grab done. The
+owner's rule since 24 August 2026 is that a cancelled download leaves nothing behind.
+
+1. Not held is no longer a reason to return. The files are deleted from what is known: the resume
+   keeper's folder is the download folder, and the remembered info dictionary says which files under
+   it are this torrent's — which is why the metadata is kept beside the download in the first place.
+2. The `Inside` guard stands: the folder every torrent shares is never this one's to delete, and a
+   torrent that never had metadata has written nothing.
+
+**Done when** a torrent the client has never been told about has its files deleted on request. Read
+first: `docs/06-torrent-client.md` § Removing.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

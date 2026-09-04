@@ -462,10 +462,30 @@ public sealed class BittorrentEngine(
 
         lock (_lock)
         {
-            if (!_torrents.Remove(infoHash, out held))
+            _torrents.Remove(infoHash, out held);
+        }
+
+        if (held is null)
+        {
+            // Not held, and its files are still on the owner's disk. This used
+            // to return here, so a removal asked for after a restart — before
+            // the plugin had handed the torrent back — deleted nothing and said
+            // nothing, while the caller went on to mark the grab done. On
+            // 5 September 2026 that was 9.4 GB in the owner's download folder
+            // that no grab answered for.
+            //
+            // Nameable without holding it, because the metadata is kept beside
+            // the download for exactly this: the resume keeper's folder is the
+            // download folder, and the info dictionary says which files under
+            // it are this torrent's.
+            if (deleteFiles && resume is not null)
             {
-                return Task.CompletedTask;
+                Delete(resume.Folder, Remembered(infoHash, []), infoHash);
             }
+
+            resume?.Forget(infoHash);
+
+            return Task.CompletedTask;
         }
 
         // What it wrote is its file list, and that is read before the resume

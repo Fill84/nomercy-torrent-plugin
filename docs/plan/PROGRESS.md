@@ -271,11 +271,23 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-21` A port nobody could map is not a port that is shut
 - [x] `S11-22` A torrent handed back to the client keeps its trackers
 - [x] `S11-23` The cadence settings are the cadences the server registers
+- [x] `S11-24` A torrent the client no longer holds still has its files deleted
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-24` A torrent the client was no longer holding kept its files for ever.** `RemoveAsync`
+  began by taking the torrent out of its table and **returning if it was not there** — so a removal
+  asked for after a restart, before the plugin had handed the torrent back, deleted nothing and said
+  nothing, while the caller went on to mark the grab done. Measured on the owner's server,
+  5 September 2026: **9.4 GB** in `D:	orrent-downloads` that no grab answered for — a season pack of
+  8.6 GB whose grab row was gone, and 594 MB belonging to a grab marked done and encoded days
+  earlier. The owner's rule is that a cancelled download leaves nothing behind, and this was the hole
+  it left through. It is nameable without holding it: the metadata is kept beside the download for
+  exactly this, so the resume keeper's folder plus the info dictionary say which files are that
+  torrent's — and the folder every torrent shares is still never touched.
 
 - **`S11-23` The four cadence fields on the Settings page were decoration.** They are offered, and
   what is typed is checked against a cron parser before it will save — and `Jobs` was a property
