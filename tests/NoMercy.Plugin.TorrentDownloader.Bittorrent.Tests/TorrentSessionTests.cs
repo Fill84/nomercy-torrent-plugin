@@ -353,6 +353,71 @@ public class TorrentSessionTests : IDisposable
         Assert.Equal(expected, seeder.Progress().Uploaded > 0);
     }
 
+
+    /// <remarks>
+    /// <para>
+    /// <strong>How many of the peers we are connected to will not send us
+    /// anything.</strong> A peer starts choked by BEP 3 and stays that way
+    /// until it says otherwise, and it says otherwise when it decides we are
+    /// worth it. On a public torrent this client never unchokes anybody — the
+    /// owner's rule is that nothing taken from a public swarm goes back out —
+    /// so a well-behaved peer has no reason to unchoke us either.
+    /// </para>
+    /// <para>
+    /// The Downloads page could not tell the difference between thirty peers
+    /// none of which will talk to us and thirty that are simply slow. On
+    /// 5 September 2026 Dark Matter S02E02 sat at 38.5% for a day with up to
+    /// thirty-two peers connected, nought of them seeds, and not a byte
+    /// arriving. This is the number that says which of the two it is.
+    /// </para>
+    /// <para>
+    /// The other side here is a public seeder, so it never unchokes — the same
+    /// thing the swarm does to us, done to us on a loopback socket.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASessionSaysHowManyOfItsPeersAreChokingIt()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+
+        byte[] content = Fixture("ubuntu-desktop.torrent");
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768);
+
+        Assert.False(torrent.Private);
+
+        (Stream seeding, Stream leeching) = await LoopbackAsync(stopping.Token);
+
+        using TorrentSession seeder = Seeding(torrent, content, "seed-public");
+        using TorrentSession leecher = Fresh(torrent);
+
+        Task<PeerConnection?> serving = PeerConnection.IntroduceAsync(
+            seeding, Hash(torrent), Id("SEED"), torrent.PieceCount, dialling: false, stopping.Token);
+
+        Task<PeerConnection?> asking = PeerConnection.IntroduceAsync(
+            leeching, Hash(torrent), Id("LEECH"), torrent.PieceCount, dialling: true, stopping.Token);
+
+        PeerConnection?[] both = await Task.WhenAll(serving, asking);
+
+        Task serves = seeder.RunAsync(both[0]!, stopping.Token);
+        Task asks = leecher.RunAsync(both[1]!, stopping.Token);
+
+        // Long enough for an unchoke to have crossed a loopback socket many
+        // times over. Nothing arriving is what is being proved, and nothing
+        // arriving never wakes a read up.
+        await Task.Delay(TimeSpan.FromSeconds(2), stopping.Token);
+
+        SessionProgress progress = leecher.Progress();
+
+        await stopping.CancelAsync();
+        await Task.WhenAll(
+            serves.ContinueWith(_ => { }, TaskScheduler.Default),
+            asks.ContinueWith(_ => { }, TaskScheduler.Default));
+
+        Assert.Equal(1, progress.Peers);
+        Assert.Equal(1, progress.ChokedBy);
+        Assert.Equal(0, progress.BytesDone);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_folder))

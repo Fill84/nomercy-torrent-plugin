@@ -273,11 +273,23 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-23` The cadence settings are the cadences the server registers
 - [x] `S11-24` A torrent the client no longer holds still has its files deleted
 - [x] `S11-25` A download no grab answers for is cleared
+- [x] `S11-26` The swarm line says how many peers are choking us
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-26` The swarm line says how many peers are choking us.** Dark Matter S02E02 sat at 38.5% for
+  a day with up to thirty-two peers connected, nought of them seeds, and not a byte arriving — and
+  nothing on the page or in the log could tell that from thirty-two peers that were merely slow. A
+  peer starts choked by BEP 3 and stays that way until it says otherwise; on a public torrent this
+  client never unchokes anybody, because the owner's rule is that nothing taken from a public swarm
+  goes back out, so a well-behaved peer has no reason to unchoke it either — and
+  `TorrentSession.RunAsync` has said so in a comment since it was written. `SessionProgress.ChokedBy`
+  counts them and the announce line reports it. **This is a measurement, not a fix**: if it reads
+  "32 of them choking us" then the swarm is behaving exactly as the client's own upload policy
+  invites, and what to do about that is the owner's to decide.
 
 - **`S11-25` A download no grab answers for is cleared.** `S11-24` stopped new leftovers; this clears
   the ones already there. A cancelled or pruned grab left its folder, its metadata and its resume

@@ -2139,6 +2139,35 @@ and has no grab yet; deleting it would be this sweep causing the fault it exists
 **Done when** a download whose grab is gone is cleared, and a folder the owner put there is not.
 Read first: `docs/plan/PROGRESS.md` § Log, `S11-24`.
 
+## S11-26 · The swarm line says how many peers are choking us
+
+Dark Matter S02E02, on the owner's server, for a day:
+
+```
+38.5% of 8 GB   0 B/s   32 peers connected, 0 of them seeds
+```
+
+Thirty-two peers and not a byte. Nothing on the page or in the log could tell that from thirty-two
+peers that were merely slow, and those two want opposite responses.
+
+A peer starts choked by BEP 3 and stays that way until it says otherwise. On a public torrent this
+client never unchokes anybody — the owner's rule is that nothing taken from a public swarm goes back
+out — so a well-behaved peer has no reason to unchoke it either. `TorrentSession.RunAsync` has said
+exactly that in a comment since it was written; what was missing was the number.
+
+1. `SessionProgress.ChokedBy` counts the connected peers that have this client choked. Choked until
+   told otherwise, so it counts the ones that said nothing as well as the ones that said no — both
+   mean nothing will come.
+2. It travels on `RunProgress` and is reported in the announce line: `… 32 peers connected, 0 of them
+   seeds, 32 of them choking us; …`.
+
+**This is a measurement, not a fix.** If it reads that every peer is choking us, the swarm is doing
+exactly what the client's own upload policy invites, and what to do about that is the owner's to
+decide — it is their rule.
+
+**Done when** a session talking to a peer that never unchokes it says so. Read first:
+`docs/06-torrent-client.md` § Choking.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

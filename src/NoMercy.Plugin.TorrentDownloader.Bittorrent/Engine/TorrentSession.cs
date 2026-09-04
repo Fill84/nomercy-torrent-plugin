@@ -6,6 +6,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 /// <param name="BytesDone">How much of it is verified.</param>
 /// <param name="Peers">How many connections are up.</param>
 /// <param name="Seeds">How many of those have the lot.</param>
+/// <param name="ChokedBy">
+/// How many of those will not send anything. A peer starts choked by BEP 3 and
+/// stays that way until it says otherwise; on a public torrent this client never
+/// unchokes anybody, so a well-behaved peer has no reason to unchoke it either.
+/// Thirty peers none of which will talk and thirty that are merely slow look the
+/// same without this.
+/// </param>
 /// <param name="Downloaded">Bytes of pieces that have arrived, good and bad.</param>
 /// <param name="Uploaded">Bytes of pieces that have gone out.</param>
 /// <param name="WantedBytes">
@@ -20,6 +27,7 @@ public sealed record SessionProgress(
     long BytesDone,
     int Peers,
     int Seeds,
+    int ChokedBy,
     long Downloaded,
     long Uploaded,
     long WantedBytes)
@@ -182,6 +190,11 @@ public sealed class TorrentSession(
                 Bytes(),
                 _peers.Count,
                 _peers.Count(one => one.Seed),
+
+                // Choked until told otherwise, which is BEP 3 — so this counts
+                // the peers that have said nothing as well as the ones that
+                // said no, and both mean the same thing: nothing will come.
+                _peers.Count(one => one.Choked),
                 _downloaded,
                 _uploaded,
                 WantedBytes);

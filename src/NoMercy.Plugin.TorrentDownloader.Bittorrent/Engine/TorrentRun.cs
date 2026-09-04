@@ -44,6 +44,10 @@ public sealed record TrackerSaid(string Tracker, int? Peers, string? Failure);
 /// <param name="BytesTotal">How big it is, or null while nothing knows.</param>
 /// <param name="Peers">How many connections are up.</param>
 /// <param name="Seeds">How many of those have the lot.</param>
+/// <param name="ChokedBy">
+/// How many of those will not send anything. Thirty peers none of which will
+/// talk and thirty that are merely slow look the same without it.
+/// </param>
 /// <param name="Downloaded">Bytes of pieces that have arrived.</param>
 /// <param name="Uploaded">Bytes of pieces that have gone out.</param>
 /// <param name="DownloadRateBytesPerSecond">
@@ -66,6 +70,7 @@ public sealed record RunProgress(
     long? BytesTotal,
     int Peers,
     int Seeds,
+    int ChokedBy,
     long Downloaded,
     long Uploaded,
     double DownloadRateBytesPerSecond,
@@ -510,6 +515,7 @@ public sealed class TorrentRun : IDisposable
                     0,
                     0,
                     0,
+                    0,
                     false);
             }
 
@@ -527,6 +533,7 @@ public sealed class TorrentRun : IDisposable
                 progress.WantedBytes,
                 progress.Peers,
                 progress.Seeds,
+                progress.ChokedBy,
                 progress.Downloaded,
                 progress.Uploaded,
 
