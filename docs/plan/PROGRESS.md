@@ -282,11 +282,21 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-32` A push carries what changed, and nothing else
 - [x] `S11-33` Room is checked whoever added it, and the address book is bounded
 - [x] `S11-34` Nothing changed is not a message
+- [x] `S11-35` The remaining time is drawn in a cell that can say it is not known
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-35` The remaining time was drawn into a cell that could not hold it.** `S11-31` added the
+  column with `PluginTableCellType.Duration`, as `docs/08-ui.md` § 46 asks — and a `Duration` cell is
+  handed **raw seconds** and formatted by the client, so a page sending it a string gets a blank
+  cell. Seen on the owner's own screen: every other unknown on the row read `—` and this one read
+  nothing, which is the one thing this page is shaped against. It is a plain cell now and the page
+  formats it, like every other cell in that table. `app-web/src/lib/plugin/formatCell.ts` is the
+  contract: typed cells take numbers so the viewer's locale governs, and `formatDuration` answers an
+  empty string for anything that is not a finite number — which is why it could not say "not known".
 
 - **`S11-34` Nothing changed is not a message.** A push with every part of it empty said only that a
   timer had gone off, and every open page answers a push by re-reading the entire view over HTTP — a

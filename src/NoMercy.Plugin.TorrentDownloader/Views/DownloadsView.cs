@@ -154,7 +154,15 @@ public static class DownloadsView
                 // hold. It was worked out on every status and drawn nowhere, so
                 // an owner watching a forty-five gigabyte pack had no figure
                 // for how long they were waiting.
-                new() { Key = "left", Label = "Left", Cell = PluginTableCellType.Duration },
+                // Text, like every other cell in this table, and not the
+                // Duration cell docs/08-ui.md § 46 suggests. A Duration cell is
+                // handed raw seconds and formatted by the client — which is
+                // right in principle, and cannot say "not known": app-web's
+                // formatDuration answers an empty string for anything that is
+                // not a finite number. A blank cell where the row's other
+                // unknowns read "—" is the one thing this page is shaped
+                // against, so the page says it itself.
+                new() { Key = "left", Label = "Left" },
                 new() { Key = "destination", Label = "Destination" },
                 new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
             ],
