@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.4.0",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.4.0/NoMercy.Plugin.TorrentDownloader-0.4.0.zip",
+          "checksum": "5f088b590f8ac603c03020ce7e6097dcf3f5a32cd894daaea7be038afdc517ba",
+          "changelog": "The version where the encode path stops reaching into the media server by name, and the first one watched end to end on a real server: a forty-five gigabyte season pack went from a pasted magnet to eight episodes in the library with nobody pressing anything.",
+          "timestamp": "2026-09-05T14:24:30Z"
+        },
+        {
           "version": "0.3.18",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.3.18/NoMercy.Plugin.TorrentDownloader-0.3.18.zip",
