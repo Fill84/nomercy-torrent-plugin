@@ -94,7 +94,7 @@ public class LiveSnapshotTests
         clock.Advance(LiveSnapshot.MinimumInterval);
 
         LiveSnapshot.Payload payload = Assert.IsType<LiveSnapshot.Payload>(hub.Pushes[0].Payload);
-        Assert.Equal(2, payload.Activity.InFlight.Count);
+        Assert.Equal(2, payload.InFlight!.Count);
     }
 
     /// <remarks>
@@ -182,7 +182,7 @@ public class LiveSnapshotTests
     /// </para>
     /// </remarks>
     [Fact]
-    public void APushDoesNotCarryTheHistoryNobodyReads()
+    public void AHundredKilobytesOfHistoryIsNotSentAtAll()
     {
         FakeTimeProvider clock = new();
         FakeHub hub = new();
@@ -201,11 +201,63 @@ public class LiveSnapshotTests
         (string Type, object? Payload) sent = Assert.Single(hub.Pushes);
         LiveSnapshot.Payload payload = Assert.IsType<LiveSnapshot.Payload>(sent.Payload);
 
-        Assert.Empty(payload.Activity.History);
-
-        // What it does carry is what says something moved, and what a receiver
-        // could act on without asking: the work in flight and where the cycle
-        // stands.
+        // Two hundred events came and went, and the push carries none of them:
+        // there is no property that could hold a history, and nothing was left
+        // in flight to report. All it says is that something moved, and when —
+        // which is all the host does anything with.
+        Assert.Null(payload.InFlight);
         Assert.NotEqual(default, payload.At);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A push carries what changed, and nothing else.</strong> It used
+    /// to carry the whole state every time — the work in flight and the cycle,
+    /// changed or not — so a torrent moving its byte count re-sent a list of
+    /// jobs that had not moved since the page was opened.
+    /// </para>
+    /// <para>
+    /// The owner asked for two things and got one: push when something changes,
+    /// and push only the changes. This is the second.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void APushCarriesOnlyThePartsThatChanged()
+    {
+        FakeTimeProvider clock = new();
+        FakeHub hub = new();
+        ActivityJournal journal = new(clock);
+        using LiveSnapshot live = new(hub, journal, new CapturingLogger(), () => CycleStatus.Unknown, clock);
+
+        journal.Started(ActivityStage.Find, "Silo S03E06");
+
+        live.Changed();
+        clock.Advance(LiveSnapshot.MinimumInterval);
+
+        LiveSnapshot.Payload first = Assert.IsType<LiveSnapshot.Payload>(hub.Pushes[0].Payload);
+
+        // The first push has to say everything: the page has nothing yet.
+        Assert.NotNull(first.InFlight);
+        Assert.NotNull(first.Cycle);
+
+        // Nothing has moved since. The cycle is the same object and the work in
+        // flight is the same work.
+        live.Changed();
+        clock.Advance(LiveSnapshot.MinimumInterval);
+
+        LiveSnapshot.Payload second = Assert.IsType<LiveSnapshot.Payload>(hub.Pushes[1].Payload);
+
+        Assert.Null(second.InFlight);
+        Assert.Null(second.Cycle);
+
+        // And the moment something does move, it is in the message again.
+        journal.Finished(ActivityStage.Find, "Silo S03E06", "one copy");
+
+        live.Changed();
+        clock.Advance(LiveSnapshot.MinimumInterval);
+
+        LiveSnapshot.Payload third = Assert.IsType<LiveSnapshot.Payload>(hub.Pushes[2].Payload);
+
+        Assert.NotNull(third.InFlight);
     }
 }

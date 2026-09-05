@@ -279,11 +279,21 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-29` A new peer or seed is an update, and the page is told
 - [x] `S11-30` A save says its warnings
 - [x] `S11-31` The five unread values judged, and a private torrent stops trading peers
+- [x] `S11-32` A push carries what changed, and nothing else
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-32` A push carries what changed, and nothing else.** The owner asked for two things — push
+  when something changes, and push only the changes — and only the first was built. Dropping the
+  history left the rest of the state going out in full on every push: a torrent ticking its byte
+  count re-sent a list of jobs that had not moved since the page was opened. The payload now carries
+  the work in flight and the cycle **only where they differ from what the pages were last told**, and
+  the history has no property to travel in at all. What is always there is the timestamp, because a
+  receiver that skipped a message it had seen before would draw the figures of the moment the page
+  opened and never move again.
 
 - **`S11-31` The five unread values were judged, and one of them was hiding something serious.**
   Five values were written and never read. Each was traced to the end.

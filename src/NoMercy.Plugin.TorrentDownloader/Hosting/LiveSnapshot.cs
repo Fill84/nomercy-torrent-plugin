@@ -44,6 +44,35 @@ public sealed class LiveSnapshot : IDisposable
     private ITimer? _due;
     private bool _disposed;
 
+    /// <summary>What the pages were last told, so only changes are sent.</summary>
+    private IReadOnlyList<ActivityEvent> _flight = [];
+
+    private CycleStatus? _standing;
+
+    /// <summary>Whether two lists of events say the same thing.</summary>
+    /// <remarks>
+    /// By value, because a snapshot is a fresh list every time and comparing
+    /// the references would call every push a change — which is the whole of
+    /// what this is here to avoid.
+    /// </remarks>
+    private static bool Same(IReadOnlyList<ActivityEvent> now, IReadOnlyList<ActivityEvent> before)
+    {
+        if (now.Count != before.Count)
+        {
+            return false;
+        }
+
+        for (int at = 0; at < now.Count; at++)
+        {
+            if (now[at] != before[at])
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     public LiveSnapshot(
         IPluginHubContext hub,
         IActivityJournal journal,
@@ -58,19 +87,29 @@ public sealed class LiveSnapshot : IDisposable
         _time = time ?? TimeProvider.System;
     }
 
-    /// <summary>What every page renders from.</summary>
-    /// <param name="Activity">What the journal holds.</param>
-    /// <param name="Cycle">Where the search cycle stands.</param>
+    /// <summary>What changed since the last push, and nothing else.</summary>
+    /// <param name="InFlight">
+    /// The work that started and has not finished, or <c>null</c> when it is
+    /// what it was last time. This used to be sent on every push whether it had
+    /// moved or not, so a torrent ticking its byte count re-sent a list of jobs
+    /// that had not changed since the page was opened.
+    /// </param>
+    /// <param name="Cycle">
+    /// Where the search cycle stands, or <c>null</c> when it has not moved.
+    /// </param>
     /// <param name="At">
     /// When this push was made, and the reason it is here: a download moves its
-    /// byte count without touching the journal or the cycle, so every push
-    /// while one is running carried a payload identical to the last. A receiver
-    /// with any reason to skip a message it has already seen would draw the
-    /// figures of the moment the page was opened and never move again — which
-    /// is exactly what the owner saw. This differs on every push, so no two are
-    /// the same message.
+    /// byte count without touching the journal or the cycle, so a payload of
+    /// only-what-changed would otherwise be empty and identical to the last
+    /// one. A receiver with any reason to skip a message it has already seen
+    /// would draw the figures of the moment the page was opened and never move
+    /// again — which is exactly what the owner saw. This differs on every push,
+    /// so no two are the same message.
     /// </param>
-    public sealed record Payload(ActivitySnapshot Activity, CycleStatus Cycle, DateTimeOffset At);
+    public sealed record Payload(
+        IReadOnlyList<ActivityEvent>? InFlight,
+        CycleStatus? Cycle,
+        DateTimeOffset At);
 
     /// <summary>
     /// Something moved. The push follows within <see cref="MinimumInterval"/>;
@@ -124,18 +163,19 @@ public sealed class LiveSnapshot : IDisposable
         // Read outside the lock: the journal takes its own, and holding two in
         // one order here and the other order there is how a deadlock is built.
         ActivitySnapshot taken = _journal.Snapshot();
+        CycleStatus cycle = _cycle();
 
-        // Without the history. It is five hundred events, about a hundred
-        // kilobytes, and it went out on every push — around once a second while
-        // anything is downloading, to every open page. Nothing reads it: not
-        // this plugin, and by the contract above not the host either, which
-        // takes any message to mean "something moved" and answers by re-reading
-        // the whole view over HTTP. A hundred kilobytes a second of postage on
-        // an empty envelope.
-        Payload payload = new(
-            taken with { History = [] },
-            _cycle(),
-            _time.GetUtcNow());
+        // Only what moved. The history is never sent at all — five hundred
+        // events, about a hundred kilobytes, on every push, read by nobody —
+        // and the work in flight and the cycle are sent only where they differ
+        // from what the pages were last told.
+        IReadOnlyList<ActivityEvent>? flight = Same(taken.InFlight, _flight) ? null : taken.InFlight;
+        CycleStatus? moved = cycle == _standing ? null : cycle;
+
+        _flight = taken.InFlight;
+        _standing = cycle;
+
+        Payload payload = new(flight, moved, _time.GetUtcNow());
 
         _ = Send(payload);
     }
