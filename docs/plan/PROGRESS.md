@@ -280,11 +280,28 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-30` A save says its warnings
 - [x] `S11-31` The five unread values judged, and a private torrent stops trading peers
 - [x] `S11-32` A push carries what changed, and nothing else
+- [x] `S11-33` Room is checked whoever added it, and the address book is bounded
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-33` The two things left standing after `S11-31` are closed.**
+  - **A torrent that will not fit is stopped the moment its size is known, whoever added it.** The
+    free-space rule of `S6-01` lives in `Grab.Room`, which only the search pipeline passes through —
+    and a magnet the owner pastes could not pass it anyway, because a magnet has no size until its
+    metadata arrives. So the same rule is applied in the engine, at the moment the size is really
+    known. Measured against what will be **fetched**, not what the torrent weighs: a pack carrying a
+    sample and a folder of screenshots is judged on its episodes. The refusal names both numbers,
+    and is about the release rather than about tonight — no amount of waiting makes it fit.
+  - **The address book is bounded at 2,000.** Trackers, the DHT, local discovery and peer exchange
+    all wrote into `_known` and nothing ever took an address out — not on a failed dial, not on
+    pause, not on resume — so a torrent left running for days remembered every address it had ever
+    been told. A tracker with three thousand peers to hand over is not exotic. Over the limit the
+    addresses dialled longest ago go first, and **an address nobody has tried yet is never dropped
+    for one that has**: the book exists to have somewhere to look when the swarm goes quiet, and an
+    untried address is the only thing in it worth anything.
 
 - **`S11-32` A push carries what changed, and nothing else.** The owner asked for two things — push
   when something changes, and push only the changes — and only the first was built. Dropping the

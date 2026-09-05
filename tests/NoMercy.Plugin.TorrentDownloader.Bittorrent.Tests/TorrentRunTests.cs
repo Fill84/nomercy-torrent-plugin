@@ -1103,4 +1103,76 @@ public class TorrentRunTests : IDisposable
             Directory.Delete(_folder, recursive: true);
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The address book never forgot anybody.</strong> Trackers, the
+    /// DHT, local discovery and peer exchange all write into it and nothing
+    /// ever took an address out — not on a failed dial, not on pause, not on
+    /// resume. A torrent left running for days remembered every address it had
+    /// ever been told, a few hundred bytes each, until the process ended.
+    /// </para>
+    /// <para>
+    /// A tracker with three thousand peers to hand over is not exotic; a
+    /// popular release has that. Over the limit, the addresses dialled longest
+    /// ago go first, and an address nobody has tried yet is never dropped for
+    /// one that has — the book exists to have somewhere to look when the swarm
+    /// goes quiet, and an untried address is the only thing in it worth
+    /// anything.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheAddressBookDoesNotGrowWithoutEnd()
+    {
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+
+        Crowded crowd = new(3000);
+
+        using TorrentRun run = new(
+            ArchiveHash,
+            ["http://tracker.invalid/announce"],
+            _folder,
+            new TrackerSet(crowd, TimeProvider.System),
+            new NobodyDials(),
+            Id("NM0001"),
+            listenPort: 51413,
+            TimeProvider.System,
+            torrent);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.InRange(run.Remembered, 1, TorrentRun.MostRemembered);
+    }
+
+    /// <summary>A tracker handing over more peers than anybody keeps.</summary>
+    private sealed class Crowded(int peers) : ITrackerTransport
+    {
+        public Task<byte[]> GetAsync(Uri address, CancellationToken ct)
+        {
+            _ = address;
+
+            byte[] compact = new byte[peers * 6];
+
+            for (int at = 0; at < peers; at++)
+            {
+                compact[at * 6] = 10;
+                compact[(at * 6) + 1] = (byte)(at / 65536 % 256);
+                compact[(at * 6) + 2] = (byte)(at / 256 % 256);
+                compact[(at * 6) + 3] = (byte)(at % 256);
+                compact[(at * 6) + 4] = 0xC8;
+                compact[(at * 6) + 5] = 0xD5;
+            }
+
+            return Task.FromResult(Bencode.Write(new BencodeDictionary(
+            [
+                new("interval"u8.ToArray(), new BencodeInteger(1800)),
+                new("peers"u8.ToArray(), new BencodeBytes(compact)),
+            ])));
+        }
+
+        public Task<byte[]> ExchangeAsync(string host, int port, byte[] datagram, TimeSpan patience, CancellationToken ct)
+        {
+            throw new TimeoutException($"{host}:{port} did not answer.");
+        }
+    }
 }

@@ -42,7 +42,8 @@ public sealed class BittorrentEngine(
     ITrackerTransport transport,
     IPeerDialler dialler,
     TimeProvider? time = null,
-    ResumeKeeper? resume = null)
+    ResumeKeeper? resume = null,
+    IStorageSpace? space = null)
     : ITorrentEngine, IDisposable
 {
     private readonly Lock _lock = new();
@@ -992,6 +993,7 @@ public sealed class BittorrentEngine(
         if (held.Run.Torrent is not null)
         {
             Refuse(held);
+            Cramped(held);
 
             return;
         }
@@ -1214,6 +1216,77 @@ public sealed class BittorrentEngine(
 
         logger.LogWarning("{Name} was refused: {Reason}", held.Run.Torrent?.Name ?? held.Name, held.Error);
         journal.Failed(ActivityStage.Download, held.Run.Torrent?.Name ?? held.Name ?? "a torrent", held.Error);
+    }
+
+    /// <summary>
+    /// Stops a torrent the disk cannot hold.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The free-space rule of <c>S6-01</c> lives in <c>Grab.Room</c>, which
+    /// only the search pipeline passes through. A magnet the owner pastes and a
+    /// torrent handed back after the client lost it reach the engine without
+    /// it — and neither could pass it, because a magnet has no size until its
+    /// metadata arrives. So the same rule is applied here, at the moment the
+    /// size is really known, whoever added it.
+    /// </para>
+    /// <para>
+    /// The same disk holds the library and the database, so a torrent that
+    /// fills it takes the media server down with it. That is the whole reason
+    /// the rule exists.
+    /// </para>
+    /// <para>
+    /// Measured against what will be fetched rather than what the torrent
+    /// weighs: only the video files are downloaded, so a pack carrying a sample
+    /// and a folder of screenshots is judged on its episodes.
+    /// </para>
+    /// </remarks>
+    private void Cramped(Held held)
+    {
+        if (space is null || held.Error is not null || held.Run.Paused)
+        {
+            return;
+        }
+
+        RunProgress progress = held.Run.Progress();
+
+        if (progress.BytesTotal is not long needed
+            || space.FreeBytes(held.Run.Folder()) is not long free
+            || free >= needed - progress.BytesDone)
+        {
+            return;
+        }
+
+        // Both numbers, because "not enough space" tells the owner nothing they
+        // can act on and these two say exactly what to clear.
+        held.Error =
+            $"It needs {Size(needed - progress.BytesDone)} more and {held.Run.Folder()} has {Size(free)} free.";
+
+        // About the torrent and not about tonight: no amount of waiting makes
+        // it fit, and the owner has to do something before it can be asked for
+        // again.
+        held.ErrorIsTheRelease = true;
+
+        held.Run.Pause();
+
+        logger.LogWarning("{Name} was stopped: {Reason}", held.Run.Torrent?.Name ?? held.Name, held.Error);
+        journal.Failed(ActivityStage.Download, held.Run.Torrent?.Name ?? held.Name ?? "a torrent", held.Error);
+    }
+
+    /// <summary>Bytes as an owner reads them.</summary>
+    private static string Size(long bytes)
+    {
+        string[] units = ["B", "KB", "MB", "GB", "TB"];
+        double size = bytes;
+        int unit = 0;
+
+        while (size >= 1024 && unit < units.Length - 1)
+        {
+            size /= 1024;
+            unit++;
+        }
+
+        return string.Create(CultureInfo.InvariantCulture, $"{size:0.#} {units[unit]}");
     }
 
     /// <summary>

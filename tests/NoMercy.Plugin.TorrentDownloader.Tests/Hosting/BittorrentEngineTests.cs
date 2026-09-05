@@ -2,6 +2,7 @@ using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
@@ -1330,5 +1331,128 @@ public class BittorrentEngineTests : IDisposable
                 Directory.Delete(folder, recursive: true);
             }
         }
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent that will not fit is stopped when its size is known,
+    /// whoever added it.</strong> The free-space rule of <c>S6-01</c> lives in
+    /// <c>Grab.Room</c>, which only the search pipeline goes through. A magnet
+    /// the owner pastes, and a torrent handed back to the client after it was
+    /// lost, reach the engine without passing it — and neither could pass it,
+    /// because a magnet has no size until its metadata arrives.
+    /// </para>
+    /// <para>
+    /// So the check belongs here as well, at the moment the size is really
+    /// known. The same disk holds the library and the database, so a torrent
+    /// that fills it takes the media server down with it — which is why that
+    /// rule exists at all.
+    /// </para>
+    /// <para>
+    /// What is measured is what will be fetched, not what the torrent weighs:
+    /// only the video files are downloaded, so a pack carrying a sample and a
+    /// screenshot folder is judged on the episodes alone.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentTooBigForTheDiskIsRefusedWhenItsSizeIsKnown()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-room-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+
+            ResumeKeeper keeping = new(folder, TimeSpan.FromSeconds(1), TimeProvider.System);
+            // Eight gigabytes of episode, which is a real season pack.
+            byte[] file = Episode(8L * 1024 * 1024 * 1024);
+            TorrentMetadata torrent = TorrentMetadata.Read(file);
+
+            keeping.Remember(torrent.InfoHash, Info(file));
+
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                new SilentTrackers(),
+                new NoPeers(),
+                null,
+                keeping,
+
+                // A disk with a kilobyte left on it.
+                new NoRoom(1024));
+
+            engine.Start();
+
+            await engine.AddAsync(
+                new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder),
+                CancellationToken.None);
+
+            TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))[0];
+
+            Assert.Equal(TorrentState.Error, status.State);
+
+            // Both numbers, because "not enough space" tells the owner nothing
+            // they can act on and these two say exactly what to clear.
+            Assert.Contains("needs", status.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("free", status.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+
+            // And it is about this torrent rather than about tonight: no amount
+            // of waiting makes it fit.
+            Assert.True(status.ErrorIsTheRelease);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
+
+    /// <summary>A disk with a fixed number of bytes left on it.</summary>
+    private sealed class NoRoom(long free) : IStorageSpace
+    {
+        public long? FreeBytes(string folder)
+        {
+            _ = folder;
+
+            return free;
+        }
+    }
+
+    /// <summary>A single-file torrent of a given size, named as an episode.</summary>
+    /// <remarks>
+    /// Built here rather than taken from a fixture because both fixtures are of
+    /// things nobody watches — a scanned book and an installer — and a torrent
+    /// with no video in it is refused for its contents before its size is ever
+    /// weighed. The size is the point of this one.
+    /// </remarks>
+    private static byte[] Episode(long bytes)
+    {
+        const int piece = 262144;
+
+        int pieces = (int)((bytes + piece - 1) / piece);
+
+        BencodeDictionary info = new(
+        [
+            new("length"u8.ToArray(), new BencodeInteger(bytes)),
+            new("name"u8.ToArray(), new BencodeBytes("Silo.S03E06.1080p.WEB.H264-CAKES.mkv"u8.ToArray())),
+            new("piece length"u8.ToArray(), new BencodeInteger(piece)),
+            new("pieces"u8.ToArray(), new BencodeBytes(new byte[pieces * 20])),
+        ]);
+
+        return Bencode.Write(new BencodeDictionary(
+        [
+            new("announce"u8.ToArray(), new BencodeBytes("http://tracker.invalid/announce"u8.ToArray())),
+            new("info"u8.ToArray(), info),
+        ]));
     }
 }

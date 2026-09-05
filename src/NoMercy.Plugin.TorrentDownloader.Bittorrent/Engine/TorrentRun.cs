@@ -564,6 +564,23 @@ public sealed class TorrentRun : IDisposable
     /// <summary>Every file in it, or nothing while the metadata has not arrived.</summary>
     public IReadOnlyList<TorrentFileEntry> Files => Torrent?.Files ?? [];
 
+    /// <summary>How many addresses this run is keeping a note of.</summary>
+    /// <remarks>
+    /// Bounded by <see cref="MostRemembered"/>. It was not: every address any
+    /// tracker, the DHT, local discovery or a peer exchange ever named stayed
+    /// for the life of the run.
+    /// </remarks>
+    public int Remembered
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _known.Count;
+            }
+        }
+    }
+
     /// <summary>Every tracker known for it.</summary>
     public IReadOnlyList<string> Trackers
     {
@@ -695,7 +712,24 @@ public sealed class TorrentRun : IDisposable
         }
     }
 
+    /// <summary>The most addresses this run keeps a note of.</summary>
+    /// <remarks>
+    /// The book never forgot anybody. Trackers, the DHT, local discovery and
+    /// peer exchange all write into it and nothing ever took an address out, so
+    /// a torrent left running for days remembered every address it had ever
+    /// been told — tens of thousands of them, a few hundred bytes each, kept
+    /// until the process ended.
+    /// </remarks>
+    public const int MostRemembered = 2000;
+
     /// <summary>Writes addresses into the book, whoever named them.</summary>
+    /// <remarks>
+    /// Bounded. Over the limit, the addresses dialled longest ago go first: one
+    /// that has been tried and got nowhere is the least worth keeping. An
+    /// address nobody has tried yet outranks every address that has, because
+    /// the whole point of the book is somewhere to look when the swarm has gone
+    /// quiet.
+    /// </remarks>
     private void Remember(IEnumerable<PeerAddress> addresses)
     {
         lock (_lock)
@@ -703,6 +737,20 @@ public sealed class TorrentRun : IDisposable
             foreach (PeerAddress address in addresses)
             {
                 _known[address.ToString()] = address;
+            }
+
+            if (_known.Count <= MostRemembered)
+            {
+                return;
+            }
+
+            foreach (string stale in _known.Keys
+                .OrderBy(one => _tried.TryGetValue(one, out DateTimeOffset when) ? when : DateTimeOffset.MaxValue)
+                .Take(_known.Count - MostRemembered)
+                .ToArray())
+            {
+                _known.Remove(stale);
+                _tried.Remove(stale);
             }
         }
     }
