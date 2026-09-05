@@ -75,7 +75,11 @@ public class DownloadsViewTests
         Assert.Contains("0.35", row, StringComparison.Ordinal);
         Assert.Contains("D:\\incomplete", row, StringComparison.Ordinal);
 
-        Assert.Contains(Rendered.EveryValue(view), one => one == "24");
+        // Nine seeds, and twenty-four connections of which nine are seeds, so
+        // fifteen leechers. The peers column counts leechers: this used to
+        // assert "24" against a column headed with the swarm's leechers, which
+        // is two populations in one place.
+        Assert.Contains(Rendered.EveryValue(view), one => one == "15");
         Assert.Contains(Rendered.EveryValue(view), one => one == "9");
     }
 
@@ -362,5 +366,58 @@ public class DownloadsViewTests
 
         Assert.Contains("100% of 2.7 GB", row, StringComparison.Ordinal);
         Assert.DoesNotContain(" in)", row, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Peers are leechers. Seeds have all of it. The two columns count
+    /// two populations and the page mixed them.</strong> A tracker answers with
+    /// <c>seeders</c> and <c>leechers</c> and they are disjoint — nobody is
+    /// both. The right-hand half of the peers column was the swarm's leechers,
+    /// and the left-hand half was every connection this client had, seeds
+    /// included. So "5 of 8" could mean five connections of which three were
+    /// seeds, against eight leechers: two numbers that cannot be compared,
+    /// printed as though they could.
+    /// </para>
+    /// <para>
+    /// The owner had to say it more than once, and they were right every time.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ThePeersColumnCountsLeechersAndTheSeedsColumnCountsSeeds()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "Silo S03E06 1080p",
+                    TorrentState.Downloading,
+                    BytesDone: 1_000_000_000,
+                    BytesTotal: 4_000_000_000,
+                    DownloadRateBytesPerSecond: 0,
+                    UploadRateBytesPerSecond: 0,
+
+                    // Eleven connections, three of which have the lot. So eight
+                    // leechers are connected, not eleven.
+                    Peers: 11,
+                    Seeds: 3,
+                    Ratio: 0,
+                    Eta: null,
+                    Error: null,
+                    SwarmSeeds: 52,
+                    SwarmPeers: 110),
+                @"D:\incomplete"),
+        ]);
+
+        IReadOnlyList<string> cells = [.. Rendered.EveryValue(view)];
+
+        Assert.Contains("3 of 52", cells);
+        Assert.Contains("8 of 110", cells);
+
+        // And never the connection count, which is neither of the two things
+        // the columns are headed with.
+        Assert.DoesNotContain("11 of 110", cells);
     }
 }

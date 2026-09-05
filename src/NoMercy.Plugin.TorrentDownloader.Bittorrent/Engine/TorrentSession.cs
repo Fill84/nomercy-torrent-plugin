@@ -6,6 +6,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 /// <param name="BytesDone">How much of it is verified.</param>
 /// <param name="Peers">How many connections are up.</param>
 /// <param name="Seeds">How many of those have the lot.</param>
+/// <param name="Askable">
+/// How many of the connected peers have unchoked this client <em>and</em> hold at
+/// least one piece it still wants. It is the number that says whether a torrent
+/// standing still is the swarm's doing or this client's: peers that will not talk
+/// and peers with nothing to offer both leave it at nought, and so does a client
+/// that is not asking, and only this tells them apart.
+/// </param>
 /// <param name="ChokedBy">
 /// How many of those will not send anything. A peer starts choked by BEP 3 and
 /// stays that way until it says otherwise; on a public torrent this client never
@@ -28,6 +35,7 @@ public sealed record SessionProgress(
     int Peers,
     int Seeds,
     int ChokedBy,
+    int Askable,
     long Downloaded,
     long Uploaded,
     long WantedBytes)
@@ -195,10 +203,34 @@ public sealed class TorrentSession(
                 // the peers that have said nothing as well as the ones that
                 // said no, and both mean the same thing: nothing will come.
                 _peers.Count(one => one.Choked),
+
+                // Unchoked and holding something still wanted. Counted here
+                // rather than worked out on a page, because what is wanted is
+                // the verified bitfield and nothing outside this class has it.
+                _peers.Count(one => !one.Choked && Wanted(one)),
                 _downloaded,
                 _uploaded,
                 WantedBytes);
         }
+    }
+
+    /// <summary>Whether this peer holds a piece this client still wants.</summary>
+    /// <remarks>
+    /// Only the wanted pieces: a torrent whose sample files are skipped is
+    /// never complete against its own piece count, and a peer holding nothing
+    /// but those has nothing for this client.
+    /// </remarks>
+    private bool Wanted(PeerConnection peer)
+    {
+        for (int piece = 0; piece < torrent.PieceCount; piece++)
+        {
+            if (!verified.Has(piece) && peer.Has.Has(piece) && (wanted is null || wanted.Has(piece)))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

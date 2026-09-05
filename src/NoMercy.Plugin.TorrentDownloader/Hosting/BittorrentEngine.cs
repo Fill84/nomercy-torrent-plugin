@@ -1072,20 +1072,27 @@ public sealed class BittorrentEngine(
 
         logger.LogInformation(
             "{Name}: {Answered} of {Asked} trackers answered with {Addresses} addresses; "
-            + "{Peers} peers connected, {Seeds} of them seeds, {Choked} of them choking us; "
+            + "{Seeds} seeds and {Leechers} leechers connected, {Choked} of them choking us, "
+            + "{Askable} with something wanted; "
             + "the swarm has {SwarmSeeds} seeds and {SwarmPeers} peers; "
             + "the DHT knows {Nodes} nodes.",
             progress.Name ?? held.Name,
             said.Count(one => one.Peers is not null),
             said.Count,
             said.Sum(one => one.Peers ?? 0),
-            progress.Peers,
             progress.Seeds,
+            progress.Peers - progress.Seeds,
 
             // A peer that will not send anything and one that is merely slow
             // read the same in a peer count, and the difference is the whole
             // difference between a torrent that is stuck and one that is not.
             progress.ChokedBy,
+
+            // And of the ones that will talk, how many hold anything this
+            // client still wants. Nought here on a torrent standing still means
+            // the swarm has nothing for it; anything above nought means the
+            // fault is this client's.
+            progress.Askable,
             held.Run.SwarmSeeds?.ToString(CultureInfo.InvariantCulture) ?? "an unknown number of",
             held.Run.SwarmPeers?.ToString(CultureInfo.InvariantCulture) ?? "an unknown number of",
 

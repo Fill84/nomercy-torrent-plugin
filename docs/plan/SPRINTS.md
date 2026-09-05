@@ -2168,6 +2168,37 @@ decide — it is their rule.
 **Done when** a session talking to a peer that never unchokes it says so. Read first:
 `docs/06-torrent-client.md` § Choking.
 
+## S11-27 · Peers are leechers, and how many of them have anything for us
+
+Two things, both from watching Dark Matter S02E02 stand still.
+
+### The columns counted two populations as one
+
+A tracker answers with `seeders` and `leechers`, and they are disjoint — nobody is both. The peers
+column's right-hand half was the swarm's leechers and its left-hand half was **every connection this
+client held, seeds included**. "5 of 8" could be five connections of which three were seeds, against
+eight leechers: two numbers that cannot be compared, printed as though they could.
+
+The connected count stays what it is for the stall detector, which wants connections. The page and
+the announce line subtract the seeds: `2 seeds and 9 leechers connected`.
+
+### And the measurement that was still missing
+
+`S11-26` added `ChokedBy` and it **disproved the standing theory**. Of eleven connected peers, four
+were choking us and seven were not — so the swarm was not refusing this client, and the upload
+policy was not why the torrent stood still.
+
+That leaves two possibilities and no way to tell them apart: those seven hold nothing this client
+wants, or this client is not asking. `SessionProgress.Askable` counts the peers that have unchoked
+it **and** hold a piece it still wants.
+
+- Nought, on a torrent standing still: the swarm has nothing for it, and waiting is right.
+- Above nought, on a torrent standing still: **the fault is this client's**, and the request path is
+  where to look next.
+
+**Done when** the announce line says both, and the peers column counts leechers. Read first:
+`docs/plan/PROGRESS.md` § Log, `S11-26`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

@@ -164,7 +164,15 @@ public static class DownloadsView
                         // A count nobody has been told is not nought. This is
                         // the whole of what 0.3.4 got wrong on this page.
                         ["seeds"] = Swarm(row.Transfer?.Seeds, row.Transfer?.SwarmSeeds),
-                        ["peers"] = Swarm(row.Transfer?.Peers, row.Transfer?.SwarmPeers),
+                        // Leechers, not connections. A tracker answers with
+                        // seeders and leechers and they are disjoint; the
+                        // right-hand half of this column is the swarm's
+                        // leechers, so the left-hand half has to be the
+                        // leechers connected and not every connection with the
+                        // seeds counted in twice.
+                        ["peers"] = Swarm(
+                            row.Transfer is { } connected ? connected.Peers - connected.Seeds : null,
+                            row.Transfer?.SwarmPeers),
                         ["ratio"] = row.Transfer?.Ratio is double ratio
                             ? ratio.ToString("0.00", CultureInfo.InvariantCulture)
                             : Unknown,

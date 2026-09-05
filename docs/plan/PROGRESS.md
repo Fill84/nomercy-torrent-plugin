@@ -274,11 +274,26 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-24` A torrent the client no longer holds still has its files deleted
 - [x] `S11-25` A download no grab answers for is cleared
 - [x] `S11-26` The swarm line says how many peers are choking us
+- [x] `S11-27` Peers are leechers, and how many of them have anything for us
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-27` Peers are leechers, seeds have all of it, and the page counted them as one thing.**
+  A tracker answers with `seeders` and `leechers` and they are **disjoint**. The right-hand half of
+  the peers column was the swarm's leechers; the left-hand half was every connection this client
+  held, seeds included. So "5 of 8" could be five connections of which three were seeds, against
+  eight leechers — two populations printed as though they could be compared. The owner corrected this
+  more than once before it was heard. The column now counts leechers on both sides, and the announce
+  line says `2 seeds and 9 leechers connected` instead of `11 peers connected, 2 of them seeds`.
+- **`S11-27` also carries the second measurement `S11-26` was missing.** `ChokedBy` disproved the
+  standing theory — of eleven connected peers only **four** were choking us, so the swarm was not
+  refusing us and the upload policy was not the cause. `SessionProgress.Askable` counts the peers
+  that have unchoked this client **and** hold a piece it still wants. Nought there on a standing
+  torrent means the swarm has nothing for it; anything above nought means the fault is this client's.
+  That is the number that decides which, and it was the question left open.
 
 - **`S11-26` The swarm line says how many peers are choking us.** Dark Matter S02E02 sat at 38.5% for
   a day with up to thirty-two peers connected, nought of them seeds, and not a byte arriving — and
