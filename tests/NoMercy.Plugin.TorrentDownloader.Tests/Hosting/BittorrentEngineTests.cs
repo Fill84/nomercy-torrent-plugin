@@ -1261,4 +1261,78 @@ public class BittorrentEngineTests : IDisposable
             }
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>What the pages show, as one value, so a change can be seen.</strong>
+    /// The heartbeat pushed while bytes were moving and said nothing otherwise,
+    /// so a download that stalled stopped updating — and a peer arriving, a
+    /// seed arriving or a peer choking us reached no page at all, because none
+    /// of those moves a byte.
+    /// </para>
+    /// <para>
+    /// The owner's rule, and it cuts both ways: information that is shown and
+    /// changes is an update, and a tick that changed nothing is not one. So
+    /// this has to differ when anything on the page differs, and stay put when
+    /// nothing does.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WhatThePagesDrawChangesWhenATorrentArrivesAndHoldsStillOtherwise()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-drawn-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+
+            ResumeKeeper keeping = new(folder, TimeSpan.FromSeconds(1), TimeProvider.System);
+            byte[] file = Fixture("archive-multifile.torrent");
+            TorrentMetadata torrent = TorrentMetadata.Read(file);
+
+            keeping.Remember(torrent.InfoHash, Info(file));
+
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                new SilentTrackers(),
+                new NoPeers(),
+                null,
+                keeping);
+
+            engine.Start();
+
+            string empty = engine.Drawn;
+
+            await engine.AddAsync(
+                new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder, torrent.TotalLength),
+                CancellationToken.None);
+
+            string holding = engine.Drawn;
+
+            Assert.NotEqual(empty, holding);
+
+            // And nothing has happened to it since, so there is nothing to say.
+            // Nobody answers this swarm, so not a byte moves and no peer
+            // arrives — which is the case the heartbeat used to be silent
+            // through and must now also be silent through, for the opposite
+            // reason: not because bytes are still, but because nothing changed.
+            Assert.Equal(holding, engine.Drawn);
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
 }

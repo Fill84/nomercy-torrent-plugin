@@ -1011,6 +1011,55 @@ public sealed class BittorrentEngine(
         journal.Failed(ActivityStage.Download, held.Name ?? "a magnet", held.Error);
     }
 
+    /// <summary>Everything the pages draw about the client, as one value.</summary>
+    /// <remarks>
+    /// <para>
+    /// To be compared with the last one pushed. Where they differ something a
+    /// page shows has changed and the page has to be told; where they are the
+    /// same nothing has, and a push would be a poll written at the other end.
+    /// </para>
+    /// <para>
+    /// Every figure the Downloads page draws is in here, and only those: a
+    /// change nobody can see is not a change. So a peer arriving moves it, a
+    /// seed arriving moves it, a peer choking us moves it, a byte moves it —
+    /// and a torrent sitting still with the same peers does not.
+    /// </para>
+    /// </remarks>
+    public string Drawn
+    {
+        get
+        {
+            System.Text.StringBuilder said = new();
+
+            lock (_lock)
+            {
+                foreach ((string infoHash, Held held) in _torrents)
+                {
+                    RunProgress progress = held.Run.Progress();
+
+                    said.Append(infoHash).Append(':')
+                        .Append(State(held, progress)).Append(':')
+                        .Append(progress.BytesDone).Append(':')
+                        .Append(progress.BytesTotal).Append(':')
+                        .Append(progress.Downloaded).Append(':')
+                        .Append(progress.Uploaded).Append(':')
+                        .Append((long)progress.DownloadRateBytesPerSecond).Append(':')
+                        .Append((long)progress.UploadRateBytesPerSecond).Append(':')
+                        .Append(progress.Seeds).Append(':')
+                        .Append(progress.Leechers).Append(':')
+                        .Append(progress.ChokedBy).Append(':')
+                        .Append(progress.Askable).Append(':')
+                        .Append(held.Run.SwarmSeeds).Append(':')
+                        .Append(held.Run.SwarmPeers).Append(':')
+                        .Append(held.Error)
+                        .Append('|');
+                }
+            }
+
+            return said.ToString();
+        }
+    }
+
     /// <summary>Whether there is any torrent at all to draw.</summary>
     /// <remarks>
     /// <para>

@@ -259,4 +259,5 @@ public class TorrentDownloaderPluginTests
             "*/30 * * * *",
             restarted.Jobs.Single(job => job.Name == JobNames.Feed).CronExpression);
     }
+
 }

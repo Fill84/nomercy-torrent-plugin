@@ -288,7 +288,15 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   stopped moving stopped being drawn, and the owner had to refresh by hand. That is backwards: a
   stalled torrent is the one being watched. **An update is an update.** A peer arriving, a seed
   arriving, a peer choking us, the swarm count changing: every one of those is news and none of them
-  moves a byte. It pushes while the client holds anything at all now.
+  moves a byte.
+
+  **And it pushes on the change itself, not on a rhythm.** The first attempt pushed once a second
+  while the client held anything, which is a poll written at the other end — the owner does not want
+  the whole view every tick, they want to be told when something moved. `BittorrentEngine.Drawn` is
+  every figure the Downloads page shows as one value: state, bytes, rates, seeds, leechers, choking,
+  askable, swarm counts, error. The heartbeat compares it with what the pages were last told and
+  pushes only where it differs. A peer arriving moves it; a byte moves it; a torrent sitting still
+  with the same peers does not.
 
 - **`S11-28` The sweep of `S11-25` never ran at a start, which is the only time it mattered.**
   It read `_engine` off the field, and the housekeeping a start owes runs on the **first tick of any

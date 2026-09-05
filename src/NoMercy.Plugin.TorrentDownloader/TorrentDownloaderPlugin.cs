@@ -49,6 +49,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </para>
     /// </remarks>
     private ITimer? _heartbeat;
+
+    /// <summary>What the pages were last told about the client.</summary>
+    private string? _drawn;
     private HttpClient? _trackerHttp;
     private Transfers? _transfers;
     private int _settled;
@@ -1133,11 +1136,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 _heartbeat = TimeProvider.System.CreateTimer(
                     _ =>
                     {
-                        // Anything held, not only anything moving. A download
-                        // that stalls is the one being looked at, and it used
-                        // to be the one the page stopped drawing.
-                        if (_engine is { Watching: true })
+                        // When something a page shows has changed, and only
+                        // then. Not on a rhythm: the owner does not want the
+                        // whole view every tick, they want to be told when
+                        // something moved. And not only when bytes move, which
+                        // is what this used to ask — a peer arriving, a seed
+                        // arriving, a peer choking us, a torrent stalling are
+                        // all changes to what is on the screen, and none of
+                        // them shifts a byte.
+                        if (_engine?.Drawn is string drawn && !string.Equals(drawn, _drawn, StringComparison.Ordinal))
                         {
+                            _drawn = drawn;
+
                             Moved();
                         }
                     },
