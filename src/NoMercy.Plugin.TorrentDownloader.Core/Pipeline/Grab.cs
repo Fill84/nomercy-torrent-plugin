@@ -43,14 +43,16 @@ public enum GrabResult
 /// <param name="Result">Which of the three.</param>
 /// <param name="InfoHash">What the client will know it by, when it took it.</param>
 /// <param name="Reason">Why not, when it did not.</param>
-/// <param name="Attempt">
-/// Whether this counts as a search attempt against the episode.
-/// <strong>B2</strong>: it never does. 0.3.4 counted a failed grab as an
-/// attempt, so three failures in a row exhausted the episode and it was never
-/// looked for again — while the attempt count made it look like work was
-/// happening.
-/// </param>
-public sealed record Grabbed(GrabResult Result, string? InfoHash, string? Reason, bool Attempt = false);
+/// <remarks>
+/// This carried an <c>Attempt</c> saying whether a grab counted as a search
+/// attempt against the episode — <strong>B2</strong>, which it never does. It
+/// was hard-wired to false at all four construction sites and read by nothing,
+/// a second expression of a rule that is really enforced elsewhere:
+/// <c>EpisodeOutcome.Searched</c> gates it and <c>CycleRecord</c> counts against
+/// <c>MaxSearchAttempts</c>. Two sources of truth for one rule is how they drift,
+/// so there is one.
+/// </remarks>
+public sealed record Grabbed(GrabResult Result, string? InfoHash, string? Reason);
 
 /// <summary>
 /// Handing a chosen copy to the torrent client.
@@ -114,8 +116,7 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
                         // magnet carried and the owner's own list. More
                         // trackers is a faster download and costs nothing.
                         [.. copy.Trackers.Union(defaultTrackers, StringComparer.OrdinalIgnoreCase)],
-                        folder,
-                        copy.SizeBytes),
+                        folder),
                     ct)
                 .ConfigureAwait(false);
 

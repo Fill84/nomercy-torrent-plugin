@@ -418,6 +418,75 @@ public class TorrentSessionTests : IDisposable
         Assert.Equal(0, progress.BytesDone);
     }
 
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A private torrent looks for peers on its own tracker and
+    /// nowhere else.</strong> BEP 27, and it is not a nicety: a private tracker
+    /// that catches a client swapping peer addresses behind its back bans the
+    /// account, and the owner's ratio and history go with it.
+    /// </para>
+    /// <para>
+    /// <c>PeerExchange.Read</c> has the guard — it answers nothing at all when
+    /// the torrent is private. Both places that actually receive a peer
+    /// exchange called the static <c>Pex.Read</c> instead, which has no guard,
+    /// so a private torrent parsed what a peer offered and dialled it. The
+    /// outgoing half was safe and the incoming half was not.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APrivateTorrentIgnoresPeersOfferedByAPeer()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(20));
+
+        byte[] content = Fixture("ubuntu-desktop.torrent");
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768, secret: true);
+
+        Assert.True(torrent.Private);
+
+        List<PeerAddress> offered = [];
+
+        string folder = Path.Combine(_folder, "private-leech");
+        Directory.CreateDirectory(folder);
+
+        TorrentDisk disk = new(torrent, folder);
+        disk.Create();
+
+        using TorrentSession leecher = new(
+            torrent,
+            disk,
+            new(torrent.PieceCount),
+            met: found => offered.AddRange(found));
+
+        (Stream ours, Stream theirs) = await LoopbackAsync(stopping.Token);
+
+        Task<PeerConnection?> mine = PeerConnection.IntroduceAsync(
+            ours, Hash(torrent), Id("LEECH"), torrent.PieceCount, dialling: false, stopping.Token);
+
+        Task<PeerConnection?> yours = PeerConnection.IntroduceAsync(
+            theirs, Hash(torrent), Id("OTHER"), torrent.PieceCount, dialling: true, stopping.Token);
+
+        PeerConnection?[] both = await Task.WhenAll(mine, yours);
+
+        Task running = leecher.RunAsync(both[0]!, stopping.Token);
+
+        // A peer offering an address, exactly as a public swarm does.
+        await both[1]!.SendAsync(
+            Pex.Write(
+                Extensions.OurExchangeId,
+                [new(System.Net.IPAddress.Parse("203.0.113.7"), 51413)],
+                []),
+            stopping.Token);
+
+        // Long enough to have crossed a loopback socket many times over.
+        await Task.Delay(TimeSpan.FromSeconds(2), stopping.Token);
+
+        await stopping.CancelAsync();
+        await running.ContinueWith(_ => { }, TaskScheduler.Default);
+
+        Assert.Empty(offered);
+    }
+
     public void Dispose()
     {
         if (Directory.Exists(_folder))

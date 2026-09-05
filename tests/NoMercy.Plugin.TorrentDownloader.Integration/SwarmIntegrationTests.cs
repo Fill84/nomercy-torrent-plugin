@@ -210,7 +210,7 @@ public class SwarmIntegrationTests
 
         try
         {
-            TorrentHandle taken = await engine.AddAsync(new(Magnet, [], folder, null), stopping.Token);
+            TorrentHandle taken = await engine.AddAsync(new(Magnet, [], folder), stopping.Token);
 
             // Long enough for a connect, an announce and a handshake on a slow
             // link, and far short of the metadata timeout.

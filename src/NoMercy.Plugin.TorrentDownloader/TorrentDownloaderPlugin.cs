@@ -721,7 +721,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         try
         {
             TorrentHandle taken = await engine.AddAsync(
-                new(source, [], settings.IncompleteFolder, null),
+                new(source, [], settings.IncompleteFolder),
                 ct);
 
             await (await GrabsAsync(ct)).RecordAsync(

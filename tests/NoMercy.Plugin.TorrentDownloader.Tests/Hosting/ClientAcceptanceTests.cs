@@ -60,7 +60,7 @@ public class ClientAcceptanceTests : IDisposable
 
         seeding.Start();
 
-        await seeding.AddAsync(new(file, [], Folder("seed"), torrent.TotalLength), stopping.Token);
+        await seeding.AddAsync(new(file, [], Folder("seed")), stopping.Token);
 
         // The one thing a swarm provides that a test has to stand in for: an
         // address. Everything after it is this client talking to this client.
@@ -69,7 +69,7 @@ public class ClientAcceptanceTests : IDisposable
         leeching.Start();
 
         await leeching.AddAsync(
-            new(file, ["http://tracker.example/announce"], Folder("leech"), torrent.TotalLength),
+            new(file, ["http://tracker.example/announce"], Folder("leech")),
             stopping.Token);
 
         await Until(
@@ -146,7 +146,7 @@ public class ClientAcceptanceTests : IDisposable
 
         engine.Start();
 
-        await engine.AddAsync(new(file, [], Folder("ondisk"), torrent.TotalLength), stopping.Token);
+        await engine.AddAsync(new(file, [], Folder("ondisk")), stopping.Token);
 
         TorrentStatus status = Assert.Single(await engine.StatusAsync(stopping.Token));
 

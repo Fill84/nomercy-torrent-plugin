@@ -36,8 +36,10 @@ public class DownloadsViewTests
         Assert.DoesNotContain("0%", row, StringComparison.Ordinal);
         Assert.DoesNotContain(Rendered.EveryValue(view), one => one == "0");
 
-        // Three of them — peers, seeds and ratio — plus progress and rate.
-        Assert.InRange(Rendered.EveryValue(view).Count(one => one == "—"), 3, 5);
+        // Peers, seeds, ratio and how long is left, plus progress and rate. A
+        // grab the client has not taken up knows none of them, and says so
+        // rather than drawing nought.
+        Assert.InRange(Rendered.EveryValue(view).Count(one => one == "—"), 4, 6);
     }
 
     /// <remarks>
@@ -424,5 +426,81 @@ public class DownloadsViewTests
         // And never the connection count, which is neither of the two things
         // the columns are headed with.
         Assert.DoesNotContain("11 of 110", cells);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>How long it has left, which was worked out and never drawn.</strong>
+    /// <c>docs/08-ui.md</c> § 46 specifies this table with a <c>Duration</c>
+    /// cell, and <c>TorrentStatus.Eta</c> is the only value on the page a
+    /// duration could hold. It was computed on every status and read by
+    /// nothing, so the owner watching a forty-five gigabyte pack had no figure
+    /// for how long they were waiting.
+    /// </para>
+    /// <para>
+    /// Null where it cannot be known — no size, or nothing moving — because a
+    /// remaining time worked out from a rate of nought inflates to infinity,
+    /// and a made-up number is worse than none.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ATorrentSaysHowLongItHasLeftWhenThatCanBeKnown()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "Silo S03E06 1080p",
+                    TorrentState.Downloading,
+                    BytesDone: 2_000_000_000,
+                    BytesTotal: 4_000_000_000,
+                    DownloadRateBytesPerSecond: 5 * 1024 * 1024,
+                    UploadRateBytesPerSecond: 0,
+                    Peers: 24,
+                    Seeds: 9,
+                    Ratio: 0.35,
+                    Eta: TimeSpan.FromMinutes(7),
+                    Error: null,
+                    Leechers: 15),
+                @"D:\incomplete"),
+        ]);
+
+        string row = string.Join(" ", Rendered.EveryValue(view));
+
+        Assert.Contains("7m", row, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
+    /// And nothing at all where it cannot be known. A torrent standing still
+    /// has no honest remaining time, and drawing one from a rate of nought is
+    /// the invented figure this whole page is shaped against.
+    /// </remarks>
+    [Fact]
+    public void ATorrentThatIsNotMovingSaysNothingAboutHowLongItHasLeft()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "Silo S03E06 1080p",
+                    TorrentState.Downloading,
+                    BytesDone: 1_000_000,
+                    BytesTotal: 4_000_000_000,
+                    DownloadRateBytesPerSecond: 0,
+                    UploadRateBytesPerSecond: 0,
+                    Peers: 3,
+                    Seeds: 0,
+                    Ratio: 0,
+                    Eta: null,
+                    Error: null,
+                    Leechers: 3),
+                @"D:\incomplete"),
+        ]);
+
+        Assert.Contains(Rendered.EveryValue(view), one => one == "—");
     }
 }

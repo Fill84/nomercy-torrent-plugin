@@ -334,4 +334,48 @@ public class PeerExchangeTests
         Assert.Equal(Extensions.OurMetadataId, ours.Messages[Extensions.Metadata]);
         Assert.Equal(Extensions.OurExchangeId, ours.Messages[Extensions.PeerExchange]);
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A peer cannot fill this client's address book by saying so.</strong>
+    /// The write side takes at most <c>MostPerMessage</c>, which is what BEP 11
+    /// asks of a well-behaved client. The read side took the lot: a compact
+    /// string is two bytes of port and four of address, and a peer message may
+    /// be a mebibyte, so one message could name a hundred and seventy thousand
+    /// addresses — every one of them written into a book that is never emptied
+    /// and dialled from for the life of the torrent.
+    /// </para>
+    /// <para>
+    /// Nothing about that needs a hostile peer; a broken one will do. The read
+    /// takes the same number the write gives.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void APeerOfferingMoreAddressesThanAllowedIsReadUpToTheLimitAndNoFurther()
+    {
+        List<PeerAddress> many =
+        [
+            .. Enumerable.Range(0, Pex.MostPerMessage * 4)
+                .Select(one => new PeerAddress(IPAddress.Parse($"10.{one / 256}.{one % 256}.1"), 51413)),
+        ];
+
+        // Written by hand rather than through Pex.Write, which caps it: the
+        // message under test is the one a peer that does not cap sends.
+        byte[] compact = new byte[many.Count * 6];
+
+        for (int at = 0; at < many.Count; at++)
+        {
+            many[at].Address.GetAddressBytes().CopyTo(compact, (at * 6));
+            compact[(at * 6) + 4] = 0xC8;
+            compact[(at * 6) + 5] = 0xD5;
+        }
+
+        PeerMessage message = Extensions.Extended(
+            Extensions.OurExchangeId,
+            new BencodeDictionary([new("added"u8.ToArray(), new BencodeBytes(compact))]));
+
+        PexUpdate read = Pex.Read(message);
+
+        Assert.Equal(Pex.MostPerMessage, read.Added.Count);
+    }
 }

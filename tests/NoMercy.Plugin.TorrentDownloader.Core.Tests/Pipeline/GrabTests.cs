@@ -11,6 +11,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 /// </summary>
 public class GrabTests
 {
+    /// <summary>Where a download would land, written once.</summary>
+    private const string Incomplete = @"D:\incomplete";
+
     /// <remarks>
     /// The client takes it and answers what it will be known by. That hash is
     /// what everything afterwards — the transfers tick, staging, recovery —
@@ -28,7 +31,11 @@ public class GrabTests
         Assert.Equal("92D8A3F6864911EF292B4BE0DD5286406396D2B3", grabbed.InfoHash);
 
         Assert.Equal("D:\\incomplete", engine.Asked!.DownloadFolder);
-        Assert.Equal(4_000_000_000, engine.Asked.ExpectedBytes);
+        // The size is not on the request. It is checked before one is built:
+        // Grab.Room reads it off the copy and refuses when the disk cannot take
+        // it, so carrying it again handed the engine a number it had no duty to
+        // use and never did.
+        Assert.Equal(GrabResult.Taken, grabbed.Result);
     }
 
     /// <remarks>
@@ -156,7 +163,6 @@ public class GrabTests
             .TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None);
 
         Assert.Equal(GrabResult.Refused, refused.Result);
-        Assert.False(refused.Attempt);
 
         // The client's own words, whatever they were.
         Assert.Contains("not a magnet", refused.Reason!, StringComparison.Ordinal);
@@ -168,8 +174,13 @@ public class GrabTests
 
         // Nor does running out of room, which is the owner's disk and not the
         // episode's fault either.
-        Assert.False((await new Grab(new FakeEngine(), Room(1), journal)
-            .TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None)).Attempt);
+        // This used to assert an `Attempt` that was hard-wired false and
+        // read by nobody, which proved nothing. The result is what the
+        // cycle acts on.
+        Assert.Equal(
+            GrabResult.NoRoom,
+            (await new Grab(new FakeEngine(), Room(1), journal)
+                .TakeAsync(Copy(), Incomplete, [], CancellationToken.None)).Result);
     }
 
     /// <remarks>

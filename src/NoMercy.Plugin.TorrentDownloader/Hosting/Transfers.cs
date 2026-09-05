@@ -267,7 +267,7 @@ public sealed class Transfers(
             // here, so a torrent that came back this way had nobody to announce
             // to for as long as it lived. Dark Matter S02E02 on 3 September
             // 2026: one announce when it was grabbed, and never another.
-            await engine.AddAsync(new(lost.Magnet, trackers, incompleteFolder, null), ct);
+            await engine.AddAsync(new(lost.Magnet, trackers, incompleteFolder), ct);
         }
         catch (Exception refused) when (refused is not OperationCanceledException)
         {

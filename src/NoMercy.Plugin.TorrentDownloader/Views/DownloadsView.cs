@@ -148,6 +148,13 @@ public static class DownloadsView
                 new() { Key = "seeds", Label = "Seeds" },
                 new() { Key = "peers", Label = "Peers" },
                 new() { Key = "ratio", Label = "Ratio" },
+
+                // docs/08-ui.md § 46 asks this table for a Duration, and how
+                // long it has left is the only thing on the page one could
+                // hold. It was worked out on every status and drawn nowhere, so
+                // an owner watching a forty-five gigabyte pack had no figure
+                // for how long they were waiting.
+                new() { Key = "left", Label = "Left", Cell = PluginTableCellType.Duration },
                 new() { Key = "destination", Label = "Destination" },
                 new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
             ],
@@ -170,6 +177,11 @@ public static class DownloadsView
                         // has all of it, a leecher has not, and this column is
                         // the second of those on both sides.
                         ["peers"] = Swarm(row.Transfer?.Leechers, row.Transfer?.SwarmPeers),
+                        // Null where it cannot be known — no size, or nothing
+                        // moving. A remaining time worked out from a rate of
+                        // nought inflates to infinity, and an invented figure
+                        // is worse than none.
+                        ["left"] = row.Transfer?.Eta is TimeSpan left ? Left(left) : Unknown,
                         ["ratio"] = row.Transfer?.Ratio is double ratio
                             ? ratio.ToString("0.00", CultureInfo.InvariantCulture)
                             : Unknown,
@@ -301,6 +313,20 @@ public static class DownloadsView
 
     /// <summary>What a number that is not known says instead of nought.</summary>
     private const string Unknown = "—";
+
+    /// <summary>How long is left, in the largest unit that says something.</summary>
+    /// <remarks>
+    /// Days for a starved pack, minutes for an ordinary episode. "4320m" and
+    /// "3d" are the same number and only one of them is read at a glance.
+    /// </remarks>
+    private static string Left(TimeSpan left)
+    {
+        return left.TotalDays >= 1
+            ? string.Create(CultureInfo.InvariantCulture, $"{left.TotalDays:0.#}d")
+            : left.TotalHours >= 1
+                ? string.Create(CultureInfo.InvariantCulture, $"{left.TotalHours:0.#}h")
+                : string.Create(CultureInfo.InvariantCulture, $"{left.TotalMinutes:0.#}m");
+    }
 
     private static string Bytes(long bytes)
     {

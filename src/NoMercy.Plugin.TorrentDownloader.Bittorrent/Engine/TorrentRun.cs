@@ -1217,6 +1217,18 @@ public sealed class TorrentRun : IDisposable
                 // Peers before pieces. A magnet is exactly when this client has
                 // fewest of them and needs most: the metadata itself has to
                 // come from somebody.
+                //
+                // Never for a private torrent, by BEP 27 — the same rule the
+                // DHT is held to a few lines down. Whether a torrent is private
+                // is in its info dictionary, so a magnet still fetching that
+                // cannot be judged yet; once it has arrived this refuses, and
+                // until then there is no info hash to trade peers about beyond
+                // the one the tracker already gave.
+                if (Torrent?.Private == true)
+                {
+                    continue;
+                }
+
                 PexUpdate offered = Pex.Read(message);
 
                 if (offered.Added.Count > 0)

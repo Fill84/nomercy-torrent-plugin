@@ -367,6 +367,17 @@ public sealed class TorrentSession(
             && message.Payload[0] == Extensions.OurExchangeId
             && met is not null)
         {
+            // BEP 27: a private torrent looks for peers on its own tracker and
+            // nowhere else, and that holds for peers offered to it as much as
+            // for peers it goes looking for. PeerExchange.Read has this guard;
+            // this called the static Pex.Read, which has none — so the outgoing
+            // half was refused and the incoming half was taken and dialled. A
+            // private tracker that catches that bans the account.
+            if (torrent.Private)
+            {
+                return;
+            }
+
             PexUpdate offered = Pex.Read(message);
 
             if (offered.Added.Count > 0)

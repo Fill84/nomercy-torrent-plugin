@@ -123,7 +123,19 @@ public sealed class LiveSnapshot : IDisposable
 
         // Read outside the lock: the journal takes its own, and holding two in
         // one order here and the other order there is how a deadlock is built.
-        Payload payload = new(_journal.Snapshot(), _cycle(), _time.GetUtcNow());
+        ActivitySnapshot taken = _journal.Snapshot();
+
+        // Without the history. It is five hundred events, about a hundred
+        // kilobytes, and it went out on every push — around once a second while
+        // anything is downloading, to every open page. Nothing reads it: not
+        // this plugin, and by the contract above not the host either, which
+        // takes any message to mean "something moved" and answers by re-reading
+        // the whole view over HTTP. A hundred kilobytes a second of postage on
+        // an empty envelope.
+        Payload payload = new(
+            taken with { History = [] },
+            _cycle(),
+            _time.GetUtcNow());
 
         _ = Send(payload);
     }

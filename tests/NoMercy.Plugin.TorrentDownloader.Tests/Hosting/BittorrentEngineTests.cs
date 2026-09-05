@@ -459,8 +459,7 @@ public class BittorrentEngineTests : IDisposable
                 new(
                     $"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever",
                     [],
-                    folder,
-                    torrent.TotalLength),
+                    folder),
                 CancellationToken.None);
 
             IReadOnlyList<TorrentFile> files = await engine.FilesAsync(torrent.InfoHash, CancellationToken.None);
@@ -509,8 +508,7 @@ public class BittorrentEngineTests : IDisposable
     private static readonly TorrentRequest Request = new(
         "magnet:?xt=urn:btih:92D8A3F6864911EF292B4BE0DD5286406396D2B3&dn=Silo+S03E06&tr=udp%3A%2F%2Fone.example%3A80",
         ["udp://two.example:80"],
-        "C:\\downloads",
-        4_388_742_440);
+        "C:\\downloads");
 
     /// <remarks>
     /// <para>
@@ -880,8 +878,7 @@ public class BittorrentEngineTests : IDisposable
                 new(
                     $"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever",
                     [],
-                    folder,
-                    torrent.TotalLength),
+                    folder),
                 CancellationToken.None);
 
             await trackers.Asked.WaitAsync(TimeSpan.FromSeconds(20));
@@ -999,12 +996,11 @@ public class BittorrentEngineTests : IDisposable
                 new CapturingLogger(),
                 new SilentTrackers(),
                 new NoPeers(),
-                null,
                 null);
 
             engine.Start();
 
-            await engine.AddAsync(new(path, [], folder, torrent.TotalLength), CancellationToken.None);
+            await engine.AddAsync(new(path, [], folder), CancellationToken.None);
 
             TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))[0];
 
@@ -1245,7 +1241,7 @@ public class BittorrentEngineTests : IDisposable
             Assert.False(engine.Watching, "nothing has been added yet.");
 
             await engine.AddAsync(
-                new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder, torrent.TotalLength),
+                new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder),
                 CancellationToken.None);
 
             // Nobody answers, so not a byte moves — which is the whole case.
@@ -1313,7 +1309,7 @@ public class BittorrentEngineTests : IDisposable
             string empty = engine.Drawn;
 
             await engine.AddAsync(
-                new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder, torrent.TotalLength),
+                new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder),
                 CancellationToken.None);
 
             string holding = engine.Drawn;

@@ -64,15 +64,10 @@ public enum TorrentState
 /// the owner's own list. More trackers is a faster download.
 /// </param>
 /// <param name="DownloadFolder">Where the bytes land while it downloads.</param>
-/// <param name="ExpectedBytes">
-/// What the indexer said it weighs, when it said. Null is not nought: a site
-/// that published no size has not said the file is empty.
-/// </param>
 public sealed record TorrentRequest(
     string Source,
     IReadOnlyList<string> Trackers,
-    string DownloadFolder,
-    long? ExpectedBytes);
+    string DownloadFolder);
 
 /// <summary>What the client calls a torrent it has taken on.</summary>
 /// <param name="InfoHash">Forty hex characters, upper case.</param>

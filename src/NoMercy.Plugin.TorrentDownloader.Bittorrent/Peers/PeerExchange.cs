@@ -91,12 +91,22 @@ public static class Pex
         return new(Peers(body.Bytes("added")), Peers(body.Bytes("dropped")));
     }
 
-    /// <summary>The peers in a compact string.</summary>
+    /// <summary>The peers in a compact string, up to what one message may say.</summary>
+    /// <remarks>
+    /// The same limit the write side gives, and for the same reason read the
+    /// other way round: an address is six bytes and a peer message may be a
+    /// mebibyte, so one message could name a hundred and seventy thousand of
+    /// them — every one written into a book that is never emptied and dialled
+    /// from for the life of the torrent. It does not take a hostile peer to
+    /// send that; a broken one will do.
+    /// </remarks>
     private static IReadOnlyList<PeerAddress> Peers(byte[]? compact)
     {
         List<PeerAddress> peers = [];
 
-        for (int at = 0; compact is not null && at + CompactLength <= compact.Length; at += CompactLength)
+        for (int at = 0;
+            compact is not null && at + CompactLength <= compact.Length && peers.Count < MostPerMessage;
+            at += CompactLength)
         {
             peers.Add(new(
                 new IPAddress(compact.AsSpan(at, 4)),

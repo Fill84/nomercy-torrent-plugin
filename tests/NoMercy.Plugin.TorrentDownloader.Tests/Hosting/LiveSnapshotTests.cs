@@ -165,4 +165,47 @@ public class LiveSnapshotTests
 
         Assert.Single(hub.Pushes);
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A push says that something moved. It does not have to carry the
+    /// last five hundred things that moved.</strong> The payload carried the
+    /// journal's whole history — capped at five hundred events, roughly a
+    /// hundred kilobytes — on every push, about once a second while anything is
+    /// downloading, to every open page.
+    /// </para>
+    /// <para>
+    /// Nothing reads it. Not this plugin, and by this class's own contract not
+    /// the host either: any message means "something moved" and the host
+    /// answers by re-reading the whole view over HTTP. So it was a hundred
+    /// kilobytes a second of postage on an empty envelope.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void APushDoesNotCarryTheHistoryNobodyReads()
+    {
+        FakeTimeProvider clock = new();
+        FakeHub hub = new();
+        ActivityJournal journal = new(clock);
+
+        for (int one = 0; one < 200; one++)
+        {
+            journal.Finished(ActivityStage.Find, $"something {one}", "done");
+        }
+
+        using LiveSnapshot live = new(hub, journal, new CapturingLogger(), () => CycleStatus.Unknown, clock);
+
+        live.Changed();
+        clock.Advance(LiveSnapshot.MinimumInterval);
+
+        (string Type, object? Payload) sent = Assert.Single(hub.Pushes);
+        LiveSnapshot.Payload payload = Assert.IsType<LiveSnapshot.Payload>(sent.Payload);
+
+        Assert.Empty(payload.Activity.History);
+
+        // What it does carry is what says something moved, and what a receiver
+        // could act on without asking: the work in flight and where the cycle
+        // stands.
+        Assert.NotEqual(default, payload.At);
+    }
 }

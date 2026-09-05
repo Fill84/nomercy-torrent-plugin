@@ -278,11 +278,42 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-28` The start's housekeeping asks for the client instead of reading a null field
 - [x] `S11-29` A new peer or seed is an update, and the page is told
 - [x] `S11-30` A save says its warnings
+- [x] `S11-31` The five unread values judged, and a private torrent stops trading peers
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-31` The five unread values were judged, and one of them was hiding something serious.**
+  Five values were written and never read. Each was traced to the end.
+  - **`PexUpdate.Dropped` — harmless to ignore, and it led to two faults that are not.**
+    **A private torrent took peers offered to it over peer exchange and dialled them.**
+    `PeerExchange.Read` has the BEP 27 guard; both places that really receive an exchange called the
+    static `Pex.Read`, which has none — so the outgoing half was refused and the incoming half was
+    taken. A private tracker that catches that bans the account, and the owner's ratio goes with it.
+    Both receive sites now refuse when the torrent is private. And **`Pex.Read` had no limit**: an
+    address is six bytes and a peer message may be a mebibyte, so one message could name a hundred
+    and seventy thousand addresses, every one written into a book that is never emptied and dialled
+    from for the life of the torrent. It reads the same fifty the write side gives.
+  - **`ActivitySnapshot.History` — a real cost.** Five hundred events, about a hundred kilobytes,
+    on every push, about once a second while anything downloads, to every open page. Nothing reads
+    it — not this plugin, and by `LiveSnapshot`'s own contract not the host, which takes any message
+    to mean "something moved" and re-reads the whole view over HTTP. The push no longer carries it.
+  - **`TorrentStatus.Eta` — a specified feature that was never drawn.** `docs/08-ui.md` § 46 asks the
+    Downloads table for a `Duration`, the cell type is used nowhere, and how long is left is the only
+    value on that page one could hold. It is drawn now, in the largest unit that says something, and
+    stays blank where it cannot be known.
+  - **`Grabbed.Attempt` — vestigial.** Hard-wired false at all four construction sites, read by
+    nobody, and a second expression of a rule really enforced by `EpisodeOutcome.Searched` and
+    `CycleRecord` against `MaxSearchAttempts`. Two sources of truth for one rule is how they drift.
+    Removed, and the two tests that asserted a constant now assert the result the cycle acts on.
+  - **`TorrentRequest.ExpectedBytes` — dead weight.** The free-space rule of `S6-01` is enforced a
+    layer earlier, in `Grab.Room`, off `ReleaseCopy.SizeBytes`. Removed.
+- **Left standing, and worth someone's judgement.** The owner-initiated add and the re-add of a lost
+  torrent reach `AddAsync` with no free-space check at all — only the search pipeline passes through
+  `Grab.Room`. And `TorrentRun._known` still grows monotonically from trackers, the DHT and LSD; the
+  remote driver is closed but nothing ever removes an address. Neither has been touched.
 
 - **`S11-30` A save that succeeded with a warning never said so.** The store decides that two
   folders on different volumes make every completion a full-file copy rather than a rename — minutes
