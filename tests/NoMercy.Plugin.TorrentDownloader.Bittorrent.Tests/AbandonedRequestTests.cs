@@ -113,10 +113,7 @@ public class AbandonedRequestTests : IDisposable
 
     public void Dispose()
     {
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
+        TempFolder.Clear(_folder);
 
         GC.SuppressFinalize(this);
     }

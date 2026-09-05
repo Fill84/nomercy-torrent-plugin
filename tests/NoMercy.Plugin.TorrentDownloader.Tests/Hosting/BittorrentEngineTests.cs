@@ -688,10 +688,7 @@ public class BittorrentEngineTests : IDisposable
     {
         GC.SuppressFinalize(this);
 
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
+        TempFolder.Clear(_folder);
     }
 
     /// <remarks>

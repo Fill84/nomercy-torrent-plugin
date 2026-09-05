@@ -289,6 +289,17 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **CI was red for a fault that was not in the plugin, and the log said so in one line.** Every test
+  passed and the run failed anyway: `System.IO.IOException : Directory not empty` out of
+  `TorrentRunTests.Dispose`. A run makes its files when its session opens and its loops keep going
+  for a moment after the test that made it returned, so deleting the temporary folder from under
+  that races — on Linux the delete throws when a file appears between the walk and the removal, and
+  the test is reported failed for something that happened after it had already passed. On Windows
+  the timing usually falls the other way, which is why it never showed here. Nine test classes had
+  the same hand-rolled teardown; there is one `TempFolder.Clear` now, which waits a moment and gives
+  up rather than throwing — a temporary folder that outlives a run is the operating system's to
+  clear, and failing a suite over one reports a fault that is not there.
+
 - **`S10-09` 0.4.0.** The version is `0.4.0` in all three places it is written — `plugin.json`,
   `Directory.Build.props` and `PluginIdentity` — and `docs/releases/0.4.0.md` says what it is and
   what it is not. Two manifest tests caught the third place: the first bump moved two of them and
