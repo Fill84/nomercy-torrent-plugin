@@ -99,7 +99,12 @@ public sealed record TorrentFile(string Path, long Length);
 /// <param name="BytesTotal">How big it is, or null while nothing knows.</param>
 /// <param name="DownloadRateBytesPerSecond">Measured, not averaged over the whole transfer.</param>
 /// <param name="UploadRateBytesPerSecond">The same, going out.</param>
-/// <param name="Peers">How many are connected.</param>
+/// <param name="Peers">How many connections there are, of every kind.</param>
+/// <param name="Leechers">
+/// How many of them are still downloading. A seed has all of it and a leecher
+/// has not; they are two populations, and neither is ever the other taken off a
+/// total.
+/// </param>
 /// <param name="Seeds">How many of those have all of it.</param>
 /// <param name="Ratio">Uploaded over downloaded, or null before anything has been downloaded.</param>
 /// <param name="Eta">How long it has left, or null when that cannot be worked out.</param>
@@ -144,7 +149,8 @@ public sealed record TorrentStatus(
     int? SwarmSeeds = null,
     int? SwarmPeers = null,
     bool ErrorIsTheRelease = false,
-    long Arrived = 0);
+    long Arrived = 0,
+    int Leechers = 0);
 
 /// <summary>
 /// The torrent client, as the pipeline is allowed to see it.

@@ -63,7 +63,10 @@ public class DownloadsViewTests
                     Seeds: 9,
                     Ratio: 0.35,
                     Eta: TimeSpan.FromMinutes(7),
-                    Error: null),
+                    Error: null,
+
+                    // Nine seeds and fifteen leechers, each its own count.
+                    Leechers: 15),
                 "D:\\incomplete"),
         ]);
 
@@ -399,15 +402,17 @@ public class DownloadsViewTests
                     DownloadRateBytesPerSecond: 0,
                     UploadRateBytesPerSecond: 0,
 
-                    // Eleven connections, three of which have the lot. So eight
-                    // leechers are connected, not eleven.
+                    // Two populations, each counted as itself: three seeds and
+                    // eight leechers, over eleven connections. Neither number
+                    // is ever the other taken off the total.
                     Peers: 11,
                     Seeds: 3,
                     Ratio: 0,
                     Eta: null,
                     Error: null,
                     SwarmSeeds: 52,
-                    SwarmPeers: 110),
+                    SwarmPeers: 110,
+                    Leechers: 8),
                 @"D:\incomplete"),
         ]);
 

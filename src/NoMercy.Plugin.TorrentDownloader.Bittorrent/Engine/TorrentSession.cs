@@ -4,6 +4,11 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 /// <param name="Verified">How many pieces are on disk and hashed.</param>
 /// <param name="Pieces">How many there are.</param>
 /// <param name="BytesDone">How much of it is verified.</param>
+/// <param name="Leechers">
+/// How many of the connections are leechers — a peer that does not have all of
+/// it. Counted, never worked out from the others: seeds and leechers are two
+/// populations and subtracting one from the other ties them together again.
+/// </param>
 /// <param name="Peers">How many connections are up.</param>
 /// <param name="Seeds">How many of those have the lot.</param>
 /// <param name="Askable">
@@ -34,6 +39,7 @@ public sealed record SessionProgress(
     long BytesDone,
     int Peers,
     int Seeds,
+    int Leechers,
     int ChokedBy,
     int Askable,
     long Downloaded,
@@ -198,6 +204,7 @@ public sealed class TorrentSession(
                 Bytes(),
                 _peers.Count,
                 _peers.Count(one => one.Seed),
+                _peers.Count(one => !one.Seed),
 
                 // Choked until told otherwise, which is BEP 3 — so this counts
                 // the peers that have said nothing as well as the ones that

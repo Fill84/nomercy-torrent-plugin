@@ -288,6 +288,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   eight leechers — two populations printed as though they could be compared. The owner corrected this
   more than once before it was heard. The column now counts leechers on both sides, and the announce
   line says `2 seeds and 9 leechers connected` instead of `11 peers connected, 2 of them seeds`.
+  **And they are counted, never derived.** The first attempt at this drew the leechers as
+  `Peers - Seeds`, which is the same mistake wearing arithmetic: it ties the two together again, so
+  a change to what a connection means silently moves the leecher count. `SessionProgress.Leechers`
+  counts `!one.Seed` where the peers are, beside `Seeds` counting `one.Seed`. A seed has all of it;
+  a leecher starts at nought and has to fetch the lot. Two populations, two counts, neither taken
+  off the other.
 - **`S11-27` also carries the second measurement `S11-26` was missing.** `ChokedBy` disproved the
   standing theory — of eleven connected peers only **four** were choking us, so the swarm was not
   refusing us and the upload policy was not the cause. `SessionProgress.Askable` counts the peers

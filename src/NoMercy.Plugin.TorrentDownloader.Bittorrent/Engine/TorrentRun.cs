@@ -43,7 +43,11 @@ public sealed record TrackerSaid(string Tracker, int? Peers, string? Failure);
 /// <param name="BytesDone">How much is verified on disk.</param>
 /// <param name="BytesTotal">How big it is, or null while nothing knows.</param>
 /// <param name="Peers">How many connections are up.</param>
-/// <param name="Seeds">How many of those have the lot.</param>
+/// <param name="Seeds">How many of the connections have all of it.</param>
+/// <param name="Leechers">
+/// How many are still downloading. Counted in its own right: seeds and leechers
+/// are two populations, and one is never the other subtracted from a total.
+/// </param>
 /// <param name="Askable">
 /// How many of those have unchoked this client and hold something it still
 /// wants — the number that says whether a torrent standing still is the swarm's
@@ -75,6 +79,7 @@ public sealed record RunProgress(
     long? BytesTotal,
     int Peers,
     int Seeds,
+    int Leechers,
     int ChokedBy,
     int Askable,
     long Downloaded,
@@ -523,6 +528,7 @@ public sealed class TorrentRun : IDisposable
                     0,
                     0,
                     0,
+                    0,
                     false);
             }
 
@@ -540,6 +546,7 @@ public sealed class TorrentRun : IDisposable
                 progress.WantedBytes,
                 progress.Peers,
                 progress.Seeds,
+                progress.Leechers,
                 progress.ChokedBy,
                 progress.Askable,
                 progress.Downloaded,

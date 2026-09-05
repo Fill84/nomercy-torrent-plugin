@@ -1081,7 +1081,7 @@ public sealed class BittorrentEngine(
             said.Count,
             said.Sum(one => one.Peers ?? 0),
             progress.Seeds,
-            progress.Peers - progress.Seeds,
+            progress.Leechers,
 
             // A peer that will not send anything and one that is merely slow
             // read the same in a peer count, and the difference is the whole
@@ -1364,7 +1364,10 @@ public sealed class BittorrentEngine(
             // Bytes in, whole pieces or not. Drawn where it is ahead of what is
             // verified, which is the only case in which a torrent looks stopped
             // while it is not.
-            progress.Downloaded);
+            progress.Downloaded,
+
+            // Counted as leechers, never a total with the seeds taken off it.
+            progress.Leechers);
     }
 
     /// <summary>Where one torrent stands, in the port's own words.</summary>

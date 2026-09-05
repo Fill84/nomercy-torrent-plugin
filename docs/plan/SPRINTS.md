@@ -2180,7 +2180,13 @@ client held, seeds included**. "5 of 8" could be five connections of which three
 eight leechers: two numbers that cannot be compared, printed as though they could.
 
 The connected count stays what it is for the stall detector, which wants connections. The page and
-the announce line subtract the seeds: `2 seeds and 9 leechers connected`.
+the announce line report the leechers: `2 seeds and 9 leechers connected`.
+
+**Counted, not derived.** The first attempt drew the leechers as `Peers - Seeds`, which is the same
+mistake wearing arithmetic — it ties the two together again, so a change to what a connection means
+silently moves the leecher count. `SessionProgress.Leechers` counts `!one.Seed` where the peers are,
+beside `Seeds` counting `one.Seed`. A seed has all of it; a leecher starts at nought and has to fetch
+the lot. Two populations, two counts, neither taken off the other.
 
 ### And the measurement that was still missing
 
