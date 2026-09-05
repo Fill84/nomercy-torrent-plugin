@@ -1133,7 +1133,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 _heartbeat = TimeProvider.System.CreateTimer(
                     _ =>
                     {
-                        if (_engine is { Moving: true })
+                        // Anything held, not only anything moving. A download
+                        // that stalls is the one being looked at, and it used
+                        // to be the one the page stopped drawing.
+                        if (_engine is { Watching: true })
                         {
                             Moved();
                         }

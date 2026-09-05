@@ -1011,6 +1011,32 @@ public sealed class BittorrentEngine(
         journal.Failed(ActivityStage.Download, held.Name ?? "a magnet", held.Error);
     }
 
+    /// <summary>Whether there is any torrent at all to draw.</summary>
+    /// <remarks>
+    /// <para>
+    /// The page's heartbeat used to push only while <see cref="Moving"/> — while
+    /// some torrent was taking or giving bytes. So a download that stalled
+    /// stopped updating the moment it stalled, and the owner had to refresh by
+    /// hand to see anything.
+    /// </para>
+    /// <para>
+    /// That is backwards. A stalled torrent is the one being watched, and the
+    /// numbers that move while it stands still — peers, seeds, how many are
+    /// choking us, how many hold anything wanted — are exactly the ones that
+    /// say what is happening to it. Nought bytes a second is news.
+    /// </para>
+    /// </remarks>
+    public bool Watching
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _torrents.Count > 0;
+            }
+        }
+    }
+
     /// <summary>Whether any torrent is taking or giving bytes right now.</summary>
     /// <remarks>
     /// Read once a second by the page's heartbeat, so it holds the lock for as

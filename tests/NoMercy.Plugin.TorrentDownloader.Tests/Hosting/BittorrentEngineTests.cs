@@ -1191,4 +1191,74 @@ public class BittorrentEngineTests : IDisposable
             }
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent standing still is still worth drawing.</strong> The
+    /// page's heartbeat pushed a new snapshot only while <c>Moving</c> was
+    /// true — while some torrent was taking or giving bytes. So a download that
+    /// stalled stopped updating the moment it stalled, and the owner had to
+    /// refresh by hand to see anything at all.
+    /// </para>
+    /// <para>
+    /// That is backwards. A stalled torrent is exactly the one being watched,
+    /// and the numbers that move while it is stalled — peers, seeds, how many
+    /// are choking us, how many hold anything wanted — are the ones that say
+    /// what is happening to it. On 5 September 2026 the owner asked why they
+    /// had to refresh again; the answer was that their only download was at
+    /// nought bytes a second.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AClientHoldingAStalledTorrentIsStillWorthDrawing()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-holding-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+
+            ResumeKeeper keeping = new(folder, TimeSpan.FromSeconds(1), TimeProvider.System);
+            byte[] file = Fixture("archive-multifile.torrent");
+            TorrentMetadata torrent = TorrentMetadata.Read(file);
+
+            keeping.Remember(torrent.InfoHash, Info(file));
+
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                new SilentTrackers(),
+                new NoPeers(),
+                null,
+                keeping);
+
+            engine.Start();
+
+            Assert.False(engine.Watching, "nothing has been added yet.");
+
+            await engine.AddAsync(
+                new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder, torrent.TotalLength),
+                CancellationToken.None);
+
+            // Nobody answers, so not a byte moves — which is the whole case.
+            Assert.False(engine.Moving, "something moved, and this is about what happens when nothing does.");
+
+            Assert.True(engine.Watching, "a torrent is held and the page was told there was nothing to draw.");
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
 }

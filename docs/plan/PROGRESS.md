@@ -276,11 +276,19 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-26` The swarm line says how many peers are choking us
 - [x] `S11-27` Peers are leechers, and how many of them have anything for us
 - [x] `S11-28` The start's housekeeping asks for the client instead of reading a null field
+- [x] `S11-29` A new peer or seed is an update, and the page is told
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-29` The page stopped updating exactly when a download stalled.** The heartbeat pushed a new
+  snapshot only while `Moving` — while some torrent was taking or giving bytes — so a download that
+  stopped moving stopped being drawn, and the owner had to refresh by hand. That is backwards: a
+  stalled torrent is the one being watched. **An update is an update.** A peer arriving, a seed
+  arriving, a peer choking us, the swarm count changing: every one of those is news and none of them
+  moves a byte. It pushes while the client holds anything at all now.
 
 - **`S11-28` The sweep of `S11-25` never ran at a start, which is the only time it mattered.**
   It read `_engine` off the field, and the housekeeping a start owes runs on the **first tick of any
