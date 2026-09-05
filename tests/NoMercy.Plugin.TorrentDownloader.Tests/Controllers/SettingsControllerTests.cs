@@ -334,4 +334,5 @@ public class SettingsControllerTests
             IntakeFolder = Path.GetTempPath(),
         };
     }
+
 }

@@ -277,11 +277,25 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-27` Peers are leechers, and how many of them have anything for us
 - [x] `S11-28` The start's housekeeping asks for the client instead of reading a null field
 - [x] `S11-29` A new peer or seed is an update, and the page is told
+- [x] `S11-30` A save says its warnings
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-30` A save that succeeded with a warning never said so.** The store decides that two
+  folders on different volumes make every completion a full-file copy rather than a rename — minutes
+  of disk on a season pack, worth knowing before the first one — and `SaveResult.Warnings` was read
+  by nothing at all. The owner saved, saw "ok", and was never told. `SaveResult.Said()` answers a
+  refusal's reasons or a success's warnings, and the controller says it.
+- **Found by sweeping for the class rather than waiting for the next one to bite.** Four faults this
+  week had one shape: a value written and never read — `ErrorIsTheRelease` set and never passed, the
+  cadences saved and never registered, `_engine` read at a start when it is still null, and now these
+  warnings. **Still on that list and not yet judged:** `TorrentStatus.Eta` is worked out on every
+  status and no page draws it; `Grabbed.Attempt`, `TorrentRequest.ExpectedBytes`,
+  `ActivitySnapshot.History` and `PexUpdate.Dropped` are declared and unread. None of them is known
+  to be a fault; none has been checked.
 
 - **`S11-29` The page stopped updating exactly when a download stalled.** The heartbeat pushed a new
   snapshot only while `Moving` — while some torrent was taking or giving bytes — so a download that

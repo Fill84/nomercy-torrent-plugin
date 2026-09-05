@@ -417,4 +417,33 @@ public class SettingsStoreTests : IDisposable
             Directory.Delete(folder, recursive: true);
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A save that succeeds with a warning says the warning.</strong>
+    /// The store decides that two folders on different volumes make every
+    /// completion a full-file copy rather than a rename — minutes of disk on a
+    /// season pack. Then nothing read <c>Warnings</c> at all, so the owner
+    /// saved, saw "ok", and was never told.
+    /// </para>
+    /// <para>
+    /// Written down and never read: the same shape as the cadence fields that
+    /// changed no schedule and the refusal that never reached the pipeline.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ASaveSaysItsWarningsWhenItSucceededAndItsReasonsWhenItDidNot()
+    {
+        Assert.Equal(
+            "Different volumes, so every completion is a copy.",
+            new SaveResult(true, [], ["Different volumes, so every completion is a copy."]).Said());
+
+        Assert.Equal(
+            "The feed cadence is not a cron.",
+            new SaveResult(false, ["The feed cadence is not a cron."], []).Said());
+
+        // And a save with nothing to say says nothing, rather than an empty
+        // string the page would draw as a blank line under the form.
+        Assert.Null(new SaveResult(true, [], []).Said());
+    }
 }

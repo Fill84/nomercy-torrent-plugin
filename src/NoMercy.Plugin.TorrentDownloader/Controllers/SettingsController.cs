@@ -79,10 +79,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
         // Not a 4xx: a refused save is an answer the page renders beside the
         // field, and the reasons are the answer. An error status would have the
         // client showing "something went wrong" over the top of them.
-        return Status(
-            result,
-            result.Saved ? "ok" : "refused",
-            result.Saved ? null : string.Join(" ", result.Errors));
+        return Status(result, result.Saved ? "ok" : "refused", result.Said());
     }
 
     /// <summary>
@@ -126,10 +123,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
 
         SaveResult result = await plugin.Settings.SaveAsync(settings, ct);
 
-        return Status(
-            result,
-            result.Saved ? "ok" : "refused",
-            result.Saved ? null : string.Join(" ", result.Errors));
+        return Status(result, result.Saved ? "ok" : "refused", result.Said());
     }
 
     /// <summary>

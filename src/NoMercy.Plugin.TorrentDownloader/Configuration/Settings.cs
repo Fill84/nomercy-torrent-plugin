@@ -94,4 +94,27 @@ public sealed class Settings
 public sealed record SaveResult(
     bool Saved,
     IReadOnlyList<string> Errors,
-    IReadOnlyList<string> Warnings);
+    IReadOnlyList<string> Warnings)
+{
+    /// <summary>What this save has to say for itself, or null when nothing.</summary>
+    /// <remarks>
+    /// <para>
+    /// A refusal's reasons, and a success's warnings. The warnings used to be
+    /// worked out and then read by nothing at all: the store decides that two
+    /// folders on different volumes make every completion a full-file copy —
+    /// minutes of disk on a season pack, and worth knowing before the first one
+    /// rather than after — and the owner saved, saw "ok", and was never told.
+    /// </para>
+    /// <para>
+    /// Written down and never read, which is the same shape as the cadence
+    /// fields that changed no schedule and the refusal that never reached the
+    /// pipeline.
+    /// </para>
+    /// </remarks>
+    public string? Said()
+    {
+        IReadOnlyList<string> saying = Saved ? Warnings : Errors;
+
+        return saying.Count == 0 ? null : string.Join(" ", saying);
+    }
+}
