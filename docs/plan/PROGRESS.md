@@ -275,11 +275,26 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-25` A download no grab answers for is cleared
 - [x] `S11-26` The swarm line says how many peers are choking us
 - [x] `S11-27` Peers are leechers, and how many of them have anything for us
+- [x] `S11-28` The start's housekeeping asks for the client instead of reading a null field
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-28` The sweep of `S11-25` never ran at a start, which is the only time it mattered.**
+  It read `_engine` off the field, and the housekeeping a start owes runs on the **first tick of any
+  cadence** while the client is built on first use — so at every start the field was still null and
+  the sweep was skipped, leaving it to the four-o'clock maintenance and nowhere else. The owner's
+  8.6 GB survived three restarts that way. It asks `ClientAsync` for the client now, like every other
+  caller.
+- **The Dark Matter question is answered, and it is not this plugin's fault.** With `S11-27`'s
+  measurement live: `0 seeds and 12 leechers connected, 5 of them choking us, **0 with something
+  wanted**`. Seven leechers have unchoked us and **not one of them holds a piece this client still
+  needs**. So the client is asking correctly; there is nothing to ask for. The theory that the upload
+  policy was choking us off was disproved by `ChokedBy`, and the theory that the request path was
+  broken is disproved by this. What is left is the swarm: twelve connections out of a hundred and
+  eleven, and no seed among them. **Whether to widen that is a separate question and nobody's fault.**
 
 - **`S11-27` Peers are leechers, seeds have all of it, and the page counted them as one thing.**
   A tracker answers with `seeders` and `leechers` and they are **disjoint**. The right-hand half of

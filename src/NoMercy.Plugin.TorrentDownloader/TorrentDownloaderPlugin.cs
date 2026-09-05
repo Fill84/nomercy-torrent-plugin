@@ -928,7 +928,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // sat in the owner's download folder for three days. Only what this
         // plugin wrote is recognised, so a folder the owner put there is left
         // where it is.
-        if (_engine is BittorrentEngine client)
+        // Asked for rather than read off the field. The housekeeping a start
+        // owes runs on the first tick of any cadence, and the client is built
+        // on first use — so at a start the field is still null and this was
+        // skipped every single time, leaving the sweep to the four-o'clock
+        // maintenance and nowhere else. The owner's 8.6 GB survived three
+        // restarts that way.
+        if (await ClientAsync(ct) is BittorrentEngine client)
         {
             IReadOnlyList<StoredDownload> every = await grabs.EveryAsync(ct);
             IReadOnlyList<string> swept = client.ForgetAbandoned([.. every.Select(one => one.InfoHash)]);
