@@ -49,6 +49,15 @@ public sealed class LiveSnapshot : IDisposable
 
     private CycleStatus? _standing;
 
+    /// <summary>The newest event the pages were last told about.</summary>
+    /// <remarks>
+    /// The History page draws what finished and what failed, and neither leaves
+    /// anything in flight — so without this a finish moved nothing this payload
+    /// carries and would not be pushed at all, and the page would sit on the
+    /// rows it had when it opened.
+    /// </remarks>
+    private ActivityEvent? _newest;
+
     /// <summary>Whether two lists of events say the same thing.</summary>
     /// <remarks>
     /// By value, because a snapshot is a fresh list every time and comparing
@@ -174,6 +183,29 @@ public sealed class LiveSnapshot : IDisposable
 
         _flight = taken.InFlight;
         _standing = cycle;
+
+        // Something finishing or failing leaves nothing in flight and is not
+        // carried in this payload — and it is a new line on the History page,
+        // which is a change to what the owner is looking at. So the newest
+        // event counts as a change even though it does not travel.
+        ActivityEvent? newest = taken.History.Count > 0 ? taken.History[^1] : null;
+        bool told = newest != _newest;
+
+        _newest = newest;
+
+        // Nothing changed is not a message. A push with every part of it empty
+        // says only that a timer went off, and every open page answers a push
+        // by re-reading the entire view over HTTP — a whole page fetch to be
+        // told that nothing happened.
+        //
+        // Whatever else moved has its own way of saying so: the client's
+        // heartbeat compares what the pages draw and only asks for a push where
+        // that differs, so a byte count moving arrives here as a change even
+        // though it is not carried in this payload either.
+        if (flight is null && moved is null && !told)
+        {
+            return;
+        }
 
         Payload payload = new(flight, moved, _time.GetUtcNow());
 

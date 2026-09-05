@@ -281,11 +281,21 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-31` The five unread values judged, and a private torrent stops trading peers
 - [x] `S11-32` A push carries what changed, and nothing else
 - [x] `S11-33` Room is checked whoever added it, and the address book is bounded
+- [x] `S11-34` Nothing changed is not a message
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-34` Nothing changed is not a message.** A push with every part of it empty said only that a
+  timer had gone off, and every open page answers a push by re-reading the entire view over HTTP — a
+  whole page fetch to be told that nothing happened. It is not sent at all now. **What counts as a
+  change is what the owner can see**, which is wider than what the payload carries: a finish or a
+  failure leaves nothing in flight and travels in no field, and it is a new line on the History page,
+  so the newest event counts. An existing test caught that before it shipped —
+  `FinishingAndFailingAreToldToo` went red on the first version of this. Together with `S11-32`:
+  push when something changes, push only what changed, and do not push when nothing did.
 
 - **`S11-33` The two things left standing after `S11-31` are closed.**
   - **A torrent that will not fit is stopped the moment its size is known, whoever added it.** The

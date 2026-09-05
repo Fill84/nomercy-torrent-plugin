@@ -193,6 +193,9 @@ public class LiveSnapshotTests
             journal.Finished(ActivityStage.Find, $"something {one}", "done");
         }
 
+        // One thing still running, so there is a change to push at all.
+        journal.Started(ActivityStage.Download, "Silo S03E06");
+
         using LiveSnapshot live = new(hub, journal, new CapturingLogger(), () => CycleStatus.Unknown, clock);
 
         live.Changed();
@@ -201,11 +204,10 @@ public class LiveSnapshotTests
         (string Type, object? Payload) sent = Assert.Single(hub.Pushes);
         LiveSnapshot.Payload payload = Assert.IsType<LiveSnapshot.Payload>(sent.Payload);
 
-        // Two hundred events came and went, and the push carries none of them:
-        // there is no property that could hold a history, and nothing was left
-        // in flight to report. All it says is that something moved, and when —
-        // which is all the host does anything with.
-        Assert.Null(payload.InFlight);
+        // Two hundred events came and went and the push carries none of them:
+        // there is no property that could hold a history. What it carries is
+        // the one thing still running.
+        Assert.Single(payload.InFlight!);
         Assert.NotEqual(default, payload.At);
     }
 
@@ -227,7 +229,10 @@ public class LiveSnapshotTests
         FakeTimeProvider clock = new();
         FakeHub hub = new();
         ActivityJournal journal = new(clock);
-        using LiveSnapshot live = new(hub, journal, new CapturingLogger(), () => CycleStatus.Unknown, clock);
+
+        CycleStatus cycle = CycleStatus.Unknown;
+
+        using LiveSnapshot live = new(hub, journal, new CapturingLogger(), () => cycle, clock);
 
         journal.Started(ActivityStage.Find, "Silo S03E06");
 
@@ -240,24 +245,59 @@ public class LiveSnapshotTests
         Assert.NotNull(first.InFlight);
         Assert.NotNull(first.Cycle);
 
-        // Nothing has moved since. The cycle is the same object and the work in
-        // flight is the same work.
+        // Now only the cycle moves. The work in flight is the same work, and
+        // sending it again would be sending what the page already has.
+        cycle = new(true, null, null);
+
         live.Changed();
         clock.Advance(LiveSnapshot.MinimumInterval);
 
         LiveSnapshot.Payload second = Assert.IsType<LiveSnapshot.Payload>(hub.Pushes[1].Payload);
 
         Assert.Null(second.InFlight);
-        Assert.Null(second.Cycle);
+        Assert.NotNull(second.Cycle);
+    }
 
-        // And the moment something does move, it is in the message again.
+    /// <remarks>
+    /// <para>
+    /// <strong>Nothing changed is not a message.</strong> A push with every
+    /// part of it empty says only that a timer went off. It used to go out
+    /// anyway, carrying a timestamp and nothing else, and every open page
+    /// answered it by re-reading the entire view over HTTP — a full page fetch
+    /// to be told that nothing had happened.
+    /// </para>
+    /// <para>
+    /// The owner asked for three things: push when something changes, push only
+    /// the changes, and do not push when there are none. This is the third.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void NothingChangedIsNotPushed()
+    {
+        FakeTimeProvider clock = new();
+        FakeHub hub = new();
+        ActivityJournal journal = new(clock);
+        using LiveSnapshot live = new(hub, journal, new CapturingLogger(), () => CycleStatus.Unknown, clock);
+
+        journal.Started(ActivityStage.Find, "Silo S03E06");
+
+        live.Changed();
+        clock.Advance(LiveSnapshot.MinimumInterval);
+
+        Assert.Single(hub.Pushes);
+
+        // Asked again with nothing to say.
+        live.Changed();
+        clock.Advance(LiveSnapshot.MinimumInterval);
+
+        Assert.Single(hub.Pushes);
+
+        // And the moment there is something, it goes.
         journal.Finished(ActivityStage.Find, "Silo S03E06", "one copy");
 
         live.Changed();
         clock.Advance(LiveSnapshot.MinimumInterval);
 
-        LiveSnapshot.Payload third = Assert.IsType<LiveSnapshot.Payload>(hub.Pushes[2].Payload);
-
-        Assert.NotNull(third.InFlight);
+        Assert.Equal(2, hub.Pushes.Count);
     }
 }
