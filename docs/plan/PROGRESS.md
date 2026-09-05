@@ -235,7 +235,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S9-03` Every show in a library is in scope — **done and reverted the same day**, see below
 - [x] `S9-04` Prove the encode end to end
 - [x] `S9-05` What was left behind
-- [ ] `S9-06` Release 0.4.0 — **superseded by** `S10-09`
+- [x] `S9-06` Release 0.4.0 — **superseded by** `S10-09`
 
 ### Sprint 10 — What the audit found
 - [x] `S10-01` One rule for whose show it is
@@ -246,7 +246,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S10-06` A port for the encode
 - [x] `S10-07` The plan says what happened
 - [x] `S10-08` Release 0.3.9
-- [ ] `S10-09` Release 0.4.0 — on the contract, with no reflection left
+- [x] `S10-09` Release 0.4.0 — on the contract, with no reflection left
 
 ### Sprint 11 — What the first watched run has to be run against
 - [x] `S11-01` Nothing is handed to the encoder unnamed — **corrected by** `S11-06`
@@ -288,6 +288,15 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S10-09` 0.4.0.** The version is `0.4.0` in all three places it is written — `plugin.json`,
+  `Directory.Build.props` and `PluginIdentity` — and `docs/releases/0.4.0.md` says what it is and
+  what it is not. Two manifest tests caught the third place: the first bump moved two of them and
+  went red, which is exactly what those tests are for. **The tag is not pushed yet**: CI has been
+  failing intermittently on master and a tag is what builds and publishes a release, so it waits for
+  a green run. A timing-dependent test of mine is the first suspect and is fixed here — it slept a
+  fixed two seconds where it should have waited for the connection it was asserting about, which is
+  a test that passes on a quiet machine and fails on a busy one.
 
 - **`S11-35` The remaining time was drawn into a cell that could not hold it.** `S11-31` added the
   column with `PluginTableCellType.Duration`, as `docs/08-ui.md` § 46 asks — and a `Duration` cell is

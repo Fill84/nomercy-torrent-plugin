@@ -401,10 +401,12 @@ public class TorrentSessionTests : IDisposable
         Task serves = seeder.RunAsync(both[0]!, stopping.Token);
         Task asks = leecher.RunAsync(both[1]!, stopping.Token);
 
-        // Long enough for an unchoke to have crossed a loopback socket many
-        // times over. Nothing arriving is what is being proved, and nothing
-        // arriving never wakes a read up.
-        await Task.Delay(TimeSpan.FromSeconds(2), stopping.Token);
+        // Waited for rather than slept through. A fixed delay is a test that
+        // passes on a quiet machine and fails on a busy one, which is a test
+        // that fails for no reason at all — and this one asserts that a peer is
+        // connected, so it needs the connection to have happened, not a guess
+        // at how long that takes.
+        await Until(() => leecher.Progress().Peers > 0, stopping.Token);
 
         SessionProgress progress = leecher.Progress();
 
@@ -485,6 +487,26 @@ public class TorrentSessionTests : IDisposable
         await running.ContinueWith(_ => { }, TaskScheduler.Default);
 
         Assert.Empty(offered);
+    }
+
+
+    /// <summary>Waits for something to be true, and gives up rather than hanging.</summary>
+    /// <remarks>
+    /// A loopback handshake takes microseconds on an idle machine and can take
+    /// seconds on a runner with a dozen other jobs on it. Sleeping a fixed
+    /// stretch is how a test comes to fail for a reason that is nothing to do
+    /// with what it is testing.
+    /// </remarks>
+    private static async Task Until(Func<bool> settled, CancellationToken ct)
+    {
+        DateTimeOffset giveUp = DateTimeOffset.UtcNow.AddSeconds(15);
+
+        while (!settled() && DateTimeOffset.UtcNow < giveUp)
+        {
+            await Task.Delay(25, ct);
+        }
+
+        Assert.True(settled(), "it never happened.");
     }
 
     public void Dispose()

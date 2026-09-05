@@ -34,5 +34,5 @@ public static class PluginIdentity
 
     public static Ulid Id { get; } = Ulid.Parse(IdText);
 
-    public static Version Version { get; } = new(0, 3, 18);
+    public static Version Version { get; } = new(0, 4, 0);
 }
