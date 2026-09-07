@@ -165,7 +165,17 @@ public class ClientAcceptanceTests : IDisposable
 
         // And it is written down this time, so the next start costs nothing at
         // all. Nothing called ResumeKeeper.Tick, so no resume file had ever
-        // been written by anything but a test.
+        // been written by anything but a test. Written on a status pass after
+        // the session exists, at the keeper's own interval — so the pass that
+        // first saw the bytes may have fallen inside that interval, and the
+        // file arrives on the one after. CI saw exactly that on Linux.
+        while (Directory.GetFiles(Folder("ondisk"), "*.resume").Length == 0 && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(200), stopping.Token);
+
+            _ = await engine.StatusAsync(stopping.Token);
+        }
+
         Assert.NotEmpty(Directory.GetFiles(Folder("ondisk"), "*.resume"));
     }
 
