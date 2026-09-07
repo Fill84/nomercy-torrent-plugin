@@ -283,11 +283,42 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-33` Room is checked whoever added it, and the address book is bounded
 - [x] `S11-34` Nothing changed is not a message
 - [x] `S11-35` The remaining time is drawn in a cell that can say it is not known
+- [x] `S11-36` The client answers while a session opens, and a stuck client is said so
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-36` The server hung for ninety minutes, and the plugin can no longer take it down that
+  way.** The owner restarted `beast-unit` at 03:34 local on 7 September 2026 because nothing
+  answered. The server's own log said it, in the one column nobody reads: the managed thread id on
+  each line sat under about two hundred for twelve hours, then from 00:03 UTC climbed by one a
+  second to 5,105 at the restart — and from 00:00:16 not one line came from a thread the process
+  already had. Every pool thread was stuck, the pool made a new one a second, and each new one got
+  stuck in turn. That is what "the server hangs" is, and the CPU stayed at nothing throughout.
+  Two things narrow it. At shutdown the host lists every job worker it could cancel, and the
+  plugin's `transfers` worker was the one missing — it was inside its tick, and the tick's first
+  act is the client's status pass under the client's lock. And the announce loop went on logging
+  every six minutes, and its first act takes the run's lock, so the run's lock was free: whatever
+  held the client's lock held it without touching the run. The journal shows the search cycle ending
+  at 00:03:29 and nothing else at that minute; the Windows logs show no disk, Defender or RAID event;
+  the night before, spanning the same midnight, shows no climb. **What held the lock is not
+  proven**, and the next one is caught with a dump — § Facts says how.
+  What is proven, and fixed: **(1)** adding a torrent started its announce loop from inside the
+  client's lock, and that loop's first act opens the session — so the hashing `S11-11` took out from
+  under the run's lock ran under the client's instead, on the adding thread, on every restart with
+  an incomplete torrent on disk. `AnnouncingAsync` yields before anything else. **(2)** The status
+  pass asked every run `NothingWanted`, which opened the session to answer; it is a read now, of
+  what the run decided when it opened. **(3)** The page heartbeat was a timer callback that took
+  the client's lock every second whether or not the last one had come back: the thread a second.
+  `Heartbeat` drops a tick that finds the last look still out, looks on a thread of its own, and
+  says once in the log when the client has not answered for thirty seconds and once when it does
+  again — the two lines the 7 September log did not have. Tests:
+  `NothingWaitsOnATorrentWhoseSessionIsOpening` (red on the add), `HeartbeatTests` (two). Three
+  tests that leaned on the session opening synchronously now wait for it. The driver's
+  unobserved-exception batch at 00:00:23 that morning — the owner's first question that day — was
+  the only line at the time and is unrelated (§ Facts).
 
 - **CI was red for a fault that was not in the plugin, and the log said so in one line.** Every test
   passed and the run failed anyway: `System.IO.IOException : Directory not empty` out of
@@ -1515,6 +1546,18 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **A run decides "nothing in it is wanted" when it opens its session; the client only reads it.**
+  Reading it used to open the session, and the client reads it in its status pass under its own
+  lock — so the pass hashed a season pack with every page and every tick waiting behind it. The
+  refusal is therefore a moment behind the add rather than part of it; the transfers tick asks every
+  minute, so that moment is at most one tick, and the engine's refusal test waits for it rather than
+  asserting on the line after the add. `docs/06-torrent-client.md` § The client always answers.
+- **The heartbeat drops a tick that finds the last look still out, and says after thirty seconds.**
+  Dropped rather than queued: a second look behind the same lock is a second thread waiting and
+  nothing else, and the look that is out will say what it finds. Thirty seconds, because a season
+  pack being hashed on a restart must not trip it and a hang must be named by the minute. Said once
+  and its return once, so the two lines bracket the hang in the log.
+
 - **A start settles once, whichever cadence ticks first — the flag moved rather than went.**
   S10-04 as written said the first-tick flag "goes, and with it the special case that made a start
   different from a tick". Carried out literally that would have deleted a fix rather than moved it:
@@ -2041,6 +2084,21 @@ and note it here.
 
 Kept here so no slice re-discovers them.
 
+- **What a starved thread pool looks like in the server log, and how to catch the next hang.** Every
+  line in `run-*.jsonl` (in `%LOCALAPPDATA%\NoMercy\log` on `beast-unit`) carries `ThreadId`. Healthy
+  is a stable set of about seventy ids under about two hundred, for hours. Starved is the maximum
+  climbing by about one a second and no line from an id the process already had: the pool is
+  injecting a thread a second and each one is getting stuck. Chart the maximum per half hour and the
+  start is the minute it first climbs. Two more tells: the host's shutdown lists every job worker it
+  could cancel, and a plugin job missing from that list was stuck inside its tick; and the
+  `Heartbeat` warning "has not answered" now names the minute. **To catch it:** while it hangs, on
+  `beast-unit`,
+  `& "C:\Program Files\dotnet\shared\Microsoft.NETCore.App\10.0.11\createdump.exe" --full -f C:\Users\phill\nomercy-hang.dmp (Get-Process NoMercyMediaServer).Id`
+  — `createdump` ships with the runtime and is there (checked 7 September 2026); it pauses the
+  process for a few seconds and stops nothing. Read the dump with `dotnet-dump analyze` and
+  `clrstack -all`, and the thread holding the client's lock is the answer. The 7 September hang was
+  read after the restart, from the log alone, and its holder is still unproven for want of exactly
+  this.
 - **Both of the owner's ports are forwarded on the router, and have been for months.** `51413` to
   `beast-unit`, where the server and this plugin run; `51414` to `Phill-PC`, the owner's own machine.
   UPnP and NAT-PMP both fail on this network and always will — neither protocol answers — so a

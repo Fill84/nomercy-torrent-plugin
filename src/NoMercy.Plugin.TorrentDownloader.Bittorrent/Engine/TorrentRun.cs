@@ -388,23 +388,25 @@ public sealed class TorrentRun : IDisposable
     /// Whether the metadata arrived and held nothing worth downloading.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// A torrent with no video file in it. The caller stops it and says so —
     /// it is the shape a fake release takes, and on 22 August 2026 one of them
     /// was a 1.2 GB executable named after an episode.
+    /// </para>
+    /// <para>
+    /// Read, never worked out here. It used to open the session to find out,
+    /// and opening one reads every byte already on disk — so the client's
+    /// status pass, which asks this of every torrent under the client's own
+    /// lock, hashed a season pack with every page and every tick waiting
+    /// behind it. The run decides this the moment it opens its session, which
+    /// its own announce loop does on its own thread; until then the answer is
+    /// no, and the next pass asks again.
+    /// </para>
     /// </remarks>
     public bool NothingWanted
     {
         get
         {
-            // Asked for rather than waited for: nothing decides which files
-            // are wanted until something asks for the session.
-            //
-            // Outside the lock, because opening one reads every byte already on
-            // disk. Asked for in here it would hold the lock across that pass
-            // just as surely as doing the reading inside it did, and everything
-            // that asks this run anything would wait on it.
-            Session();
-
             lock (_lock)
             {
                 return _nothingWanted;

@@ -638,7 +638,7 @@ public class TorrentRunTests : IDisposable
 
         // Opening runs on its own thread, as it does in the client: a peer that
         // turned up, or the announce loop.
-        Task opening = Task.Run(() => _ = run.NothingWanted);
+        Task opening = Task.Run(() => run.OnceAsync(CancellationToken.None));
 
         Assert.True(verifying.Wait(TimeSpan.FromSeconds(10)), "the session was never opened.");
 
@@ -678,7 +678,7 @@ public class TorrentRunTests : IDisposable
     /// </para>
     /// </remarks>
     [Fact]
-    public void ATorrentWithNothingOnDiskIsVerifiedBeforeItsFilesAreMade()
+    public async Task ATorrentWithNothingOnDiskIsVerifiedBeforeItsFilesAreMade()
     {
         TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
 
@@ -701,7 +701,7 @@ public class TorrentRunTests : IDisposable
                 return new(asked.PieceCount);
             });
 
-        _ = run.NothingWanted;
+        await run.OnceAsync(CancellationToken.None);
 
         Assert.False(
             anyFileExisted,

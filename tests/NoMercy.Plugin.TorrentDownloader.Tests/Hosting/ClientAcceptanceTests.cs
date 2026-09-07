@@ -148,7 +148,18 @@ public class ClientAcceptanceTests : IDisposable
 
         await engine.AddAsync(new(file, [], Folder("ondisk")), stopping.Token);
 
+        // The disk pass runs on the run's own thread, off the client's lock,
+        // so the figure it finds is a moment behind the add — and the client
+        // answers in the meantime, which is the point.
         TorrentStatus status = Assert.Single(await engine.StatusAsync(stopping.Token));
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(20);
+
+        while (status.BytesDone != torrent.TotalLength && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50), stopping.Token);
+
+            status = Assert.Single(await engine.StatusAsync(stopping.Token));
+        }
 
         Assert.Equal(torrent.TotalLength, status.BytesDone);
 

@@ -43,7 +43,8 @@ public sealed class BittorrentEngine(
     IPeerDialler dialler,
     TimeProvider? time = null,
     ResumeKeeper? resume = null,
-    IStorageSpace? space = null)
+    IStorageSpace? space = null,
+    Func<TorrentMetadata, TorrentDisk, Bitfield>? verify = null)
     : ITorrentEngine, IDisposable
 {
     private readonly Lock _lock = new();
@@ -358,7 +359,12 @@ public sealed class BittorrentEngine(
 
                 // The client's own, shared by every torrent: the DHT is a map
                 // of the network rather than of any one swarm.
-                _dht);
+                _dht,
+
+                // The disk pass, replaceable so a test can hold one open. What
+                // the client must go on answering through is that pass, and a
+                // test cannot hold a real one open for long enough to tell.
+                verify);
 
             Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time));
 
@@ -669,6 +675,14 @@ public sealed class BittorrentEngine(
     /// </remarks>
     private async Task AnnouncingAsync(Held held, CancellationToken ct)
     {
+        // Off the caller's thread before anything else. This is started from
+        // inside the client's lock, and the first thing an announce pass does
+        // is open the session, which reads and hashes every byte already on
+        // disk: without this the hashing ran on the thread that added the
+        // torrent, under the lock, and every page and every tick waited on it
+        // for as long as a season pack takes to read.
+        await Task.Yield();
+
         while (!ct.IsCancellationRequested)
         {
             try

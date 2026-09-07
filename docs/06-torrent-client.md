@@ -253,6 +253,24 @@ No progress **and** no peers for `StallMinutes`: the torrent is stopped, the rea
 against the grab and the episode returns to missing. Progress with no peers is not a stall; peers with no
 progress for a minute is not either.
 
+## The client always answers
+
+Everything the pages and the transfers tick ask the client — status, what the pages draw, whether
+anything is moving — is answered under the client's own lock, and so is everything a run is asked.
+**Nothing that reads the disk runs under either lock.** Opening a session reads and hashes every
+byte already on disk, minutes for a season pack: it runs on the run's own thread, started by its
+announce loop after that loop has left the client's lock, and a run decides "nothing in it is
+wanted" at that moment rather than when it is asked. A client asked about a torrent whose session is
+opening answers what it knows so far.
+
+The page heartbeat looks at the client once a second and says "moved" where what the pages draw has
+changed. One look at a time: a tick that finds the last look still out is dropped rather than queued
+behind the same lock, and the look runs on a thread of its own, never the timer's. A client that has
+not answered for thirty seconds is said so once in the log, and its return is said once, so a hang
+has a first line and a last line. On 7 September 2026 it had neither: every tick sat down behind a
+held lock on a new thread, the server made a thread a second for ninety minutes, and nothing in the
+log said so.
+
 ## Ports
 
 `ListenPort` from settings, TCP and UDP. Mapped with **UPnP IGD**, falling back to **NAT-PMP**. A

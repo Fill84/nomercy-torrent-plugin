@@ -1000,7 +1000,19 @@ public class BittorrentEngineTests : IDisposable
 
             await engine.AddAsync(new(path, [], folder), CancellationToken.None);
 
+            // Decided when the run opens its session, which its announce loop
+            // does on its own thread rather than under the client's lock — so
+            // the refusal is a moment behind the add, and the status pass that
+            // acts on it is asked until it has.
             TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))[0];
+            DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+
+            while (status.State != TorrentState.Error && DateTimeOffset.UtcNow < giveUpAt)
+            {
+                await Task.Delay(TimeSpan.FromMilliseconds(50));
+
+                status = (await engine.StatusAsync(CancellationToken.None))[0];
+            }
 
             Assert.Equal(TorrentState.Error, status.State);
             Assert.Contains("no video file", status.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
@@ -1422,6 +1434,90 @@ public class BittorrentEngineTests : IDisposable
             _ = folder;
 
             return free;
+        }
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Nothing waits on a torrent whose session is opening.</strong>
+    /// Opening one reads and hashes every byte already on disk, minutes for a
+    /// season pack, and <c>S11-11</c> took that pass out from under the run's
+    /// own lock. It was still under the client's: adding a torrent started its
+    /// announce loop from inside the lock, and that loop's first act is to
+    /// open the session, so the hashing ran on the adding thread with every
+    /// other caller of the client waiting on it. And the status pass asked a
+    /// run whether it wanted nothing, which opened the session to find out.
+    /// </para>
+    /// <para>
+    /// Every caller of the client that waits is a thread that waits, and the
+    /// page heartbeat asks once a second: on 7 September 2026 the server
+    /// created a thread a second for ninety minutes and answered nothing at
+    /// all until the owner restarted it. So the client answers while the disk
+    /// is being read, and adding a torrent returns before it is.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task NothingWaitsOnATorrentWhoseSessionIsOpening()
+    {
+        using ManualResetEventSlim verifying = new(false);
+        using ManualResetEventSlim held = new(false);
+
+        try
+        {
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                new CapturingLogger(),
+                new SilentTrackers(),
+                new NoPeers(),
+                verify: (torrent, _) =>
+                {
+                    verifying.Set();
+                    held.Wait(TimeSpan.FromSeconds(30));
+
+                    return new(torrent.PieceCount);
+                });
+
+            engine.Start();
+
+            Directory.CreateDirectory(_folder);
+
+            string file = Path.Combine(_folder, "episode.torrent");
+            File.WriteAllBytes(file, Episode(64L * 1024 * 1024));
+
+            Task<TorrentHandle> adding = engine.AddAsync(
+                Request with { Source = file, DownloadFolder = _folder },
+                CancellationToken.None);
+
+            Assert.Same(
+                adding,
+                await Task.WhenAny(adding, Task.Delay(TimeSpan.FromSeconds(5))));
+
+            Assert.True(verifying.Wait(TimeSpan.FromSeconds(10)), "the session was never opened.");
+
+            // What the pages and the transfers tick ask the client, asked while
+            // the disk is being read.
+            Task asking = Task.Run(async () =>
+            {
+                _ = await engine.StatusAsync(CancellationToken.None);
+                _ = engine.Drawn;
+                _ = engine.Moving;
+            });
+
+            Assert.Same(
+                asking,
+                await Task.WhenAny(asking, Task.Delay(TimeSpan.FromSeconds(5))));
+        }
+        finally
+        {
+            held.Set();
         }
     }
 

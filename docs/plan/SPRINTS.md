@@ -2205,6 +2205,34 @@ it **and** hold a piece it still wants.
 **Done when** the announce line says both, and the peers column counts leechers. Read first:
 `docs/plan/PROGRESS.md` § Log, `S11-26`.
 
+## S11-36 · The client answers while a session opens, and a stuck client is said so
+
+From the owner's server hanging for ninety minutes on 7 September 2026. The full reading is in
+`docs/plan/PROGRESS.md` § Log and § Facts; this is what the slice changes.
+
+**Files:** `Hosting/BittorrentEngine.cs`, `Hosting/Heartbeat.cs` (new), `TorrentDownloaderPlugin.cs`,
+`Bittorrent/Engine/TorrentRun.cs`, `docs/06-torrent-client.md` § The client always answers.
+
+**Steps**
+
+1. Test (red): `BittorrentEngineTests.NothingWaitsOnATorrentWhoseSessionIsOpening` — an engine
+   whose disk pass is held open; `AddAsync` returns within five seconds, and `StatusAsync`, `Drawn`
+   and `Moving` answer within five seconds while it is held. It fails on the add: the announce loop
+   is started from inside the client's lock and opens the session before its first `await`.
+2. `AnnouncingAsync` yields before anything else. `TorrentRun.NothingWanted` is a read of what the
+   run decided when it opened its session, never a call that opens one. The refusal test and the
+   two run tests that opened a session through `NothingWanted` open it through `OnceAsync` and wait
+   for the decision.
+3. Test (red): `HeartbeatTests` — a tick that finds the last look still out is dropped, so five
+   ticks behind one blocked look are one look; a look out for thirty seconds is said once as a
+   warning naming the wait, and its return once.
+4. `Heartbeat`: the timer only triggers; the look runs on its own thread; `Patience` is thirty
+   seconds. The plugin's inline timer becomes one of these.
+
+**Done when** the four tests pass, the whole suite is green, and a torrent added with gigabytes
+already on disk leaves the Downloads page answering while it is hashed. Read first:
+`docs/plan/PROGRESS.md` § Log `S11-11`, then § Facts on what a starved pool looks like in the log.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.
