@@ -1993,6 +1993,21 @@ and note it here.
   with `BrowserURL = http://127.0.0.1:{port}`; `IPage.ReloadAsync` takes `ReloadOptions`, not
   `NavigationOptions`; `IBrowser.Disconnect()` is synchronous; `InstalledBrowser` is in
   `PuppeteerSharp.BrowserData`.
+- **`UnobservedTaskException … PuppeteerSharp.PuppeteerException` in the server log is the driver's
+  noise, not a fault here.** Seen on 7 September 2026 as twelve lines at one instant, in fours of
+  "Execution Context was destroyed", "Execution Context was destroyed", "Response body is unavailable
+  for redirect responses". Both come from tasks the driver faults on purpose and nobody is meant to
+  await: `IsolatedWorld.ClearContext` faults its context-resolve task on the *second* clear a
+  navigation sends (`executionContextDestroyed`, then `executionContextsCleared`), once per world and
+  there are two worlds per frame — hence the pair; `NetworkManager.HandleRequestRedirect` faults a
+  redirect response's body task that only a body read would ever await — hence the one. So a
+  navigation that redirects once costs three, and the finaliser reports them in a batch whenever it
+  runs. Nothing this plugin does reaches either task: the context task is private to the driver and
+  the redirect is the site's. Checked against the decompiled 25.6.0 and the newest release, 25.10.0,
+  which faults both the same way; upstream issue #2642 reports exactly these two sites and was
+  closed as not planned. The server's `Program.cs` logs every unobserved exception at Information
+  and marks it observed, so the line is harmless and cannot be silenced from a plugin. Do not chase
+  it, and do not upgrade the driver for it.
 - `CA1416` is on and enforced: a Windows-only or Linux-only type must carry `[SupportedOSPlatform]`
   and be constructed behind an `OperatingSystem.IsWindows()`-style check, not behind an equivalent
   the analyser cannot follow. It caught two real cross-platform slips in `S2-03`.
