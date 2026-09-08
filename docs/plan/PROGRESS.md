@@ -311,7 +311,8 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   conversation yields before it asks. Tests: `APeerThatDialsInWhileTheSessionIsOpeningHoldsNothingUp`
   (hung, then green). Two small things seen on the Downloads page while measuring and left for a
   slice of their own: the magnet field draws two borders when focused, and is not emptied after a
-  successful add. The release notes are `docs/releases/0.4.1.md`.
+  successful add. The release notes are `docs/releases/0.4.1.md`; the owner asked for the hotfix by name, so
+  `0.4.1` is the version in all three places and `v0.4.1` is tagged.
 
 - **`S11-36` The server hung for ninety minutes, and the plugin can no longer take it down that
   way.** The owner restarted `beast-unit` at 03:34 local on 7 September 2026 because nothing
