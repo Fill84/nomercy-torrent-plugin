@@ -309,9 +309,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   restart, one that a restart with a stale resume file walks straight into. The wait is a task
   now, awaited with the lock let go; the opener completes it after letting go of the lock; the
   conversation yields before it asks. Tests: `APeerThatDialsInWhileTheSessionIsOpeningHoldsNothingUp`
-  (hung, then green). Two small things seen on the Downloads page while measuring and left for a
-  slice of their own: the magnet field draws two borders when focused, and is not emptied after a
-  successful add. The release notes are `docs/releases/0.4.1.md`; the owner asked for the hotfix by name, so
+  (hung, then green). Two small things seen on the Downloads page while measuring, both the web app's and both
+  settled the same day: the magnet field was not emptied after a successful add — `nomercy-app-web`
+  `c7074f854`, a form that was sent starts empty again, with three tests — and the two borders it
+  drew when focused are the bare `<input>` of the web app the owner has deployed; `app-web` master
+  already draws the design system's field there, so that goes with the next web app deploy and
+  nothing in this plugin. Also seen while pulling that repository: `store/serverReachable.ts` on
+  master no longer treats one failed probe as an outage but confirms it over one and three seconds
+  first, so the reconnect cycles of § Facts get softer with the next web app deploy too. The release notes are `docs/releases/0.4.1.md`; the owner asked for the hotfix by name, so
   `0.4.1` is the version in all three places and `v0.4.1` is tagged.
 
 - **`S11-36` The server hung for ninety minutes, and the plugin can no longer take it down that
