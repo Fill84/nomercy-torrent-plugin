@@ -665,6 +665,89 @@ public class TorrentRunTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>A peer that dials in while the session is opening holds nothing
+    /// up.</strong> Taking a peer started its conversation from inside the
+    /// run's lock, and the conversation's first act is to ask for the session
+    /// — which, while somebody else is reading the disk, waited on that pass
+    /// with the lock still held. Every question to the run then waited on that
+    /// peer, the client's status pass waited on the run under the client's own
+    /// lock, and the page heartbeat sat down behind it once a second.
+    /// </para>
+    /// <para>
+    /// The port is forwarded and the swarm remembers this client, so a restart
+    /// with a season pack still on disk is exactly that: a verification of
+    /// gigabytes with the old swarm dialling back in throughout. On 8 September
+    /// 2026 Dark Matter had forty-eight of them connected. The peer is taken
+    /// on, its conversation waits for the session without a thread and without
+    /// the lock, and whoever took it is answered at once.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APeerThatDialsInWhileTheSessionIsOpeningHoldsNothingUp()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(60));
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+
+        using ManualResetEventSlim verifying = new(false);
+        using ManualResetEventSlim held = new(false);
+
+        try
+        {
+            using TorrentRun run = new(
+                ArchiveHash,
+                [],
+                _folder,
+                new TrackerSet(new AnsweringTrackers(), TimeProvider.System),
+                new NobodyDials(),
+                Id("NM0001"),
+                listenPort: 51413,
+                TimeProvider.System,
+                torrent,
+                verify: (_, _) =>
+                {
+                    verifying.Set();
+                    held.Wait(TimeSpan.FromSeconds(30));
+
+                    return new(torrent.PieceCount);
+                });
+
+            Task opening = Task.Run(() => run.OnceAsync(stopping.Token));
+
+            Assert.True(verifying.Wait(TimeSpan.FromSeconds(10)), "the session was never opened.");
+
+            PeerWire wire = new();
+
+            PeerConnection?[] introduced = await Task.WhenAll(
+                PeerConnection.IntroduceAsync(wire.Receiver, ArchiveHash, Id("QUIET0"), 0, dialling: false, stopping.Token),
+                PeerConnection.IntroduceAsync(wire.Initiator, ArchiveHash, Id("NM0002"), 0, dialling: true, stopping.Token));
+
+            // What the accept loop does with an arrival, on its own thread.
+            Task taking = Task.Run(() => run.Take(introduced[1]!, stopping.Token));
+
+            Assert.Same(
+                taking,
+                await Task.WhenAny(taking, Task.Delay(TimeSpan.FromSeconds(5))));
+
+            // And the run still answers what the pages ask it.
+            Task asking = Task.Run(() => run.Progress());
+
+            Assert.Same(
+                asking,
+                await Task.WhenAny(asking, Task.Delay(TimeSpan.FromSeconds(5))));
+
+            held.Set();
+
+            await Task.WhenAny(opening, Task.Delay(TimeSpan.FromSeconds(30)));
+            introduced[0]!.Dispose();
+        }
+        finally
+        {
+            held.Set();
+        }
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>A torrent with nothing on disk is not asked to hash its own empty
     /// files.</strong> Opening a session creates every file at its full length,
     /// sparse. That used to happen before the disk was verified, so the

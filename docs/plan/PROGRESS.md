@@ -284,11 +284,34 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-34` Nothing changed is not a message
 - [x] `S11-35` The remaining time is drawn in a cell that can say it is not known
 - [x] `S11-36` The client answers while a session opens, and a stuck client is said so
+- [x] `S11-37` A peer that dials in while the session opens holds nothing up
 - [x] `S11-05` One run, watched — the owner's
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-37` A peer that dials in while the session opens deadlocked the run, and 0.4.1 is the
+  hotfix.** The owner reported the other face of the same thing: short hangs, the web client
+  connecting and dropping a few times a minute, the server slow, only with the plugin enabled.
+  Measured on 8 September 2026 with the plugin re-enabled on `beast-unit`: three hours, a search
+  cycle, eight feed ticks, a real download and forty-eight connected peers — `setup/server-info`
+  never took more than 18 ms and the dashboard never dropped. What the web app calls a disconnect
+  is its own probe: it asks `setup/server-info` every thirty seconds with a five-second timeout,
+  pauses every hub on one failure and retries at 2, 5, 10 and 30 seconds. So the symptom is any
+  answer slower than five seconds, and the days it was seen were days of restarts and re-adds with
+  gigabytes on disk. Writing the test for the one wait `S11-36` had left — a peer arriving while
+  the disk is being read — hung the suite for ten minutes: `Take` started the conversation inside
+  the run's lock, the conversation asked for the session, and waited on a `ManualResetEventSlim`
+  that the disk pass could only set after taking that same lock. Not a wait: a deadlock, for as
+  long as the run lived, with the client's status pass and the page heartbeat queued behind it —
+  and with the port forwarded and Dark Matter's swarm dialling back in within a minute of every
+  restart, one that a restart with a stale resume file walks straight into. The wait is a task
+  now, awaited with the lock let go; the opener completes it after letting go of the lock; the
+  conversation yields before it asks. Tests: `APeerThatDialsInWhileTheSessionIsOpeningHoldsNothingUp`
+  (hung, then green). Two small things seen on the Downloads page while measuring and left for a
+  slice of their own: the magnet field draws two borders when focused, and is not emptied after a
+  successful add. The release notes are `docs/releases/0.4.1.md`.
 
 - **`S11-36` The server hung for ninety minutes, and the plugin can no longer take it down that
   way.** The owner restarted `beast-unit` at 03:34 local on 7 September 2026 because nothing
@@ -1546,6 +1569,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **Whoever waits on a session opening waits on a task, and the opener completes it after
+  letting go of the lock.** The event it replaces was waited on from inside the lock and set from
+  inside the lock, which is a deadlock with extra steps; a task can be awaited with nothing held
+  and completed after everything is let go. The thirty-minute backstop stays, as a `WaitAsync`.
 - **A run decides "nothing in it is wanted" when it opens its session; the client only reads it.**
   Reading it used to open the session, and the client reads it in its status pass under its own
   lock — so the pass hashed a season pack with every page and every tick waiting behind it. The
@@ -2083,6 +2110,19 @@ and note it here.
 ## Facts, measured
 
 Kept here so no slice re-discovers them.
+
+- **What the web app calls "the server disconnecting", and how to measure the server instead.**
+  `nomercy-app-web` asks `GET /api/v1/setup/server-info` every thirty seconds with a five-second
+  timeout (`store/serverReachable.ts`); one failure pauses every hub and the probe retries at 2, 5,
+  10 and 30 seconds, which the owner sees as connect/disconnect cycles. The server speaks HTTP/1.1
+  and HTTP/3 only, never HTTP/2, so a browser has six connections per host for everything at once.
+  To measure the server itself, on `beast-unit`, a hidden PowerShell that calls that endpoint over
+  HTTPS once a second (certificate check off; a 401 without a token still walks the whole
+  pipeline) and writes `ms`, CPU%, thread count and working set per line — the recipe is in the
+  8 September session; the first request of each run costs about 2.1 s of TLS and is noise. On
+  8 September 2026 that gave 1–18 ms for three hours with the plugin on, including a search cycle
+  and a download, so a stutter the owner sees and this does not is in the browser or in the day's
+  restarts, not in the request path.
 
 - **What a starved thread pool looks like in the server log, and how to catch the next hang.** Every
   line in `run-*.jsonl` (in `%LOCALAPPDATA%\NoMercy\log` on `beast-unit`) carries `ThreadId`. Healthy

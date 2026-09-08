@@ -261,7 +261,10 @@ anything is moving — is answered under the client's own lock, and so is everyt
 byte already on disk, minutes for a season pack: it runs on the run's own thread, started by its
 announce loop after that loop has left the client's lock, and a run decides "nothing in it is
 wanted" at that moment rather than when it is asked. A client asked about a torrent whose session is
-opening answers what it knows so far.
+opening answers what it knows so far. A peer that dials in while the session is opening is taken
+on at once and its conversation waits for the session as a task, holding no thread and no lock:
+waited for as an event from inside the run's lock, it and the pass that would wake it waited on
+each other for ever, and everything behind the run's lock with them.
 
 The page heartbeat looks at the client once a second and says "moved" where what the pages draw has
 changed. One look at a time: a tick that finds the last look still out is dropped rather than queued

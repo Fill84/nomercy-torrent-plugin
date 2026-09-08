@@ -2233,6 +2233,30 @@ From the owner's server hanging for ninety minutes on 7 September 2026. The full
 already on disk leaves the Downloads page answering while it is hashed. Read first:
 `docs/plan/PROGRESS.md` § Log `S11-11`, then § Facts on what a starved pool looks like in the log.
 
+## S11-37 · A peer that dials in while the session opens holds nothing up
+
+Found by the test that was meant to show a bounded wait: it hung for ten minutes. Taking a peer
+starts its conversation from inside the run's lock; the conversation's first act asks for the
+session; while somebody else is reading the disk that wait was a `ManualResetEventSlim` waited on
+with the lock still held — and the pass that sets it needs the lock to finish. A deadlock, on every
+verification that a peer dials into, which with a forwarded port and a swarm that remembers this
+client is every restart with gigabytes on disk.
+
+**Files:** `Bittorrent/Engine/TorrentRun.cs`, `docs/06-torrent-client.md` § The client always answers.
+
+**Steps**
+
+1. Test (red): `TorrentRunTests.APeerThatDialsInWhileTheSessionIsOpeningHoldsNothingUp` — a
+   verifier held open, a peer taken on from another thread; `Take` returns within five seconds and
+   `Progress` answers within five seconds. It hangs today.
+2. `Session()` becomes `SessionAsync`; the wait on somebody else's opening is a
+   `TaskCompletionSource` awaited with the lock let go; the opener completes it after the lock is
+   let go, never inside it. `ConverseAsync` yields before anything else, so whoever took the peer
+   is answered at once.
+
+**Done when** that test and the two other session-opening tests pass and the whole suite is green.
+Read first: `docs/plan/PROGRESS.md` § Log `S11-36`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

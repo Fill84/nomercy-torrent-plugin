@@ -277,8 +277,20 @@ public sealed class TorrentRun : IDisposable
     /// </remarks>
     private bool _verifying;
 
-    /// <summary>Set while nobody is opening the session, so a caller can wait on it.</summary>
-    private readonly ManualResetEventSlim _opened = new(true);
+    /// <summary>
+    /// Completes when the opening under way is over, so a caller can wait on
+    /// it without a thread.
+    /// </summary>
+    /// <remarks>
+    /// A task and not an event, and that is the whole of the difference. It
+    /// was a <c>ManualResetEventSlim</c> waited on with the run's lock held: a
+    /// peer that dialled in while the disk was being read sat down on the
+    /// event from inside <see cref="Take"/>, and the pass that would set it
+    /// needed that same lock to finish. Both waited for ever, and everything
+    /// that asked the run anything waited behind them — the client's status
+    /// pass under the client's own lock, and the page heartbeat once a second.
+    /// </remarks>
+    private TaskCompletionSource _opened = Done();
 
     /// <summary>How many peers one DHT search asks for.</summary>
     /// <remarks>
@@ -640,7 +652,7 @@ public sealed class TorrentRun : IDisposable
         // what the torrent is has somewhere for the first block to go, and the
         // files have to exist before the resume file can be judged against
         // them.
-        Session();
+        await SessionAsync(ct).ConfigureAwait(false);
 
         // The announce keeps the tracker's own interval; the pass around it
         // comes round sooner. A run that has lost every peer has to be able to
@@ -956,13 +968,12 @@ public sealed class TorrentRun : IDisposable
         // Let go of anybody waiting on the session before the token is
         // cancelled: a run being disposed while it is being opened must not
         // leave a caller sitting on the half hour.
-        _opened.Set();
+        _opened.TrySetResult();
 
         // Outside the lock: cancelling runs continuations, and one of them
         // taking this lock on the way out would deadlock against it.
         _stopping.Cancel();
         _stopping.Dispose();
-        _opened.Dispose();
     }
 
     /// <summary>
@@ -1146,6 +1157,14 @@ public sealed class TorrentRun : IDisposable
     /// </remarks>
     private async Task ConverseAsync(PeerConnection peer, CancellationToken ct)
     {
+        // Off the caller's thread before anything else. This is started from
+        // inside the run's lock by whoever took the peer, and the first thing
+        // it does is ask for the session — which reads the disk when there is
+        // none yet, and waits when somebody else is reading it. Neither may
+        // happen on the thread that took the peer, and nothing may happen under
+        // the lock.
+        await Task.Yield();
+
         try
         {
             // A read this peer had already begun when the metadata arrived,
@@ -1160,7 +1179,7 @@ public sealed class TorrentRun : IDisposable
                 pending = await FetchAsync(peer, ct).ConfigureAwait(false);
             }
 
-            if (Session() is TorrentSession session)
+            if (await SessionAsync(ct).ConfigureAwait(false) is TorrentSession session)
             {
                 await session.RunAsync(peer, ct, pending).ConfigureAwait(false);
             }
@@ -1384,12 +1403,13 @@ public sealed class TorrentRun : IDisposable
     /// session built from a magnet alone would have nowhere to put a block and
     /// nothing to check it against.
     /// </remarks>
-    private TorrentSession? Session()
+    private async Task<TorrentSession?> SessionAsync(CancellationToken ct)
     {
         while (true)
         {
             TorrentMetadata torrent;
             IReadOnlyList<TorrentFileEntry> keeping;
+            Task? somebodyElse = null;
 
             lock (_lock)
             {
@@ -1406,30 +1426,50 @@ public sealed class TorrentRun : IDisposable
                 if (_verifying)
                 {
                     // Somebody else is reading the disk. Waited for below with
-                    // the lock let go, so a caller that really needs the
-                    // session still gets it and everything that only wants to
-                    // ask this run something is answered meanwhile.
-                    goto waiting;
+                    // the lock let go and without a thread, so a caller that
+                    // really needs the session still gets it and everything
+                    // that only wants to ask this run something is answered
+                    // meanwhile.
+                    somebodyElse = _opened.Task;
                 }
-
-                keeping = _choose is null ? _torrent.Files : _choose(_torrent.Files);
-
-                if (keeping.Count == 0)
+                else
                 {
-                    _nothingWanted = true;
+                    keeping = _choose is null ? _torrent.Files : _choose(_torrent.Files);
 
-                    // Nothing in it is worth a byte. Said rather than started:
-                    // the caller stops this torrent and blames it, and creating
-                    // a session that wants no pieces would report itself
-                    // finished the moment it existed.
-                    return null;
+                    if (keeping.Count == 0)
+                    {
+                        _nothingWanted = true;
+
+                        // Nothing in it is worth a byte. Said rather than
+                        // started: the caller stops this torrent and blames it,
+                        // and creating a session that wants no pieces would
+                        // report itself finished the moment it existed.
+                        return null;
+                    }
+
+                    torrent = _torrent;
+                    _verifying = true;
+                    _opened = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+                    goto opening;
                 }
-
-                torrent = _torrent;
-                _verifying = true;
-
-                _opened.Reset();
             }
+
+            try
+            {
+                // Never for ever: a pass that faulted completes this on its way
+                // out, and the limit is a backstop for a caller that should
+                // never be left here.
+                await somebodyElse.WaitAsync(Opening, ct).ConfigureAwait(false);
+            }
+            catch (TimeoutException)
+            {
+                // Round again, and the lock says what happened meanwhile.
+            }
+
+            continue;
+
+        opening:
 
             try
             {
@@ -1487,20 +1527,30 @@ public sealed class TorrentRun : IDisposable
             }
             finally
             {
+                TaskCompletionSource opened;
+
                 lock (_lock)
                 {
                     _verifying = false;
+                    opened = _opened;
                 }
 
-                _opened.Set();
+                // After the lock is let go, never inside it: a waiter woken
+                // here takes the lock next, and waking it while holding the
+                // lock is how the deadlock above was built.
+                opened.TrySetResult();
             }
-
-        waiting:
-
-            // Never for ever: a pass that faulted sets this on its way out, and
-            // this is a fallback for a thread that should never be left here.
-            _opened.Wait(Opening);
         }
+    }
+
+    /// <summary>A completion that is already over, for a run nobody is opening.</summary>
+    private static TaskCompletionSource Done()
+    {
+        TaskCompletionSource done = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        done.SetResult();
+
+        return done;
     }
 
     /// <summary>The longest a caller waits on somebody else opening the session.</summary>
