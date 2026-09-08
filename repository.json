@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.4.1",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.4.1/NoMercy.Plugin.TorrentDownloader-0.4.1.zip",
+          "checksum": "eb3c519068030fb43a978ea384aed3c512367488eface9c04694adcc3a72ae67",
+          "changelog": "A hotfix for one fault with three faces: the server hanging for an hour and a half on 7 September, the server stalling for a minute after a restart, and the web client connecting and dropping a few times a minute. All three were the client's lock being held while the disk was read, and every page and every tick queuing behind it — one thread per second until the server had none left to answer with.",
+          "timestamp": "2026-09-08T14:07:03Z"
+        },
+        {
           "version": "0.4.0",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.4.0/NoMercy.Plugin.TorrentDownloader-0.4.0.zip",
