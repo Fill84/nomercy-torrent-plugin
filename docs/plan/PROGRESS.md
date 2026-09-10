@@ -4,6 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**The pages are live again and the fix is not deployed.** `S11-38` is on `master` and in no
+build the owner runs: 0.4.0 and 0.4.1 both drop every push a download makes, which is the "nothing
+updates without a refresh" the owner reported. It wants a version, a tag and a deploy, and all
+three are the owner's to give.
+
 **Current: nothing. Sprint 11 is finished.** Every slice is ticked, and `S11-05` — the end-to-end
 run watched on the owner's own server — was a forty-five gigabyte pack for a show the owner did not
 have, which went from a pasted magnet to eight episodes in the library with nobody pressing
@@ -286,10 +291,34 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-36` The client answers while a session opens, and a stuck client is said so
 - [x] `S11-37` A peer that dials in while the session opens holds nothing up
 - [x] `S11-05` One run, watched — the owner's
+- [x] `S11-38` A push that was asked for is sent
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-38` A push that was asked for is sent, and that is what the pages had stopped getting.**
+  The owner reported that nothing moves without a refresh by hand: a torrent drawn as waiting for
+  metadata was really twelve per cent downloaded, and had been for minutes. `LiveSnapshot.Push`
+  decided for itself whether anything had changed, from the journal's in-flight list, the newest
+  history event and the cycle status — and a download's progress is in none of the three. The
+  heartbeat is the one thing that sees it: it compares what the pages draw, sees the percentage
+  move and calls `Changed()`, which schedules the push; a second later `Push` looked at its three
+  fields, found none of them moved, and returned without sending. So for as long as something
+  downloaded and nothing else happened, no message left the plugin at all, and the Downloads page
+  sat on the figures it had when it was opened. Live since `S11-34`, which added that filter and a
+  test — `NothingChangedIsNotPushed` — that asserted exactly the silence the owner then reported.
+  §H again: the fault shipped with a test covering it. The filter is gone and so is the `_newest`
+  it needed; `Changed()` is the only way in and none of its three callers asks for nothing, so
+  quiet is still kept by nobody asking. Tests:
+  `AByteCountMovingIsPushedThoughItTouchesNeitherJournalNorCycle` (red, then green) replaces
+  `NothingChangedIsNotPushed`; `NothingChangingPushesNothing` still holds, which is what stops this
+  being a poll. Everything
+  else in the chain was read and is sound: `Heartbeat` looks once a second and only says "moved"
+  where `BittorrentEngine.Drawn` differs, `PluginHubBroadcaster` sends to `plugin:{id}` with `Ulid`
+  serialised as its canonical 26-character string, and `nomercy-app-web` re-joins its groups on
+  every reconnect and answers any `PluginMessage` by re-reading the view. **This needs a build the
+  owner deploys**: 0.4.1 and 0.4.0 both carry the fault.
 
 - **`S11-37` A peer that dials in while the session opens deadlocked the run, and 0.4.1 is the
   hotfix.** The owner reported the other face of the same thing: short hangs, the web client
@@ -1575,6 +1604,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **Whether anything changed is known where `Changed()` is called, and nowhere else.**
+  `LiveSnapshot.Push` may not re-derive it. The journal and the cycle are a part of what the owner
+  is looking at, never the whole of it — a byte count, a peer, a seed, a choke all move the page
+  and touch neither — so a filter built on them drops real changes and calls it quiet. It did, for
+  two releases. Quiet is kept by nobody calling `Changed()`, which is the only way in and is
+  already how a plugin with nothing to say says nothing. `docs/08-ui.md` § Two rules is the rule
+  this broke: everything updates live.
 - **Whoever waits on a session opening waits on a task, and the opener completes it after
   letting go of the lock.** The event it replaces was waited on from inside the lock and set from
   inside the lock, which is a deadlock with extra steps; a task can be awaited with nothing held

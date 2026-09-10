@@ -2257,6 +2257,34 @@ client is every restart with gigabytes on disk.
 **Done when** that test and the two other session-opening tests pass and the whole suite is green.
 Read first: `docs/plan/PROGRESS.md` § Log `S11-36`.
 
+## S11-38 · A push that was asked for is sent
+
+The owner reported it plainly: nothing on the Downloads page moves. A torrent sat on "waiting for
+metadata" and only a refresh by hand showed it had been downloading at twelve per cent for minutes.
+
+`LiveSnapshot.Push` decided for itself whether anything had changed, from the journal's in-flight
+list, the newest history event and the cycle status — and a download's progress is in none of the
+three. The heartbeat, which is the one thing that does see it, compares what the pages draw and
+calls `Changed()`; the push was then scheduled and dropped a second later for having nothing to
+say. So for as long as something downloaded and nothing else happened, no message left the plugin
+at all. `S11-34` added that filter, and the test it added asserted the silence.
+
+**Files:** `Hosting/LiveSnapshot.cs`, `tests/…/Hosting/LiveSnapshotTests.cs`.
+
+**Steps**
+
+1. Test (red): `LiveSnapshotTests.AByteCountMovingIsPushedThoughItTouchesNeitherJournalNorCycle` —
+   a download started in the journal, one push; then `Changed()` again with the journal and the
+   cycle standing still, as the heartbeat asks it. A second push goes out, carrying a null
+   `InFlight`, a null `Cycle` and a different `At`. It does not today. Replaces
+   `NothingChangedIsNotPushed`, which asserted the fault.
+2. Drop the filter and the `_newest` it needed. Whether anything changed is known where `Changed()`
+   is called and nowhere else, and quiet is kept by nobody calling it.
+
+**Done when** that test passes, the whole suite is green, and `NothingChangingPushesNothing` still
+holds — nobody asking is still nothing sent, which is what stops this being a poll.
+Read first: `docs/plan/PROGRESS.md` § Log `S11-34`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

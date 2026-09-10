@@ -260,44 +260,60 @@ public class LiveSnapshotTests
 
     /// <remarks>
     /// <para>
-    /// <strong>Nothing changed is not a message.</strong> A push with every
-    /// part of it empty says only that a timer went off. It used to go out
-    /// anyway, carrying a timestamp and nothing else, and every open page
-    /// answered it by re-reading the entire view over HTTP — a full page fetch
-    /// to be told that nothing had happened.
+    /// <strong>A push that was asked for goes out, whatever the journal says.</strong>
+    /// A torrent moving from waiting for metadata to twelve per cent touches
+    /// nothing this payload carries: the journal still holds the same one entry
+    /// in flight, no event has finished, and the cycle has not moved. The only
+    /// thing that sees it move is the client heartbeat, and all the heartbeat
+    /// can do is say so.
     /// </para>
     /// <para>
-    /// The owner asked for three things: push when something changes, push only
-    /// the changes, and do not push when there are none. This is the third.
+    /// That was dropped here. <c>Push</c> decided for itself whether anything
+    /// had changed, from the journal and the cycle alone — which is a partial
+    /// view of what the owner is looking at — found neither had moved, and
+    /// returned without sending. So for as long as a torrent downloaded and
+    /// nothing else happened, no message left the plugin at all: the Downloads
+    /// page drew the figures of the moment it was opened and only a refresh by
+    /// hand moved them. Shipped in 0.4.0, with a test asserting the silence.
+    /// </para>
+    /// <para>
+    /// Quiet is still quiet — nobody asking is <see cref="NothingChangingPushesNothing"/>,
+    /// and that is what stops this being a poll. What this says is that once
+    /// something has asked, the asking is not second-guessed.
     /// </para>
     /// </remarks>
     [Fact]
-    public void NothingChangedIsNotPushed()
+    public void AByteCountMovingIsPushedThoughItTouchesNeitherJournalNorCycle()
     {
         FakeTimeProvider clock = new();
         FakeHub hub = new();
         ActivityJournal journal = new(clock);
         using LiveSnapshot live = new(hub, journal, new CapturingLogger(), () => CycleStatus.Unknown, clock);
 
-        journal.Started(ActivityStage.Find, "Silo S03E06");
+        // The download starts: that much the journal does see.
+        journal.Started(ActivityStage.Download, "Dark Matter S02E05");
 
         live.Changed();
         clock.Advance(LiveSnapshot.MinimumInterval);
 
         Assert.Single(hub.Pushes);
 
-        // Asked again with nothing to say.
-        live.Changed();
-        clock.Advance(LiveSnapshot.MinimumInterval);
-
-        Assert.Single(hub.Pushes);
-
-        // And the moment there is something, it goes.
-        journal.Finished(ActivityStage.Find, "Silo S03E06", "one copy");
-
+        // And now the bytes arrive. The heartbeat compares what the pages draw,
+        // sees the percentage move, and asks for a push; the journal and the
+        // cycle stand exactly where they did.
         live.Changed();
         clock.Advance(LiveSnapshot.MinimumInterval);
 
         Assert.Equal(2, hub.Pushes.Count);
+
+        // Carrying the moment, which is what makes it a different message from
+        // the last one even though neither of the other two fields moved.
+        LiveSnapshot.Payload second = Assert.IsType<LiveSnapshot.Payload>(hub.Pushes[1].Payload);
+
+        Assert.Null(second.InFlight);
+        Assert.Null(second.Cycle);
+        Assert.NotEqual(
+            Assert.IsType<LiveSnapshot.Payload>(hub.Pushes[0].Payload).At,
+            second.At);
     }
 }
