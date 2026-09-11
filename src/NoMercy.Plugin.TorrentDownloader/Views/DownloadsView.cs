@@ -208,7 +208,7 @@ public static class DownloadsView
     /// rendering as a torrent at nought per cent — one is waiting and the other
     /// is stuck, and an owner can act on the difference.
     /// </remarks>
-    private static string State(DownloadRow row)
+    internal static string State(DownloadRow row)
     {
         if (row.Transfer is null)
         {

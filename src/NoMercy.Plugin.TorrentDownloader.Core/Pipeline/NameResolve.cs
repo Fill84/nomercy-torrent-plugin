@@ -131,18 +131,16 @@ public sealed class NameResolve(
         // them `South.Park.S15E12.1080p.BluRay.x264-FilmHD`. The release the
         // owner wanted was at the source the whole time and the question buried
         // it.
-        TrackedEpisode[] missing = [.. episodes.Where(episode => !pooled.Has(Keys(episode)))];
+        //
+        // Every episode, whatever the pool already holds for it — the owner's
+        // rule of 11 September 2026, see NamesForAsync.
+        IReadOnlyList<PooledName> found = await AskAsync(episodes, profile, ct);
 
-        if (missing.Length > 0)
-        {
-            IReadOnlyList<PooledName> found = await AskAsync(missing, profile, ct);
+        // Written before they are used, so the next cycle starts from them
+        // even if this one is interrupted.
+        await pool.AddAsync(found, ct);
 
-            // Written before they are used, so the next cycle starts from them
-            // even if this one is interrupted.
-            await pool.AddAsync(found, ct);
-
-            pooled.Add(found);
-        }
+        pooled.Add(found);
 
         return [.. episodes.Select(episode => new ResolvedNames(episode.Key, pooled.Titles(AllKeys(episode))))];
     }
@@ -164,10 +162,19 @@ public sealed class NameResolve(
     }
 
     /// <summary>
-    /// The names for one episode: from the pool, or from the sources when the
-    /// pool has none.
+    /// The names for one episode: what the sources answer now, and whatever
+    /// the pool already held besides.
     /// </summary>
     /// <remarks>
+    /// <para>
+    /// <strong>The sources are asked about every episode on every run.</strong>
+    /// The owner's rule of 11 September 2026. The pool used to stand in for
+    /// them: an episode with any name in it was never asked about again, and
+    /// on the owner's server Dark Matter S02E03 had exactly one — a MULTi
+    /// release English only refuses — so no source was asked and no name the
+    /// owner could take ever reached an indexer. A source asked today also
+    /// knows about the release that went up after the pool was filled.
+    /// </para>
     /// <para>
     /// <strong>One episode at a time, so the episode can be downloaded the
     /// moment it is decided.</strong> The owner's rule of 11 September 2026:
@@ -179,10 +186,9 @@ public sealed class NameResolve(
     /// an hour on a cycle whose pool was empty.
     /// </para>
     /// <para>
-    /// The questions are the same ones, asked in the same way; only the moment
-    /// each is asked has moved. What one episode's answer brings in is kept in
-    /// <paramref name="pooled"/>, so an episode it also answers for is not
-    /// asked about again.
+    /// What one episode's answer brings in is kept in <paramref name="pooled"/>,
+    /// so it is a candidate for any later episode of this run it also answers
+    /// for.
     /// </para>
     /// </remarks>
     public async Task<IReadOnlyList<string>> NamesForAsync(
@@ -191,16 +197,13 @@ public sealed class NameResolve(
         Profile profile,
         CancellationToken ct)
     {
-        if (!pooled.Has(Keys(episode)))
-        {
-            IReadOnlyList<PooledName> found = await AskAsync([episode], profile, ct);
+        IReadOnlyList<PooledName> found = await AskAsync([episode], profile, ct);
 
-            // Written before they are used, so the next cycle starts from them
-            // even if this one is interrupted.
-            await pool.AddAsync(found, ct);
+        // Written before they are used, so the next cycle starts from them
+        // even if this one is interrupted.
+        await pool.AddAsync(found, ct);
 
-            pooled.Add(found);
-        }
+        pooled.Add(found);
 
         return pooled.Titles(AllKeys(episode));
     }
@@ -246,6 +249,8 @@ public sealed class NameResolve(
                     found.AddRange(names);
                 }
 
+                journal.Counted(RunCounter.EpisodesAsked);
+                journal.Counted(RunCounter.NamesFound, names.Length);
                 journal.Finished(ActivityStage.Names, subject, $"{names.Length} names");
             });
 
@@ -296,6 +301,7 @@ public sealed class NameResolve(
             if (result.Failure is FetchFailure failure)
             {
                 journal.Failed(ActivityStage.Names, $"{subject} · {database.Name}", failure.ToString());
+                journal.Noted(ActivityStage.Names, subject, $"{database.Name} · {term} · {failure}");
 
                 return [];
             }
@@ -304,32 +310,63 @@ public sealed class NameResolve(
 
             if (reader is null)
             {
-                journal.Failed(
-                    ActivityStage.Names,
-                    $"{subject} · {database.Name}",
-                    $"It answered and nothing here reads a source of kind '{database.Kind}'.");
+                string unread = $"It answered and nothing here reads a source of kind '{database.Kind}'.";
+
+                journal.Failed(ActivityStage.Names, $"{subject} · {database.Name}", unread);
+                journal.Noted(ActivityStage.Names, subject, $"{database.Name} · {term} · {unread}");
 
                 return [];
             }
 
             DateTimeOffset seen = time.GetUtcNow();
 
-            return
+            PooledName[] named =
             [
                 .. reader.Read(result.Body!, address)
                     .Select(row => (row.Title, Key: PoolKey.Of(ReleaseName.Parse(row.Title))))
-                    .Where(named => named.Key is not null)
-                    .Select(named => new PooledName(named.Key!, named.Title, database.Name, seen)),
+                    .Where(one => one.Key is not null)
+                    .Select(one => new PooledName(one.Key!, one.Title, database.Name, seen)),
             ];
+
+            // What the source was asked and what it said, word for word — the
+            // owner could not see on 11 September 2026 whether the sources had
+            // been asked at all.
+            journal.Noted(ActivityStage.Names, subject, Answered(database, term, named));
+
+            return named;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // One name database is one name database, exactly as one feed is
             // one feed. The episode is worth more than the site that failed.
             journal.Failed(ActivityStage.Names, $"{subject} · {database.Name}", exception.Message);
+            journal.Noted(ActivityStage.Names, subject, $"{database.Name} · {term} · {exception.Message}");
 
             return [];
         }
+    }
+
+    /// <summary>
+    /// One source's answer as a line: what it was asked, and the names it gave.
+    /// </summary>
+    /// <remarks>
+    /// Five of them at most. srrDB can answer forty-five to one question, and a
+    /// line that long is one nobody reads; the rest are counted.
+    /// </remarks>
+    private static string Answered(SourceDefinition database, string term, PooledName[] named)
+    {
+        string[] titles = [.. named.Select(one => one.Title).Distinct(StringComparer.Ordinal)];
+
+        if (titles.Length == 0)
+        {
+            return $"{database.Name} · {term} · no names";
+        }
+
+        string counted = titles.Length == 1 ? "1 name" : $"{titles.Length} names";
+        string shown = string.Join(", ", titles.Take(5));
+        string more = titles.Length > 5 ? $" and {titles.Length - 5} more" : string.Empty;
+
+        return $"{database.Name} · {term} · {counted}: {shown}{more}";
     }
 
     /// <summary>

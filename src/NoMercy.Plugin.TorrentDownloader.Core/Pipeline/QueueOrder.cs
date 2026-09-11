@@ -16,9 +16,18 @@ public static class QueueOrder
     /// The episodes that will be searched, soonest first.
     /// </summary>
     /// <remarks>
-    /// Never searched first, then longest waiting. Anything else lets one
-    /// episode be asked about over and over while an unlucky one is never
-    /// reached at all.
+    /// <para>
+    /// <strong>Always from the top: show, season, episode.</strong> The owner's
+    /// decision of 11 September 2026. This used to put whatever was searched
+    /// longest ago first, so every episode a stopped run had reached went to
+    /// the back — and the next Run carried on from where the stopped one had
+    /// got to, which looked exactly like a pause. A run now begins where every
+    /// run begins.
+    /// </para>
+    /// <para>
+    /// Shows by title, because that is how the owner reads the Queue page; the
+    /// id only breaks a tie between two shows of one name.
+    /// </para>
     /// </remarks>
     public static IReadOnlyList<TrackedEpisode> Order(IEnumerable<TrackedEpisode> episodes)
     {
@@ -29,10 +38,7 @@ public static class QueueOrder
                 // asked about before it exists; an unavailable one has been
                 // given up on until the next maintenance pass puts it back.
                 .Where(episode => episode.State == EpisodeState.Missing)
-                .OrderBy(episode => episode.LastSearchAt ?? DateTimeOffset.MinValue)
-                // Everything searched in one cycle shares a moment, so without
-                // a tie-break the page reshuffles itself between two renders of
-                // the same data and looks like it is doing something.
+                .OrderBy(episode => episode.ShowTitle, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(episode => episode.Key.ShowId)
                 .ThenBy(episode => episode.Key.Season)
                 .ThenBy(episode => episode.Key.Number),

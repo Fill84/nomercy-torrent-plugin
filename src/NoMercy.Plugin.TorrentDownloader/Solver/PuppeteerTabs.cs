@@ -104,6 +104,8 @@ public sealed class PuppeteerTabs : IBrowserTabs
 
             IPage page = await _connected.NewPageAsync();
 
+            page.Response += ObserveRedirect;
+
             // Counted once the page exists, never before it. A page that fails
             // to open — a browser that died, a connection lost — would leave a
             // tab counted that nothing can ever close, and a browser counted
@@ -117,6 +119,51 @@ public sealed class PuppeteerTabs : IBrowserTabs
         finally
         {
             _connecting.Release();
+        }
+    }
+
+    /// <summary>
+    /// Reads the failure PuppeteerSharp leaves on every redirect, so it is not
+    /// reported as a task nobody observed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// PuppeteerSharp fails a redirect response's body task in
+    /// <c>NetworkManager.HandleRequestRedirect</c> and nothing ever awaits it, so
+    /// the finalizer reports it and the media server writes it into its log as
+    /// an <c>UnobservedTaskException</c> — three of them in one warm-up,
+    /// measured 11 September 2026. The owner saw them there.
+    /// </para>
+    /// <para>
+    /// Only a real redirect. <c>BufferAsync</c> awaits that task before
+    /// anything else, so on a redirect it throws at once and asks Chrome
+    /// nothing; on any other response it would fetch the body over the wire.
+    /// </para>
+    /// <para>
+    /// The other kind in that log, "Execution Context was destroyed", cannot be
+    /// reached from here: PuppeteerSharp fails a private task in
+    /// <c>IsolatedWorld.ClearContext</c> and replaces it on the next line,
+    /// before any event this could listen to. It is still there in its current
+    /// source.
+    /// </para>
+    /// </remarks>
+    private static void ObserveRedirect(object? sender, ResponseCreatedEventArgs created)
+    {
+        if ((int)created.Response.Status is 301 or 302 or 303 or 307 or 308)
+        {
+            _ = ObserveAsync(created.Response);
+        }
+    }
+
+    private static async Task ObserveAsync(IResponse response)
+    {
+        try
+        {
+            await response.BufferAsync();
+        }
+        catch (PuppeteerException)
+        {
+            // The failure being observed: a redirect has no body.
         }
     }
 

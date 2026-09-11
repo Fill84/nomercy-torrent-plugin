@@ -120,6 +120,95 @@ public class ActivityJournalTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A run that ends leaves nothing of itself behind.</strong> The
+    /// owner pressed Stop on 11 September 2026 and every row the run had
+    /// started stayed on the dashboard, which looked exactly like a pause.
+    /// Whatever a run had in flight is its own, and when it ends — finished,
+    /// stopped or failed — none of it is still running.
+    /// </para>
+    /// <para>
+    /// Only the run's own stages. The feeds are read on a cadence of their
+    /// own, and a feed being read is not something stopping a search stops.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void WhenARunEndsNothingOfItStaysInFlight()
+    {
+        ActivityJournal journal = new();
+
+        journal.RunStarted();
+        journal.Started(ActivityStage.Clearance, "extranet.torrentbay.st");
+        journal.Started(ActivityStage.Names, "Silo S03E06");
+        journal.Started(ActivityStage.Find, "Silo S03E06 1080p · 1337x");
+        journal.Started(ActivityStage.Decide, "Silo S03E06");
+        journal.Started(ActivityStage.Grab, "Silo S03E06");
+        journal.Started(ActivityStage.Harvest, "PreDB");
+
+        journal.RunEnded();
+
+        Assert.Equal(["PreDB"], journal.Snapshot().InFlight.Select(work => work.Subject));
+    }
+
+    /// <remarks>
+    /// The stage rows count this run and nothing before it, from nought, and a
+    /// run that has ended has no stage rows at all — the owner asked for the
+    /// page to be cleared when a run stops.
+    /// </remarks>
+    [Fact]
+    public void ARunCountsWhatItDidFromNought()
+    {
+        ActivityJournal journal = new();
+
+        journal.RunStarted();
+        journal.Counted(RunCounter.Questions);
+        journal.Counted(RunCounter.Questions);
+        journal.Counted(RunCounter.NamesFound, 3);
+
+        SearchProgress first = journal.Snapshot().Run!;
+
+        Assert.Equal(2, first.Count(RunCounter.Questions));
+        Assert.Equal(3, first.Count(RunCounter.NamesFound));
+        Assert.Equal(0, first.Count(RunCounter.Taken));
+
+        journal.RunEnded();
+
+        Assert.Null(journal.Snapshot().Run);
+
+        journal.RunStarted();
+
+        Assert.Equal(0, journal.Snapshot().Run!.Count(RunCounter.Questions));
+    }
+
+    /// <remarks>
+    /// What the plugin did for one episode — which source was asked and what
+    /// it said, which name was refused and why, every question to every
+    /// indexer and its answer — stays on the page until that episode is
+    /// decided, and not a moment longer than the run.
+    /// </remarks>
+    [Fact]
+    public void WhatWasNotedAboutAnEpisodeStaysUntilItIsDecided()
+    {
+        ActivityJournal journal = new();
+
+        journal.RunStarted();
+        journal.Noted(ActivityStage.Names, "Silo S03E06", "srrDB · Silo S03E06 1080p · 2 names");
+        journal.Noted(ActivityStage.Find, "Silo S03E06", "1337x · Silo.S03E06.1080p.WEB.H264-CAKES · 0 rows");
+        journal.Noted(ActivityStage.Names, "Sugar S02E02", "PreDB · Sugar S02E02 1080p · 1 name");
+
+        Assert.Equal(3, journal.Snapshot().Notes.Count);
+
+        journal.Started(ActivityStage.Decide, "Silo S03E06");
+        journal.Finished(ActivityStage.Decide, "Silo S03E06", "chose Silo.S03E06.1080p.WEB.H264-CAKES");
+
+        Assert.Equal(["Sugar S02E02"], journal.Snapshot().Notes.Select(note => note.Episode));
+
+        journal.RunEnded();
+
+        Assert.Empty(journal.Snapshot().Notes);
+    }
+
+    /// <remarks>
     /// Every stage in the chain, so a stage cannot be added to the pipeline
     /// without a place in the journal to report from. A stage that cannot be
     /// seen does not ship.

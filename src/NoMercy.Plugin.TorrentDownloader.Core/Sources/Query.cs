@@ -23,6 +23,26 @@ public static class Query
         return address.Replace("{query}", Format(term, style), StringComparison.Ordinal);
     }
 
+    /// <summary>
+    /// <paramref name="address"/> with <c>{query}</c> replaced by
+    /// <paramref name="term"/> letter for letter.
+    /// </summary>
+    /// <remarks>
+    /// Only escaped, never rewritten: the dots and the dash of a release name
+    /// reach the site as the source wrote them. That is the first question an
+    /// indexer is asked about a name — the owner's rule of 11 September 2026.
+    /// </remarks>
+    public static string WriteExact(string address, string term)
+    {
+        return address.Replace("{query}", Uri.EscapeDataString(term), StringComparison.Ordinal);
+    }
+
+    /// <summary>The term with its punctuation gone, as words a person reads.</summary>
+    public static string Sanitised(string term)
+    {
+        return string.Join(' ', Words(term));
+    }
+
     /// <summary>The term as this style sends it.</summary>
     public static string Format(string term, string style)
     {

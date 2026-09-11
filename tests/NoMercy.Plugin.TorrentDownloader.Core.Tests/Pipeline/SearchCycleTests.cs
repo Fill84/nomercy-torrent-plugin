@@ -214,12 +214,12 @@ public class SearchCycleTests
             new(new() { MaximumResolution = "1080p", MaxSearchAttempts = 2 }, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
-        // The one name the profile accepts, then the four rungs below it: the
-        // episode with the owner's quality and without, then the season with it
-        // and without. The programme's own name used to be a question here and
-        // is gone — asked on its own a site answers with every season and every
-        // quality it has.
-        Assert.Equal(5, fetch.Asked.Count(address => address.Host == "www.limetorrents.lol"));
+        // The one name the profile accepts, letter for letter and then without
+        // its punctuation, then the four rungs below it: the episode with the
+        // owner's quality and without, then the season with it and without. The
+        // programme's own name used to be a question here and is gone — asked
+        // on its own a site answers with every season and every quality it has.
+        Assert.Equal(6, fetch.Asked.Count(address => address.Host == "www.limetorrents.lol"));
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
         Assert.False(outcome.HandedOver);
@@ -728,6 +728,11 @@ public class SearchCycleTests
 
         FakeFetch fetch = Answering();
 
+        // The sources are asked about every episode on every run, so for them
+        // to leave nothing they have to answer nothing.
+        fetch.FailsHost("api.srrdb.com", FetchOutcome.Unreachable, "nothing answered");
+        fetch.FailsHost("predb.me", FetchOutcome.Unreachable, "nothing answered");
+
         await Cycle(fetch, new(), pool: pool).RunAsync(
             [Silo(6)],
             new(Wanted, Blacklist.None, DryRun: false, Folder),
@@ -737,6 +742,61 @@ public class SearchCycleTests
             fetch.Asked,
             address => address.ToString().EndsWith("/search/all/Silo S03 1080p/", StringComparison.Ordinal)
                 || address.ToString().EndsWith("/search/all/Silo S03E06 1080p/", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The stage rows and the lines under each episode are what the run really
+    /// did — the owner asked on 11 September 2026 for the dashboard to show
+    /// literally that. Counted and noted as it happens: which source was asked
+    /// and what it said, and every question put to every indexer with the rows
+    /// it came back with.
+    /// </para>
+    /// <para>
+    /// Collected while the run goes, because an episode's lines are cleared the
+    /// moment it is decided.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task EveryQuestionTheRunPutsIsCountedAndNoted()
+    {
+        FakeFetch fetch = Answering();
+        ActivityJournal journal = new();
+
+        List<string> noted = [];
+        journal.Recorded += () =>
+        {
+            string[] lines = [.. journal.Snapshot().Notes.Select(note => note.Line)];
+
+            lock (noted)
+            {
+                noted.AddRange(lines);
+            }
+        };
+
+        journal.RunStarted();
+
+        await Cycle(fetch, new(), journal).RunAsync(
+            [Silo(6)],
+            new(Wanted, Blacklist.None, DryRun: true, Folder),
+            CancellationToken.None);
+
+        SearchProgress run = journal.Snapshot().Run!;
+
+        // Every search question the indexer was really sent, and no more.
+        Assert.Equal(
+            fetch.Asked.Count(address => address.AbsolutePath.StartsWith("/search/", StringComparison.Ordinal)),
+            run.Count(RunCounter.Questions));
+        Assert.True(run.Count(RunCounter.QuestionsAnswered) > 0);
+
+        Assert.Equal(1, run.Count(RunCounter.Episodes));
+        Assert.Equal(1, run.Count(RunCounter.EpisodesAsked));
+        Assert.True(run.Count(RunCounter.NamesFound) > 0);
+        Assert.Equal(1, run.Count(RunCounter.Decided));
+
+        // What a source was asked, and the exact name put to an indexer.
+        Assert.Contains(noted, line => line.StartsWith("srrDB search · Silo S03E06 1080p · ", StringComparison.Ordinal));
+        Assert.Contains(noted, line => line.StartsWith("LimeTorrents · Silo.S03E06.1080p.WEB.H264-CAKES · ", StringComparison.Ordinal));
     }
 
     /// <summary>One name in the pool, keyed the way the harvest keys it.</summary>

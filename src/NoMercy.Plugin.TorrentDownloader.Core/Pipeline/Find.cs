@@ -40,7 +40,26 @@ public sealed class Find(
         LibraryKind kind,
         CancellationToken ct)
     {
-        return SearchAsync([releaseName], kind, ct);
+        // A release name, so letter for letter first and then without its
+        // punctuation — the same two questions a cycle puts.
+        return SearchAsync(SearchTerm.Ladder([releaseName], []), kind, ct);
+    }
+
+    /// <summary>
+    /// Every copy anybody is serving, for questions this plugin made up.
+    /// </summary>
+    /// <remarks>
+    /// Each goes out in the site's own style. A release name a source gave is
+    /// not one of these: it goes through <see cref="SearchTerm.Ladder"/>, which
+    /// asks it letter for letter first.
+    /// </remarks>
+    public Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
+        IReadOnlyList<string> ladder,
+        LibraryKind kind,
+        CancellationToken ct,
+        AskedThisCycle? asked = null)
+    {
+        return SearchAsync([.. ladder.Select(rung => new SearchTerm(rung, false))], kind, ct, asked);
     }
 
     /// <summary>
@@ -80,11 +99,17 @@ public sealed class Find(
     /// What each site has already answered this cycle, so no question is put
     /// to the same site twice. Null where there is no cycle to remember for.
     /// </param>
+    /// <param name="about">
+    /// The episode these questions are for, so every one of them — and what it
+    /// came back with — is noted under it on the dashboard. Null where there is
+    /// no episode to note it under.
+    /// </param>
     public async Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
-        IReadOnlyList<string> ladder,
+        IReadOnlyList<SearchTerm> ladder,
         LibraryKind kind,
         CancellationToken ct,
-        AskedThisCycle? asked = null)
+        AskedThisCycle? asked = null,
+        string? about = null)
     {
         // Only the indexers worth asking about this library. An anime-only site
         // asked about a television show spends a paced request on a site that
@@ -93,7 +118,7 @@ public sealed class Find(
         SourceDefinition[] indexers = [.. catalogue.For(SourceRole.Indexer).Where(one => one.Serves(kind))];
 
         ReleaseCopy[][] answers = await Task.WhenAll(
-            indexers.Select(indexer => ClimbAsync(indexer, ladder, asked, ct)));
+            indexers.Select(indexer => ClimbAsync(indexer, ladder, asked, about, ct)));
 
         return Merge([.. answers.SelectMany(answer => answer)]);
     }
@@ -101,18 +126,26 @@ public sealed class Find(
     /// <summary>One site, asked down the ladder until it answers.</summary>
     private async Task<ReleaseCopy[]> ClimbAsync(
         SourceDefinition indexer,
-        IReadOnlyList<string> ladder,
+        IReadOnlyList<SearchTerm> ladder,
         AskedThisCycle? asked,
+        string? about,
         CancellationToken ct)
     {
-        foreach (string rung in ladder)
+        foreach (SearchTerm rung in ladder)
         {
             ReleaseCopy[]? rows = asked?.Recall(indexer.Name, rung);
 
             if (rows is null)
             {
-                rows = await AskAsync(indexer, rung, ct);
+                rows = await AskAsync(indexer, rung, about, ct);
                 asked?.Keep(indexer.Name, rung, rows);
+            }
+            else
+            {
+                // Said, though nothing was sent: the page shows every question
+                // this episode was answered by, and this one was answered for
+                // another episode earlier in the run.
+                Said(about, indexer, rung, $"already answered this run: {Rows(rows.Length)}");
             }
 
             if (rows.Length > 0)
@@ -171,6 +204,13 @@ public sealed class Find(
             ? [.. chosen.Routes]
             : [new CopyRoute(chosen.Source, chosen.DetailUrl, chosen.Magnet, chosen.Claim)];
 
+        // The highest-rated site first, so its magnet is the one handed over
+        // and its trackers lead. The owner's decision of 11 September 2026, made
+        // for TorrentBay, which indexes every other site. Every route is still
+        // asked, at once, and every tracker any of them names still travels:
+        // this decides only whose answer the torrent is built on.
+        routes = [.. routes.OrderByDescending(route => Rating(route.Source))];
+
         string?[] answered = await Task.WhenAll(routes.Select(route => ArtefactAsync(chosen, route, ct)));
 
         string[] found = [.. answered.OfType<string>()];
@@ -200,6 +240,14 @@ public sealed class Find(
             InfoHash = hash,
             Trackers = trackers,
         };
+    }
+
+    /// <summary>The catalogue's rating of a site, or nought for one it does not carry.</summary>
+    private int Rating(string source)
+    {
+        return catalogue.Enabled
+            .FirstOrDefault(one => string.Equals(one.Name, source, StringComparison.OrdinalIgnoreCase))
+            ?.Priority ?? 0;
     }
 
     /// <summary>
@@ -474,22 +522,45 @@ public sealed class Find(
         };
     }
 
-    private async Task<ReleaseCopy[]> AskAsync(SourceDefinition indexer, string releaseName, CancellationToken ct)
+    /// <summary>
+    /// Notes what one indexer answered one question, under the episode it was
+    /// asked for.
+    /// </summary>
+    private void Said(string? about, SourceDefinition indexer, SearchTerm term, string what)
     {
-        string subject = $"{releaseName} · {indexer.Name}";
+        if (about is not null)
+        {
+            journal.Noted(ActivityStage.Find, about, $"{indexer.Name} · {term.AsAsked} · {what}");
+        }
+    }
+
+    private static string Rows(int count)
+    {
+        return count == 1 ? "1 row" : $"{count} rows";
+    }
+
+    private async Task<ReleaseCopy[]> AskAsync(SourceDefinition indexer, SearchTerm term, string? about, CancellationToken ct)
+    {
+        // As it went out, so the page shows the question the site was really
+        // put: the name with its dots, or the words it was given instead.
+        string subject = $"{term.AsAsked} · {indexer.Name}";
         long started = _time.GetTimestamp();
 
         journal.Started(ActivityStage.Find, subject);
+        journal.Counted(RunCounter.Questions);
 
         try
         {
-            Uri first = new(Query.Write(indexer.SearchAddress!, releaseName, indexer.Query));
+            Uri first = new(term.Exact
+                ? Query.WriteExact(indexer.SearchAddress!, term.Text)
+                : Query.Write(indexer.SearchAddress!, term.Text, indexer.Query));
 
             FetchResult result = await fetch.GetAsync(first, indexer.SearchAddressGated, ct);
 
             if (result.Failure is FetchFailure failure)
             {
                 journal.Failed(ActivityStage.Find, subject, failure.ToString());
+                Said(about, indexer, term, failure.ToString());
                 await WroteAsync(indexer, started, 0, failure.ToString(), ct);
 
                 return [];
@@ -502,6 +573,7 @@ public sealed class Find(
                 string unread = $"It answered and nothing here reads a source of kind '{indexer.Kind}'.";
 
                 journal.Failed(ActivityStage.Find, subject, unread);
+                Said(about, indexer, term, unread);
                 await WroteAsync(indexer, started, 0, unread, ct);
 
                 return [];
@@ -539,6 +611,12 @@ public sealed class Find(
                 copies.AddRange(more);
             }
 
+            if (copies.Count > 0)
+            {
+                journal.Counted(RunCounter.QuestionsAnswered);
+            }
+
+            Said(about, indexer, term, Rows(copies.Count));
             journal.Finished(ActivityStage.Find, subject, $"{copies.Count} copies");
             await WroteAsync(indexer, started, copies.Count, null, ct);
 
@@ -549,6 +627,7 @@ public sealed class Find(
             // One site is one site, exactly as it is in the harvest. An episode
             // is worth more than the indexer that failed on it.
             journal.Failed(ActivityStage.Find, subject, exception.Message);
+            Said(about, indexer, term, exception.Message);
             await WroteAsync(indexer, started, 0, exception.Message, ct);
 
             return [];

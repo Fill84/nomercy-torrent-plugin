@@ -91,9 +91,9 @@ public class ShowsAndQueueViewTests : IDisposable
     }
 
     /// <remarks>
-    /// The order shown is the order the search cadence will ask in: never
-    /// searched first, then longest waiting. A page in any other order is a
-    /// guess about what the plugin is about to do.
+    /// The order shown is the order a run will ask in: always from the top,
+    /// show, season, episode — the owner's decision of 11 September 2026. A
+    /// page in any other order is a guess about what the plugin is about to do.
     /// </remarks>
     [Fact]
     public async Task TheOrderIsTheOrderTheyWillBeAskedIn()
@@ -109,9 +109,10 @@ public class ShowsAndQueueViewTests : IDisposable
         await episodes.RecordSearchAsync(new(1, 1, 1), new(2026, 8, 13, 0, 0, 0, TimeSpan.Zero), CancellationToken.None);
         await episodes.RecordSearchAsync(new(1, 1, 2), new(2026, 8, 1, 0, 0, 0, TimeSpan.Zero), CancellationToken.None);
 
-        // Three has never been searched, then two waited longest, then one.
+        // From the top, whatever was searched when: a stopped run and the next
+        // one both begin at the first episode.
         Assert.Equal(
-            ["Silo S01E03", "Silo S01E02", "Silo S01E01"],
+            ["Silo S01E01", "Silo S01E02", "Silo S01E03"],
             RowsOf(await View(plugin, Pages.QueueRoute), QueueView.LookingTableId));
     }
 

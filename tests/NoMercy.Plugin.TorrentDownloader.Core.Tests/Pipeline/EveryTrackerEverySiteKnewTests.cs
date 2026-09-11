@@ -146,6 +146,38 @@ public class EveryTrackerEverySiteKnewTests
         Assert.DoesNotContain(limeOnly[0], resolved.Trackers, StringComparer.OrdinalIgnoreCase);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>The highest-rated site that has the torrent leads.</strong> The
+    /// owner's decision of 11 September 2026, made for TorrentBay, which indexes
+    /// every other site: its magnet is the one handed over and its trackers come
+    /// first.
+    /// </para>
+    /// <para>
+    /// It decides only whose answer the torrent is built on. Every other site is
+    /// still asked, and every tracker any of them knew still travels — the test
+    /// above holds that.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheHighestRatedSiteThatHasTheTorrentLeads()
+    {
+        FakeFetch fetch = Answering();
+
+        // The routes in the order the merge happened to meet them, with the
+        // highest-rated site that publishes a magnet — LimeTorrents, at 35 —
+        // last of all.
+        ReleaseCopy merged = Merged() with { Routes = [.. Enumerable.Reverse(Merged().Routes)] };
+
+        ReleaseCopy resolved = await Finding(fetch).ResolveAsync(merged, CancellationToken.None);
+
+        string lime = DetailPage.Read(Capture.Fixture("silo6afg-row-limetorrents.html"), Release)!.Value.Magnet;
+        string[] leading = [.. Magnets.TrackersOf(lime).Distinct(StringComparer.OrdinalIgnoreCase)];
+
+        Assert.Equal(lime, resolved.Magnet);
+        Assert.Equal(leading, resolved.Trackers.Take(leading.Length));
+    }
+
     /// <summary>The torrent as the merge really produced it that day.</summary>
     private static ReleaseCopy Merged()
     {

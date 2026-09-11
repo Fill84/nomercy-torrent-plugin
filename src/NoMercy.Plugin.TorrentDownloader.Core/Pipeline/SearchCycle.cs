@@ -163,6 +163,8 @@ public sealed class SearchCycle(
         // will do rather than guessing at it.
         TrackedEpisode[] queue = [.. QueueOrder.Order(missing)];
 
+        journal.Counted(RunCounter.Episodes, queue.Length);
+
         Decisions decisions = new(options.Profile, queue, options.Blacklisted);
 
         // What the pool already knows, read once. The sources are asked inside
@@ -228,6 +230,13 @@ public sealed class SearchCycle(
                 ct);
 
             outcomes.Add(outcome);
+
+            journal.Counted(RunCounter.Decided);
+
+            if (outcome.HandedOver)
+            {
+                journal.Counted(RunCounter.Taken);
+            }
 
             // Written now rather than when the whole queue is done. Over
             // twenty-eight gaps that is half an hour in which the pages say
@@ -308,18 +317,17 @@ public sealed class SearchCycle(
             // release and a real PreDB name — their pool holds 2,238 names in
             // other languages, and every one of them cost a request at every
             // indexer that carries the show.
-            IReadOnlyList<string> wanted = Wanted(candidates, episode, decisions, refused);
+            IReadOnlyList<string> wanted = Wanted(candidates, episode, decisions, refused, subject);
 
-            // The whole ladder in one pass: the source's own names first, then
-            // what this plugin makes up, and each indexer asked down it until
-            // that indexer answers. Nothing is judged until every site has
-            // finished — the owner's rule, and the reason the judging is one
-            // call below rather than one per rung.
-            string[] ladder =
-            [
-                .. wanted,
-                .. Rungs(episode, options.Profile).Select(rung => rung.Term),
-            ];
+            // The whole ladder in one pass: each of the source's names letter
+            // for letter and then without its punctuation, then what this plugin
+            // makes up, and each indexer asked down it until that indexer
+            // answers. Nothing is judged until every site has finished — the
+            // owner's rule, and the reason the judging is one call below rather
+            // than one per rung.
+            IReadOnlyList<SearchTerm> ladder = SearchTerm.Ladder(
+                wanted,
+                Rungs(episode, options.Profile).Select(rung => rung.Term));
 
             await AskAsync(ladder, episode, gathered, answered, asked, trackers, ct);
 
@@ -480,7 +488,7 @@ public sealed class SearchCycle(
     /// while the release everybody was seeding went unfetched.
     /// </remarks>
     private async Task AskAsync(
-        IReadOnlyList<string> ladder,
+        IReadOnlyList<SearchTerm> ladder,
         TrackedEpisode episode,
         List<ReleaseCopy> gathered,
         List<ReleaseCopy> answered,
@@ -488,34 +496,26 @@ public sealed class SearchCycle(
         List<string> trackers,
         CancellationToken ct)
     {
-        IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(ladder, episode.Kind, ct, asked);
-
-
+        IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(
+            ladder,
+            episode.Kind,
+            ct,
+            asked,
+            about: $"{episode.ShowTitle} {episode.Key}");
 
         // Every copy, taken or not: a tracker on a release the profile refused
-
         // is serving the same swarm as the one it accepted.
-
         trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
 
-
-
         // A season's rungs are at the foot of every gap's ladder, so what one
-
         // gap's search turned up is a candidate for the others. A candidate and
-
         // never an answer: each gap is still decided on its own, which is what
-
         // let a stray row settle Sugar S02E08 while the release everybody was
-
         // seeding went unfetched.
-
         answered.AddRange(copies);
 
-
-
-        gathered.AddRange(copies);
-
+        // Once. It was added twice, so every copy this episode's own search
+        // brought back went into its decision two times over.
         gathered.AddRange(copies);
     }
 
@@ -542,11 +542,12 @@ public sealed class SearchCycle(
     /// nothing.
     /// </para>
     /// </remarks>
-    private static IReadOnlyList<string> Wanted(
+    private IReadOnlyList<string> Wanted(
         IReadOnlyList<string> candidates,
         TrackedEpisode episode,
         Decisions decisions,
-        List<string> refused)
+        List<string> refused,
+        string subject)
     {
         List<string> worth = [];
 
@@ -559,11 +560,19 @@ public sealed class SearchCycle(
             if (verdict.Accepted)
             {
                 worth.Add(candidate);
+                journal.Noted(ActivityStage.Decide, subject, $"asking the indexers for {candidate}");
 
                 continue;
             }
 
             refused.Add(verdict.Reason);
+
+            // On the page, name and reason: the owner could not see why a
+            // source's name never reached an indexer, and on 11 September 2026
+            // the only name there was for Dark Matter S02E03 was a MULTi release
+            // English only refuses.
+            journal.Counted(RunCounter.NamesRefused);
+            journal.Noted(ActivityStage.Decide, subject, $"refused {candidate}: {verdict.Reason}");
         }
 
         return worth;

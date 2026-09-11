@@ -23,10 +23,40 @@ public sealed class ActivityJournal : IActivityJournal
     /// </remarks>
     public const int HistoryLimit = 500;
 
+    /// <summary>
+    /// How many notes are kept at once.
+    /// </summary>
+    /// <remarks>
+    /// An episode's notes go when it is decided, so this is only reached by a
+    /// run that keeps failing to decide anything — and that must not become a
+    /// leak either. The newest are the ones worth reading.
+    /// </remarks>
+    public const int NoteLimit = 1000;
+
+    /// <summary>
+    /// The stages that belong to a search run, and end with it.
+    /// </summary>
+    /// <remarks>
+    /// The harvest is not one: the feeds are read on a cadence of their own,
+    /// and stopping a search does not stop a feed being read. Downloads and
+    /// dispatch outlive the run on purpose.
+    /// </remarks>
+    private static readonly ActivityStage[] RunStages =
+    [
+        ActivityStage.Clearance,
+        ActivityStage.Names,
+        ActivityStage.Find,
+        ActivityStage.Decide,
+        ActivityStage.Grab,
+    ];
+
     private readonly Lock _lock = new();
     private readonly Dictionary<(ActivityStage Stage, string Subject), ActivityEvent> _inFlight = [];
     private readonly Queue<ActivityEvent> _history = new(HistoryLimit);
+    private readonly List<EpisodeNote> _notes = [];
     private readonly TimeProvider _time;
+    private Dictionary<RunCounter, int>? _counts;
+    private DateTimeOffset _runStartedAt;
 
     public ActivityJournal(TimeProvider? time = null)
     {
@@ -61,6 +91,71 @@ public sealed class ActivityJournal : IActivityJournal
         Record(new(stage, ActivityOutcome.Failed, subject, _time.GetUtcNow(), detail));
     }
 
+    public void RunStarted()
+    {
+        lock (_lock)
+        {
+            _counts = [];
+            _runStartedAt = _time.GetUtcNow();
+            _notes.Clear();
+        }
+
+        Recorded?.Invoke();
+    }
+
+    public void RunEnded()
+    {
+        lock (_lock)
+        {
+            // Everything the run had going, however it ended. Left in flight
+            // it reads as a run waiting to carry on — the owner pressed Stop on
+            // 11 September 2026 and took the page for a pause.
+            foreach ((ActivityStage Stage, string Subject) key in _inFlight.Keys
+                         .Where(key => RunStages.Contains(key.Stage))
+                         .ToArray())
+            {
+                _inFlight.Remove(key);
+            }
+
+            _notes.Clear();
+            _counts = null;
+        }
+
+        Recorded?.Invoke();
+    }
+
+    public void Counted(RunCounter counter, int by = 1)
+    {
+        lock (_lock)
+        {
+            // Nothing to count into outside a run: a count with no run to
+            // belong to would turn up on the next run's rows.
+            if (_counts is null)
+            {
+                return;
+            }
+
+            _counts[counter] = _counts.GetValueOrDefault(counter) + by;
+        }
+
+        Recorded?.Invoke();
+    }
+
+    public void Noted(ActivityStage stage, string episode, string line)
+    {
+        lock (_lock)
+        {
+            _notes.Add(new(stage, episode, _time.GetUtcNow(), line));
+
+            if (_notes.Count > NoteLimit)
+            {
+                _notes.RemoveRange(0, _notes.Count - NoteLimit);
+            }
+        }
+
+        Recorded?.Invoke();
+    }
+
     public ActivitySnapshot Snapshot()
     {
         lock (_lock)
@@ -71,7 +166,11 @@ public sealed class ActivityJournal : IActivityJournal
             return new(
                 [.. _inFlight.Values.OrderBy(activity => activity.At)],
                 [.. _history],
-                _time.GetUtcNow());
+                _time.GetUtcNow())
+            {
+                Run = _counts is null ? null : new(_runStartedAt, new Dictionary<RunCounter, int>(_counts)),
+                Notes = [.. _notes],
+            };
         }
     }
 
@@ -101,6 +200,14 @@ public sealed class ActivityJournal : IActivityJournal
                 // running, and leaving it in flight would show as stuck for as
                 // long as the server stayed up.
                 _inFlight.Remove(key);
+
+                // A decided episode is done, and so is everything noted about
+                // it on the way: the page shows the episodes still being worked
+                // on, not the ones already settled.
+                if (activity.Stage == ActivityStage.Decide)
+                {
+                    _notes.RemoveAll(note => note.Episode == activity.Subject);
+                }
             }
 
             _history.Enqueue(activity);

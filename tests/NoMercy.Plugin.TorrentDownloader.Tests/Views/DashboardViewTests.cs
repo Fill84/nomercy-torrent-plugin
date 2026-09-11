@@ -49,6 +49,142 @@ public class DashboardViewTests
     }
 
     /// <remarks>
+    /// While a run is going the bar says since when, as a clock time — the
+    /// owner's decision of 11 September 2026. "Never run" beside a Running
+    /// badge, which is what it said that day, contradicted itself.
+    /// </remarks>
+    [Fact]
+    public void ARunningDashboardSaysSinceWhen()
+    {
+        PluginView view = DashboardView.Render(
+            new([], [], Now),
+            new(true, null, Now.AddHours(6)) { StartedAt = Now.AddMinutes(-3) });
+
+        string bar = string.Join(" ", Rendered.Words(view));
+
+        Assert.Contains($"running since {Clock(Now.AddMinutes(-3))}", bar, StringComparison.Ordinal);
+        Assert.DoesNotContain("never run", bar, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// A run that was stopped says so, and when. It is not the same as one that
+    /// finished, and the owner, who pressed Stop, is the one who needs to see
+    /// that the stop took.
+    /// </remarks>
+    [Fact]
+    public void AStoppedRunSaysItWasStoppedAndWhen()
+    {
+        PluginView view = DashboardView.Render(
+            new([], [], Now),
+            new(false, Now.AddMinutes(-1), Now.AddHours(6)) { LastEnd = RunEnd.Stopped });
+
+        string bar = string.Join(" ", Rendered.Words(view));
+
+        Assert.Contains($"stopped at {Clock(Now.AddMinutes(-1))}", bar, StringComparison.Ordinal);
+        Assert.Contains($"next run {Clock(Now.AddHours(6))}", bar, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// And one that finished says that.
+    /// </remarks>
+    [Fact]
+    public void AFinishedRunSaysWhenItFinished()
+    {
+        PluginView view = DashboardView.Render(
+            new([], [], Now),
+            new(false, Now.AddMinutes(-14), Now.AddHours(6)) { LastEnd = RunEnd.Finished });
+
+        string bar = string.Join(" ", Rendered.Words(view));
+
+        Assert.Contains($"last run finished at {Clock(Now.AddMinutes(-14))}", bar, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// A row per stage of the run, each with its counts — the owner's approval
+    /// of 11 September 2026. Numbers the run really counted, from nought when it
+    /// began.
+    /// </remarks>
+    [Fact]
+    public void ARunningDashboardHasARowPerStageWithItsCounts()
+    {
+        ActivitySnapshot snapshot = new([], [], Now)
+        {
+            Run = new(
+                Now.AddMinutes(-3),
+                new Dictionary<RunCounter, int>
+                {
+                    [RunCounter.SitesLookedAt] = 5,
+                    [RunCounter.SitesChallenged] = 5,
+                    [RunCounter.SitesCleared] = 5,
+                    [RunCounter.Episodes] = 42,
+                    [RunCounter.EpisodesAsked] = 3,
+                    [RunCounter.NamesFound] = 17,
+                    [RunCounter.NamesRefused] = 9,
+                    [RunCounter.Questions] = 31,
+                    [RunCounter.QuestionsAnswered] = 12,
+                    [RunCounter.Decided] = 2,
+                    [RunCounter.Taken] = 1,
+                }),
+        };
+
+        PluginView view = DashboardView.Render(snapshot, new(true, null, Now.AddHours(6)) { StartedAt = Now.AddMinutes(-3) });
+
+        string[] words = [.. Rendered.Words(new() { Components = [Rendered.ById(view, DashboardView.StagesTableId)] })];
+
+        Assert.Contains("5 sites looked at · 5 challenged · 5 cleared · 0 failed", words);
+        Assert.Contains("3 of 42 episodes asked · 17 names · 9 refused", words);
+        Assert.Contains("31 questions · 12 answered with rows", words);
+        Assert.Contains("2 of 42 episodes decided", words);
+        Assert.Contains("1 handed to the client", words);
+    }
+
+    /// <remarks>
+    /// No run, no stage rows. The owner asked for the page to be cleared when a
+    /// run stops, and rows left standing read as a run still going.
+    /// </remarks>
+    [Fact]
+    public void AnIdleDashboardHasNoStageRows()
+    {
+        PluginView view = DashboardView.Render(new([], [], Now), new(false, Now.AddMinutes(-1), null));
+
+        Assert.DoesNotContain(Rendered.All(view), component => component.Id == DashboardView.StagesTableId);
+    }
+
+    /// <remarks>
+    /// What the run did for each episode it is still working on: which source
+    /// was asked and what it said, which name was refused and why, every
+    /// question to every indexer and its answer.
+    /// </remarks>
+    [Fact]
+    public void WhatWasNotedAboutAnEpisodeIsOnThePage()
+    {
+        ActivitySnapshot snapshot = new([], [], Now)
+        {
+            Run = new(Now.AddMinutes(-3), new Dictionary<RunCounter, int>()),
+            Notes =
+            [
+                new(ActivityStage.Names, "Dark Matter S02E03", Now.AddSeconds(-20),
+                    "PreDB · Dark Matter S02E03 1080p · 1 name: Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES"),
+                new(ActivityStage.Find, "Dark Matter S02E03", Now.AddSeconds(-5),
+                    "TorrentBay · Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES · 1 row"),
+            ],
+        };
+
+        PluginView view = DashboardView.Render(snapshot, new(true, null, null) { StartedAt = Now.AddMinutes(-3) });
+
+        string[] words = [.. Rendered.Words(new() { Components = [Rendered.ById(view, DashboardView.NotesTableId)] })];
+
+        Assert.Contains("Dark Matter S02E03", words);
+        Assert.Contains("PreDB · Dark Matter S02E03 1080p · 1 name: Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES", words);
+        Assert.Contains("TorrentBay · Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES · 1 row", words);
+    }
+
+    private static string Clock(DateTimeOffset moment)
+    {
+        return moment.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
+    }
+
+    /// <remarks>
     /// Every number is real. A plugin that has never run says so; drawing that
     /// as "0 minutes ago" is the shape of 0.3.4's "0 downloads" while two were
     /// running.

@@ -1194,13 +1194,11 @@ public sealed class BittorrentEngine(
             // measure, so here it is measured.
             _dht?.Table.Count ?? 0);
 
-        foreach (TrackerSaid one in said.Where(one => one.Failure is not null))
-        {
-            // Named, because a magnet off a public indexer carries eighteen
-            // trackers and several are years dead — and which ones is the
-            // difference between a swarm nobody reached and one nobody asked.
-            logger.LogInformation("{Tracker} did not answer: {Reason}", one.Tracker, one.Failure);
-        }
+        // Not one line per tracker that did not answer. The owner's decision of
+        // 11 September 2026: a torrent carrying seventy trackers put up to
+        // seventy lines into the server log on every announce, most of them the
+        // same dead hosts, and the one line above already says how many of them
+        // answered.
     }
 
     /// <summary>

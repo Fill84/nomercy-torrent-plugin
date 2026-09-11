@@ -57,7 +57,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     /// <summary>What the last search cycle decided, for the pages that say so.</summary>
     private CycleReport? _lastCycle;
-    private DateTimeOffset? _lastCycleAt;
+
+    /// <summary>How the last run ended, read from the store once and kept up to date after.</summary>
+    private LastRun? _lastRun;
+    private bool _lastRunRead;
+
+    /// <summary>When the running search began, or null when none runs.</summary>
+    private DateTimeOffset? _runStartedAt;
+
+    private RunRepository? _runs;
 
     /// <summary>The running cycle's own stopping token, or null when none runs.</summary>
     private CancellationTokenSource? _cycle;
@@ -206,6 +214,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _episodes = new(_database);
         _grabs = new(_database);
         _ledger = new(_database);
+        _runs = new(_database);
         _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
 
         // The one line that makes the pages live. Without it LiveSnapshot is a
@@ -516,13 +525,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         finally
         {
-            _lastCycleAt = DateTimeOffset.UtcNow;
-
             // The run is over, so the browser goes. Every tab it kept per site
             // is closed with it; the clearance those tabs earned is already in
             // the clearance store and the profile is a folder on disk, so
             // nothing is lost but the memory.
-            await chain.RunEndedAsync(ct);
+            //
+            // Never on the run's own token. A run that was stopped arrives here
+            // with that token already cancelled, and closing the browser on it
+            // gave up before it began — so Stop, of all things, was the one
+            // ending that could leave Chrome running.
+            await chain.RunEndedAsync(CancellationToken.None);
         }
 
         // Everything the cycle decided is already written: CycleWriter put
@@ -554,6 +566,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         _cycle = cycle;
 
+        // Counted from nought, with nothing noted about any episode yet.
+        _journal.RunStarted();
+
+        // Already set when the button claimed the run, so the page said
+        // "running since" from the instant it was pressed; a cadence tick sets
+        // it here.
+        _runStartedAt ??= DateTimeOffset.UtcNow;
+        DateTimeOffset started = _runStartedAt.Value;
+        RunEnd how = RunEnd.Finished;
+
         try
         {
             await SearchAsync(cycle.Token, only);
@@ -561,8 +583,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         catch (OperationCanceledException)
         {
             // Stopped on purpose — the owner pressed Stop, or the server is
-            // going away. Not a fault, and the page says when the cycle last
-            // ran either way.
+            // going away. Not a fault, and the page says so, and when.
+            how = RunEnd.Stopped;
         }
         catch (Exception wrong)
         {
@@ -570,12 +592,24 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // nobody awaits, so an exception here would go nowhere at all and
             // the page would show a cycle that began, ended, and explained
             // nothing.
+            how = RunEnd.Failed;
             _journal.Failed(ActivityStage.Decide, "the search cycle", wrong.Message);
             _context?.Logger.LogError(wrong, "The search cycle stopped: {Reason}", wrong.Message);
         }
         finally
         {
             _cycle = null;
+
+            // Nothing of the run stays on the page, however it ended. The owner
+            // pressed Stop on 11 September 2026 and every row it had started
+            // stayed where it was, which read as a pause.
+            _journal.RunEnded();
+
+            // Before the guard is let go, so a page drawn the moment the run is
+            // over already says how it ended.
+            _runStartedAt = null;
+            await RememberAsync(new(started, DateTimeOffset.UtcNow, how));
+
             _running.Leave();
 
             // The last thing a run does. Nothing is recorded in the journal by
@@ -615,6 +649,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             return false;
         }
+
+        // And since when, for the same reason: the push below is what redraws
+        // every open page, and it should say "running since" straight away.
+        _runStartedAt = DateTimeOffset.UtcNow;
 
         // Never the caller's token, and never awaited: the endpoint answers
         // that a cycle has begun, not that it has finished. It is handed the
@@ -1274,7 +1312,17 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     [.. (await (await GrabsAsync(ct)).HistoryAsync(ct)).Select(Line)]);
 
             default:
-                return DashboardView.Render(_journal.Snapshot(), CurrentCycle());
+                await LastRunAsync(ct);
+
+                ActivitySnapshot activity = _journal.Snapshot();
+
+                // What the client holds only while a run is going: that is the
+                // only time the Download stage is drawn, and asking the client
+                // for a page that will not show it is work for nothing.
+                return DashboardView.Render(
+                    activity,
+                    CurrentCycle(),
+                    activity.Run is null ? null : await DownloadRowsAsync(ct));
         }
     }
 
@@ -1361,6 +1409,52 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return _ledger ?? throw new InvalidOperationException("The plugin has not been initialised, so it has no store yet.");
     }
 
+    private async Task<RunRepository> RunsAsync(CancellationToken ct)
+    {
+        await EpisodesAsync(ct);
+
+        return _runs ?? throw new InvalidOperationException("The plugin has not been initialised, so it has no store yet.");
+    }
+
+    /// <summary>How the last run ended, read from the store the first time it is wanted.</summary>
+    private async Task LastRunAsync(CancellationToken ct)
+    {
+        if (_lastRunRead)
+        {
+            return;
+        }
+
+        LastRun? stored = await (await RunsAsync(ct)).LastAsync(ct);
+
+        // A run that ended while this was reading is newer than anything on
+        // disk, and it wins.
+        _lastRun ??= stored;
+        _lastRunRead = true;
+    }
+
+    /// <summary>
+    /// Keeps how a run ended: on the page at once, and on disk for the next
+    /// start.
+    /// </summary>
+    private async Task RememberAsync(LastRun run)
+    {
+        _lastRun = run;
+        _lastRunRead = true;
+
+        try
+        {
+            // Not the run's token: a stopped run arrives here with it
+            // cancelled, and the stop is exactly what has to be written down.
+            await (await RunsAsync(CancellationToken.None)).RecordAsync(run, CancellationToken.None);
+        }
+        catch (Exception unwritten) when (unwritten is not OperationCanceledException)
+        {
+            // The page already has it. What is lost is only the next start's
+            // memory of it, and that is not worth taking the run's ending down.
+            _context?.Logger.LogWarning(unwritten, "How the run ended could not be written down: {Reason}", unwritten.Message);
+        }
+    }
+
     /// <summary>
     /// The sources that ship, read once.
     /// </summary>
@@ -1433,14 +1527,29 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// What the status bar says about the search cycle.
     /// </summary>
     /// <remarks>
-    /// When a cycle has run, when it finished; before then, null — which the
-    /// page draws as "never run" rather than as nought. The time of the next
-    /// one stays unknown: a cadence's schedule belongs to the host that
-    /// registered it, and this plugin is never told it.
+    /// <para>
+    /// Since when a run is going, and how and when the last one ended — kept
+    /// in the store, so a restart does not turn it into "never run".
+    /// </para>
+    /// <para>
+    /// The next run is the search cadence's next time, worked out as the
+    /// server works it out: NCrontab, in UTC. Only once the server has asked
+    /// for the cadences — before that nothing is scheduled, and the page says
+    /// the time is not known rather than inventing one.
+    /// </para>
     /// </remarks>
     private CycleStatus CurrentCycle()
     {
-        return new(_running.Busy, _lastCycleAt, null);
+        string? search = _jobs?.FirstOrDefault(job => job.Name == JobNames.Search)?.CronExpression;
+
+        return new(
+            _running.Busy,
+            _lastRun?.EndedAt,
+            search is null ? null : Cron.NextAfter(search, DateTimeOffset.UtcNow))
+        {
+            StartedAt = _running.Busy ? _runStartedAt : null,
+            LastEnd = _lastRun?.How,
+        };
     }
 
     public void Dispose()

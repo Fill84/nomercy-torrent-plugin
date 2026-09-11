@@ -23,4 +23,12 @@ public sealed record ActivitySnapshot(
 {
     /// <summary>A snapshot of a journal that has seen nothing.</summary>
     public static ActivitySnapshot Empty { get; } = new([], [], DateTimeOffset.UnixEpoch);
+
+    /// <summary>How far the running search has got, or null when none runs.</summary>
+    public SearchProgress? Run { get; init; }
+
+    /// <summary>
+    /// What the run did for each episode it has not yet decided, oldest first.
+    /// </summary>
+    public IReadOnlyList<EpisodeNote> Notes { get; init; } = [];
 }

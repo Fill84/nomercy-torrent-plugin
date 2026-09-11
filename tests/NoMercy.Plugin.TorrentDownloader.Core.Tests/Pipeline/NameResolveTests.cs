@@ -20,28 +20,44 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 public class NameResolveTests
 {
     /// <remarks>
-    /// An episode the harvest already found a name for costs nothing at all.
-    /// The feeds are read once a quarter of an hour and the search runs every
-    /// six; on a library where the pool is doing its job, most episodes never
-    /// reach a name database.
+    /// <para>
+    /// <strong>The owner's rule of 11 September 2026: the sources are asked
+    /// about every missing episode on every run.</strong> The pool only adds to
+    /// what they answer; it never stands in for them.
+    /// </para>
+    /// <para>
+    /// It used to stand in. An episode with any name at all in the pool was
+    /// never asked about again — and on the owner's server Dark Matter S02E03
+    /// had one, <c>Dark.Matter.S02E03.MULTi.1080p.WEB.H264-AZR</c> from 1
+    /// September, which English only refuses. So no source was asked, and no
+    /// name the owner could take ever reached an indexer.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task AnEpisodeAnsweredByThePoolCostsNoRequests()
+    public async Task AnEpisodeWithANameInThePoolIsStillAskedAboutEveryRun()
     {
         FakePool pool = new();
         await pool.AddAsync(
-            [new(PoolKey.For("Silo", 3, 6), "Silo.S03E06.1080p.WEB.H264-CAKES", "PreDB", When)],
+            [new(PoolKey.For("Silo", 3, 6), "Silo.S03E06.MULTi.1080p.WEB.H264-AZR", "PreDB", When)],
             CancellationToken.None);
 
         FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("srrdb-search.json"));
 
-        IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, pool)
-            .ResolveAsync([Episode("Silo", 3, 6)], Wanted, CancellationToken.None);
+        NameResolve resolving = Resolving(fetch, pool);
+        TrackedEpisode silo = Episode("Silo", 3, 6);
 
-        Assert.Empty(fetch.Asked);
+        IReadOnlyList<string> names = await resolving.NamesForAsync(
+            silo,
+            await resolving.FromPoolAsync([silo], CancellationToken.None),
+            Wanted,
+            CancellationToken.None);
 
-        ResolvedNames only = Assert.Single(resolved);
-        Assert.Equal("Silo.S03E06.1080p.WEB.H264-CAKES", Assert.Single(only.Titles));
+        // Asked, although the pool already had a name for it.
+        Assert.Contains(fetch.Asked, address => address.Host == "api.srrdb.com");
+
+        // And what the pool held is still one of the candidates.
+        Assert.Contains("Silo.S03E06.MULTi.1080p.WEB.H264-AZR", names);
     }
 
     /// <remarks>
@@ -178,8 +194,9 @@ public class NameResolveTests
     /// An anime episode is looked up under both of its numbers. The harvest
     /// files an absolute-numbered release under the number it carries — this
     /// one is a real row off the Nyaa capture — and an episode looked up only
-    /// under its season would ask a name database for something already in
-    /// hand.
+    /// under its season would never see it. The sources are asked as well, as
+    /// they are for every episode on every run; what the pool holds is added
+    /// to what they answer.
     /// </remarks>
     [Fact]
     public async Task AnAnimeEpisodeIsFoundUnderItsAbsoluteNumber()
@@ -190,16 +207,16 @@ public class NameResolveTests
             CancellationToken.None);
 
         FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
 
         IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, pool).ResolveAsync(
             [Episode("One Piece", 21, 45, kind: LibraryKind.Anime, absolute: 1172)],
             Wanted,
             CancellationToken.None);
 
-        Assert.Empty(fetch.Asked);
-        Assert.Equal(
+        Assert.Contains(
             "[KiyoshiiSubs] One Piece - 1172v2 [1080p][H.265 - 10Bit].mkv",
-            Assert.Single(Assert.Single(resolved).Titles));
+            Assert.Single(resolved).Titles);
     }
 
     /// <remarks>

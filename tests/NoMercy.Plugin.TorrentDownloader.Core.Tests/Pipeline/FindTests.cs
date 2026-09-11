@@ -350,8 +350,12 @@ public class FindTests
         FakeFetch fetch = new();
         RecordingLedger ledger = new();
 
-        fetch.Answers(Address("LimeTorrents"), Capture.Fixture("limetorrents.html"));
+        // LimeTorrents answers the name letter for letter, so it is asked
+        // nothing else. The other two refuse both forms of it.
+        fetch.Answers(Exact("LimeTorrents"), Capture.Fixture("limetorrents.html"));
+        fetch.Fails(Exact("Torrentz2"), FetchOutcome.RateLimited, "429 Too Many Requests");
         fetch.Fails(Address("Torrentz2"), FetchOutcome.RateLimited, "429 Too Many Requests");
+        fetch.Fails(Exact("TorrentDownloads"), FetchOutcome.Refused, "403 Forbidden");
         fetch.Fails(Address("TorrentDownloads"), FetchOutcome.Refused, "403 Forbidden");
 
         await Finding(fetch, ledger: ledger).SearchAsync(Name, LibraryKind.Television, CancellationToken.None);
@@ -361,12 +365,18 @@ public class FindTests
         Assert.True(answered.Rows > 0, "The captured page is covered in releases.");
         Assert.Null(answered.Refusal);
 
-        SourceAnswer refused = ledger.Answers.Single(one => one.Name == "Torrentz2");
+        // Both questions it was put, each written down.
+        SourceAnswer[] refused = [.. ledger.Answers.Where(one => one.Name == "Torrentz2")];
+
+        Assert.Equal(2, refused.Length);
 
         // Its own words. "Broken" would be this plugin's judgement of a site
         // that simply asked to be left alone for a while, which is G2 exactly.
-        Assert.Equal(0, refused.Rows);
-        Assert.Contains("429", refused.Refusal!, StringComparison.Ordinal);
+        Assert.All(refused, one =>
+        {
+            Assert.Equal(0, one.Rows);
+            Assert.Contains("429", one.Refusal!, StringComparison.Ordinal);
+        });
     }
 
     /// <remarks>
@@ -511,7 +521,9 @@ public class FindTests
     {
         FakeFetch fetch = new();
 
-        string first = Query.Write(TorrentBay.SearchAddress!, Name, TorrentBay.Query);
+        // The name letter for letter is the first question, and it answers, so
+        // the pages that follow are that question's.
+        string first = Query.WriteExact(TorrentBay.SearchAddress!, Name);
 
         fetch.Answers(first, Capture.Fixture("torrentbay.html"));
         fetch.Answers($"{first}&page=2", Capture.Fixture("torrentbay.html"));
@@ -711,6 +723,14 @@ public class FindTests
         SourceDefinition indexer = Indexers.Single(one => one.Name == source);
 
         return Query.Write(indexer.SearchAddress!, Name, indexer.Query);
+    }
+
+    /// <summary>Where the name goes first: letter for letter, as the source wrote it.</summary>
+    private static string Exact(string source)
+    {
+        SourceDefinition indexer = Indexers.Single(one => one.Name == source);
+
+        return Query.WriteExact(indexer.SearchAddress!, Name);
     }
 
     private static Find Finding(

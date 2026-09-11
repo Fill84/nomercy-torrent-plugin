@@ -29,7 +29,7 @@ torrent. The traps below are what that took.
 | --- | --- | --- |
 | **Feed** | what was released recently | nothing — read whole. A feed answers any question with the newest N posts |
 | **Name database** | what a release is called | show and slot; answers names, never torrents |
-| **Indexer** | who is serving a named release | the **full release name**; answers rows with hashes |
+| **Indexer** | who is serving a named release | the **full release name** letter for letter, then without its punctuation, then the ladder; answers rows with hashes |
 
 A feed with a search address is both a feed and a name database. `SourceRole` is decided from `kind`
 and the presence of `searchUrl`, and nothing else guesses.
@@ -47,12 +47,12 @@ and the presence of `searchUrl`, and nothing else guesses.
 | The Pirate Bay | `apibay` | — | words | no | 45 | 5s | indexer |
 | 1337x | `site` | `1337x` | words | **yes** | 40 | 15s | indexer |
 | LimeTorrents | `site` | generic | words | no | 35 | 15s | indexer |
-| TorrentBay | `site` | `torrentbay` | words | **yes** | 30 | 15s | indexer |
+| TorrentBay | `site` | `torrentbay` | words | **yes** | 60 | 15s | indexer (leading) |
 | EZTV | `site` | `eztv` | words | **yes** | 30 | 15s | indexer |
 | TorrentGalaxy | `site` | `torrentgalaxy` | **spaced** | no | 30 | 15s | indexer |
 | Torrentz2 | `site` | `torrentz2` | words | no | 25 | 15s | indexer |
 | TorrentDownloads | `site` | `torrentdownloads` | words | no | 25 | 15s | indexer |
-| Nyaa | `torrent-rss` | — | words | no | **50** | 15s | indexer, **anime libraries only** |
+| Nyaa | `torrent-rss` | — | words | no | **70** | 15s | indexer, **anime libraries only** (leading for anime) |
 | YTS | `yts` | — | words | no | 20 | 15s | films — **off** |
 
 ```

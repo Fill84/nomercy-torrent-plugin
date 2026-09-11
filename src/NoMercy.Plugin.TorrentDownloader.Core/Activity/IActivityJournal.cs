@@ -25,6 +25,27 @@ public interface IActivityJournal
     /// </summary>
     void Failed(ActivityStage stage, string subject, string detail);
 
+    /// <summary>
+    /// A search run has begun: its counters start from nought and nothing is
+    /// noted about any episode yet.
+    /// </summary>
+    void RunStarted();
+
+    /// <summary>
+    /// The run is over, however it ended. Nothing of it stays in flight, its
+    /// notes go and its counters with them.
+    /// </summary>
+    void RunEnded();
+
+    /// <summary>One more of <paramref name="counter"/> in this run, or <paramref name="by"/> more.</summary>
+    void Counted(RunCounter counter, int by = 1);
+
+    /// <summary>
+    /// A line about what the run did for <paramref name="episode"/>, shown until
+    /// that episode is decided.
+    /// </summary>
+    void Noted(ActivityStage stage, string episode, string line);
+
     /// <summary>Everything happening now and lately, frozen.</summary>
     ActivitySnapshot Snapshot();
 }

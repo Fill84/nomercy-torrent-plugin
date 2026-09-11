@@ -231,6 +231,7 @@ public sealed class Chain : IAsyncDisposable
         string pass = $"{behindAChallenge.Length} sites that may need a browser";
 
         _journal.Started(ActivityStage.Clearance, pass);
+        _journal.Counted(RunCounter.SitesLookedAt, behindAChallenge.Length);
 
         // Asked over plain HTTP first, with no solver behind it, purely to find
         // out which of them really challenges us today. The catalogue's gated
@@ -249,6 +250,8 @@ public sealed class Chain : IAsyncDisposable
         }));
 
         Uri[] needing = [.. unsettled.Where((_, at) => challenged[at])];
+
+        _journal.Counted(RunCounter.SitesChallenged, needing.Length);
 
         foreach (Uri settled in unsettled.Where((_, at) => !challenged[at]))
         {
@@ -280,6 +283,8 @@ public sealed class Chain : IAsyncDisposable
             {
                 Clearance? earned = await _solver.SolveAsync(address, ct);
 
+                _journal.Counted(RunCounter.SitesCleared);
+
                 if (earned is not null)
                 {
                     _clearances.Keep(address.Host, earned);
@@ -302,6 +307,7 @@ public sealed class Chain : IAsyncDisposable
                 // One host is one host. What it costs is that host meeting its
                 // challenge again when it is really asked.
                 _logger.LogDebug(wrong, "The challenge on {Host} could not be cleared up front.", address.Host);
+                _journal.Counted(RunCounter.SitesFailed);
                 _journal.Failed(ActivityStage.Clearance, address.Host, wrong.Message);
             }
         }));

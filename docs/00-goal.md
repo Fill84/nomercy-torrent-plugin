@@ -21,10 +21,12 @@ missing in exactly the same way as one that aired last night. A show that has en
 1. Libraries   read every library of type tv or anime
 2. Shows       every show in them, every episode
 3. Missing     no video file, air date in the past
-4. Names       read every feed and scene database; pick the release NAME that already meets
-               the profile — resolution, codec, language, group
-5. Find        search that full release name on every indexer; merge the matches by info hash
-               so one torrent carries every tracker
+4. Names       ask every source — PreDB, srrDB, SceneSource, PreDB.net — about the episode, on
+               every run, with the owner's resolution and then without; keep the release
+               NAMES that already meet the profile — resolution, codec, language, group
+5. Find        every indexer, each on its own: every name letter for letter, then without its
+               punctuation, then Show SxxExx <res>, Show SxxExx, Show Sxx <res>, Show Sxx; merge
+               the matches by info hash so one torrent carries every tracker
 6. Download    the plugin's own BitTorrent client takes it
 7. Dispatch    stage the video and queue an encode job with the right library, folder and media id
 ```
@@ -38,9 +40,11 @@ seeders, no tracker and no magnet. The decision *what to download* is made on th
 question *who has it* is put to the indexers afterwards. Asking a name how many seeders it has is
 what stopped 0.3.4 downloading anything at all.
 
-**An indexer is asked the full release name.** `Silo.S03E06.1080p.WEB.H264-CAKES`, never
-`Silo S03E06`. A row whose title is that release *is* that release; a row that looks similar is a
-guess.
+**An indexer is asked the full release name first, letter for letter.**
+`Silo.S03E06.1080p.WEB.H264-CAKES`, dots and dash as the source wrote it — then the same name without
+its punctuation — and only when a site has nothing for either does it go down the ladder to
+`Silo S03E06 1080p`. A row whose title is that release *is* that release; a row that looks similar
+is a guess. The owner's rule of 11 September 2026.
 
 ## What the owner configures
 

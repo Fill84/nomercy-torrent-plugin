@@ -6,9 +6,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Domain;
 /// <remarks>
 /// Written here rather than taken from a library because Core references
 /// nothing, and because the answer needed is not "can this be parsed" but "what
-/// do I tell the owner". It does not compute the next occurrence: the server
-/// owns the schedule, and a second implementation of that would be a second
-/// answer to when a job runs.
+/// do I tell the owner".
+///
+/// It also says when a cadence next runs, because the owner asked for the
+/// dashboard to show it and the server keeps that time to itself. The server
+/// owns the schedule, so this is its answer and not a second one: NoMercyQueue
+/// hands the expression to NCrontab with <c>DateTime.UtcNow</c> as the base,
+/// and every expectation in its tests is what NCrontab 3.4.0 answered.
 ///
 /// It matters that this is checked at all. A cron the server cannot parse is
 /// not refused at registration — the job is simply never scheduled — so the
@@ -50,6 +54,120 @@ public static class Cron
 
         reason = null;
         return true;
+    }
+
+    /// <summary>
+    /// When <paramref name="expression"/> next fires, strictly after
+    /// <paramref name="after"/>, in UTC — or null for an expression the server
+    /// could never schedule.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// In UTC because the server schedules in UTC. Strictly after, because a
+    /// cadence asked at the minute it fires has just fired.
+    /// </para>
+    /// <para>
+    /// A day of the month and a day of the week given together must both
+    /// match. That is NCrontab's rule and not every cron's — a classic cron
+    /// takes either — and NCrontab is what the server runs.
+    /// </para>
+    /// </remarks>
+    public static DateTimeOffset? NextAfter(string? expression, DateTimeOffset after)
+    {
+        if (!IsValid(expression, out _))
+        {
+            return null;
+        }
+
+        string[] fields = expression!.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        bool[][] allowed = [.. Fields.Select((rules, at) => Allowed(fields[at], rules))];
+
+        DateTime utc = after.UtcDateTime;
+        DateTime start = new DateTime(utc.Year, utc.Month, utc.Day, utc.Hour, utc.Minute, 0, DateTimeKind.Utc)
+            .AddMinutes(1);
+
+        // Five years: every combination of day and month comes round inside
+        // that, the twenty-ninth of February included.
+        for (DateTime day = start.Date; day < start.Date.AddYears(5); day = day.AddDays(1))
+        {
+            if (!allowed[3][day.Month] || !allowed[2][day.Day] || !allowed[4][(int)day.DayOfWeek])
+            {
+                continue;
+            }
+
+            for (int hour = 0; hour < 24; hour++)
+            {
+                if (!allowed[1][hour])
+                {
+                    continue;
+                }
+
+                for (int minute = 0; minute < 60; minute++)
+                {
+                    if (!allowed[0][minute])
+                    {
+                        continue;
+                    }
+
+                    DateTime candidate = day.AddHours(hour).AddMinutes(minute);
+
+                    if (candidate >= start)
+                    {
+                        return new DateTimeOffset(candidate, TimeSpan.Zero);
+                    }
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Which values one field lets through, indexed by value.</summary>
+    private static bool[] Allowed(string field, (string Name, int Minimum, int Maximum) rules)
+    {
+        bool[] allowed = new bool[rules.Maximum + 1];
+
+        foreach (string part in field.Split(','))
+        {
+            string range = part;
+            int step = 1;
+
+            int slash = part.IndexOf('/', StringComparison.Ordinal);
+            if (slash >= 0)
+            {
+                range = part[..slash];
+                step = int.Parse(part[(slash + 1)..], System.Globalization.CultureInfo.InvariantCulture);
+            }
+
+            int from;
+            int to;
+            int dash = range.IndexOf('-', StringComparison.Ordinal);
+
+            if (range == "*")
+            {
+                from = rules.Minimum;
+                to = rules.Maximum;
+            }
+            else if (dash > 0)
+            {
+                from = int.Parse(range[..dash], System.Globalization.CultureInfo.InvariantCulture);
+                to = int.Parse(range[(dash + 1)..], System.Globalization.CultureInfo.InvariantCulture);
+            }
+            else
+            {
+                from = int.Parse(range, System.Globalization.CultureInfo.InvariantCulture);
+
+                // A single value with a step runs to the end of the field.
+                to = slash >= 0 ? rules.Maximum : from;
+            }
+
+            for (int value = from; value <= to; value += step)
+            {
+                allowed[value] = true;
+            }
+        }
+
+        return allowed;
     }
 
     private static bool IsValidField(string field, (string Name, int Minimum, int Maximum) rules, out string? reason)

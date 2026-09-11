@@ -7,37 +7,45 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 public class QueueOrderTests
 {
     /// <remarks>
-    /// The order the Queue page shows is the order the search cadence will
-    /// actually ask in — one rule, used by both, or the page is a guess about
-    /// what the plugin is going to do.
+    /// <para>
+    /// <strong>Every run starts at the top.</strong> The owner's decision of
+    /// 11 September 2026. The queue was ordered by when each episode was last
+    /// searched, so every episode a stopped run had reached went to the back,
+    /// and pressing Run again carried on from where the stopped one had got to
+    /// — which looked exactly like a pause.
+    /// </para>
+    /// <para>
+    /// The order the Queue page shows is the order a run asks in — one rule,
+    /// used by both, or the page is a guess about what the plugin will do.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void WhatHasNeverBeenSearchedComesFirst()
+    public void EveryRunStartsAtTheTopWhateverWasSearchedLast()
     {
         IReadOnlyList<TrackedEpisode> ordered = QueueOrder.Order(
         [
+            Missing(1, 1, 3, lastSearchAt: null),
+            Missing(1, 1, 1, lastSearchAt: new DateTimeOffset(2026, 9, 11, 3, 22, 0, TimeSpan.Zero)),
             Missing(1, 1, 2, lastSearchAt: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero)),
-            Missing(1, 1, 1, lastSearchAt: null),
         ]);
 
-        Assert.Equal([new EpisodeKey(1, 1, 1), new EpisodeKey(1, 1, 2)], ordered.Select(episode => episode.Key));
+        Assert.Equal([1, 2, 3], ordered.Select(episode => episode.Key.Number));
     }
 
     /// <remarks>
-    /// Then the one waiting longest. Anything else lets a popular episode be
-    /// asked about repeatedly while an unlucky one is never reached.
+    /// Shows by their title, which is how the owner reads the Queue page — a
+    /// show's id is a number nobody sees.
     /// </remarks>
     [Fact]
-    public void ThenTheOneWaitingLongest()
+    public void ShowsComeInTheOrderOfTheirTitles()
     {
         IReadOnlyList<TrackedEpisode> ordered = QueueOrder.Order(
         [
-            Missing(1, 1, 1, lastSearchAt: new DateTimeOffset(2026, 8, 10, 0, 0, 0, TimeSpan.Zero)),
-            Missing(1, 1, 2, lastSearchAt: new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero)),
-            Missing(1, 1, 3, lastSearchAt: new DateTimeOffset(2026, 8, 5, 0, 0, 0, TimeSpan.Zero)),
+            Missing(1, 1, 1) with { ShowTitle = "Silo" },
+            Missing(2, 1, 1) with { ShowTitle = "Dark Matter" },
         ]);
 
-        Assert.Equal([2, 3, 1], ordered.Select(episode => episode.Key.Number));
+        Assert.Equal(["Dark Matter", "Silo"], ordered.Select(episode => episode.ShowTitle));
     }
 
     /// <remarks>

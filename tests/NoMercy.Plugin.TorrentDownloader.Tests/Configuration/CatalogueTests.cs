@@ -294,4 +294,37 @@ public class CatalogueTests
                 $"{one.Name} at {one.Priority} outranks the anime indexer at {nyaa.Priority}."));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>TorrentBay leads every general indexer.</strong> The owner's
+    /// decision of 11 September 2026: it indexes every other site, so where two
+    /// copies are level it is the one taken, and when a torrent is fetched its
+    /// answer is the one the magnet is built on.
+    /// </para>
+    /// <para>
+    /// For television. Anime is led by Nyaa, the test above — the owner's
+    /// decision of the same day, and Nyaa is never asked about anything else.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TorrentBayOutranksEveryOtherGeneralIndexer()
+    {
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(new CapturingLogger()).Load();
+        SourceDefinition torrentBay = shipped.Single(one => one.Name == "TorrentBay");
+
+        SourceDefinition[] others =
+        [
+            .. shipped.Where(one => one.Role.HasFlag(SourceRole.Indexer)
+                                    && one.Libraries.Count == 0
+                                    && one.Name != torrentBay.Name),
+        ];
+
+        Assert.NotEmpty(others);
+        Assert.All(
+            others,
+            one => Assert.True(
+                torrentBay.Priority > one.Priority,
+                $"{one.Name} at {one.Priority} outranks TorrentBay at {torrentBay.Priority}."));
+    }
+
 }

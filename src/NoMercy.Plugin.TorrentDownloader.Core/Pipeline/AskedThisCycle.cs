@@ -12,6 +12,11 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// season, so "this term was asked" is only true of the site it was asked of.
 /// </para>
 /// <para>
+/// And per form. A name asked letter for letter and the same name asked without
+/// its punctuation are two different questions, and a site that answered one
+/// with nothing may well answer the other.
+/// </para>
+/// <para>
 /// The saving it exists for is the season. Every gap of one season has that
 /// season's rungs at the bottom of its ladder, and a site that answers nothing
 /// narrower reaches them for every one of those gaps. Eight gaps once had every
@@ -21,11 +26,11 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// </remarks>
 public sealed class AskedThisCycle
 {
-    private readonly Dictionary<(string Source, string Term), ReleaseCopy[]> _answers = [];
+    private readonly Dictionary<(string Source, SearchTerm Term), ReleaseCopy[]> _answers = [];
     private readonly Lock _lock = new();
 
     /// <summary>What that site said to that question, or null where it was never asked.</summary>
-    public ReleaseCopy[]? Recall(string source, string term)
+    public ReleaseCopy[]? Recall(string source, SearchTerm term)
     {
         lock (_lock)
         {
@@ -39,7 +44,7 @@ public sealed class AskedThisCycle
     /// next rung, and asking again to be told the same nothing is the request
     /// this class exists to save.
     /// </remarks>
-    public void Keep(string source, string term, ReleaseCopy[] rows)
+    public void Keep(string source, SearchTerm term, ReleaseCopy[] rows)
     {
         lock (_lock)
         {

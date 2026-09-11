@@ -99,6 +99,55 @@ public class EachSiteClimbsItsOwnLadderTests
         Assert.Equal(2, fetch.Asked.Count);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>The owner's rule of 11 September 2026, and the reason the sources
+    /// exist at all.</strong> A source hands over the exact release, and that
+    /// exact release is what an indexer is asked for first — letter for letter,
+    /// dots and dash included. No rows, and the same name is asked without its
+    /// punctuation. No rows to that either, and only then does the site go
+    /// down the ladder.
+    /// </para>
+    /// <para>
+    /// Every name used to go out as loose words — the dots and the dash turned
+    /// into spaces before any site saw it — so the question the source had
+    /// answered was never put to anybody.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASourcesNameIsAskedLetterForLetterThenWithoutPunctuationAndOnlyThenTheLadder()
+    {
+        FakeFetch fetch = new();
+
+        // LimeTorrents answers the name exactly as the source wrote it.
+        fetch.Answers(Exact("LimeTorrents", Full), Capture.Fixture("limetorrents.html"));
+
+        // TorrentDownloads answers neither form of the name, and does answer
+        // the first rung of the ladder.
+        fetch.Answers(Exact("TorrentDownloads", Full), Capture.Fixture("nyaa-nothing.xml"));
+        fetch.Answers(Address("TorrentDownloads", Full), Capture.Fixture("nyaa-nothing.xml"));
+        fetch.Answers(Address("TorrentDownloads", Shorter), Capture.Fixture("torrentdownloads.html"));
+
+        await Finding(fetch).SearchAsync(
+            SearchTerm.Ladder([Full], [Shorter, Shortest]),
+            LibraryKind.Television,
+            CancellationToken.None);
+
+        // Letter for letter, then without punctuation, then the ladder — and it
+        // stopped on the rung that answered.
+        Assert.Equal(
+            [Exact("TorrentDownloads", Full), Address("TorrentDownloads", Full), Address("TorrentDownloads", Shorter)],
+            fetch.Asked.Where(address => address.Host == "www.torrentdownloads.pro").Select(address => address.ToString()));
+
+        // The site that answered the exact name was asked nothing else.
+        Assert.Equal(
+            [Exact("LimeTorrents", Full)],
+            fetch.Asked.Where(address => address.Host == "www.limetorrents.lol").Select(address => address.ToString()));
+
+        // And letter for letter means the dots and the dash reached the site.
+        Assert.Contains(Full, Uri.UnescapeDataString(Exact("LimeTorrents", Full)), StringComparison.Ordinal);
+    }
+
     private const string Full = "Silo.S03E06.1080p.WEB.H264-CAKES";
     private const string Shorter = "Silo S03E06 1080p";
     private const string Shortest = "Silo S03E06";
@@ -111,6 +160,16 @@ public class EachSiteClimbsItsOwnLadderTests
 
         return new Uri(Query.Write(written.Replace(term, "{query}", StringComparison.Ordinal), term, QueryStyles.Words))
             .ToString();
+    }
+
+    /// <summary>The address a name goes out on letter for letter, only made safe for a URL.</summary>
+    private static string Exact(string site, string term)
+    {
+        string written = site == "LimeTorrents"
+            ? "https://www.limetorrents.lol/search/all/{query}/"
+            : "https://www.torrentdownloads.pro/search/?search={query}";
+
+        return new Uri(written.Replace("{query}", Uri.EscapeDataString(term), StringComparison.Ordinal)).ToString();
     }
 
     private static Find Finding(FakeFetch fetch)

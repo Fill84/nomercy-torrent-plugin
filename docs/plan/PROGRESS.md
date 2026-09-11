@@ -4,6 +4,12 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S11-40` is built and green locally and waits on a deploy and a live run.** The first live run
+of `S11-39` on 11 September 2026 showed the sources were not asked, names went out as loose words,
+Stop looked like a pause and the dashboard said too little; `S11-40` is the owner's answer to all
+of it. Then the same live run as below, plus: Stop clears the page and closes Chrome, the next Run
+starts at the top, and every question shows under its episode.
+
 **`S11-39` is committed and deployed to `beast-unit`, and waits on one live run.** The audit of
 10 and 11 September 2026 — `docs/plan/AUDIT-2026-09-10.md` — and everything the owner asked for
 during it. The owner's instruction: once a live run on their server is green, push and release
@@ -299,10 +305,37 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-05` One run, watched — the owner's
 - [x] `S11-38` A push that was asked for is sent
 - [x] `S11-39` The audit: sources, indexers, the merge, Chrome and the dashboard, measured
+- [x] `S11-40` Exact names, sources every run, Stop, the status bar, stage rows and every question on the page
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-40` What the first live run of S11-39 showed, and the owner's answer to it.** Measured on
+  `beast-unit`: Dark Matter S02E03 had one name in the pool, a MULTi release English only refuses,
+  so no source was asked and no name reached an indexer; and every name that did go out went as
+  loose words. What landed:
+  - **A source's name goes to every indexer letter for letter, then without its punctuation, then
+    the ladder** — `SearchTerm.Ladder`, `Query.WriteExact`. Measured on TorrentBay: the exact name
+    answers one row, the release.
+  - **The sources are asked about every episode on every run.** The pool only adds.
+  - **Every run starts at the top**: show title, season, episode. The old "searched longest ago
+    first" is what made Run after Stop carry on where the stopped run had got to.
+  - **Stop ends everything**: `ActivityJournal.RunEnded` clears the run's stages, its notes and its
+    counts; Chrome is closed on a token that is not the cancelled one.
+  - **Status bar**: running since, how the last run ended (a `runs` table, migration 007, so it
+    survives a restart), and the next run from the search cadence — `Cron.NextAfter`, checked
+    against NCrontab 3.4.0, which is what NoMercyQueue schedules with, in UTC.
+  - **Stage rows and notes**: `RunCounter` counts per run, and every source answer, refused name and
+    indexer question is noted under its episode until it is decided.
+  - **TorrentBay leads television (60), Nyaa anime (70).** The highest-rated route that has the
+    torrent is the magnet it is built on; every route is still asked.
+  - **Quieter log**: no line per tracker that did not answer; redirects observed, taking the
+    unobserved-task lines in one warm-up from 11 to 8. The other 8, "Execution Context was
+    destroyed", are PuppeteerSharp's own (`IsolatedWorld.ClearContext`) and out of reach.
+  - `gathered.AddRange(copies)` ran twice in `SearchCycle`; once now.
+  `BittorrentEngineTests.ATorrentTooBigForTheDiskIsRefusedWhenItsSizeIsKnown` failed once under a
+  full run and passed alone three times and in the next full run: timing-sensitive, not this slice.
 
 - **`S11-39` The audit of 10 and 11 September: every finding measured, every rule the owner's.**
   The owner asked for the whole chain walked and measured rather than read; the findings and their
@@ -1646,6 +1679,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **The owner's rules from the live run of 11 September 2026.** A source's name goes to an indexer
+  letter for letter, then without punctuation, then the ladder. The sources are asked every run;
+  the pool only adds. Every run starts at the top. Stop ends and clears the whole run, downloads
+  excepted. TorrentBay leads for television and Nyaa for anime, and every indexer is still asked.
+  The per-tracker "did not answer" lines are not wanted in the log.
 - **The owner's rules of 10 and 11 September 2026, all of them theirs.** The sources are PreDB,
   srrDB and SceneSource; EZTV is an indexer. A source is asked about the episode with the owner's
   resolution, then without. An indexer is asked the release names, then the episode with and without

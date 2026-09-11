@@ -90,7 +90,7 @@
       "url": "https://extranet.torrentbay.st/browse/?q={query}&sort=seeders&order=desc",
       "reader": "torrentbay",
       "gated": true,
-      "priority": 30,
+      "priority": 60,
       "minimumIntervalSeconds": 15,
       "pageParameter": "page",
       "pages": 3,
@@ -141,7 +141,7 @@
       "libraries": [
         "anime"
       ],
-      "priority": 50,
+      "priority": 70,
       "minimumIntervalSeconds": 15,
       "note": "An indexer in XML; every item links a real torrent. For anime it is often the only source that has the release, and it is asked with both the seasonal and the absolute form."
     },
