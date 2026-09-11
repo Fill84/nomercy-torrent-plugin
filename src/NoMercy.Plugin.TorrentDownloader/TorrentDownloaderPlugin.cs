@@ -460,6 +460,26 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 [.. (await grabs.OpenAsync(ct)).SelectMany(one => one.Covers)]);
         }
 
+        // Every challenge cleared first, in one pass, so the run itself needs no
+        // browser at all. The owner's design of 11 September 2026: Chrome is
+        // for getting past Cloudflare and for nothing else, and once the
+        // cookies are in hand it can be shut.
+        try
+        {
+            await chain.ClearTheWayAsync(settings, ct);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            // Never a reason to skip the search. Clearing up front is a saving,
+            // not a requirement: a challenge that was not cleared here is one
+            // the run meets when it reaches that host, which is what happened
+            // before this pass existed at all. Letting it throw would lose the
+            // whole cycle to a browser that would not start.
+            Context.Logger.LogWarning(
+                wrong,
+                "The challenges could not be cleared before the run, so each host meets its own as it is asked.");
+        }
+
         try
         {
             _lastCycle = await chain.Search(
@@ -487,12 +507,22 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     settings.IncompleteFolder)
                 {
                     DefaultTrackers = settings.Client.DefaultTrackers,
+
+                    // Their tracker belongs to the torrents it issued and to
+                    // nothing else.
+                    OwnTrackerHosts = [.. settings.PrivateTrackers.Select(one => one.Host)],
                 },
                 ct);
         }
         finally
         {
             _lastCycleAt = DateTimeOffset.UtcNow;
+
+            // The run is over, so the browser goes. Every tab it kept per site
+            // is closed with it; the clearance those tabs earned is already in
+            // the clearance store and the profile is a folder on disk, so
+            // nothing is lost but the memory.
+            await chain.RunEndedAsync(ct);
         }
 
         // Everything the cycle decided is already written: CycleWriter put
@@ -509,9 +539,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// release for one episode twice over, because what one has decided is
     /// state the other cannot see.
     /// </remarks>
-    private async Task CycleAsync(CancellationToken ct, EpisodeKey? only = null)
+    private async Task CycleAsync(CancellationToken ct, EpisodeKey? only = null, bool holding = false)
     {
-        if (!_running.TryEnter())
+        if (!holding && !_running.TryEnter())
         {
             // Dropped, not queued: a tick that arrives during a cycle is one
             // the cycle is already doing the work of.
@@ -555,6 +585,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
     }
 
+    /// <summary>Whether a cycle is running now.</summary>
+    /// <remarks>
+    /// What the status bar draws its badge and its button from, and the one
+    /// thing a page has to be right about the instant a run is started.
+    /// </remarks>
+    public bool Running => _running.Busy;
+
     /// <summary>
     /// Starts a full cycle in the background, and answers at once.
     /// </summary>
@@ -567,15 +604,25 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <returns>Whether one was started, or false when one was already running.</returns>
     public bool StartRun()
     {
-        if (_running.Busy)
+        // Claimed here, on the caller's thread, and not inside the task.
+        //
+        // **It used to be claimed in the task, and the page said so.** The
+        // endpoint answered "started", the task had not reached the guard yet,
+        // and everything that asked in between — the push below, and any page
+        // loaded or refreshed in that window — was told the cycle was idle. The
+        // owner saw a Run button still enabled on a run they had just started.
+        if (!_running.TryEnter())
         {
             return false;
         }
 
         // Never the caller's token, and never awaited: the endpoint answers
-        // that a cycle has begun, not that it has finished.
-        _ = Task.Run(() => CycleAsync(Lifetime), CancellationToken.None);
+        // that a cycle has begun, not that it has finished. It is handed the
+        // guard it already holds, so nothing claims it twice.
+        _ = Task.Run(() => CycleAsync(Lifetime, holding: true), CancellationToken.None);
 
+        // Now, and not before: the snapshot this sends says the cycle is
+        // running, because by now it is.
         Moved();
 
         return true;

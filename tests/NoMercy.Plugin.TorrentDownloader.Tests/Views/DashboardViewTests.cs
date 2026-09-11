@@ -1,3 +1,4 @@
+using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -25,8 +26,20 @@ public class DashboardViewTests
 
         string bar = string.Join(" ", Rendered.Words(view));
 
-        Assert.Contains("14 min ago", bar, StringComparison.Ordinal);
-        Assert.Contains("6 h", bar, StringComparison.Ordinal);
+        // Clock times, not distances from now. "14 min ago" is true for a
+        // minute and then quietly wrong, and nothing pushes to correct it: the
+        // passing of a minute changes nothing the plugin holds, so a page left
+        // open sat on it for an hour. The owner's decision of 11 September 2026.
+        Assert.Contains(
+            Now.AddMinutes(-14).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture),
+            bar,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            Now.AddHours(6).ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture),
+            bar,
+            StringComparison.Ordinal);
+
+        Assert.DoesNotContain("ago", bar, StringComparison.Ordinal);
         Assert.DoesNotContain(
             Rendered.All(view),
             component => component.Component == PluginComponentType.Spinner);

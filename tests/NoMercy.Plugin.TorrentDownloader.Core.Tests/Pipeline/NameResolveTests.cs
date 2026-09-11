@@ -36,7 +36,7 @@ public class NameResolveTests
         FakeFetch fetch = new();
 
         IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, pool)
-            .ResolveAsync([Episode("Silo", 3, 6)], CancellationToken.None);
+            .ResolveAsync([Episode("Silo", 3, 6)], Wanted, CancellationToken.None);
 
         Assert.Empty(fetch.Asked);
 
@@ -45,25 +45,34 @@ public class NameResolveTests
     }
 
     /// <remarks>
-    /// A miss asks, and asks once for the season rather than once for the
-    /// episode. Two episodes of one season are one question: the answer to
-    /// "what is Silo season three called" covers both of them, and asking twice
-    /// is a request a site did not need to serve.
+    /// <para>
+    /// <strong>Each episode is asked about on its own.</strong> It used to be
+    /// one question per season — two episodes of one season were one request —
+    /// and that saving is what hid the releases the owner wanted: a source
+    /// asked about a season answers with the season, and the episode's own
+    /// releases fall past the cut.
+    /// </para>
+    /// <para>
+    /// So two episodes are two questions per source, and each of those may
+    /// climb a rung when the first finds nothing. The gate paces it.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task TwoEpisodesOfOneSeasonCostOneQueryPerSource()
+    public async Task EachEpisodeIsAskedAboutOnItsOwn()
     {
         FakeFetch fetch = new();
         fetch.AnswersAnything(Capture.Fixture("srrdb-search.json"));
 
         await Resolving(fetch).ResolveAsync(
             [Episode("Silo", 3, 6), Episode("Silo", 3, 7)],
+            Wanted,
             CancellationToken.None);
 
-        // One per name database, and there are two of them.
-        Assert.Equal(2, fetch.Asked.Count);
+        // Two episodes, two sources. srrDB answers the first question for both
+        // of them; predb.me cannot read that answer and climbs a rung, so it
+        // asks twice each.
         Assert.Equal(
-            ["api.srrdb.com", "predb.me"],
+            ["api.srrdb.com", "api.srrdb.com", "predb.me", "predb.me", "predb.me", "predb.me"],
             fetch.Asked.Select(address => address.Host).Order());
     }
 
@@ -86,10 +95,12 @@ public class NameResolveTests
 
         Assert.Equal(42, episodes.Length);
 
-        await Resolving(fetch).ResolveAsync(episodes, CancellationToken.None);
+        await Resolving(fetch).ResolveAsync(episodes, Wanted, CancellationToken.None);
 
-        Assert.Equal(6, fetch.Asked.Count(address => address.Host == "api.srrdb.com"));
-        Assert.Equal(6, fetch.Asked.Count(address => address.Host == "predb.me"));
+        // One question per episode now, not one per season. Six seasons of seven
+        // episodes is forty-two questions rather than six — the price of asking
+        // the question a source can actually answer.
+        Assert.Equal(42, fetch.Asked.Count(address => address.Host == "api.srrdb.com"));
     }
 
     /// <remarks>
@@ -106,11 +117,14 @@ public class NameResolveTests
 
         await Resolving(fetch).ResolveAsync(
             [Episode("Sugar", 1, 1, year: 2024)],
+            Wanted,
             CancellationToken.None);
 
         string[] asked = [.. fetch.Asked.Where(address => address.Host == "api.srrdb.com").Select(Term)];
 
-        Assert.Equal(["sugar-2024-s01", "sugar-s01"], asked.Order());
+        // The episode with the quality, then without, then the same two under
+        // the year. srrDB answers the first, so only that one is asked.
+        Assert.Equal(["sugar-s01e01-1080p"], asked.Order());
     }
 
     /// <remarks>
@@ -126,10 +140,13 @@ public class NameResolveTests
 
         await Resolving(fetch).ResolveAsync(
             [Episode("Monsters of God", 1, 2, year: 2026)],
+            Wanted,
             CancellationToken.None);
 
+        // A title of more than one word is never asked under its year, so the
+        // episode's own question is the only one this source needs.
         Assert.Equal(
-            ["monsters-of-god-s01"],
+            ["monsters-of-god-s01e02-1080p"],
             fetch.Asked.Where(address => address.Host == "api.srrdb.com").Select(Term));
     }
 
@@ -146,10 +163,14 @@ public class NameResolveTests
 
         await Resolving(fetch).ResolveAsync(
             [Episode("Sousou no Frieren", 1, 13, kind: LibraryKind.Anime, absolute: 13)],
+            Wanted,
             CancellationToken.None);
 
+        // srrDB answers the first question, so the absolute form is not needed
+        // here. That it exists at all is the next test, which asks a source
+        // that answers nothing.
         Assert.Equal(
-            ["sousou-no-frieren", "sousou-no-frieren-s01"],
+            ["sousou-no-frieren-s01e13-1080p"],
             fetch.Asked.Where(address => address.Host == "api.srrdb.com").Select(Term).Order());
     }
 
@@ -172,6 +193,7 @@ public class NameResolveTests
 
         IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, pool).ResolveAsync(
             [Episode("One Piece", 21, 45, kind: LibraryKind.Anime, absolute: 1172)],
+            Wanted,
             CancellationToken.None);
 
         Assert.Empty(fetch.Asked);
@@ -201,7 +223,7 @@ public class NameResolveTests
         fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
 
         IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, pool)
-            .ResolveAsync([Episode("Silo", 3, 6)], CancellationToken.None);
+            .ResolveAsync([Episode("Silo", 3, 6)], Wanted, CancellationToken.None);
 
         Assert.Contains("Silo.S03.1080p.WEB.H264-CAKES", Assert.Single(resolved).Titles);
 
@@ -223,7 +245,7 @@ public class NameResolveTests
         FakePool pool = new();
 
         IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, pool)
-            .ResolveAsync([Episode("Silo", 3, 6)], CancellationToken.None);
+            .ResolveAsync([Episode("Silo", 3, 6)], Wanted, CancellationToken.None);
 
         Assert.Contains("Silo.S03E06.1080p.WEB.H264-CAKES", Assert.Single(resolved).Titles);
 
@@ -248,7 +270,7 @@ public class NameResolveTests
         ActivityJournal journal = new();
 
         IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, journal: journal)
-            .ResolveAsync([Episode("Silo", 3, 6)], CancellationToken.None);
+            .ResolveAsync([Episode("Silo", 3, 6)], Wanted, CancellationToken.None);
 
         Assert.Empty(Assert.Single(resolved).Titles);
 
@@ -256,7 +278,7 @@ public class NameResolveTests
             journal.Snapshot().History,
             entry => entry.Stage == ActivityStage.Names
                      && entry.Outcome == ActivityOutcome.Finished
-                     && entry.Subject == "Silo S03");
+                     && entry.Subject == "Silo S03E06");
     }
 
     /// <remarks>
@@ -273,7 +295,7 @@ public class NameResolveTests
         ActivityJournal journal = new();
 
         IReadOnlyList<ResolvedNames> resolved = await Resolving(fetch, journal: journal)
-            .ResolveAsync([Episode("Silo", 3, 6)], CancellationToken.None);
+            .ResolveAsync([Episode("Silo", 3, 6)], Wanted, CancellationToken.None);
 
         Assert.NotEmpty(Assert.Single(resolved).Titles);
 
@@ -289,6 +311,81 @@ public class NameResolveTests
     private static string Term(Uri address)
     {
         return address.Segments[^1];
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A source is asked about the episode, with the owner's quality,
+    /// and nothing broader.</strong> The owner's rule of 11 September 2026, and
+    /// it is measured. srrDB asked <c>south-park-s15</c> — the season, which is
+    /// what this stage used to ask — answers 286 releases and hands back the
+    /// first 45: DVD rips, a making-of documentary, and not one release of the
+    /// episode. Asked <c>south-park-s15e12-1080p</c> it answers four, one of
+    /// which is <c>South.Park.S15E12.1080p.BluRay.x264-FilmHD</c>.
+    /// </para>
+    /// <para>
+    /// So the release the owner wanted existed at the source the whole time,
+    /// and the plugin asked a question that buried it. The pool held four names
+    /// for that episode, all German, 2160p or XviD, and the cycle fell through
+    /// to guessing at the indexers.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASourceIsAskedAboutTheEpisodeWithTheOwnersQuality()
+    {
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("srrdb-search.json"));
+
+        await Resolving(fetch).ResolveAsync(
+            [Episode("Silo", 3, 6)],
+            new() { MaximumResolution = "1080p" },
+            CancellationToken.None);
+
+        // The first question put to each source names the quality. A source that
+        // answers nothing to it is asked again without, which is the rung below
+        // and the next test.
+        foreach (IGrouping<string, Uri> site in fetch.Asked.GroupBy(address => address.Host))
+        {
+            Assert.Contains("1080p", site.First().ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        Assert.All(
+            fetch.Asked,
+            address => Assert.Contains("s03e06", address.ToString(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <remarks>
+    /// And where that finds nothing, the same question without the quality —
+    /// the owner's ladder, at the source this time. A release nobody published
+    /// in 1080p is still a release, and the profile refuses it one step later
+    /// where every spelling is understood.
+    /// </remarks>
+    [Fact]
+    public async Task ASourceThatAnswersNothingIsAskedTheEpisodeWithoutTheQuality()
+    {
+        FakeFetch fetch = new();
+
+        // Nothing at all for the question that names the quality.
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+
+        await Resolving(fetch).ResolveAsync(
+            [Episode("Silo", 3, 6)],
+            new() { MaximumResolution = "1080p" },
+            CancellationToken.None);
+
+        string[] asked = [.. fetch.Asked.Select(address => address.ToString())];
+
+        Assert.Contains(asked, address => address.Contains("1080p", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(
+            asked,
+            address => address.Contains("s03e06", StringComparison.OrdinalIgnoreCase)
+                && !address.Contains("1080p", StringComparison.OrdinalIgnoreCase));
+
+        // And never the season on its own, which is what buried the release.
+        Assert.DoesNotContain(
+            asked,
+            address => address.Contains("s03", StringComparison.OrdinalIgnoreCase)
+                && !address.Contains("s03e06", StringComparison.OrdinalIgnoreCase));
     }
 
     private static TrackedEpisode Episode(
@@ -320,6 +417,9 @@ public class NameResolveTests
             SearchGated = true,
         },
     ];
+
+    /// <summary>What the owner wants, at its documented defaults.</summary>
+    private static Profile Wanted => new() { MaximumResolution = "1080p" };
 
     private static NameResolve Resolving(
         FakeFetch fetch,

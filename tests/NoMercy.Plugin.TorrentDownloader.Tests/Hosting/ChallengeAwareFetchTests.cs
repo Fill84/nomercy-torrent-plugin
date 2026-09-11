@@ -236,6 +236,62 @@ public class ChallengeAwareFetchTests
     /// <summary>The hosts these tests use, all granted.</summary>
     private static readonly string[] Hosts = ["mine.example", "predb.me", "www.1337x.to"];
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A gated host whose challenge has already been solved is read
+    /// over plain HTTP, and the browser stays shut.</strong> The owner's
+    /// decision of 11 September 2026: Chrome is for solving a challenge and
+    /// nothing else. Once the clearance cookie is in hand it travels on an
+    /// ordinary request, which is what the unmarked path has always done.
+    /// </para>
+    /// <para>
+    /// It used to go straight to the browser on anything the catalogue marked
+    /// gated, and never stored a clearance for those hosts at all — so every
+    /// page of every gated site, every cycle, needed Chrome.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AGatedHostWithAClearanceIsReadOverHttpAndNeverInTheBrowser()
+    {
+        FakeHttp http = new();
+        http.Answers(System.Net.HttpStatusCode.OK, "<html>the real page</html>");
+
+        FakePages pages = new("<html>through the browser</html>");
+        ClearanceStore clearances = new();
+        clearances.Keep("www.1337x.to", new("cookie", "a user agent"));
+
+        FetchResult result = await Fetch(http, pages: pages, clearances: clearances)
+            .GetAsync(new("https://www.1337x.to/search/Silo/"), gated: true, CancellationToken.None);
+
+        Assert.Empty(pages.Asked);
+        Assert.Single(http.Attempts);
+        Assert.Equal("<html>the real page</html>", result.Body);
+    }
+
+    /// <remarks>
+    /// And a gated host with no clearance yet is solved once — in the browser,
+    /// which is what a browser is for — and then read over plain HTTP with what
+    /// the solve earned.
+    /// </remarks>
+    [Fact]
+    public async Task AGatedHostIsSolvedOnceAndThenReadOverHttp()
+    {
+        FakeHttp http = new();
+        http.Answers(System.Net.HttpStatusCode.OK, "<html>the real page</html>");
+
+        FakeSolver solver = new(new("cookie", "a user agent"));
+        FakePages pages = new("<html>through the browser</html>");
+        ClearanceStore clearances = new();
+
+        FetchResult result = await Fetch(http, solver: solver, pages: pages, clearances: clearances)
+            .GetAsync(new("https://www.1337x.to/search/Silo/"), gated: true, CancellationToken.None);
+
+        Assert.Equal(1, solver.Solves);
+        Assert.Empty(pages.Asked);
+        Assert.Equal("<html>the real page</html>", result.Body);
+        Assert.NotNull(clearances.For("www.1337x.to"));
+    }
+
     private static ChallengeAwareFetch Fetch(
         FakeHttp http,
         IChallengeSolver? solver = null,

@@ -175,6 +175,147 @@ public sealed class Chain : IAsyncDisposable
             ct);
     }
 
+    /// <summary>
+    /// Clears every challenge the run will meet, before the run starts.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The owner's design, 11 September 2026.</strong> Chrome exists to
+    /// get past Cloudflare and for nothing else. So every source and indexer
+    /// whose address sits behind a challenge is cleared first, in one pass; the
+    /// cookies that earns go into the clearance store; the browser is closed;
+    /// and the whole run then goes over ordinary HTTP with no browser at all.
+    /// </para>
+    /// <para>
+    /// Solved together rather than one at a time as each is first needed: a
+    /// challenge met halfway through a cycle is a browser started halfway
+    /// through a cycle, and the owner watched ten Chrome processes sitting on
+    /// their server because of it.
+    /// </para>
+    /// <para>
+    /// A host that will not clear is not a failure here. It is left without a
+    /// clearance and meets its challenge the ordinary way when it is asked,
+    /// which is one browser rather than none and still says so in the journal.
+    /// </para>
+    /// </remarks>
+    public async Task ClearTheWayAsync(Settings settings, CancellationToken ct)
+    {
+        SourceCatalogue catalogue = Catalogue(settings);
+
+        Uri[] behindAChallenge =
+        [
+            .. catalogue.Enabled
+                .Where(source => source.SearchAddressGated || source.Gated)
+                .Select(source => source.SearchAddress ?? source.Url)
+                .Select(address => new Uri(address.Replace("{query}", "a", StringComparison.Ordinal)))
+
+                // One per host: a clearance is issued to a host and not to a
+                // path, so a second address on the same host is a challenge
+                // already cleared.
+                .GroupBy(address => address.Host, StringComparer.OrdinalIgnoreCase)
+                .Select(perHost => perHost.First()),
+        ];
+
+        if (behindAChallenge.Length == 0)
+        {
+            return;
+        }
+
+        _logger.LogInformation(
+            "Looking at {Count} hosts that may challenge us, before the run, so the run itself needs no browser.",
+            behindAChallenge.Length);
+
+        // Said on the page, not only in the log. This is the first thing a run
+        // does and it can take a minute; a dashboard with nothing on it is a
+        // plugin that looks asleep.
+        string pass = $"{behindAChallenge.Length} sites that may need a browser";
+
+        _journal.Started(ActivityStage.Clearance, pass);
+
+        // Asked over plain HTTP first, with no solver behind it, purely to find
+        // out which of them really challenges us today. The catalogue's gated
+        // flag is what a site did when it was written down; this is what it
+        // does now, and a site that has stopped challenging costs no browser
+        // at all.
+        ChallengeAwareFetch asking = new(_http, _gate, _context.Grants, _clearances);
+
+        Uri[] unsettled = [.. behindAChallenge.Where(one => _clearances.For(one.Host) is null)];
+
+        bool[] challenged = await Task.WhenAll(unsettled.Select(async address =>
+        {
+            FetchResult plainly = await asking.GetAsync(address, gated: false, ct);
+
+            return plainly.Failure?.Outcome == FetchOutcome.Challenged;
+        }));
+
+        Uri[] needing = [.. unsettled.Where((_, at) => challenged[at])];
+
+        foreach (Uri settled in unsettled.Where((_, at) => !challenged[at]))
+        {
+            _logger.LogDebug("{Host} answered without a challenge, so it needs no browser.", settled.Host);
+            _journal.Finished(ActivityStage.Clearance, settled.Host, "answered without a challenge");
+        }
+
+        if (needing.Length == 0)
+        {
+            _journal.Finished(ActivityStage.Clearance, pass, "none of them needed a browser");
+
+            return;
+        }
+
+        _logger.LogInformation(
+            "Clearing {Count} challenges together, so the run itself needs no browser.",
+            needing.Length);
+
+        // **All of them at once, in one browser.** The owner's rule of
+        // 11 September 2026. Solved one after another, each tab closes behind
+        // itself and takes the browser with it — measured that day as Chrome
+        // going up and down five times in a row, which is five cold starts and
+        // five challenges met from nothing.
+        await Task.WhenAll(needing.Select(async address =>
+        {
+            _journal.Started(ActivityStage.Clearance, address.Host, "clearing its challenge in the browser");
+
+            try
+            {
+                Clearance? earned = await _solver.SolveAsync(address, ct);
+
+                if (earned is not null)
+                {
+                    _clearances.Keep(address.Host, earned);
+                    _journal.Finished(ActivityStage.Clearance, address.Host, "cleared, and its cookie kept");
+                }
+                else
+                {
+                    _logger.LogDebug(
+                        "{Host} cleared without a cookie, so its pages come from the browser.",
+                        address.Host);
+
+                    _journal.Finished(
+                        ActivityStage.Clearance,
+                        address.Host,
+                        "cleared without a cookie, so its pages come from the browser");
+                }
+            }
+            catch (Exception wrong) when (wrong is not OperationCanceledException)
+            {
+                // One host is one host. What it costs is that host meeting its
+                // challenge again when it is really asked.
+                _logger.LogDebug(wrong, "The challenge on {Host} could not be cleared up front.", address.Host);
+                _journal.Failed(ActivityStage.Clearance, address.Host, wrong.Message);
+            }
+        }));
+
+        // Everything that could be cleared has been, so the browser has nothing
+        // left to do until the next run.
+        await _tabs.CloseAllAsync(ct);
+
+        _journal.Finished(
+            ActivityStage.Clearance,
+            pass,
+            $"{needing.Length} cleared, and the browser closed");
+    }
+
     /// <summary>Reads every feed into the pool.</summary>
     public Harvest Harvest(Settings settings)
     {
@@ -207,6 +348,22 @@ public sealed class Chain : IAsyncDisposable
             // server with it.
             _engine is null ? null : new Grab(_engine, new DiskSpace(), _journal),
             written);
+    }
+
+    /// <summary>
+    /// A run has ended: every tab closed and the browser taken down.
+    /// </summary>
+    /// <remarks>
+    /// A tab is kept per site and reused while a run lasts, so a gated site
+    /// meets its challenge once for the whole cycle instead of once per page.
+    /// The run's end is the only moment anything knows it is safe to let go,
+    /// and the owner asked on 11 September 2026 that it be let go then: ten
+    /// Chrome processes sitting on a finished server is two hundred megabytes
+    /// held for nothing.
+    /// </remarks>
+    public Task RunEndedAsync(CancellationToken ct)
+    {
+        return _tabs.CloseAllAsync(ct);
     }
 
     public async ValueTask DisposeAsync()

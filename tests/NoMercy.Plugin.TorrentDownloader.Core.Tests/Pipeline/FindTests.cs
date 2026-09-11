@@ -174,7 +174,7 @@ public class FindTests
 
         ReleaseCopy chosen = new(Name, "TorrentDownloads", 25, null, null, new(Detail), 9);
 
-        ReleaseCopy followed = await Finding(fetch).FollowAsync(chosen, CancellationToken.None);
+        ReleaseCopy followed = await Finding(fetch).ResolveAsync(chosen, CancellationToken.None);
 
         Assert.Equal("D8C536D10926761FCC69265308070B19DB6DA336", followed.InfoHash);
         Assert.StartsWith(
@@ -198,7 +198,7 @@ public class FindTests
         FakeFetch fetch = new();
         fetch.Answers(Page, Capture.Fixture("limetorrents-detail.html"));
 
-        ReleaseCopy followed = await Finding(fetch).FollowAsync(
+        ReleaseCopy followed = await Finding(fetch).ResolveAsync(
             new(Name, "LimeTorrents", 35, null, null, new(Page), 12),
             CancellationToken.None);
 
@@ -225,20 +225,37 @@ public class FindTests
             new(Detail),
             12);
 
-        Assert.Same(already, await Finding(fetch).FollowAsync(already, CancellationToken.None));
+        ReleaseCopy resolved = await Finding(fetch).ResolveAsync(already, CancellationToken.None);
+
+        // Nothing was asked, which is the whole of what this is about: the
+        // artefact was already in hand.
         Assert.Empty(fetch.Asked);
+        Assert.Equal(already.Magnet, resolved.Magnet);
+        Assert.Equal(already.InfoHash, resolved.InfoHash);
     }
 
     /// <remarks>
-    /// And a copy that carries a hash needs no page at all: a hash is
-    /// everything a magnet is made of. LimeTorrents publishes a hashed
-    /// <c>.torrent</c> link on every row and no magnet anywhere, so following
-    /// those pages would be one request per grab for a torrent already in hand.
+    /// <para>
+    /// <strong>A hash is a fallback, never a reason not to look.</strong> This
+    /// used to stop the moment a row carried one: a magnet was built out of the
+    /// hash — <c>magnet:?xt=urn:btih:…&amp;dn=…</c>, with no tracker in it — and
+    /// the page was never read. Every tracker this plugin could ever learn is on
+    /// that page, so nothing was learned from any indexer, ever, and every grab
+    /// went out with an empty tracker list.
+    /// </para>
+    /// <para>
+    /// The page is a real LimeTorrents one and the hash on the row is the hash
+    /// on the page, so the copy loses nothing by being read — and gains the
+    /// twenty trackers the site published with it.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task ACopyThatCarriesAHashIsNotFollowedEither()
+    public async Task ACopyThatCarriesAHashIsStillReadForItsTrackers()
     {
+        const string Page = "https://www.limetorrents.lol/Silo-S03E06-1080p-WEB-H264-CAKES-torrent-19877003.html";
+
         FakeFetch fetch = new();
+        fetch.Answers(Page, Capture.Fixture("limetorrents-detail.html"));
 
         ReleaseCopy hashed = new(
             Name,
@@ -246,16 +263,14 @@ public class FindTests
             35,
             "92D8A3F6864911EF292B4BE0DD5286406396D2B3",
             null,
-            new(Detail),
+            new(Page),
             12);
 
-        ReleaseCopy answered = await Finding(fetch).FollowAsync(hashed, CancellationToken.None);
+        ReleaseCopy answered = await Finding(fetch).ResolveAsync(hashed, CancellationToken.None);
 
-        Assert.Empty(fetch.Asked);
-        Assert.StartsWith(
-            "magnet:?xt=urn:btih:92D8A3F6864911EF292B4BE0DD5286406396D2B3",
-            answered.Magnet,
-            StringComparison.Ordinal);
+        Assert.Single(fetch.Asked);
+        Assert.Equal("92D8A3F6864911EF292B4BE0DD5286406396D2B3", answered.InfoHash);
+        Assert.NotEmpty(answered.Trackers);
     }
 
     /// <remarks>
@@ -425,7 +440,7 @@ public class FindTests
         Assert.Null(row.Magnet);
         Assert.Null(row.InfoHash);
 
-        ReleaseCopy followed = await find.FollowAsync(row, CancellationToken.None);
+        ReleaseCopy followed = await find.ResolveAsync(row, CancellationToken.None);
 
         Assert.StartsWith("magnet:?", followed.Magnet!, StringComparison.Ordinal);
         Assert.Equal("0123456789ABCDEF0123456789ABCDEF01234567", followed.InfoHash);
@@ -462,7 +477,7 @@ public class FindTests
 
         ReleaseCopy row = (await find.SearchAsync(Name, LibraryKind.Television, CancellationToken.None))[0];
 
-        Assert.Null((await find.FollowAsync(row, CancellationToken.None)).Magnet);
+        Assert.Null((await find.ResolveAsync(row, CancellationToken.None)).Magnet);
     }
 
     /// <remarks>
@@ -481,7 +496,7 @@ public class FindTests
 
         ReleaseCopy row = (await find.SearchAsync(Name, LibraryKind.Television, CancellationToken.None))[0];
 
-        Assert.Null((await find.FollowAsync(row, CancellationToken.None)).Magnet);
+        Assert.Null((await find.ResolveAsync(row, CancellationToken.None)).Magnet);
     }
 
     /// <remarks>
@@ -643,7 +658,7 @@ public class FindTests
 
         ReleaseCopy row = new(Name, site, 30, null, null, new(detail), 9);
 
-        ReleaseCopy followed = await Finding(fetch).FollowAsync(row, CancellationToken.None);
+        ReleaseCopy followed = await Finding(fetch).ResolveAsync(row, CancellationToken.None);
 
         Assert.Equal(hash, followed.InfoHash);
         Assert.StartsWith("magnet:?xt=urn:btih:", followed.Magnet!, StringComparison.OrdinalIgnoreCase);

@@ -31,6 +31,15 @@
       "note": "JSON with resultsCount and results[].release. Names, not torrents, and that is the point: only a full release name is fit to put to an indexer. A show with no scene releases honestly answers zero, which is not a broken reader."
     },
     {
+      "name": "PreDB.net",
+      "kind": "rss",
+      "url": "https://api.predb.net/feed/",
+      "searchUrl": "https://api.predb.net/feed/?q={query}",
+      "priority": 20,
+      "minimumIntervalSeconds": 15,
+      "note": "A name database with an RSS search, and the only PreDB mirror that answers a plain request: predb.me and predb.pw both put up a Cloudflare challenge, predb.org builds its page with JavaScript, and nfodb.net.ru did not answer at all. Measured 11 September 2026 — asked South.Park.S15E12.1080p it answers South.Park.S15E12.1080p.BluRay.x264-FilmHD, which is the release the owner wanted and which the season-wide question had been burying."
+    },
+    {
       "name": "SceneSource",
       "kind": "rss",
       "url": "https://www.scnsrc.me/feed/",
@@ -129,7 +138,9 @@
       "name": "Nyaa",
       "kind": "torrent-rss",
       "url": "https://nyaa.si/?page=rss&q={query}",
-      "libraries": [ "anime" ],
+      "libraries": [
+        "anime"
+      ],
       "priority": 50,
       "minimumIntervalSeconds": 15,
       "note": "An indexer in XML; every item links a real torrent. For anime it is often the only source that has the release, and it is asked with both the seasonal and the absolute form."

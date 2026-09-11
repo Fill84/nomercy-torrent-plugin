@@ -50,7 +50,8 @@ public class BrowserTests : IDisposable
         using Browser browser = new(
             new BrowserInstall(_folder, downloader, log),
             stages,
-            log);
+            log,
+            listeningWithin: TimeSpan.Zero);
 
         IBrowserProcess? started = await browser.StartAsync(CancellationToken.None);
 
@@ -176,7 +177,13 @@ public class BrowserTests : IDisposable
         BlockingBrowserDownloader downloader = new();
         CapturingLogger log = new();
 
-        using Browser browser = new(new BrowserInstall(_folder, downloader, log), stages, log);
+        // No real browser is started here, so nothing will ever listen on the
+        // debugging port and there is nothing to wait for.
+        using Browser browser = new(
+            new BrowserInstall(_folder, downloader, log),
+            stages,
+            log,
+            listeningWithin: TimeSpan.Zero);
 
         Task<IBrowserProcess?> first = browser.StartAsync(CancellationToken.None);
         Task<IBrowserProcess?> second = browser.StartAsync(CancellationToken.None);

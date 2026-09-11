@@ -106,6 +106,12 @@ public static class SourcesView
     /// something they have to work out. A source that is askable now says so,
     /// which is what tells a rate-limited site apart from a broken one.
     /// </remarks>
+    /// <remarks>
+    /// A clock time, never a distance from now: "in 3 min" is true for a minute
+    /// and then quietly wrong, and nothing pushes to correct it because the
+    /// passing of a minute changes nothing the plugin holds. The owner's
+    /// decision of 11 September 2026.
+    /// </remarks>
     private static string Next(SourceReport source, DateTimeOffset now)
     {
         if (source.NextAskable is not DateTimeOffset next || next <= now)
@@ -113,11 +119,7 @@ public static class SourcesView
             return "now";
         }
 
-        TimeSpan wait = next - now;
-
-        return wait.TotalMinutes >= 1
-            ? string.Create(CultureInfo.InvariantCulture, $"in {wait.TotalMinutes:0} min")
-            : string.Create(CultureInfo.InvariantCulture, $"in {wait.TotalSeconds:0} s");
+        return next.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture);
     }
 
     /// <summary>How long it took, at the resolution a person cares about.</summary>

@@ -28,12 +28,43 @@ public static class IdleBrowser
 {
     /// <summary>How long a browser with nothing open is kept before it is closed.</summary>
     /// <remarks>
-    /// Long enough that every source of one search cycle shares the browser
-    /// that the first of them started, and that a cycle a quarter of an hour
-    /// later still finds its clearance. Short enough that a server left alone
-    /// is not holding a browser at midnight for a search it made at nine.
+    /// <para>
+    /// <strong>None at all: the owner's decision of 11 September 2026.</strong>
+    /// They watched ten Chrome processes and two hundred megabytes sitting on
+    /// their server with nothing running, and asked for it to go the moment the
+    /// last page has been read.
+    /// </para>
+    /// <para>
+    /// <strong>It was a quarter of an hour, for a reason that turned out to be
+    /// the wrong one.</strong> On 26 August 2026 stopping it with its last tab
+    /// was measured breaking gated sources — TorrentBay cleared, 1337x and EZTV
+    /// answered "this address is behind a challenge and the browser could not
+    /// get past it" — and the browser being taken down was blamed. It was not
+    /// the browser. <c>CloudflareChallenge</c> counted
+    /// <c>challenge-platform</c> a marker, and Cloudflare leaves that script on
+    /// an ordinary page for the session that has just solved a challenge, so
+    /// the solver rejected the very page it had been waiting for. That is
+    /// fixed, and with it the reason for keeping a browser warm.
+    /// </para>
+    /// <para>
+    /// What is not lost by closing: the clearance cookie is read into the
+    /// clearance store the moment it is issued, and the browser's own profile
+    /// is a folder on disk that outlives the process. A cold start costs the
+    /// seconds it takes to start Chrome.
+    /// </para>
     /// </remarks>
-    public static readonly TimeSpan After = TimeSpan.FromMinutes(15);
+    public static readonly TimeSpan After = TimeSpan.Zero;
+
+    /// <summary>
+    /// How often the idle check runs anyway.
+    /// </summary>
+    /// <remarks>
+    /// The close is done by the last tab as it goes, so this is a backstop and
+    /// nothing more: a tab abandoned without being disposed would otherwise
+    /// leave a browser nobody closes. A timer cannot have a period of nothing,
+    /// and there is no case that needs it sooner than this.
+    /// </remarks>
+    public static readonly TimeSpan Backstop = TimeSpan.FromMinutes(1);
 
     /// <summary>
     /// Whether a browser should be closed now.

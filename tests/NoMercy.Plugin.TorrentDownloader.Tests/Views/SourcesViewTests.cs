@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.Json;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -57,9 +58,14 @@ public class SourcesViewTests
         Assert.Contains("HTTP 429 from the site", page, StringComparison.Ordinal);
         Assert.Contains("the reader found no rows in the page", page, StringComparison.Ordinal);
 
-        // And the one that is waiting says how long, while the one that is not
-        // says it can be asked now.
-        Assert.Contains("in 4 min", page, StringComparison.Ordinal);
+        // And the one that is waiting says when it can be asked, as a clock
+        // time rather than a distance from now — which goes stale the minute
+        // after it is drawn, with nothing to push a correction. The one that is
+        // not waiting says it can be asked now.
+        Assert.Contains(
+            Now.AddMinutes(4).ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+            page,
+            StringComparison.Ordinal);
         Assert.Contains("now", page, StringComparison.Ordinal);
     }
 

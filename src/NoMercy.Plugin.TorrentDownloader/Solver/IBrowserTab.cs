@@ -86,4 +86,15 @@ public interface IBrowserTabs : IAsyncDisposable
     /// </summary>
     /// <returns>Null when there is no browser to open a tab in.</returns>
     Task<IBrowserTab?> ForAsync(string host, CancellationToken ct);
+
+    /// <summary>
+    /// The run is over: every tab closed and the browser taken down.
+    /// </summary>
+    /// <remarks>
+    /// A tab is kept per site and reused while a run lasts, so a gated site
+    /// costs one challenge for the whole cycle rather than one per page. The
+    /// only thing that knows the run has ended is the thing that ran it, so it
+    /// says so here.
+    /// </remarks>
+    Task CloseAllAsync(CancellationToken ct);
 }

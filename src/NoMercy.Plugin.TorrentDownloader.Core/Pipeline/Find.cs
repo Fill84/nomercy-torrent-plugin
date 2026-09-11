@@ -35,10 +35,56 @@ public sealed class Find(
     /// The gate is the only thing that slows any of it down, and it does that
     /// per host.
     /// </remarks>
-    public async Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
+    public Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
         string releaseName,
         LibraryKind kind,
         CancellationToken ct)
+    {
+        return SearchAsync([releaseName], kind, ct);
+    }
+
+    /// <summary>
+    /// Every copy anybody is serving, each site asked the first question it can
+    /// answer.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A site that answers nothing was asked the wrong question, so it
+    /// is asked a simpler one.</strong> The owner's rule, 10 September 2026, and
+    /// it is measured: asked for <c>Silo.S03E06.1080p.WEB.H264-CAKES</c>, 1337x
+    /// answers nothing at all and The Pirate Bay answers one row; one rung down,
+    /// at <c>Silo S03E06 1080p</c>, 1337x answers four. It has the release the
+    /// whole time and does not answer to the name it is published under.
+    /// </para>
+    /// <para>
+    /// <strong>Each site climbs on its own, and that is the point.</strong> One
+    /// ladder for all of them stops the moment anybody answers — so a site that
+    /// needed one more rung is left with nothing, and the trackers it publishes
+    /// for that torrent never reach the magnet. Asking every indexer is worth
+    /// nothing if the ones that answer decide when the others stop being asked.
+    /// </para>
+    /// <para>
+    /// A site stops at the rung it answers on. Climbing past it would spend a
+    /// request on a question already answered and drag back the broader rows the
+    /// ladder exists to avoid — the owner watched TorrentGalaxy answer a
+    /// programme's own name with fifty rows of every season and every quality.
+    /// </para>
+    /// </remarks>
+    /// <param name="ladder">
+    /// The questions in order, narrowest first: the release names the sources
+    /// know, then what the plugin makes up for itself.
+    /// </param>
+    /// <param name="kind">Which library, so a site is only asked what it serves.</param>
+    /// <param name="ct">Cancellation.</param>
+    /// <param name="asked">
+    /// What each site has already answered this cycle, so no question is put
+    /// to the same site twice. Null where there is no cycle to remember for.
+    /// </param>
+    public async Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
+        IReadOnlyList<string> ladder,
+        LibraryKind kind,
+        CancellationToken ct,
+        AskedThisCycle? asked = null)
     {
         // Only the indexers worth asking about this library. An anime-only site
         // asked about a television show spends a paced request on a site that
@@ -47,101 +93,184 @@ public sealed class Find(
         SourceDefinition[] indexers = [.. catalogue.For(SourceRole.Indexer).Where(one => one.Serves(kind))];
 
         ReleaseCopy[][] answers = await Task.WhenAll(
-            indexers.Select(indexer => AskAsync(indexer, releaseName, ct)));
+            indexers.Select(indexer => ClimbAsync(indexer, ladder, asked, ct)));
 
         return Merge([.. answers.SelectMany(answer => answer)]);
     }
 
+    /// <summary>One site, asked down the ladder until it answers.</summary>
+    private async Task<ReleaseCopy[]> ClimbAsync(
+        SourceDefinition indexer,
+        IReadOnlyList<string> ladder,
+        AskedThisCycle? asked,
+        CancellationToken ct)
+    {
+        foreach (string rung in ladder)
+        {
+            ReleaseCopy[]? rows = asked?.Recall(indexer.Name, rung);
+
+            if (rows is null)
+            {
+                rows = await AskAsync(indexer, rung, ct);
+                asked?.Keep(indexer.Name, rung, rows);
+            }
+
+            if (rows.Length > 0)
+            {
+                return rows;
+            }
+        }
+
+        return [];
+    }
+
     /// <summary>
-    /// Follows a copy to its own page for the magnet the listing did not carry.
+    /// The torrent, with every tracker that every indexer holding it knows.
     /// </summary>
     /// <remarks>
-    /// <strong>C3.</strong> Called for the copy that was chosen and for no
-    /// other: following every row of every answer is a request per row per
-    /// episode, which is how a plugin gets itself banned from a site. A copy
-    /// that already has a magnet is answered as it is, without a request.
+    /// <para>
+    /// <strong>An indexer exists to hand over a torrent or a magnet, and the
+    /// trackers are on that artefact.</strong> Not one shipped indexer prints a
+    /// magnet on a listing — measured across every capture in
+    /// <c>tests/fixtures/</c> and again live on 10 September 2026 — so the row's
+    /// own page is the ordinary route to one, not an exception. Each indexer
+    /// that has this torrent is asked for its artefact once, and every tracker
+    /// of every one of them travels with the grab.
+    /// </para>
+    /// <para>
+    /// <strong>What this replaces, and why it cost every download its
+    /// trackers.</strong> This used to stop at the first thing that could be
+    /// turned into a magnet: a row carrying an info hash was answered with
+    /// <c>Magnets.For(hash, title)</c> — <c>magnet:?xt=urn:btih:…&amp;dn=…</c>,
+    /// with no tracker in it — and its page was never read. Measured over four
+    /// episodes and four sites, not one of a hundred and eighty merged torrents
+    /// reached the client with a single tracker, so a swarm could only ever be
+    /// found through the DHT. That is why torrents sat at "fetching metadata"
+    /// with no peer and no seed.
+    /// </para>
+    /// <para>
+    /// <strong>C3 still holds.</strong> This is one request per indexer for the
+    /// release being taken, and none per row: following every row of every
+    /// answer is a request per row per episode, which is how a plugin gets
+    /// itself banned. All of them at once, because the gate paces each host on
+    /// its own and one after another would cost the sum of the slowest sites on
+    /// every download.
+    /// </para>
+    /// <para>
+    /// A hash remains the fallback rather than a reason not to look. The Pirate
+    /// Bay publishes a hash and no page at all, and it keeps working exactly as
+    /// it did: where no route answers with an artefact, the magnet is still
+    /// built from the hash.
+    /// </para>
     /// </remarks>
-    public async Task<ReleaseCopy> FollowAsync(ReleaseCopy chosen, CancellationToken ct)
+    public async Task<ReleaseCopy> ResolveAsync(ReleaseCopy chosen, CancellationToken ct)
     {
-        if (chosen.Magnet is not null)
+        // A copy that never went through a merge — one built by a caller, or a
+        // single row — still has the one route it is.
+        CopyRoute[] routes = chosen.Routes.Count > 0
+            ? [.. chosen.Routes]
+            : [new CopyRoute(chosen.Source, chosen.DetailUrl, chosen.Magnet, chosen.Claim)];
+
+        string?[] answered = await Task.WhenAll(routes.Select(route => ArtefactAsync(chosen, route, ct)));
+
+        string[] found = [.. answered.OfType<string>()];
+
+        // Everything anybody named for this torrent, once each. What the copy
+        // already carried stays first: it was learned before this and the order
+        // a tracker was learned in is what TrackerBook keeps.
+        string[] trackers =
+        [
+            .. chosen.Trackers
+                .Concat(Magnets.TrackersOf(chosen.Magnet))
+                .Concat(found.SelectMany(Magnets.TrackersOf))
+                .Distinct(StringComparer.OrdinalIgnoreCase),
+        ];
+
+        string? magnet = chosen.Magnet ?? found.FirstOrDefault();
+        string? hash = chosen.InfoHash ?? found.Select(Magnets.HashOf).OfType<string>().FirstOrDefault();
+
+        if (magnet is null && hash is not null)
         {
-            return chosen;
+            magnet = Magnets.For(hash, chosen.Title);
         }
 
-        if (chosen.InfoHash is string known)
+        return chosen with
         {
-            // A hash is all a magnet needs, so a copy that has one is already
-            // reachable and its page has nothing to add. LimeTorrents publishes
-            // a hashed .torrent link on every row and nothing else, and
-            // following those pages would be a request per grab for a torrent
-            // already in hand.
-            //
-            // Asked before the page address rather than after it. The Pirate
-            // Bay's own endpoint answers with a hash and no page at all, and
-            // while the two were the other way round every row it gave came
-            // back unreachable: the highest-priority indexer in the catalogue,
-            // with the most honest seeder counts of any of them, could not
-            // produce a single download.
-            return chosen with { Magnet = Magnets.For(known, chosen.Title) };
+            Magnet = magnet,
+            InfoHash = hash,
+            Trackers = trackers,
+        };
+    }
+
+    /// <summary>
+    /// The magnet one indexer holds for this torrent, or null where it holds
+    /// none.
+    /// </summary>
+    /// <remarks>
+    /// A failure here is one site's failure and never the torrent's: the other
+    /// routes are still being asked, and what they answer is enough.
+    /// </remarks>
+    private async Task<string?> ArtefactAsync(ReleaseCopy chosen, CopyRoute route, CancellationToken ct)
+    {
+        if (route.Magnet is not null)
+        {
+            // The listing carried it, so there is nothing to fetch. No shipped
+            // indexer does this today, but the owner's own might.
+            return route.Magnet;
         }
 
-        if (chosen.Claim is SignedClaim claim && chosen.DetailUrl is not null)
+        if (route.Claim is SignedClaim claim && route.DetailUrl is not null)
         {
             // A site that prints no magnet and no hash anywhere, on the listing
             // or on the row's own page, and answers a signed request instead.
-            // Asked before the page is fetched, because on this site the page
-            // has nothing on it either and fetching it is a request spent for
+            // Asked instead of the page, because on this site the page has
+            // nothing on it either and fetching it is a request spent for
             // certain on nothing.
-            return await AskForMagnetAsync(chosen, claim, ct);
+            return await AskForMagnetAsync(chosen, route, claim, ct);
         }
 
-        if (chosen.DetailUrl is null)
+        if (route.DetailUrl is null)
         {
-            // No magnet, no hash and no page to look on. Nothing more can be
-            // done for it here.
-            return chosen;
+            return null;
         }
+
+        string subject = $"{chosen.Title} · {route.Source}";
 
         SourceDefinition? indexer = catalogue.Enabled
-            .FirstOrDefault(source => string.Equals(source.Name, chosen.Source, StringComparison.OrdinalIgnoreCase));
+            .FirstOrDefault(source => string.Equals(source.Name, route.Source, StringComparison.OrdinalIgnoreCase));
 
-        journal.Started(ActivityStage.Find, $"{chosen.Title} · {chosen.Source}", "following the row's own page");
+        journal.Started(ActivityStage.Find, subject, "reading the row's own page for the torrent");
 
         try
         {
-            FetchResult result = await fetch.GetAsync(chosen.DetailUrl, indexer?.Gated ?? false, ct);
+            FetchResult result = await fetch.GetAsync(route.DetailUrl, indexer?.Gated ?? false, ct);
 
             if (result.Failure is FetchFailure failure)
             {
-                journal.Failed(ActivityStage.Find, $"{chosen.Title} · {chosen.Source}", failure.ToString());
+                journal.Failed(ActivityStage.Find, subject, failure.ToString());
 
-                return chosen;
+                return null;
             }
 
-            if (DetailPage.Read(result.Body!, chosen.Title) is not (string magnet, string hash))
+            if (DetailPage.Read(result.Body!, chosen.Title) is not (string magnet, string _))
             {
-                journal.Failed(
-                    ActivityStage.Find,
-                    $"{chosen.Title} · {chosen.Source}",
-                    "Its own page names no torrent either.");
+                journal.Failed(ActivityStage.Find, subject, "Its own page names no torrent either.");
 
-                return chosen;
+                return null;
             }
 
-            journal.Finished(ActivityStage.Find, $"{chosen.Title} · {chosen.Source}", "magnet found");
+            journal.Finished(
+                ActivityStage.Find,
+                subject,
+                $"{Magnets.TrackersOf(magnet).Count} trackers");
 
-            return chosen with
-            {
-                Magnet = magnet,
-                InfoHash = chosen.InfoHash ?? hash,
-                Trackers = [.. chosen.Trackers.Union(Magnets.TrackersOf(magnet), StringComparer.OrdinalIgnoreCase)],
-            };
+            return magnet;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            journal.Failed(ActivityStage.Find, $"{chosen.Title} · {chosen.Source}", exception.Message);
+            journal.Failed(ActivityStage.Find, subject, exception.Message);
 
-            return chosen;
+            return null;
         }
     }
 
@@ -155,21 +284,22 @@ public sealed class Find(
     /// ask, and is refused — so where there is no browser this says so and
     /// changes nothing, which leaves the caller free to try the next copy.
     /// </remarks>
-    private async Task<ReleaseCopy> AskForMagnetAsync(
+    private async Task<string?> AskForMagnetAsync(
         ReleaseCopy chosen,
+        CopyRoute route,
         SignedClaim claim,
         CancellationToken ct)
     {
-        string subject = $"{chosen.Title} · {chosen.Source}";
+        string subject = $"{chosen.Title} · {route.Source}";
 
         if (post is null)
         {
-            journal.Failed(ActivityStage.Find, subject, $"{chosen.Source} names its torrents only to a browser.");
+            journal.Failed(ActivityStage.Find, subject, $"{route.Source} names its torrents only to a browser.");
 
-            return chosen;
+            return null;
         }
 
-        Uri endpoint = SignedMagnet.EndpointOn(chosen.DetailUrl!);
+        Uri endpoint = SignedMagnet.EndpointOn(route.DetailUrl!);
 
         journal.Started(ActivityStage.Find, subject, "asking the site for the torrent");
 
@@ -182,25 +312,20 @@ public sealed class Find(
 
             if (SignedMagnet.MagnetIn(answered) is not string magnet)
             {
-                journal.Failed(ActivityStage.Find, subject, $"{chosen.Source} would not name the torrent.");
+                journal.Failed(ActivityStage.Find, subject, $"{route.Source} would not name the torrent.");
 
-                return chosen;
+                return null;
             }
 
             journal.Finished(ActivityStage.Find, subject, "magnet answered");
 
-            return chosen with
-            {
-                Magnet = magnet,
-                InfoHash = chosen.InfoHash ?? Magnets.HashOf(magnet),
-                Trackers = [.. chosen.Trackers.Union(Magnets.TrackersOf(magnet), StringComparer.OrdinalIgnoreCase)],
-            };
+            return magnet;
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             journal.Failed(ActivityStage.Find, subject, exception.Message);
 
-            return chosen;
+            return null;
         }
     }
 
@@ -331,6 +456,16 @@ public sealed class Find(
                     .SelectMany(copy => copy.Trackers.Union(Magnets.TrackersOf(copy.Magnet), StringComparer.OrdinalIgnoreCase))
                     .Distinct(StringComparer.OrdinalIgnoreCase),
             ],
+            // One per indexer, and every one of them kept. This is the whole
+            // difference between a magnet with every site's trackers on it and
+            // the bare one built from a hash that used to go out.
+            Routes =
+            [
+                .. rows
+                    .SelectMany(copy => copy.Routes)
+                    .GroupBy(route => route.Source, StringComparer.OrdinalIgnoreCase)
+                    .Select(perSite => perSite.First()),
+            ],
             Magnet = best.Magnet ?? rows.Select(copy => copy.Magnet).FirstOrDefault(magnet => magnet is not null),
             InfoHash = best.InfoHash ?? rows.Select(copy => copy.InfoHash).FirstOrDefault(hash => hash is not null),
             DetailUrl = best.DetailUrl ?? rows.Select(copy => copy.DetailUrl).FirstOrDefault(url => url is not null),
@@ -439,6 +574,11 @@ public sealed class Find(
             Magnets.TrackersOf(row.Magnet))
         {
             Claim = row.Claim,
+
+            // Its own route, before any merging. What survives a merge is the
+            // union of these, so every site that has the torrent can be asked
+            // for the artefact its trackers are on.
+            Routes = [new(indexer.Name, row.DetailUrl, row.Magnet, row.Claim)],
         });
     }
 

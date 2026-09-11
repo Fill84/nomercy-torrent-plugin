@@ -1,3 +1,4 @@
+using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugins.Abstractions;
 
@@ -42,8 +43,8 @@ public static class DashboardView
                 "status-state",
                 cycle.Running ? "Running" : "Idle",
                 cycle.Running ? PluginBadgeVariant.Info : PluginBadgeVariant.Neutral),
-            Ui.Text("status-last", LastRan(cycle.LastRanAt, now)),
-            Ui.Text("status-next", NextDue(cycle.NextDueAt, now)),
+            Ui.Text("status-last", LastRan(cycle.LastRanAt)),
+            Ui.Text("status-next", NextDue(cycle.NextDueAt)),
 
             // docs/08-ui.md § Actions puts RunNow on the Dashboard as well as
             // on Settings. The dashboard is where an owner watches, so it is
@@ -87,41 +88,37 @@ public static class DashboardView
             "Nothing in flight.");
     }
 
-    private static string LastRan(DateTimeOffset? lastRanAt, DateTimeOffset now)
+    private static string LastRan(DateTimeOffset? lastRanAt)
     {
-        return lastRanAt is null
-            ? "never run"
-            : $"last ran {Ago(now - lastRanAt.Value)} ago";
+        return lastRanAt is null ? "never run" : $"last ran {Clock(lastRanAt.Value)}";
     }
 
-    private static string NextDue(DateTimeOffset? nextDueAt, DateTimeOffset now)
+    private static string NextDue(DateTimeOffset? nextDueAt)
     {
         // Not "not scheduled": the cadences are registered with the server from
         // the moment the plugin loads, so saying they are not would be false.
         // What is missing is the time, and that is what it says.
-        return nextDueAt is null
-            ? "next run time not known"
-            : $"next due in {Ago(nextDueAt.Value - now)}";
+        return nextDueAt is null ? "next run time not known" : $"next due {Clock(nextDueAt.Value)}";
     }
 
     /// <summary>
-    /// A span in the largest unit that still says something true.
+    /// A moment, said as a clock time rather than as a distance from now.
     /// </summary>
     /// <remarks>
-    /// Rounded down, never up: "1 h" for anything under two hours is a
-    /// statement the owner can check against the clock, where "in 0 min" for
-    /// something forty seconds away reads as overdue.
+    /// <para>
+    /// <strong>The owner's decision of 11 September 2026.</strong> "Last ran 4
+    /// minutes ago" is true for one minute and then quietly wrong, and nothing
+    /// can push to correct it: the plugin pushes when something it holds
+    /// changes, and the passing of a minute changes nothing it holds. A page
+    /// left open sat on "4 minutes ago" for an hour.
+    /// </para>
+    /// <para>
+    /// A clock time never goes stale. It is also what the owner can check
+    /// against the server log, which is the other place they look.
+    /// </para>
     /// </remarks>
-    private static string Ago(TimeSpan span)
+    private static string Clock(DateTimeOffset moment)
     {
-        if (span < TimeSpan.Zero)
-        {
-            span = TimeSpan.Zero;
-        }
-
-        return span.TotalMinutes < 1 ? $"{(int)span.TotalSeconds} s"
-            : span.TotalHours < 1 ? $"{(int)span.TotalMinutes} min"
-            : span.TotalDays < 1 ? $"{(int)span.TotalHours} h"
-            : $"{(int)span.TotalDays} d";
+        return moment.ToLocalTime().ToString("HH:mm", CultureInfo.InvariantCulture);
     }
 }

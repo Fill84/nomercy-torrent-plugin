@@ -1,3 +1,4 @@
+using NoMercy.Plugin.TorrentDownloader.Solver;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Solver;
@@ -42,8 +43,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Solver;
 /// </remarks>
 public class TheBrowserOutlivesItsTabsTests
 {
+    /// <remarks>
+    /// The owner's decision of 11 September 2026, after watching ten Chrome
+    /// processes and two hundred megabytes sit on their server with nothing
+    /// running: the browser goes with the last page that was read.
+    /// </remarks>
     [Fact]
-    public void NothingStopsTheBrowserWhenATabCloses()
+    public void TheBrowserIsStoppedByItsLastTab()
     {
         string tabs = File.ReadAllText(Path.Combine(
             RepositoryRoot(),
@@ -52,22 +58,40 @@ public class TheBrowserOutlivesItsTabsTests
             "Solver",
             "PuppeteerTabs.cs"));
 
-        // What a closing tab does, from the method it calls to the end of it.
-        // Everything the browser is worth keeping for is lost the moment this
-        // says Stop: the clearance a gated source handed to that session.
         int from = tabs.IndexOf("private void Closed()", StringComparison.Ordinal);
 
         Assert.True(from > 0, "the tab no longer says when it closed");
 
-        string closing = tabs[from..tabs.IndexOf("/// <summary>", from, StringComparison.Ordinal)];
+        string closing = tabs[from..tabs.IndexOf("private void CloseIfIdle", from, StringComparison.Ordinal)];
 
-        Assert.DoesNotContain("Stop(", closing, StringComparison.Ordinal);
+        // The last tab out asks for the close. Not the tab before it: a browser
+        // taken down while another tab is reading a page is a solve that fails
+        // on a disposed handle.
+        Assert.Contains("if (open == 0)", closing, StringComparison.Ordinal);
+        Assert.Contains("CloseIfIdle", closing, StringComparison.Ordinal);
 
-        // And the browser is stopped in exactly one place in this file: the
-        // idle check. Two would mean one of them was added without this being
-        // thought about again.
-        Assert.Equal(1, tabs.Split("_browser.Stop()").Length - 1);
+        // Two places, and only two: the last tab out, and the backstop for a run
+        // that ended with something still open. A third would be somebody
+        // stopping it for a reason nobody wrote down.
+        Assert.Equal(2, tabs.Split("_browser.Stop()").Length - 1);
     }
+
+    /// <remarks>
+    /// Nothing is kept waiting. It was a quarter of an hour, to keep a
+    /// clearance warm for the next gated source — and that turned out to be the
+    /// wrong cure for the wrong disease: the gated sources were failing because
+    /// <c>CloudflareChallenge</c> read its own detections script as a
+    /// challenge, not because the browser had gone.
+    /// </remarks>
+    [Fact]
+    public void NothingIsKeptWaitingOnceTheLastTabHasGone()
+    {
+        Assert.Equal(TimeSpan.Zero, IdleBrowser.After);
+        Assert.True(IdleBrowser.Due(0, Nine, Nine, IdleBrowser.After));
+        Assert.False(IdleBrowser.Due(1, Nine, Nine, IdleBrowser.After));
+    }
+
+    private static readonly DateTimeOffset Nine = new(2026, 8, 31, 21, 0, 0, TimeSpan.Zero);
 
     /// <remarks>
     /// And it is stopped in two places in the whole plugin: the browser itself,
@@ -89,8 +113,8 @@ public class TheBrowserOutlivesItsTabsTests
                 .Where(file => !file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
                 .Where(file => Path.GetFileName(file) != "Browser.cs")
 
-                // The idle close, which is a quarter of an hour with nothing
-                // open and never a tab closing. Its own test above says so.
+                // The close the last tab asks for, and the backstop timer
+                // beside it. Its own test above says so.
                 .Where(file => Path.GetFileName(file) != "PuppeteerTabs.cs")
                 .Where(file => File.ReadAllText(file).Contains(".Stop();", StringComparison.Ordinal)),
         ];

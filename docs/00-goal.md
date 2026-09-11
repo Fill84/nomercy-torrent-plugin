@@ -44,8 +44,10 @@ guess.
 
 ## What the owner configures
 
-The fifteen public sources ship with the plugin and are not configurable. On top of them the
-owner may add their own indexers and their own private trackers, because those cannot be shipped.
+The five public name sources and eleven public indexers ship with the plugin and are not
+configurable.
+On top of them the owner may add their own indexers and their own private trackers, because those
+cannot be shipped.
 
 They also configure: the two folders, four cron expressions, the quality profile, and the torrent
 client's limits. Everything has a working default.

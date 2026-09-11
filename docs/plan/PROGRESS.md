@@ -4,10 +4,16 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**The pages are live again and the fix is not deployed.** `S11-38` is on `master` and in no
-build the owner runs: 0.4.0 and 0.4.1 both drop every push a download makes, which is the "nothing
-updates without a refresh" the owner reported. It wants a version, a tag and a deploy, and all
-three are the owner's to give.
+**`S11-39` is committed and deployed to `beast-unit`, and waits on one live run.** The audit of
+10 and 11 September 2026 — `docs/plan/AUDIT-2026-09-10.md` — and everything the owner asked for
+during it. The owner's instruction: once a live run on their server is green, push and release
+`v0.5.0`. Until then nothing is pushed. What that run has to show, and nothing less: the warm-up
+on the dashboard and Chrome gone after it; a source asked about an episode with the owner's
+quality and answering with a release name; that name put whole to every indexer; the merge
+carrying every tracker; and a download starting the moment its episode is decided.
+
+Not audited yet, and the owner asked for the whole chain: reading the library and working out
+what is missing, the torrent client itself, staging, and dispatch.
 
 **Current: nothing. Sprint 11 is finished.** Every slice is ticked, and `S11-05` — the end-to-end
 run watched on the owner's own server — was a forty-five gigabyte pack for a show the owner did not
@@ -292,10 +298,46 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-37` A peer that dials in while the session opens holds nothing up
 - [x] `S11-05` One run, watched — the owner's
 - [x] `S11-38` A push that was asked for is sent
+- [x] `S11-39` The audit: sources, indexers, the merge, Chrome and the dashboard, measured
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S11-39` The audit of 10 and 11 September: every finding measured, every rule the owner's.**
+  The owner asked for the whole chain walked and measured rather than read; the findings and their
+  measurements are in `docs/plan/AUDIT-2026-09-10.md`. What landed, in the order it was found:
+  - **1337x and EZTV answered nothing for at least ten days.** `CloudflareChallenge` counted
+    `challenge-platform` a marker, and Cloudflare leaves `/cdn-cgi/challenge-platform/scripts/jsd/main.js`
+    on an ordinary page for a session that has just solved a challenge — so the solver rejected the
+    page it had been waiting for. A cold-profile health run went from 12 of 14 to 14 of 14. Pinned by
+    two real captures of 1337x.
+  - **Not one tracker reached the client.** No shipped listing publishes a magnet, and `Find` built a
+    bare magnet from the hash without reading the row's page. A merged torrent now keeps every
+    indexer's route to it, every route is asked once for its magnet, and the trackers are unioned —
+    38 live where there were 0. Through `TrackerBook` on the way out, so nothing unannounceable and
+    nothing of the owner's own private trackers travels with a grab.
+  - **The sources were asked the wrong question.** Per season: srrDB asked `south-park-s15` answers
+    286 releases and returns 45, none of the episode. Per episode with the owner's quality:
+    `south-park-s15e12-1080p` answers four, one of them `South.Park.S15E12.1080p.BluRay.x264-FilmHD`.
+    Measured live for Silo S03E06 and South Park S15E12. PreDB.net added as a source; EZTV moved to
+    the indexers, and the 3,316 file names it had put into the owner's pool deleted on the server.
+  - **Each indexer climbs its own ladder**: the release names, then the episode with and without the
+    quality, then the season with and without; a site stops where it answers. `Silo` on its own is
+    never asked. Measured: 1337x answers nothing to a full release name and four rows one rung down.
+  - **Chrome runs only while a challenge needs it.** Every challenge is cleared together when Run is
+    pressed, the cookies kept, the browser closed; a tab closes with its solve; a challenge mid-run
+    starts the browser, is solved, and it closes again. `Browser.StartAsync` never waited for the
+    debugging port, which only showed once the browser started closing: the second job of every run
+    failed on `connection refused`. Measured: 0, 23 while solving five sites together, 0.
+  - **A decided episode goes to the client at once.** The sources were asked about the whole queue
+    before any episode was searched; now one episode at a time, so a download starts before the next
+    episode is asked about.
+  - **The Run button was enabled on a run just started**: the guard was claimed inside the background
+    task, after the endpoint had answered and after the push that redraws every page. Claimed by the
+    caller now. Clock times replace distances on the Dashboard and Sources pages, and the warm-up is
+    on the dashboard as its own stage, `Clearance`.
+  Tests: every new one seen red before green. 1,155 green, build and format clean.
 
 - **`S11-38` A push that was asked for is sent, and that is what the pages had stopped getting.**
   The owner reported that nothing moves without a refresh by hand: a torrent drawn as waiting for
@@ -1604,6 +1646,18 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **The owner's rules of 10 and 11 September 2026, all of them theirs.** The sources are PreDB,
+  srrDB and SceneSource; EZTV is an indexer. A source is asked about the episode with the owner's
+  resolution, then without. An indexer is asked the release names, then the episode with and without
+  the resolution, then the season with and without, and each indexer climbs on its own. The codec is
+  never in a question — it is written too many ways — and is judged on the rows. An indexer exists
+  to hand over a torrent or a magnet; every tracker comes off that, and everything with one info
+  hash is one torrent with all of them. Chrome is for solving a challenge and runs only while one
+  needs it. A decided episode is handed to the client at once. Pages show clock times, never
+  distances from now. And the dashboard shows literally what the plugin is doing.
+- **Two info hashes for one release are both started and the first to finish is kept.** The owner's
+  decision, not built yet: a round of its own once the rest is standing, because it reaches the
+  client, the transfers tick, staging and the disk accounting.
 - **Whether anything changed is known where `Changed()` is called, and nowhere else.**
   `LiveSnapshot.Push` may not re-derive it. The journal and the cycle are a part of what the owner
   is looking at, never the whole of it — a byte count, a peer, a seed, a choke all move the page

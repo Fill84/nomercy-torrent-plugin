@@ -25,7 +25,7 @@ public class GrabTests
         FakeEngine engine = new();
 
         Grabbed grabbed = await new Grab(engine, Room(Terabyte), new ActivityJournal())
-            .TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None);
+            .TakeAsync(Copy(), "D:\\incomplete", [], [], CancellationToken.None);
 
         Assert.Equal(GrabResult.Taken, grabbed.Result);
         Assert.Equal("92D8A3F6864911EF292B4BE0DD5286406396D2B3", grabbed.InfoHash);
@@ -36,6 +36,56 @@ public class GrabTests
         // it, so carrying it again handed the engine a number it had no duty to
         // use and never did.
         Assert.Equal(GrabResult.Taken, grabbed.Result);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>What travels with a grab is what may be announced to, and
+    /// nothing else.</strong> A grab used to carry no tracker at all, because
+    /// no listing publishes a magnet and the row's own page was never read — so
+    /// whatever a page happened to call a tracker never reached the client and
+    /// nobody had to think about it. Now every indexer holding the torrent is
+    /// read for its magnet, and what those pages name is not always an address:
+    /// one magnet read on 10 September 2026 carried the literal word
+    /// <c>DHT</c> in a tracker field.
+    /// </para>
+    /// <para>
+    /// The half that is not tidiness: **a private tracker's announce address is
+    /// the owner's passkey**, and this list goes out with every grab. One
+    /// learned off a public page would hand their credentials to every public
+    /// swarm they download from. Their tracker belongs to the torrents it
+    /// issued and to nothing else.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task NothingUnannounceableAndNothingOfTheOwnersOwnTravelsWithAGrab()
+    {
+        FakeEngine engine = new();
+
+        await new Grab(engine, Room(Terabyte), new ActivityJournal()).TakeAsync(
+            Copy() with
+            {
+                Trackers =
+                [
+                    "udp://good.example:6969/announce",
+
+                    // Not an address at all.
+                    "DHT",
+
+                    // The owner's own, as a public page might print it.
+                    "https://private.example/announce",
+
+                    // A passkey, in the two shapes one is written in.
+                    "udp://public.example:80/announce?passkey=abc123",
+                    "https://someone:secret@public.example/announce",
+                ],
+            },
+            @"D:\incomplete",
+            [],
+            ["private.example"],
+            CancellationToken.None);
+
+        Assert.Equal(["udp://good.example:6969/announce"], engine.Asked!.Trackers);
     }
 
     /// <remarks>
@@ -53,6 +103,7 @@ public class GrabTests
             Copy() with { Trackers = ["udp://site.example:80", "udp://both.example:80"] },
             "D:\\incomplete",
             ["udp://owner.example:6969", "UDP://BOTH.EXAMPLE:80"],
+            [],
             CancellationToken.None);
 
         Assert.Equal(
@@ -71,7 +122,7 @@ public class GrabTests
         FakeEngine engine = new();
 
         Grabbed refused = await new Grab(engine, Room(1_000_000_000), new ActivityJournal())
-            .TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None);
+            .TakeAsync(Copy(), "D:\\incomplete", [], [], CancellationToken.None);
 
         Assert.Equal(GrabResult.NoRoom, refused.Result);
 
@@ -114,13 +165,13 @@ public class GrabTests
 
         Assert.Equal(
             GrabResult.Taken,
-            (await grab.TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None)).Result);
+            (await grab.TakeAsync(Copy(), "D:\\incomplete", [], [], CancellationToken.None)).Result);
 
         Assert.Equal(
             GrabResult.Taken,
-            (await grab.TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None)).Result);
+            (await grab.TakeAsync(Copy(), "D:\\incomplete", [], [], CancellationToken.None)).Result);
 
-        Grabbed third = await grab.TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None);
+        Grabbed third = await grab.TakeAsync(Copy(), "D:\\incomplete", [], [], CancellationToken.None);
 
         Assert.Equal(GrabResult.NoRoom, third.Result);
 
@@ -135,7 +186,7 @@ public class GrabTests
         FakeEngine engine = new();
 
         Grabbed grabbed = await new Grab(engine, Room(null), new ActivityJournal())
-            .TakeAsync(Copy(), "\\\\share\\incomplete", [], CancellationToken.None);
+            .TakeAsync(Copy(), "\\\\share\\incomplete", [], [], CancellationToken.None);
 
         Assert.Equal(GrabResult.Taken, grabbed.Result);
 
@@ -144,7 +195,7 @@ public class GrabTests
         Assert.Equal(
             GrabResult.Taken,
             (await new Grab(engine, Room(10), new ActivityJournal())
-                .TakeAsync(Copy() with { SizeBytes = null }, "D:\\incomplete", [], CancellationToken.None)).Result);
+                .TakeAsync(Copy() with { SizeBytes = null }, "D:\\incomplete", [], [], CancellationToken.None)).Result);
     }
 
     /// <remarks>
@@ -160,7 +211,7 @@ public class GrabTests
         ActivityJournal journal = new();
 
         Grabbed refused = await new Grab(new RefusingEngine(), Room(Terabyte), journal)
-            .TakeAsync(Copy(), "D:\\incomplete", [], CancellationToken.None);
+            .TakeAsync(Copy(), "D:\\incomplete", [], [], CancellationToken.None);
 
         Assert.Equal(GrabResult.Refused, refused.Result);
 
@@ -180,7 +231,7 @@ public class GrabTests
         Assert.Equal(
             GrabResult.NoRoom,
             (await new Grab(new FakeEngine(), Room(1), journal)
-                .TakeAsync(Copy(), Incomplete, [], CancellationToken.None)).Result);
+                .TakeAsync(Copy(), Incomplete, [], [], CancellationToken.None)).Result);
     }
 
     /// <remarks>
@@ -197,6 +248,7 @@ public class GrabTests
             Copy() with { Magnet = null },
             "D:\\incomplete",
             [],
+            [],
             CancellationToken.None);
 
         Assert.StartsWith("magnet:?xt=urn:btih:", engine.Asked!.Source, StringComparison.Ordinal);
@@ -204,6 +256,7 @@ public class GrabTests
         Grabbed nothing = await new Grab(engine, Room(Terabyte), new ActivityJournal()).TakeAsync(
             Copy() with { Magnet = null, InfoHash = null },
             "D:\\incomplete",
+            [],
             [],
             CancellationToken.None);
 

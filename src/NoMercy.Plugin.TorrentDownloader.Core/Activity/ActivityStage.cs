@@ -10,6 +10,17 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Activity;
 /// </remarks>
 public enum ActivityStage
 {
+    /// <summary>
+    /// Clearing the challenges the run would otherwise meet, before it starts.
+    /// </summary>
+    /// <remarks>
+    /// Not part of an episode's journey, and first all the same: it is what the
+    /// plugin is doing while the owner is looking at the dashboard wondering
+    /// whether anything happened when they pressed Run. Their words on
+    /// 11 September 2026: show literally what the plugin is doing.
+    /// </remarks>
+    Clearance,
+
     /// <summary>Reading every feed into the name pool.</summary>
     Harvest,
 

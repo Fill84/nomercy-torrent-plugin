@@ -129,6 +129,7 @@ public class ActivityJournalTests
     {
         Assert.Equal(
             [
+                ActivityStage.Clearance,
                 ActivityStage.Harvest,
                 ActivityStage.Names,
                 ActivityStage.Find,

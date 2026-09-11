@@ -1,6 +1,35 @@
 namespace NoMercy.Plugin.TorrentDownloader.Core.Domain;
 
 /// <summary>
+/// One indexer's way to the torrent, kept through a merge.
+/// </summary>
+/// <remarks>
+/// <para>
+/// An indexer exists to hand over a torrent or a magnet, and every tracker
+/// comes off that artefact rather than off the listing it was found on — not
+/// one shipped indexer publishes a magnet on a listing, which is measured
+/// across every capture in <c>tests/fixtures/</c>. So the same torrent on five
+/// sites is five artefacts to be had, and the trackers of all five belong on
+/// the one magnet that is handed to the client.
+/// </para>
+/// <para>
+/// Merging used to keep only the best-informed row and drop the rest, and with
+/// them went every other site's route to the same torrent. What reached the
+/// client was a magnet built from the hash alone, with no tracker in it at all,
+/// and the swarm could then only be found through the DHT.
+/// </para>
+/// </remarks>
+/// <param name="Source">Which indexer this route belongs to, so each is asked once.</param>
+/// <param name="DetailUrl">The row's own page, where the magnet usually is.</param>
+/// <param name="Magnet">The magnet, where the listing itself carried one.</param>
+/// <param name="Claim">What the site must be asked, where it publishes no address at all.</param>
+public sealed record CopyRoute(
+    string Source,
+    Uri? DetailUrl = null,
+    string? Magnet = null,
+    Sources.Readers.SignedClaim? Claim = null);
+
+/// <summary>
 /// One copy of one release, on one site.
 /// </summary>
 /// <remarks>
@@ -50,4 +79,10 @@ public sealed record ReleaseCopy(
 
     /// <summary>Never null: a copy naming no tracker names none.</summary>
     public IReadOnlyList<string> Trackers { get; init; } = Trackers ?? [];
+
+    /// <summary>
+    /// Every indexer's way to this torrent, one per indexer, kept through the
+    /// merge so all of them can be asked for the artefact their trackers are on.
+    /// </summary>
+    public IReadOnlyList<CopyRoute> Routes { get; init; } = [];
 }

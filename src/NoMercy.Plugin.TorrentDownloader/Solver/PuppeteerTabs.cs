@@ -33,8 +33,10 @@ public sealed class PuppeteerTabs : IBrowserTabs
     private readonly TimeProvider _time;
     private readonly SemaphoreSlim _connecting = new(1, 1);
     private readonly ITimer _watching;
+    private readonly TimeSpan _idle;
 
     private IBrowser? _connected;
+
 
     /// <summary>How many tabs are open, and when the last one closed.</summary>
     /// <remarks>
@@ -69,11 +71,13 @@ public sealed class PuppeteerTabs : IBrowserTabs
         // which is the whole of the case being answered: a server that stopped
         // searching at nine held ten Chrome processes at midnight because there
         // was nobody left to notice.
+        _idle = idle;
+
         _watching = _time.CreateTimer(
             _ => CloseIfIdle(idle),
             null,
-            idle,
-            idle);
+            IdleBrowser.Backstop,
+            IdleBrowser.Backstop);
     }
 
     public async Task<IBrowserTab?> ForAsync(string host, CancellationToken ct)
@@ -116,6 +120,36 @@ public sealed class PuppeteerTabs : IBrowserTabs
         }
     }
 
+    /// <summary>
+    /// The run is over: every tab closed and the browser taken down.
+    /// </summary>
+    /// <remarks>
+    /// The one thing that knows a run has ended is the thing that ran it, so it
+    /// says so. Until then a tab is kept per site and reused, which is what
+    /// makes a gated site cost one challenge for the whole cycle instead of one
+    /// per page.
+    /// </remarks>
+    public async Task CloseAllAsync(CancellationToken ct)
+    {
+        await _connecting.WaitAsync(ct);
+
+        try
+        {
+            // Nothing is held open to close: a tab is closed by whoever read
+            // its page, and the browser goes with the last of them. This is the
+            // backstop for a run that ended with something still out.
+            _connected?.Disconnect();
+            _connected?.Dispose();
+            _connected = null;
+        }
+        finally
+        {
+            _connecting.Release();
+        }
+
+        _browser.Stop();
+    }
+
     /// <remarks>
     /// No tabs are closed here. A tab belongs to the task that opened it and is
     /// closed by it; one still open while this runs is a solve still in flight,
@@ -146,10 +180,24 @@ public sealed class PuppeteerTabs : IBrowserTabs
     }
 
     /// <summary>A tab has been closed by whoever opened it.</summary>
+    /// <remarks>
+    /// And the browser goes with the last of them. The owner's decision of
+    /// 11 September 2026: ten Chrome processes sitting on a server that has
+    /// finished searching is two hundred megabytes held for nothing.
+    ///
+    /// On a thread of its own, never the disposing caller's: stopping the
+    /// browser ends a process and tears down a hidden desktop, and a tab's
+    /// <c>DisposeAsync</c> is not the place to wait for that.
+    /// </remarks>
     private void Closed()
     {
-        Interlocked.Decrement(ref _open);
+        int open = Interlocked.Decrement(ref _open);
         Interlocked.Exchange(ref _lastClosed, _time.GetUtcNow().UtcTicks);
+
+        if (open == 0)
+        {
+            _ = Task.Run(() => CloseIfIdle(_idle));
+        }
     }
 
     /// <summary>
@@ -198,9 +246,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
             _connecting.Release();
         }
 
-        _logger.LogInformation(
-            "The browser has had nothing to do for {Minutes:0} minutes, so it was closed.",
-            idle.TotalMinutes);
+        _logger.LogInformation("The browser had nothing left open, so it was closed.");
 
         _browser.Stop();
     }
@@ -209,6 +255,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
 /// <summary>One real tab.</summary>
 internal sealed class PuppeteerTab(IPage page, Action closed) : IBrowserTab
 {
+
     public async Task GoToAsync(Uri url, CancellationToken ct)
     {
         await page.GoToAsync(url.ToString(), new NavigationOptions

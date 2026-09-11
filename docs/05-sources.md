@@ -1,10 +1,27 @@
 # Sources
 
-Seventeen sources ship in `src/.../sources.json`, copied beside the assembly. On top of them the
-owner may add their own indexers and their own private trackers.
+Sixteen entries ship in `src/.../sources.json`: five name sources and eleven indexers. They are
+copied beside the assembly, and on top of them the owner may add their own indexers and their own
+private trackers.
 
-All fifteen were measured working end to end on 13 August 2026 — each answered a real release name
-and produced a route to a torrent. The traps below are what that took.
+**The two are not the same thing and this document does not use one word for both.** A name source
+answers what a release is called; an indexer answers who is serving it. `SourceRole` decides which
+from the kind and the presence of a search address, and known failure **A2** is what happened when
+they were confused — a feed was put in the search set and asked a question per episode, forty
+identical requests a cycle. This page used to open by calling all fifteen "sources", and by naming
+two different totals three lines apart.
+
+**The sources are PreDB, srrDB and SceneSource. Five entries: PreDB under two mirrors, srrDB under
+both its feed and its search API, and SceneSource.** The owner's rule, 10 September 2026. Everything else in the catalogue is an
+indexer, EZTV included: its endpoint answers rows carrying a magnet, a hash, a seed count and a
+size, which is what an indexer answers and not what a scene database does. It was counted a feed
+until then, and 3,149 of its file names — a quarter of the owner's whole name pool — went in as
+release names, spelled `Somebody.Knows.Something.S01E04.XviD-AFG[EZTVx.to].avi` with the site's tag
+inside and the extension still on the end.
+
+Fifteen are asked: YTS ships switched off because films are out of scope. All of them were measured
+working end to end on 13 August 2026 — each answered a real release name and produced a route to a
+torrent. The traps below are what that took.
 
 ## Roles
 
@@ -24,8 +41,9 @@ and the presence of `searchUrl`, and nothing else guesses.
 | PreDB | `rss` | — | words | no | 20 | 60s | feed + names |
 | srrDB | `rss` | — | words | no | 20 | 60s | feed |
 | srrDB search | `srrdb` | — | slug | no | 20 | 15s | names |
+| PreDB.net | `rss` | — | words | no | 20 | 15s | feed + names |
 | SceneSource | `rss` | — | words | **yes** | 20 | 60s | feed + names |
-| EZTV latest | `eztv-api` | — | words | no | 30 | 60s | feed |
+| EZTV latest | `eztv-api` | — | words | no | 30 | 60s | indexer |
 | The Pirate Bay | `apibay` | — | words | no | 45 | 5s | indexer |
 | 1337x | `site` | `1337x` | words | **yes** | 40 | 15s | indexer |
 | LimeTorrents | `site` | generic | words | no | 35 | 15s | indexer |
@@ -230,7 +248,7 @@ each source returned.
 A source is flagged when it does not answer, offers no route to a torrent, returns far fewer rows
 than last time, or — the case it exists for — when **the page is covered in torrents and the reader
 saw none of them**. It distinguishes that from a site that honestly has nothing by counting
-release-shaped **names** in the body: six of the fifteen answer JSON or XML with no anchor and no
+release-shaped **names** in the body: six of the fifteen entries answer JSON or XML with no anchor and no
 magnet anywhere in them, so a count of links would report every one of those as having nothing on
 the day its reader broke. A name is release-shaped when it carries a resolution, a codec or a
 source — never the episode number, which is in the term that was searched for and so appears on

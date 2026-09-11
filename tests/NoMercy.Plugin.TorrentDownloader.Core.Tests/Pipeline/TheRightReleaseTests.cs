@@ -216,15 +216,15 @@ public class TheRightReleaseTests
 
         fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
 
-        fetch.Answers("https://apibay.org/q.php?q=Silo+S03E04&cat=", Capture.Fixture("silo4-apibay.json"));
+        fetch.Answers("https://apibay.org/q.php?q=Silo+S03E04+1080p&cat=", Capture.Fixture("silo4-apibay.json"));
         fetch.Answers(
-            "https://www.limetorrents.lol/search/all/Silo+S03E04/",
+            "https://www.limetorrents.lol/search/all/Silo+S03E04+1080p/",
             Capture.Fixture("silo4-limetorrents.html"));
         fetch.Answers(
-            "https://torrentgalaxy.one/get-posts/keywords:Silo%20S03E04/",
+            "https://torrentgalaxy.one/get-posts/keywords:Silo S03E04 1080p/",
             Capture.Fixture("silo4-torrentgalaxy.html"));
         fetch.Answers(
-            "https://www.torrentdownloads.pro/search/?search=Silo+S03E04",
+            "https://www.torrentdownloads.pro/search/?search=Silo+S03E04+1080p",
             Capture.Fixture("silo4-torrentdownloads.html"));
 
         return fetch;
@@ -248,8 +248,8 @@ public class TheRightReleaseTests
 
         Assert.Contains(
             fetch.Asked,
-            address => address.ToString().Contains("Sugar+S02E08", StringComparison.OrdinalIgnoreCase)
-                       || address.ToString().Contains("Sugar%20S02E08", StringComparison.OrdinalIgnoreCase));
+            address => address.ToString().Contains("Sugar+S02E08+1080p", StringComparison.OrdinalIgnoreCase)
+                       || address.ToString().Contains("Sugar S02E08 1080p", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>One gap, as the owner's library holds it.</summary>
@@ -296,8 +296,8 @@ public class TheRightReleaseTests
 
         fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
 
-        string term = $"Sugar+S02E{number:00}";
-        string spaced = $"Sugar%20S02E{number:00}";
+        string term = $"Sugar+S02E{number:00}+1080p";
+        string spaced = $"Sugar S02E{number:00} 1080p";
         string set = number == 8 ? "sugar" : "sugar1";
 
         fetch.Answers($"https://apibay.org/q.php?q={term}&cat=", Capture.Fixture($"{set}-apibay.json"));
@@ -322,13 +322,13 @@ public class TheRightReleaseTests
         fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
 
         fetch.Answers(
-            "https://www.limetorrents.lol/search/all/Lucky+S01E02/",
+            "https://www.limetorrents.lol/search/all/Lucky+S01E02+1080p/",
             Capture.Fixture("lucky2-limetorrents.html"));
         fetch.Answers(
-            "https://torrentgalaxy.one/get-posts/keywords:Lucky%20S01E02/",
+            "https://torrentgalaxy.one/get-posts/keywords:Lucky S01E02 1080p/",
             Capture.Fixture("lucky2-torrentgalaxy.html"));
         fetch.Answers(
-            "https://www.torrentdownloads.pro/search/?search=Lucky+S01E02",
+            "https://www.torrentdownloads.pro/search/?search=Lucky+S01E02+1080p",
             Capture.Fixture("lucky2-torrentdownloads.html"));
 
         return fetch;

@@ -22,6 +22,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Solver;
 /// </remarks>
 public class TheBrowserIsClosedWhenItHasNothingToDoTests
 {
+    /// <summary>What the rule was measured against; it is now nothing at all.</summary>
+    private static readonly TimeSpan AQuarterOfAnHour = TimeSpan.FromMinutes(15);
+
     private static readonly DateTimeOffset Nine = new(2026, 8, 31, 21, 0, 0, TimeSpan.Zero);
 
     /// <remarks>
@@ -32,7 +35,7 @@ public class TheBrowserIsClosedWhenItHasNothingToDoTests
     [Fact]
     public void ATabStillOpenKeepsTheBrowserHoweverLongItHasBeenOpen()
     {
-        Assert.False(IdleBrowser.Due(1, Nine, Nine.AddHours(3), IdleBrowser.After));
+        Assert.False(IdleBrowser.Due(1, Nine, Nine.AddHours(3), AQuarterOfAnHour));
     }
 
     /// <remarks>
@@ -43,7 +46,7 @@ public class TheBrowserIsClosedWhenItHasNothingToDoTests
     [Fact]
     public void ABrowserThatHasNotBeenAskedForATabYetIsKept()
     {
-        Assert.False(IdleBrowser.Due(0, null, Nine.AddHours(3), IdleBrowser.After));
+        Assert.False(IdleBrowser.Due(0, null, Nine.AddHours(3), AQuarterOfAnHour));
     }
 
     /// <remarks>
@@ -54,7 +57,7 @@ public class TheBrowserIsClosedWhenItHasNothingToDoTests
     [Fact]
     public void ABrowserIdleForLessThanTheWindowIsKept()
     {
-        Assert.False(IdleBrowser.Due(0, Nine, Nine.Add(IdleBrowser.After).AddSeconds(-1), IdleBrowser.After));
+        Assert.False(IdleBrowser.Due(0, Nine, Nine.Add(AQuarterOfAnHour).AddSeconds(-1), AQuarterOfAnHour));
     }
 
     /// <remarks>
@@ -65,7 +68,7 @@ public class TheBrowserIsClosedWhenItHasNothingToDoTests
     [Fact]
     public void ABrowserIdleForLongerThanTheWindowIsClosed()
     {
-        Assert.True(IdleBrowser.Due(0, Nine, Nine.Add(IdleBrowser.After), IdleBrowser.After));
-        Assert.True(IdleBrowser.Due(0, Nine, Nine.AddHours(3), IdleBrowser.After));
+        Assert.True(IdleBrowser.Due(0, Nine, Nine.Add(AQuarterOfAnHour), AQuarterOfAnHour));
+        Assert.True(IdleBrowser.Due(0, Nine, Nine.AddHours(3), AQuarterOfAnHour));
     }
 }

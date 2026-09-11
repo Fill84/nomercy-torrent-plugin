@@ -77,11 +77,16 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
     /// <param name="copy">What the decide stage chose.</param>
     /// <param name="folder">Where downloads land.</param>
     /// <param name="defaultTrackers">The owner's own list, added to every grab.</param>
+    /// <param name="ownTrackerHosts">
+    /// The hosts of the owner's private trackers, which are never announced to
+    /// for anybody else's torrent.
+    /// </param>
     /// <param name="ct">Cancellation.</param>
     public async Task<Grabbed> TakeAsync(
         ReleaseCopy copy,
         string folder,
         IReadOnlyList<string> defaultTrackers,
+        IReadOnlyCollection<string> ownTrackerHosts,
         CancellationToken ct)
     {
         if (Room(copy, folder) is string full)
@@ -112,10 +117,19 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
                     new(
                         source,
 
-                        // Everything anybody named for it: what the site's
-                        // magnet carried and the owner's own list. More
-                        // trackers is a faster download and costs nothing.
-                        [.. copy.Trackers.Union(defaultTrackers, StringComparer.OrdinalIgnoreCase)],
+                        // Everything anybody named for it: what every indexer
+                        // holding this torrent published on its own page, and
+                        // the owner's own list. More trackers is a faster
+                        // download and costs nothing.
+                        //
+                        // Through TrackerBook, which is the one place that says
+                        // what may be announced to. A page names whatever it
+                        // likes — one of the magnets read on 10 September 2026
+                        // carried the literal word "DHT" in a tracker field —
+                        // and a private tracker's announce address is the
+                        // owner's passkey, which must never travel with
+                        // somebody else's torrent.
+                        TrackerBook.Learn(copy.Trackers, defaultTrackers, ownTrackerHosts),
                         folder),
                     ct)
                 .ConfigureAwait(false);

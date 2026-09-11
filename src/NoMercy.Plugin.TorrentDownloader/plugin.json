@@ -7,7 +7,10 @@
   "assembly": "NoMercy.Plugin.TorrentDownloader.dll",
   "autoEnabled": true,
   "capabilities": {
-    "hooks": ["scheduledTask", "ui"],
+    "hooks": [
+      "scheduledTask",
+      "ui"
+    ],
     "rest": true,
     "ws": false,
     "network": {
@@ -26,14 +29,30 @@
         "torrentz2.nz",
         "www.torrentdownloads.pro",
         "nyaa.si",
-        "yts.gg"
+        "yts.gg",
+        "api.predb.net"
       ]
     },
     "ui": {
       "mounts": [
-        { "section": "dashboard", "route": "/", "label": "Torrent Downloader", "icon": "download" },
-        { "section": "library", "route": "/", "label": "Torrent Downloader", "icon": "download" },
-        { "section": "settings", "route": "/settings", "label": "Torrent Downloader", "icon": "download" }
+        {
+          "section": "dashboard",
+          "route": "/",
+          "label": "Torrent Downloader",
+          "icon": "download"
+        },
+        {
+          "section": "library",
+          "route": "/",
+          "label": "Torrent Downloader",
+          "icon": "download"
+        },
+        {
+          "section": "settings",
+          "route": "/settings",
+          "label": "Torrent Downloader",
+          "icon": "download"
+        }
       ]
     }
   }

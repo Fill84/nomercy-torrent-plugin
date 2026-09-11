@@ -131,7 +131,12 @@ public class SourceDefinitionTests
     [Theory]
     [InlineData("rss", true, SourceRole.Feed | SourceRole.Names)]
     [InlineData("rss", false, SourceRole.Feed)]
-    [InlineData("eztv-api", false, SourceRole.Feed)]
+    // EZTV is a search site, not a place that says what a release is called.
+    // Its endpoint answers rows with a magnet, a hash, seeds and a size on every
+    // one of them — an indexer's answer. Counting it a feed put 3,149 of its
+    // file names into the owner's name pool, tagged "[EZTVx.to].mkv" and
+    // ending in the file extension, and those went out as search terms.
+    [InlineData("eztv-api", false, SourceRole.Indexer)]
     [InlineData("srrdb", false, SourceRole.Names)]
     [InlineData("apibay", false, SourceRole.Indexer)]
     [InlineData("site", false, SourceRole.Indexer)]

@@ -16,10 +16,19 @@ public sealed class Browser(
     BrowserInstall install,
     IHiddenStageFactory stages,
     ILogger logger,
-    int port = Browser.DefaultPort) : IDisposable
+    int port = Browser.DefaultPort,
+    TimeSpan? listeningWithin = null) : IDisposable
 {
     /// <summary>Where its remote-debugging endpoint listens.</summary>
     public const int DefaultPort = 9222;
+
+    /// <summary>How long the browser gets to open its debugging port.</summary>
+    /// <remarks>
+    /// Generous: a cold Chrome on a busy server is seconds, and the cost of
+    /// waiting too little is a solve that fails for no reason anybody can see.
+    /// A test that stands up no real browser passes nothing at all here.
+    /// </remarks>
+    private readonly TimeSpan _listeningWithin = listeningWithin ?? TimeSpan.FromSeconds(20);
 
     private readonly SemaphoreSlim _starting = new(1, 1);
     private IHiddenStage? _stage;
@@ -79,6 +88,8 @@ public sealed class Browser(
 
             _process = await _stage.LaunchAsync(executable, Arguments(port), ct);
 
+            await ListeningAsync(ct);
+
             return _process;
         }
         finally
@@ -137,6 +148,65 @@ public sealed class Browser(
 
         _stage?.Dispose();
         _stage = null;
+    }
+
+    /// <summary>
+    /// Waits until the browser is answering on its debugging port.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A launched process is not a browser that can be spoken to.</strong>
+    /// Chrome takes a moment to open its debugging port, and the driver
+    /// connecting before it does gets a refused socket — which reads as a
+    /// browser that will not start rather than one that is still starting.
+    /// </para>
+    /// <para>
+    /// It was never noticed while the browser was started once and kept, because
+    /// whatever happened between launching and the first solve was slower than
+    /// Chrome. The moment the browser began closing after every job — the
+    /// owner's rule of 11 September 2026, that it runs only while it is needed —
+    /// the second job failed on <c>connection refused</c> at 127.0.0.1:9222,
+    /// every time.
+    /// </para>
+    /// <para>
+    /// A plain TCP connect, because that is the question being asked: is
+    /// anything listening. Asking over HTTP would need a client and would answer
+    /// the same thing later.
+    /// </para>
+    /// </remarks>
+    private async Task ListeningAsync(CancellationToken ct)
+    {
+        if (_listeningWithin <= TimeSpan.Zero)
+        {
+            return;
+        }
+
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + _listeningWithin;
+
+        while (true)
+        {
+            try
+            {
+                using System.Net.Sockets.TcpClient probe = new();
+
+                await probe.ConnectAsync(System.Net.IPAddress.Loopback, port, ct);
+
+                return;
+            }
+            catch (System.Net.Sockets.SocketException)
+            {
+                if (DateTimeOffset.UtcNow >= giveUpAt)
+                {
+                    logger.LogWarning(
+                        "The browser did not open its debugging port within {Seconds:0} seconds.",
+                        _listeningWithin.TotalSeconds);
+
+                    return;
+                }
+
+                await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
+            }
+        }
     }
 
     public void Dispose()

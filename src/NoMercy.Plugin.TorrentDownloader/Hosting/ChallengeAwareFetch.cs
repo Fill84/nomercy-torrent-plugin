@@ -52,9 +52,7 @@ public sealed class ChallengeAwareFetch(
 
         if (gated)
         {
-            // Straight to the browser. Trying HTTP first on an address the
-            // catalogue says is gated buys a guaranteed refusal every time.
-            return await ThroughBrowser(address, ct, "This address is behind a challenge");
+            return await Gated(address, host, ct);
         }
 
         FetchResult first = await Plain(address, host, ct);
@@ -100,6 +98,66 @@ public sealed class ChallengeAwareFetch(
             FetchOutcome.Challenged,
             address,
             $"{host} put up a second challenge straight after one was cleared, so this plugin cannot read it."));
+    }
+
+    /// <summary>
+    /// A host the catalogue says puts up a challenge.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The browser is for solving the challenge and nothing else.</strong>
+    /// The owner's decision of 11 September 2026, after watching ten Chrome
+    /// processes sit on their server. A clearance cookie travels on an ordinary
+    /// request, so once one is in hand every page of that host is read over
+    /// plain HTTP and no browser is needed at all.
+    /// </para>
+    /// <para>
+    /// <strong>What this replaces.</strong> A gated address went straight to
+    /// the browser, every time, and that path stores no clearance — so the
+    /// browser was needed again for the very next page, and again for the one
+    /// after that, for as long as the plugin ran.
+    /// </para>
+    /// <para>
+    /// The browser is still the last resort, because some hosts clear without
+    /// issuing a cookie: there is then nothing to replay, and the page can only
+    /// come from the tab that cleared it.
+    /// </para>
+    /// </remarks>
+    private async Task<FetchResult> Gated(Uri address, string host, CancellationToken ct)
+    {
+        if (clearances.For(host) is not null)
+        {
+            FetchResult kept = await Plain(address, host, ct);
+
+            if (kept.Failure?.Outcome != FetchOutcome.Challenged)
+            {
+                return kept;
+            }
+
+            // It was good and is not any more. Spent rather than kept and
+            // retried: a clearance that no longer clears is a clearance to
+            // throw away.
+            clearances.Spend(host);
+        }
+
+        if (solver is not null)
+        {
+            Clearance? earned = await solver.SolveAsync(address, ct);
+
+            if (earned is not null)
+            {
+                clearances.Keep(host, earned);
+
+                FetchResult after = await Plain(address, host, ct);
+
+                if (after.Failure?.Outcome != FetchOutcome.Challenged)
+                {
+                    return after;
+                }
+            }
+        }
+
+        return await ThroughBrowser(address, ct, "This address is behind a challenge");
     }
 
     private async Task<FetchResult> ThroughBrowser(Uri address, CancellationToken ct, string why)
