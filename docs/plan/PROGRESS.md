@@ -1700,6 +1700,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **A delivered release the library still misses is delivered again, every run.** The owner's
+  decision of 11 September 2026, knowing what it costs. Measured that day on South Park S15E12: the
+  grab reopens, the file is staged and sent, the server's encoder finds its output already there and
+  skips the encode, and media server 0.1.494 links the file to another episode again — the plugin
+  then warns that it did. The fix is media-server `c7221930` ("register encoded files against the
+  dispatched episode"), on `dev` and in no release. Until one ships, that run-by-run redelivery and
+  its warning are expected; do not make the plugin stop redelivering without asking.
 - **The owner's rules from the live run of 11 September 2026.** A source's name goes to an indexer
   letter for letter, then without punctuation, then the ladder. The sources are asked every run;
   the pool only adds. Every run starts at the top. Stop ends and clears the whole run, downloads
