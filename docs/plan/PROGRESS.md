@@ -1704,9 +1704,13 @@ and note it here.
   decision of 11 September 2026, knowing what it costs. Measured that day on South Park S15E12: the
   grab reopens, the file is staged and sent, the server's encoder finds its output already there and
   skips the encode, and media server 0.1.494 links the file to another episode again — the plugin
-  then warns that it did. The fix is media-server `c7221930` ("register encoded files against the
-  dispatched episode"), on `dev` and in no release. Until one ships, that run-by-run redelivery and
-  its warning are expected; do not make the plugin stop redelivering without asking.
+  then warns that it did. **Corrected the same day:** media-server `c7221930` ("register encoded
+  files against the dispatched episode", Stoney_Eagle, 2 September) *is* in 0.1.492 to 0.1.494 —
+  the release workflow copies dev's tree onto master as one release commit, so git history does not
+  show it, and its changed lines are in 0.1.494's tree. So the server the owner runs has that fix and
+  S15E12 still ends without a file: the encoder skipped ("All desired outputs present") and nothing
+  put the file against the episode. The cause is not known yet. The run-by-run redelivery and its
+  warning are expected until it is; do not make the plugin stop redelivering without asking.
 - **The owner's rules from the live run of 11 September 2026.** A source's name goes to an indexer
   letter for letter, then without punctuation, then the ladder. The sources are asked every run;
   the pool only adds. Every run starts at the top. Stop ends and clears the whole run, downloads
