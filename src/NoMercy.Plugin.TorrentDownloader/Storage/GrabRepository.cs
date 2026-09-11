@@ -59,6 +59,16 @@ public sealed class GrabRepository(Store database)
     /// dropping the insert against it left the owner looking at nothing
     /// grabbed, pasting the magnet by hand, and being refused by a row they
     /// could not see.
+    ///
+    /// And so is a hash that is <em>done</em>: the owner's decision of 11
+    /// September 2026. A run only takes a torrent for an episode the library
+    /// does not have, so a delivered torrent taken again is one whose episode
+    /// never arrived — South Park S15E12, encoded on 1 September and filed by
+    /// the server under another episode. Left done, the client was handed it
+    /// and the next tick stopped it as nobody's. It is delivered again, from
+    /// the beginning: nothing staged and no encode against it. The one other
+    /// way in is the owner pasting that torrent by hand, which is asking for
+    /// exactly the same thing.
     /// </remarks>
     public async Task RecordAsync(
         EpisodeKey episode,
@@ -84,12 +94,17 @@ public sealed class GrabRepository(Store database)
                 magnet        = excluded.magnet,
                 grabbed_at    = excluded.grabbed_at,
                 state         = excluded.state,
-                covers        = excluded.covers
-            -- Failed only. A grab that is done has its file in the library,
-            -- and dragging it back would put the episode to missing and search
-            -- for it again — the fault that took the owner's finished grabs
-            -- from twenty-three to eleven.
-            WHERE grabs.state = 'failed';
+                covers        = excluded.covers,
+                staged_path   = NULL,
+                encode_job    = NULL
+            -- Failed or done, never open: a grab still running is the first
+            -- recording of this torrent and it wins. Done is taken on again
+            -- only because a run takes a torrent for an episode the library
+            -- does not have — the owner's decision of 11 September 2026. What
+            -- this used to guard against, a finished grab dragged back while
+            -- its episode was in the library, cannot come through here: the
+            -- run never decides an episode the library has.
+            WHERE grabs.state IN ('failed', 'done');
             """;
 
         command.Parameters.AddWithValue("$show", episode.ShowId);

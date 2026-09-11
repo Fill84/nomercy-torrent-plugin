@@ -139,6 +139,13 @@ public class GrabRepositoryTests : IDisposable
     /// It is what took the owner's finished grabs from twenty-three to eleven
     /// overnight.
     /// </para>
+    /// <para>
+    /// A failure and a state written by hash still never touch a done grab.
+    /// Recording the torrent again is the one thing that does, and on purpose:
+    /// since 11 September 2026 a done torrent recorded again is delivered again,
+    /// because it is only recorded again for an episode the library does not
+    /// have — <see cref="ATorrentThatWasDeliveredIsTakenOnAgainWhenItsEpisodeIsStillMissing"/>.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task AGrabThatIsDoneIsNotDraggedBackByALaterFailure()
@@ -148,9 +155,6 @@ public class GrabRepositoryTests : IDisposable
 
         await Record(grabs, Hash, [Episode(1)]);
         await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
-
-        // The same torrent, grabbed again before the duplicate was stopped.
-        await Record(grabs, Hash, [Episode(1)]);
 
         await grabs.FailedAsync(Hash, "the swarm went quiet", DateTimeOffset.UtcNow, null, CancellationToken.None);
 
@@ -299,6 +303,65 @@ public class GrabRepositoryTests : IDisposable
         StoredDownload only = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
 
         Assert.Equal("Silo S03E01 1080p WEB H264-CAKES", only.ReleaseTitle);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent that was delivered is delivered again when the library
+    /// still misses its episode.</strong> The owner's decision of 11 September
+    /// 2026. South Park S15E12 was downloaded and encoded on 1 September, and
+    /// the server filed it under another episode — its title carries "1%" — so
+    /// the episode stayed missing. The next run found the same release and
+    /// handed it to the client, and twenty seconds later the plugin stopped it
+    /// again: the grab was done, so the torrent in the client was nobody's.
+    /// </para>
+    /// <para>
+    /// A run only takes a torrent for an episode the library does not have, so
+    /// a done grab taken again is one to deliver again: open, with nothing
+    /// staged and no encode against it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentThatWasDeliveredIsTakenOnAgainWhenItsEpisodeIsStillMissing()
+    {
+        GrabRepository grabs = Repository();
+
+        await grabs.RecordAsync(
+            Episode(1),
+            "Silo",
+            "Silo S03E01 1080p WEB H264-CAKES",
+            "1337x",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode(1)],
+            When,
+            CancellationToken.None);
+
+        await grabs.StagedAsync(Hash, [@"D:\intake\Silo.S03E01.1080p.mkv"], CancellationToken.None);
+        await grabs.EncodeJobAsync(Hash, Episode(1), "job-1", CancellationToken.None);
+        await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+
+        // The same release, found again ten days later because the library
+        // still does not have the episode.
+        await grabs.RecordAsync(
+            Episode(1),
+            "Silo",
+            "Silo S03E01 1080p WEB H264-CAKES",
+            "TorrentBay",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode(1)],
+            When.AddDays(10),
+            CancellationToken.None);
+
+        StoredDownload again = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        // A new download, not the old one's leftovers: nothing staged yet and
+        // no encode asked for, or the next tick would skip straight past both.
+        Assert.Empty(again.StagedPaths);
+        Assert.Null(again.EncodeJobId);
     }
 
     /// <remarks>

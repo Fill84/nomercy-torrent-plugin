@@ -345,6 +345,16 @@ One line per finished slice: the id, what landed, and anything the next slice sh
     `api/v1/dashboard/plugins/{id}/{page}` before drawing a page and nothing answered: two 404s per
     page in the owner's console. `PagesController` answers there with the page itself — an absolute
     route, on the owner's decision, limited to this plugin's id and its seven pages.
+  - **A delivered torrent taken again is delivered again.** South Park S15E12 was encoded on
+    1 September and filed by the server under another episode ("1%" in its title, media-server #38),
+    so it stayed missing; every run found the same release, handed it to the client, and the next
+    transfers tick stopped it as nobody's because its grab was done. `GrabRepository.RecordAsync` now
+    reopens a done grab as it already reopened a failed one — state back to grabbed, nothing staged,
+    no encode — on the owner's decision. A run only records a torrent for an episode the library
+    does not have; the only other caller is the owner pasting it by hand.
+  - **EZTV's API ships switched off** — it answers every question with the same hundred newest
+    torrents — and **the plugin is no longer mounted under library**, only on the dashboard and in
+    the user menu. Both the owner's decisions.
   `BittorrentEngineTests.ATorrentTooBigForTheDiskIsRefusedWhenItsSizeIsKnown` failed once under a
   full run and passed alone three times and in the next full run: timing-sensitive, not this slice.
 
