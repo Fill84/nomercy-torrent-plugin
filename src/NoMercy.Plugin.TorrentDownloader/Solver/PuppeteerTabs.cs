@@ -105,6 +105,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
             IPage page = await _connected.NewPageAsync();
 
             page.Response += ObserveRedirect;
+            UnobservedContexts.Watch(page);
 
             // Counted once the page exists, never before it. A page that fails
             // to open — a browser that died, a connection lost — would leave a
