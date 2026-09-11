@@ -181,24 +181,10 @@ public static class Pages
         },
         new()
         {
-            // And beside the libraries, because that is where the owner goes
-            // looking for what fills them. Asked for on 2 September 2026, after
-            // the entry that used to be here was taken away.
-            //
-            // **It was taken away for a reason, and the reason still stands.**
-            // Mounted under library *instead of* dashboard, the cog beside this
-            // plugin in the dashboard's own list opened it at /plugins/… while
-            // the title beside it went to /dashboard/plugins/… — two addresses
-            // for one plugin, from one row, and only one of them the page the
-            // owner was already on. Both mounts is what keeps that from coming
-            // back: the dashboard's own list still finds its dashboard page.
-            Section = PluginUiSection.Library,
-            Label = PluginIdentity.Name,
-            Icon = "download",
-            Route = DashboardRoute,
-        },
-        new()
-        {
+            // Not beside the libraries as well: the owner's decision of
+            // 11 September 2026, the plugin belongs in the dashboard and the user
+            // menu and nowhere else. Settings is the mount the web app shows in
+            // the user menu.
             Section = PluginUiSection.Settings,
             Label = PluginIdentity.Name,
             Icon = "download",

@@ -111,9 +111,15 @@ public class ManifestTests
     /// <c>settings</c> for where a plugin is set up rather than where it works.
     /// This plugin's eight pages are work; only one of them is setup.
     /// </para>
+    /// <para>
+    /// <strong>And not beside the libraries.</strong> The owner's decision of
+    /// 11 September 2026: the plugin belongs in the dashboard and in the user
+    /// menu, and nowhere else. It had been mounted under library as well since
+    /// 2 September.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void ThePluginsOwnPageIsMountedOnTheDashboardAndBesideTheLibraries()
+    public void ThePluginsOwnPageIsMountedOnTheDashboardAndNotBesideTheLibraries()
     {
         string[] sections =
         [
@@ -122,10 +128,10 @@ public class ManifestTests
                 .Select(entry => entry.Section),
         ];
 
-        // Both, and the dashboard one is what keeps the cog and the title in
-        // the dashboard's own plugin list pointing at one address.
+        // The dashboard one is what keeps the cog and the title in the
+        // dashboard's own plugin list pointing at one address.
         Assert.Contains(PluginUiSection.Dashboard, sections);
-        Assert.Contains(PluginUiSection.Library, sections);
+        Assert.DoesNotContain(PluginUiSection.Library, Pages.NavEntries.Select(entry => entry.Section));
 
         // And only sections every client is expected to render: an unknown one
         // is not an error, it is quietly demoted to the add-ons page, where

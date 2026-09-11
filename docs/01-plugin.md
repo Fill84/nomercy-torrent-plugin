@@ -106,8 +106,8 @@ perfectly healthy. That happened, for a day.
     "ws": false,
     "network": { "hosts": [ /* every host in sources.json */ ] },
     "ui": { "mounts": [
-      { "section": "library",  "route": "/",         "label": "Torrent Downloader", "icon": "download" },
-      { "section": "settings", "route": "/settings", "label": "Torrent Downloader", "icon": "download" }
+      { "section": "dashboard", "route": "/",         "label": "Torrent Downloader", "icon": "download" },
+      { "section": "settings",  "route": "/settings", "label": "Torrent Downloader", "icon": "download" }
     ] }
   }
 }
