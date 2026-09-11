@@ -334,6 +334,17 @@ One line per finished slice: the id, what landed, and anything the next slice sh
     unobserved-task lines in one warm-up from 11 to 8. The other 8, "Execution Context was
     destroyed", are PuppeteerSharp's own (`IsolatedWorld.ClearContext`) and out of reach.
   - `gathered.AddRange(copies)` ran twice in `SearchCycle`; once now.
+  - **No more unobserved-task lines from the browser.** `UnobservedContexts` reads the task
+    PuppeteerSharp fails in `IsolatedWorld.ClearContext` for every world it can reach — each frame's,
+    and each one its execution-context list still holds — on every page event and every 10 ms while a
+    tab is open, because a challenge frame moved to its own process gets new worlds nothing else
+    announces. Measured over the five-site warm-up: 11, 8, 4, 6, then 0 twice. Switching site
+    isolation off also gave 0, and cost TorrentBay its cookie, so it stays on.
+    `PuppeteerSharpInternalsTests` goes red if an update renames what it reaches for.
+  - **Every plugin page answers where the web app fetches it.** The app asks for
+    `api/v1/dashboard/plugins/{id}/{page}` before drawing a page and nothing answered: two 404s per
+    page in the owner's console. `PagesController` answers there with the page itself — an absolute
+    route, on the owner's decision, limited to this plugin's id and its seven pages.
   `BittorrentEngineTests.ATorrentTooBigForTheDiskIsRefusedWhenItsSizeIsKnown` failed once under a
   full run and passed alone three times and in the next full run: timing-sensitive, not this slice.
 
