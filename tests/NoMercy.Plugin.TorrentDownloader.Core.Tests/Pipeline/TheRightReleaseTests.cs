@@ -63,10 +63,16 @@ public class TheRightReleaseTests
 
         // Something the client can be handed, carrying the hash of the torrent
         // that was chosen rather than of whatever the page happened to mention.
-        string magnet = Assert.Single(engine.Taken).Source;
+        // First, and into the ordinary folder; anything after it is the same
+        // release under another hash, started beside it by the owner's rule of
+        // 11 September 2026 — this capture carries S02E08 CAKES under two.
+        string magnet = engine.Taken[0].Source;
 
         Assert.StartsWith("magnet:?xt=urn:btih:", magnet, StringComparison.Ordinal);
         Assert.Equal(40, Magnets.HashOf(magnet)!.Length);
+        Assert.Equal(@"C:\downloads", engine.Taken[0].DownloadFolder);
+        Assert.Equal(engine.Taken.Count - 1, outcome.Racing.Count);
+        Assert.All(outcome.Racing, racing => Assert.Equal(release, racing.Release));
 
         Console.WriteLine($"S02E{number:00}: {outcome.Source} -> {Magnets.HashOf(magnet)}");
     }
@@ -112,9 +118,14 @@ public class TheRightReleaseTests
         Assert.Equal("Lucky 2026 S01E02 1080p WEB h264-ETHEL", outcome.Release);
         Assert.Equal(878, outcome.Seeders);
 
-        string magnet = Assert.Single(engine.Taken).Source;
+        // The chosen torrent first; this capture carries the ETHEL release
+        // under a second hash too, and that one is started beside it as a
+        // copy of the same release — never a decoy.
+        string magnet = engine.Taken[0].Source;
 
         Assert.StartsWith("magnet:?xt=urn:btih:", magnet, StringComparison.Ordinal);
+        Assert.Equal(engine.Taken.Count - 1, outcome.Racing.Count);
+        Assert.All(outcome.Racing, racing => Assert.Equal(outcome.Release, racing.Release));
 
         Console.WriteLine($"Lucky S01E02: {outcome.Source} -> {Magnets.HashOf(magnet)}");
 

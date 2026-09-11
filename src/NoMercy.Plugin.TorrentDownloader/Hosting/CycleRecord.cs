@@ -70,6 +70,10 @@ public static class CycleRecord
                 continue;
             }
 
+            // Itself at the least: a grab that answers for no episode could
+            // never be put back to missing when it failed.
+            IReadOnlyList<EpisodeKey> covers = outcome.Covers.Count > 0 ? outcome.Covers : [outcome.Episode];
+
             await grabs.RecordAsync(
                 outcome.Episode,
                 titles.GetValueOrDefault(outcome.Episode, string.Empty),
@@ -77,12 +81,33 @@ public static class CycleRecord
                 outcome.Source ?? "unknown",
                 hash,
                 outcome.Magnet,
-
-                // Itself at the least: a grab that answers for no episode could
-                // never be put back to missing when it failed.
-                outcome.Covers.Count > 0 ? outcome.Covers : [outcome.Episode],
+                covers,
                 at,
                 ct);
+
+            // Every other torrent of the same release, started beside it. Each
+            // is a grab of its own, because the tick can only decide the race
+            // between torrents the store knows — and each with the folder it
+            // downloads into, or it is staged from where it is not.
+            foreach (EpisodeOutcome racing in outcome.Racing)
+            {
+                if (racing.InfoHash is not string other)
+                {
+                    continue;
+                }
+
+                await grabs.RecordAsync(
+                    outcome.Episode,
+                    titles.GetValueOrDefault(outcome.Episode, string.Empty),
+                    racing.Release ?? other,
+                    racing.Source ?? "unknown",
+                    other,
+                    racing.Magnet,
+                    covers,
+                    at,
+                    ct,
+                    racing.Folder);
+            }
         }
 
         await CountSearchesAsync(report, looked, at, episodes, maxAttempts, ct);

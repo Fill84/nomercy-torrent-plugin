@@ -4,6 +4,10 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S11-41` is built and green locally, not deployed.** One release under two hashes: both start,
+the first to finish is kept, the other is stopped and its files deleted. Nothing is pushed and no
+release is made until the owner has checked everything and says so.
+
 **`S11-40` is built and green locally and waits on a deploy and a live run.** The first live run
 of `S11-39` on 11 September 2026 showed the sources were not asked, names went out as loose words,
 Stop looked like a pause and the dashboard said too little; `S11-40` is the owner's answer to all
@@ -306,11 +310,29 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-38` A push that was asked for is sent
 - [x] `S11-39` The audit: sources, indexers, the merge, Chrome and the dashboard, measured
 - [x] `S11-40` Exact names, sources every run, Stop, the status bar, stage rows and every question on the page
+- [x] `S11-41` One release under two hashes: both start, the first to finish is kept
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **`S11-41` One release under two hashes: both start, the first to finish is kept.** The owner's
+  decision, `docs/06-torrent-client.md` § One release under two hashes. The cycle takes every other
+  copy with the chosen copy's release name and a hash of its own (`SearchCycle.RacingAsync`), each
+  into `<incomplete>/<HASH>` — measured first: a torrent writes under its own name in the folder it
+  is given, so two of one release in one folder write one path, and deleting the loser would have
+  deleted the winner's file. The folder is a grab column (migration 008), read by staging and by
+  the re-add after a restart. The tick stages the first to finish and stops every other copy of
+  that release for those episodes with its files (`Transfers.Beaten`, `LoseAsync`); the grab is
+  written `lost` with a history line, not failed and not refused. Proven on the real Pirate Bay
+  answer for Sugar S02E01, which carries the NTb 720p under two hashes. Asked the same day and
+  checked: nothing public is ever uploaded or seeded — `TorrentSession` never unchokes a public
+  peer and never serves it a block (`OnlyAPrivateTorrentGivesAnythingBack`), and `SeedLimit`
+  finishes a public torrent the moment it is complete (`APublicTorrentIsFinishedTheMomentItIsComplete`).
+  Three older tests asserted exactly one torrent handed over, and their real captures each carry the
+  chosen release under a second hash (Silo S03E06 CAKES, Sugar S02E08 CAKES, Lucky S01E02 ETHEL) —
+  so the race takes it. They now assert the chosen torrent first, in the ordinary folder, and every
+  other one a copy of the same release: the rule changed, not the check.
 - **`S11-40` What the first live run of S11-39 showed, and the owner's answer to it.** Measured on
   `beast-unit`: Dark Matter S02E03 had one name in the pool, a MULTi release English only refuses,
   so no source was asked and no name reached an indexer; and every name that did go out went as
@@ -1700,6 +1722,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **One release under two hashes: both start, the first to finish is kept, the other is stopped
+  and its files deleted.** The owner's decision of 11 September 2026, choosing "stop and delete"
+  over letting the loser finish. It could not have been the other: nothing is uploaded or seeded
+  unless the torrent is private, which the owner restated the same day.
 - **A delivered release the library still misses is delivered again, every run.** The owner's
   decision of 11 September 2026, knowing what it costs. Measured that day on South Park S15E12: the
   grab reopens, the file is staged and sent, the server's encoder finds its output already there and

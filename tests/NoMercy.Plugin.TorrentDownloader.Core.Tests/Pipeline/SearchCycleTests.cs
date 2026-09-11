@@ -55,10 +55,18 @@ public class SearchCycleTests
         // publishes a hashed .torrent link and no magnet at all.
         Assert.Contains(
             "92D8A3F6864911EF292B4BE0DD5286406396D2B3",
-            Assert.Single(engine.Taken).Source,
+            engine.Taken[0].Source,
             StringComparison.OrdinalIgnoreCase);
 
         Assert.Equal(Folder, engine.Taken[0].DownloadFolder);
+
+        // And the same release under its other hash on this page, started
+        // beside it in a folder of its own — the owner's rule of 11 September
+        // 2026 that the first of the two to finish is kept.
+        EpisodeOutcome racing = Assert.Single(taken.Racing);
+
+        Assert.Equal(2, engine.Taken.Count);
+        Assert.Equal(Path.Combine(Folder, racing.InfoHash!), engine.Taken[1].DownloadFolder);
 
         // And the episode nobody is serving says exactly that, rather than
         // disappearing from the report. It was asked about: the indexer was put
@@ -299,6 +307,52 @@ public class SearchCycleTests
         // All three gaps, because it is a pack and the season had three.
         Assert.Equal(3, taken.Covers.Count);
         Assert.Contains(Pokemon(2).Key, taken.Covers);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>One release under two hashes is taken under both.</strong> The
+    /// owner's decision of 11 September 2026: the two start together and the
+    /// first to finish is kept. The Pirate Bay's own answer for Sugar S02E01
+    /// carries <c>… 720p ATVP WEB-DL DDP5 1 H 264-NTb</c> twice, seeded by 57
+    /// and by 10, and which of those two swarms delivers first is not something
+    /// a listing can say.
+    /// </para>
+    /// <para>
+    /// The second goes into a folder of its own. Both torrents carry one name,
+    /// and in one folder they would write one path.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task OneReleaseUnderTwoHashesIsTakenUnderBothIntoFoldersOfTheirOwn()
+    {
+        FakeFetch fetch = new();
+        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
+        fetch.Answers(
+            "https://apibay.org/q.php?q=Sugar+S02E01+720p&cat=",
+            Capture.Fixture("sugar1-apibay.json"));
+
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await Cycle(fetch, engine, sources: WithPirateBay).RunAsync(
+            [Sugar(1)],
+            new(new() { MaximumResolution = "720p" }, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        EpisodeOutcome taken = Assert.Single(report.Outcomes);
+
+        Assert.True(taken.HandedOver, taken.Detail);
+        Assert.Equal("3592F3263EC91937FF60C3815040EDF14406F96A", taken.InfoHash);
+
+        EpisodeOutcome racing = Assert.Single(taken.Racing);
+
+        Assert.Equal("510E50DD445DDE31DC3C98531EEFE1D2DE2CC5C1", racing.InfoHash);
+        Assert.Equal(taken.Covers, racing.Covers);
+
+        Assert.Equal(2, engine.Taken.Count);
+        Assert.Equal(Folder, engine.Taken[0].DownloadFolder);
+        Assert.Equal(Path.Combine(Folder, racing.InfoHash!), engine.Taken[1].DownloadFolder);
+        Assert.Equal(engine.Taken[1].DownloadFolder, racing.Folder);
     }
 
     /// <remarks>
@@ -1054,6 +1108,19 @@ public class SearchCycleTests
     private static TrackedEpisode Silo(int number)
     {
         return Episode(3, number);
+    }
+
+    /// <summary>A gap in the season The Pirate Bay's captured answer is about.</summary>
+    private static TrackedEpisode Sugar(int number)
+    {
+        return new(
+            new(157741, 2, number),
+            "Sugar",
+            2024,
+            LibraryKind.Television,
+            null,
+            new DateOnly(2026, 8, 1),
+            EpisodeState.Missing);
     }
 
     private static TrackedEpisode Episode(int season, int number)

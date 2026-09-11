@@ -489,6 +489,92 @@ public class TransfersTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>One release under two hashes: both start, the first to finish is
+    /// kept.</strong> The owner's decision of 11 September 2026. Two torrents of
+    /// one release are the same file cut twice, and which swarm delivers first
+    /// cannot be told from a listing.
+    /// </para>
+    /// <para>
+    /// The other one is stopped and its files deleted — not failed, and not
+    /// refused: nothing is wrong with it, it was only slower, and blacklisting
+    /// it would refuse a good copy the next time the episode is wanted.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task OfTwoCopiesOfOneReleaseTheFirstToFinishIsKeptAndTheOtherStoppedWithItsFiles()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+        await Racing(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        Directory.CreateDirectory(RivalFolder);
+
+        StandingEngine engine = new StandingEngine()
+            .Holding(Finished(), new TorrentFile(Path.GetFileName(episode), 900_000_000))
+            .Holding(Downloading() with { InfoHash = Rival });
+
+        await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "The copy that finished was never staged.");
+        Assert.Contains((Rival, true), engine.Removed);
+        Assert.DoesNotContain(engine.Removed, one => one.InfoHash == Hash);
+
+        // Over, and not refused.
+        Assert.DoesNotContain(await grabs.OpenAsync(CancellationToken.None), one => one.InfoHash == Rival);
+        Assert.DoesNotContain(Rival, await grabs.BlacklistedAsync(CancellationToken.None));
+        Assert.Contains(await grabs.HistoryAsync(CancellationToken.None), row => row.Event == "lost");
+
+        // And the folder it had to itself goes with it.
+        Assert.False(Directory.Exists(RivalFolder), "The loser's own folder was left behind.");
+    }
+
+    /// <remarks>
+    /// Either can win. The second copy downloads into a folder of its own,
+    /// because two torrents of one release carry one name and would otherwise
+    /// write into one path — so when it is the one that finishes, it is staged
+    /// from there and not from the folder every other torrent uses.
+    /// </remarks>
+    [Fact]
+    public async Task ASecondCopyThatFinishesFirstIsStagedFromItsOwnFolder()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+        await Racing(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000, RivalFolder);
+
+        StandingEngine engine = new StandingEngine()
+            .Holding(Downloading())
+            .Holding(Finished() with { InfoHash = Rival }, new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "The copy that finished first was never staged.");
+        Assert.Contains((Hash, true), engine.Removed);
+        Assert.DoesNotContain(await grabs.OpenAsync(CancellationToken.None), one => one.InfoHash == Hash);
+    }
+
+    /// <remarks>
+    /// And after a restart it goes back into the same folder. Put into the one
+    /// every torrent uses, it would write over the other copy's file of the
+    /// same name.
+    /// </remarks>
+    [Fact]
+    public async Task ASecondCopyTheClientHasLostIsAddedBackIntoItsOwnFolder()
+    {
+        GrabRepository grabs = await Grabs();
+        await Racing(grabs);
+
+        StandingEngine engine = new();
+
+        await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(RivalFolder, Assert.Single(engine.Taken).DownloadFolder);
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>Eight rows of one torrent are one torrent.</strong> Every cycle
     /// used to record a fresh grab for an episode it was already downloading,
     /// because an episode stays missing until the library has a file for it. So
@@ -1499,9 +1585,15 @@ public class TransfersTests : IDisposable
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
+    /// <summary>Another torrent of the same release, for the same episode.</summary>
+    private const string Rival = "FEDCBA9876543210FEDCBA9876543210FEDCBA98";
+
     private static EpisodeKey Episode => new(41, 3, 6);
 
     private string Incomplete => Path.Combine(_root, "incomplete");
+
+    /// <summary>Where the second copy downloads, which is a folder of its own.</summary>
+    private string RivalFolder => Path.Combine(Incomplete, Rival);
 
     private string Intake => Path.Combine(_root, "intake");
 
@@ -1564,12 +1656,28 @@ public class TransfersTests : IDisposable
             CancellationToken.None);
     }
 
-    /// <summary>A file really on disk, where the download would have left it.</summary>
-    private string Downloaded(string name, long length)
+    /// <summary>The second copy of the same release, as the cycle records it.</summary>
+    private async Task Racing(GrabRepository grabs)
     {
-        Directory.CreateDirectory(Incomplete);
+        await grabs.RecordAsync(
+            Episode,
+            "Silo",
+            "Silo.S03E06.1080p.WEB.H264-CAKES",
+            "The Pirate Bay",
+            Rival,
+            $"magnet:?xt=urn:btih:{Rival}",
+            [Episode],
+            DateTimeOffset.UtcNow,
+            CancellationToken.None,
+            RivalFolder);
+    }
 
-        string path = Path.Combine(Incomplete, name);
+    /// <summary>A file really on disk, where the download would have left it.</summary>
+    private string Downloaded(string name, long length, string? folder = null)
+    {
+        Directory.CreateDirectory(folder ?? Incomplete);
+
+        string path = Path.Combine(folder ?? Incomplete, name);
 
         using (FileStream writing = File.Create(path))
         {

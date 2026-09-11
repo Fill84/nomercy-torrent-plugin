@@ -247,6 +247,26 @@ finished the moment it is complete: nothing is ever uploaded on a public swarm, 
 gives nothing to anybody while costing a connection. It is stopped, not removed — the files stay
 where they are and staging takes them from there.
 
+## One release under two hashes
+
+The same release name under two info hashes is one file cut into two torrents, and which swarm
+delivers first cannot be told from a listing. The owner's decision of 11 September 2026: **both start
+together, and the first to finish is kept.**
+
+- The cycle takes the best copy as always, then every other copy with the same release name and an
+  info hash of its own, for the same episodes. Only a copy whose row names its hash is taken this
+  way; a row without one cannot be told from the copy already taken.
+- A second copy downloads into `<incomplete folder>/<INFO HASH>`, written down with its grab. Two
+  torrents of one release carry one name, and a torrent writes under its own name in the folder it
+  is given, so in one folder they would write one path. It is staged from that folder and added back
+  into it after a restart.
+- The first copy to finish is staged and dispatched. Every other copy of that release for those
+  episodes is stopped, its files are deleted, and its grab is written **lost**, with a line in the
+  history. Lost is not failed: the copy is not refused, and its episodes are not put back to missing,
+  because the winner is delivering them.
+- A copy is never left to finish and seed. Nothing is uploaded on a public swarm (see **Uploading**),
+  so a loser left running gives nothing to anybody and costs the disk the same gigabytes twice.
+
 ## Stalls
 
 No progress **and** no peers for `StallMinutes`: the torrent is stopped, the reason is recorded

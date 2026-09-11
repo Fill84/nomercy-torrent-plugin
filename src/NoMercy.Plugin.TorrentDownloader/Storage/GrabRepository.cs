@@ -79,15 +79,16 @@ public sealed class GrabRepository(Store database)
         string? magnet,
         IReadOnlyList<EpisodeKey> covers,
         DateTimeOffset at,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? folder = null)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);
         await using SqliteCommand command = connection.CreateCommand();
 
         command.CommandText =
             """
-            INSERT INTO grabs (show_id, season, episode, release_title, info_hash, source, magnet, grabbed_at, state, covers)
-            VALUES ($show, $season, $episode, $release, $hash, $source, $magnet, $at, $state, $covers)
+            INSERT INTO grabs (show_id, season, episode, release_title, info_hash, source, magnet, grabbed_at, state, covers, folder)
+            VALUES ($show, $season, $episode, $release, $hash, $source, $magnet, $at, $state, $covers, $folder)
             ON CONFLICT (info_hash) DO UPDATE SET
                 release_title = excluded.release_title,
                 source        = excluded.source,
@@ -95,6 +96,7 @@ public sealed class GrabRepository(Store database)
                 grabbed_at    = excluded.grabbed_at,
                 state         = excluded.state,
                 covers        = excluded.covers,
+                folder        = excluded.folder,
                 staged_path   = NULL,
                 encode_job    = NULL
             -- Failed or done, never open: a grab still running is the first
@@ -103,8 +105,10 @@ public sealed class GrabRepository(Store database)
             -- does not have — the owner's decision of 11 September 2026. What
             -- this used to guard against, a finished grab dragged back while
             -- its episode was in the library, cannot come through here: the
-            -- run never decides an episode the library has.
-            WHERE grabs.state IN ('failed', 'done');
+            -- run never decides an episode the library has. Lost is over in
+            -- the same way: another copy finished first, and a later run that
+            -- takes this one again has a reason to.
+            WHERE grabs.state IN ('failed', 'done', 'lost');
             """;
 
         command.Parameters.AddWithValue("$show", episode.ShowId);
@@ -122,6 +126,7 @@ public sealed class GrabRepository(Store database)
         command.Parameters.AddWithValue(
             "$covers",
             JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })));
+        command.Parameters.AddWithValue("$folder", (object?)folder ?? DBNull.Value);
 
         _ = showTitle;
 
@@ -147,8 +152,8 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, encode_job FROM grabs
-            WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed');
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, encode_job, folder FROM grabs
+            WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed', 'lost');
             """;
 
         List<StoredDownload> open = [];
@@ -166,6 +171,7 @@ public sealed class GrabRepository(Store database)
                 Covers = Covered(reader.GetString(4)),
                 StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
                 EncodeJobId = reader.IsDBNull(6) ? null : reader.GetString(6),
+                Folder = reader.IsDBNull(7) ? null : reader.GetString(7),
             });
         }
 
@@ -189,7 +195,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, encode_job FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, encode_job, folder FROM grabs
             WHERE info_hash IS NOT NULL;
             """;
 
@@ -208,6 +214,7 @@ public sealed class GrabRepository(Store database)
                 Covers = Covered(reader.GetString(4)),
                 StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
                 EncodeJobId = reader.IsDBNull(6) ? null : reader.GetString(6),
+                Folder = reader.IsDBNull(7) ? null : reader.GetString(7),
             });
         }
 
@@ -444,6 +451,50 @@ public sealed class GrabRepository(Store database)
         command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
 
         await command.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>
+    /// A torrent another copy of the same release beat to the finish.
+    /// </summary>
+    /// <remarks>
+    /// Over, and said in the history, so the owner can see why a download left
+    /// the page. Not refused and its episodes not put back to missing, which is
+    /// everything <see cref="FailedAsync"/> does: nothing is wrong with this
+    /// copy, it was only slower, and the one that won is delivering them.
+    /// </remarks>
+    public async Task LostAsync(string infoHash, string reason, DateTimeOffset at, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
+
+        string hash = infoHash.ToUpperInvariant();
+
+        await using (SqliteCommand marking = connection.CreateCommand())
+        {
+            marking.Transaction = transaction;
+            marking.CommandText = "UPDATE grabs SET state = 'lost' WHERE info_hash = $hash AND state <> 'done';";
+            marking.Parameters.AddWithValue("$hash", hash);
+
+            await marking.ExecuteNonQueryAsync(ct);
+        }
+
+        await using (SqliteCommand writing = connection.CreateCommand())
+        {
+            writing.Transaction = transaction;
+            writing.CommandText =
+                """
+                INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+                SELECT $at, 'lost', show_id, season, episode, NULL, release_title, source, $detail
+                FROM grabs WHERE info_hash = $hash LIMIT 1;
+                """;
+            writing.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
+            writing.Parameters.AddWithValue("$detail", reason);
+            writing.Parameters.AddWithValue("$hash", hash);
+
+            await writing.ExecuteNonQueryAsync(ct);
+        }
+
+        await transaction.CommitAsync(ct);
     }
 
     /// <summary>

@@ -71,6 +71,28 @@ public sealed record EpisodeOutcome(
     /// they were.
     /// </remarks>
     public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
+
+    /// <summary>
+    /// The same release under other hashes, handed over beside it.
+    /// </summary>
+    /// <remarks>
+    /// The owner's decision of 11 September 2026: one release under two
+    /// hashes is two torrents of one file, and which swarm delivers first
+    /// cannot be told from a listing — so both start, the first to finish is
+    /// kept, and the other is stopped and its files deleted. That last part is
+    /// the tick's; this is only what was handed over.
+    /// </remarks>
+    public IReadOnlyList<EpisodeOutcome> Racing { get; init; } = [];
+
+    /// <summary>
+    /// Where this one downloads, when it is not the folder every torrent uses.
+    /// </summary>
+    /// <remarks>
+    /// Only for a copy in <see cref="Racing"/>. Two torrents of one release
+    /// carry one name, and a torrent writes under its own name in the folder it
+    /// is given — so in one folder they would write one path.
+    /// </remarks>
+    public string? Folder { get; init; }
 }
 
 /// <summary>
@@ -444,10 +466,86 @@ public sealed class SearchCycle(
             {
                 Searched = true,
                 Considered = AheadOf(chosen, decision.Ranked),
+                Racing = await RacingAsync(episode, chosen, outcome, decision.Ranked, covers, options, trackers, known, ct),
             };
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// The same release under every other hash anybody is serving, handed over
+    /// beside the copy just taken.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The owner's decision of 11 September 2026. One release under two hashes
+    /// is one file cut into two torrents, and which of the two swarms delivers
+    /// first is not something a listing can say: The Pirate Bay's own answer for
+    /// Sugar S02E01 carries the NTb 720p twice, seeded by 57 and by 10. So both
+    /// start, the first to finish is kept, and the tick stops the other and
+    /// deletes its files.
+    /// </para>
+    /// <para>
+    /// Each goes into a folder of its own, named after its hash. A torrent
+    /// writes under its own name in the folder it is given, and two torrents of
+    /// one release carry one name — in one folder they would write one path.
+    /// </para>
+    /// </remarks>
+    private async Task<IReadOnlyList<EpisodeOutcome>> RacingAsync(
+        TrackedEpisode episode,
+        ReleaseCopy taken,
+        EpisodeOutcome outcome,
+        IReadOnlyList<ReleaseCopy> ranked,
+        IReadOnlyList<EpisodeKey> covers,
+        CycleOptions options,
+        List<string> trackers,
+        IReadOnlyList<string> known,
+        CancellationToken ct)
+    {
+        if (!outcome.HandedOver || outcome.InfoHash is not string first)
+        {
+            return [];
+        }
+
+        string release = TitleMatcher.Release(taken.Title);
+        HashSet<string> held = new(StringComparer.OrdinalIgnoreCase) { first };
+        List<EpisodeOutcome> racing = [];
+
+        foreach (ReleaseCopy candidate in ranked)
+        {
+            // Only a copy that says which torrent it is. A row without a hash
+            // cannot be told from the one already taken without reading its
+            // page, and most of the time it is that one.
+            if (candidate.InfoHash is not string hash
+                || held.Contains(hash)
+                || !string.Equals(
+                    TitleMatcher.Release(Decisions.NameOf(candidate, known)),
+                    release,
+                    StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            ReleaseCopy resolved = await find.ResolveAsync(candidate, ct);
+
+            trackers.AddRange(resolved.Trackers);
+
+            (EpisodeOutcome rival, _) = await GrabAsync(
+                episode,
+                resolved with { Title = taken.Title },
+                covers,
+                options,
+                ct,
+                Path.Combine(options.IncompleteFolder, hash.ToUpperInvariant()));
+
+            if (rival.HandedOver && rival.InfoHash is string took && held.Add(took))
+            {
+                racing.Add(rival with { Searched = true });
+            }
+        }
+
+        return racing;
     }
 
     /// <summary>
@@ -668,7 +766,8 @@ public sealed class SearchCycle(
         ReleaseCopy chosen,
         IReadOnlyList<EpisodeKey> covers,
         CycleOptions options,
-        CancellationToken ct)
+        CancellationToken ct,
+        string? folder = null)
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
 
@@ -717,7 +816,7 @@ public sealed class SearchCycle(
         // database.
         Grabbed taken = await grab.TakeAsync(
             chosen,
-            options.IncompleteFolder,
+            folder ?? options.IncompleteFolder,
             options.DefaultTrackers,
             options.OwnTrackerHosts,
             ct);
@@ -751,6 +850,7 @@ public sealed class SearchCycle(
                 InfoHash = taken.InfoHash,
                 Magnet = chosen.Magnet,
                 Covers = covers,
+                Folder = folder,
             },
             true);
     }

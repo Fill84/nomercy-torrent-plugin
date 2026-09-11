@@ -37,6 +37,17 @@ public enum GrabState
     Failed,
 
     Paused,
+
+    /// <summary>
+    /// Another torrent of the same release finished first, so this one was
+    /// stopped and its files deleted.
+    /// </summary>
+    /// <remarks>
+    /// Its own state rather than <see cref="Failed"/>: nothing is wrong with
+    /// it, it was only slower, and a failure is refused for a while — which
+    /// would turn away a good copy the next time the episode is wanted.
+    /// </remarks>
+    Lost,
 }
 
 /// <summary>
@@ -89,6 +100,17 @@ public sealed record StoredDownload(string InfoHash, string Magnet, string Relea
     /// </para>
     /// </remarks>
     public IReadOnlyList<string> StagedPaths { get; init; } = [];
+
+    /// <summary>
+    /// Where it downloads, when that is not the folder every torrent uses.
+    /// </summary>
+    /// <remarks>
+    /// A second torrent of a release already being downloaded gets a folder of
+    /// its own, because both carry one name and would otherwise write one
+    /// path. Kept, so it is staged from there and added back there after a
+    /// restart. Null is the ordinary folder.
+    /// </remarks>
+    public string? Folder { get; init; }
 }
 
 /// <summary>
@@ -151,10 +173,10 @@ public static class Recovery
 
         foreach (StoredDownload download in stored)
         {
-            if (download.State is GrabState.Done or GrabState.Failed
+            if (download.State is GrabState.Done or GrabState.Failed or GrabState.Lost
                 or GrabState.Staged or GrabState.Dispatched)
             {
-                // Nothing here to plan. Done and failed are finished with
+                // Nothing here to plan. Done, failed and lost are finished with
                 // either way, and a torrent still in the client after it was
                 // staged is there on purpose and is not something to stop.
                 //
