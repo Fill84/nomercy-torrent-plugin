@@ -56,7 +56,8 @@
       "url": "https://eztv.re/api/get-torrents?limit=100&search={query}",
       "priority": 30,
       "minimumIntervalSeconds": 60,
-      "note": "JSON, and must not be read as HTML. It takes a search parameter and ignores it, so it is read whole on the feed pass and never asked a question."
+      "enabled": false,
+      "note": "JSON, and must not be read as HTML. It takes a search parameter and ignores it: measured 11 September 2026, every question for every episode was answered with the same hundred newest torrents of every show, so it counted as a site that had answered and was asked the same thing again and again. Switched off on the owner's decision; the EZTV site, which does search, stays on."
     },
     {
       "name": "The Pirate Bay",

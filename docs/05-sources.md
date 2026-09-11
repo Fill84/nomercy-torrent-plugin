@@ -19,7 +19,10 @@ until then, and 3,149 of its file names — a quarter of the owner's whole name 
 release names, spelled `Somebody.Knows.Something.S01E04.XviD-AFG[EZTVx.to].avi` with the site's tag
 inside and the extension still on the end.
 
-Fifteen are asked: YTS ships switched off because films are out of scope. All of them were measured
+Fourteen are asked. YTS ships switched off because films are out of scope, and EZTV latest because
+its API ignores the search term: measured 11 September 2026, it answered every question for every
+episode with the same hundred newest torrents of every show, so it counted as having answered and
+was asked the same thing over and over. The owner's decision; the EZTV site, which searches, stays. All of them were measured
 working end to end on 13 August 2026 — each answered a real release name and produced a route to a
 torrent. The traps below are what that took.
 
@@ -43,7 +46,7 @@ and the presence of `searchUrl`, and nothing else guesses.
 | srrDB search | `srrdb` | — | slug | no | 20 | 15s | names |
 | PreDB.net | `rss` | — | words | no | 20 | 15s | feed + names |
 | SceneSource | `rss` | — | words | **yes** | 20 | 60s | feed + names |
-| EZTV latest | `eztv-api` | — | words | no | 30 | 60s | indexer |
+| EZTV latest | `eztv-api` | — | words | no | 30 | 60s | indexer — **switched off** |
 | The Pirate Bay | `apibay` | — | words | no | 45 | 5s | indexer |
 | 1337x | `site` | `1337x` | words | **yes** | 40 | 15s | indexer |
 | LimeTorrents | `site` | generic | words | no | 35 | 15s | indexer |

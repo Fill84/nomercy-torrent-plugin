@@ -296,6 +296,28 @@ public class CatalogueTests
 
     /// <remarks>
     /// <para>
+    /// <strong>EZTV's API ships switched off.</strong> The owner's decision of
+    /// 11 September 2026, after it was measured answering every question for
+    /// every episode with the same hundred newest torrents of every show: it
+    /// takes a search parameter and ignores it. So it counted as a site that
+    /// had answered and never went down the ladder, and was asked the same
+    /// question again for the same list, over and over.
+    /// </para>
+    /// <para>
+    /// The other EZTV — the site, which really searches — stays on.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EztvsApiShipsSwitchedOffAndItsSiteDoesNot()
+    {
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(new CapturingLogger()).Load();
+
+        Assert.False(shipped.Single(one => one.Name == "EZTV latest").Enabled);
+        Assert.True(shipped.Single(one => one.Name == "EZTV").Enabled);
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>TorrentBay leads every general indexer.</strong> The owner's
     /// decision of 11 September 2026: it indexes every other site, so where two
     /// copies are level it is the one taken, and when a torrent is fetched its

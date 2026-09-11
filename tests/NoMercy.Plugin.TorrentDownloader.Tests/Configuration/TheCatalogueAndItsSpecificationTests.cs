@@ -79,22 +79,27 @@ public class TheCatalogueAndItsSpecificationTests
     }
 
     /// <remarks>
-    /// And the one entry that ships switched off says so in both places. YTS is
-    /// films, which are out of scope; its address is recorded so nobody
-    /// rediscovers it and it is never asked.
+    /// And the entries that ship switched off say so in both places. YTS is
+    /// films, which are out of scope. EZTV latest is EZTV's API, which ignores
+    /// the search term and answers every question with the same hundred newest
+    /// torrents — switched off on the owner's decision of 11 September 2026.
+    /// Their addresses are recorded so nobody rediscovers them, and they are
+    /// never asked.
     /// </remarks>
     [Fact]
-    public void TheEntryThatShipsSwitchedOffIsTheOneTheDocumentSaysIs()
+    public void TheEntriesThatShipSwitchedOffAreTheOnesTheDocumentSaysAre()
     {
         IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(new CapturingLogger()).Load();
 
-        SourceDefinition off = Assert.Single(shipped, one => !one.Enabled);
+        string[] off = [.. shipped.Where(one => !one.Enabled).Select(one => one.Name).Order(StringComparer.Ordinal)];
 
-        Assert.Equal("YTS", off.Name);
-        Assert.Contains(
-            $"{InWords(shipped.Count - 1)} are asked: YTS ships switched off",
-            Document("05-sources.md"),
-            StringComparison.Ordinal);
+        Assert.Equal(["EZTV latest", "YTS"], off);
+
+        string document = Document("05-sources.md");
+
+        Assert.Contains($"{InWords(shipped.Count - off.Length)} are asked.", document, StringComparison.Ordinal);
+        Assert.Contains("YTS ships switched off", document, StringComparison.Ordinal);
+        Assert.Contains("EZTV latest because", document, StringComparison.Ordinal);
     }
 
     /// <summary>The numbers as prose writes them, which is how these documents do.</summary>
@@ -104,6 +109,7 @@ public class TheCatalogueAndItsSpecificationTests
         {
             5 => "five",
             11 => "eleven",
+            14 => "Fourteen",
             15 => "Fifteen",
             16 => "Sixteen",
 
