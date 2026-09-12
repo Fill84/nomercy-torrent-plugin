@@ -89,6 +89,21 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     /// <summary>The guard that keeps two cycles from running together.</summary>
     private readonly OneAtATime _running = new();
+
+    /// <summary>
+    /// Guards feed and maintenance against overlapping themselves.
+    /// </summary>
+    /// <remarks>
+    /// Needed only since the due cadences went fire-and-forget (S12-05 fix
+    /// round 1): a slow feed can still be running when the next tick finds it
+    /// due again, and nothing but this stops a second one starting on top of
+    /// it. Search already had <see cref="_running"/> for the same reason, from
+    /// before this plugin had a clock at all.
+    /// </remarks>
+    private readonly OneAtATime _feedRunning = new();
+
+    private readonly OneAtATime _maintenanceRunning = new();
+
     private int _unconfigured;
     private int _overlapping;
     private int _announced;
@@ -331,27 +346,34 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // has not yet re-read Jobs after an upgrade is still holding its
             // previous four-job registration, each still firing on its own
             // old cadence. Accepted, and still runs the one pass that name
-            // has always meant — nothing here needs to know the clock exists.
+            // has always meant — and now records a finish too, so the clock
+            // does not repeat work this tick already did once the host does
+            // catch up and start driving all four through Transfers instead.
             case JobNames.Feed:
-                await HarvestAsync(work.Token);
+                await RunFeedAsync(work.Token);
                 break;
 
             case JobNames.Search:
-                await CycleAsync(work.Token);
+                await RunSearchAsync(work.Token);
                 break;
 
             case JobNames.Maintenance:
-                await MaintainAsync(work.Token);
+                await RunMaintenanceAsync(work.Token);
                 break;
 
             case JobNames.Transfers:
-                // The one job Jobs declares now. Transfers is not a cadence
-                // choice here: it is what this tick promises the host every
-                // time it fires, so it never waits on the clock. The other
-                // three no longer have a registration of their own to tick on
-                // — this is the only place left that can start them.
+                // The one job Jobs declares now, and the host serialises every
+                // tick of it behind a single worker loop (AllowConcurrent is
+                // false). Transfers must therefore never wait on the others:
+                // a fifteen-minute search cycle awaited in-line here would
+                // leave nothing staged and no encode asked for until it let
+                // go, which is the exact fault this slice exists to remove.
+                // So the due cadences are started and left running on the
+                // plugin's own lifetime — never on `work`, which is disposed
+                // the moment this method returns — and this tick returns as
+                // soon as transfers itself has.
                 await TransfersAsync(work.Token);
-                await TickDueCadencesAsync(work.Token);
+                StartDueCadences();
                 break;
 
             default:
@@ -360,22 +382,52 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// Runs whichever of feed, search and maintenance the clock says are due
-    /// right now, and records each one's finish once it really has run.
+    /// Starts <see cref="TickDueCadencesAsync"/> without waiting for it, on the
+    /// plugin's own lifetime rather than the tick's own token.
     /// </summary>
     /// <remarks>
-    /// <para>
+    /// Fire-and-forget rather than <c>AllowConcurrent: true</c> on the one
+    /// declared job — the reviewer's ruling. <c>AllowConcurrent</c> would let
+    /// the host start a second Transfers tick before the first has returned,
+    /// and transfers itself would then be able to overlap itself and stage
+    /// the same finished download twice. Started here instead, transfers
+    /// keeps ticking once a minute, serialised, exactly as before; only the
+    /// slower cadences run alongside it rather than inside it.
+    /// </remarks>
+    private void StartDueCadences()
+    {
+        _ = Task.Run(() => TickDueCadencesGuardedAsync(Lifetime), CancellationToken.None);
+    }
+
+    /// <summary>
+    /// <see cref="TickDueCadencesAsync"/>, with nothing left to escape it.
+    /// </summary>
+    /// <remarks>
+    /// A fire-and-forget <see cref="Task"/> has no caller to throw to: an
+    /// exception deciding which cadences are due — a settings read, a database
+    /// error — would otherwise be an unobserved task exception, which is a
+    /// fault with no line in this plugin's own log at all.
+    /// </remarks>
+    private async Task TickDueCadencesGuardedAsync(CancellationToken ct)
+    {
+        try
+        {
+            await TickDueCadencesAsync(ct);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            _context?.Logger.LogWarning(wrong, "Deciding which cadences are due failed: {Reason}", wrong.Message);
+        }
+    }
+
+    /// <summary>
+    /// Runs whichever of feed, search and maintenance the clock says are due
+    /// right now.
+    /// </summary>
+    /// <remarks>
     /// Nothing to judge cadences against when the plugin is unconfigured:
     /// <see cref="ConfiguredAsync"/> already says so once, and there is
     /// nowhere for any of the three to search, harvest or refresh into.
-    /// </para>
-    /// <para>
-    /// Search records a finish only when <see cref="CycleAsync"/> answers that
-    /// it really ran. Its own overlap guard drops a tick that arrives while a
-    /// cycle — cadence or the Run button — is already going, and recording a
-    /// finish for a cycle that was dropped would tell the clock a run happened
-    /// that did not, delaying the next real one by a whole interval.
-    /// </para>
     /// </remarks>
     private async Task TickDueCadencesAsync(CancellationToken ct)
     {
@@ -399,21 +451,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             switch (name)
             {
                 case JobNames.Feed:
-                    await HarvestAsync(ct);
-                    await clock.FinishedAsync(name, ct);
+                    await RunFeedAsync(ct);
                     break;
 
                 case JobNames.Maintenance:
-                    await MaintainAsync(ct);
-                    await clock.FinishedAsync(name, ct);
+                    await RunMaintenanceAsync(ct);
                     break;
 
                 case JobNames.Search:
-                    if (await CycleAsync(ct))
-                    {
-                        await clock.FinishedAsync(name, ct);
-                    }
-
+                    await RunSearchAsync(ct);
                     break;
             }
         }
@@ -423,6 +469,89 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // between — the same way CurrentCycle has always read a live cron
         // string rather than a snapshot taken once.
         _nextSearchDue = await clock.NextAsync(JobNames.Search, settings.Cadences.Search, ct);
+    }
+
+    /// <summary>Runs the feed cadence behind its own overlap guard.</summary>
+    private Task RunFeedAsync(CancellationToken ct)
+    {
+        return RunCadenceAsync(_feedRunning, JobNames.Feed, () => HarvestAsync(ct), ct);
+    }
+
+    /// <summary>Runs the maintenance cadence behind its own overlap guard.</summary>
+    private Task RunMaintenanceAsync(CancellationToken ct)
+    {
+        return RunCadenceAsync(_maintenanceRunning, JobNames.Maintenance, () => MaintainAsync(ct), ct);
+    }
+
+    /// <summary>
+    /// Runs the search cadence, recording a finish only when it really ran.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="CycleAsync"/> already guards itself with <see cref="_running"/>
+    /// — shared with the Run button — and already turns a failure or a stop
+    /// into a recorded finish rather than losing it, so it needs none of
+    /// <see cref="RunCadenceAsync"/>'s own guarding or catching. Only whether
+    /// it actually ran, versus was dropped because a cycle was already going,
+    /// decides whether the clock hears about it: a dropped tick did no work,
+    /// and recording one anyway would delay the next real cycle by a whole
+    /// interval for nothing.
+    /// </remarks>
+    private async Task RunSearchAsync(CancellationToken ct)
+    {
+        if (await CycleAsync(ct))
+        {
+            await (await ClockAsync(ct)).FinishedAsync(JobNames.Search, ct);
+        }
+    }
+
+    /// <summary>
+    /// Runs one cadence pass behind its own overlap guard, and records its
+    /// finish however it ended.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Feed and maintenance run fire-and-forget now (see
+    /// <see cref="StartDueCadences"/>), so a slow one can still be going when
+    /// its own next tick falls due; dropped here rather than piled up, the
+    /// same choice <see cref="OneAtATime"/> already makes for search.
+    /// </para>
+    /// <para>
+    /// A finish is recorded even when <paramref name="pass"/> throws. Nothing
+    /// here has a caller to report the exception to beyond a log line, and an
+    /// exception that also froze the clock's own record of this cadence's
+    /// last finish would have a feed that fails once retry every single
+    /// minute instead of waiting out the owner's own interval — the same
+    /// reasoning <see cref="CycleAsync"/> already applies to a failed search.
+    /// </para>
+    /// </remarks>
+    private async Task RunCadenceAsync(OneAtATime guard, string name, Func<Task> pass, CancellationToken ct)
+    {
+        if (!guard.TryEnter())
+        {
+            return;
+        }
+
+        try
+        {
+            await pass();
+        }
+        catch (OperationCanceledException)
+        {
+            // The plugin is shutting down. Not a fault, and recorded as a
+            // finish below exactly like a completed pass — the alternative is
+            // a restart finding this cadence still "due" from the moment
+            // before and repeating it immediately.
+        }
+        catch (Exception wrong)
+        {
+            _context?.Logger.LogWarning(wrong, "The {Name} cadence failed: {Reason}", name, wrong.Message);
+        }
+        finally
+        {
+            guard.Leave();
+        }
+
+        await (await ClockAsync(ct)).FinishedAsync(name, ct);
     }
 
     /// <summary>The clock, once the database behind it has been migrated.</summary>
