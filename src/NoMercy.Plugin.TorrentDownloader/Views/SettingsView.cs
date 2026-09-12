@@ -57,10 +57,10 @@ public static class SettingsView
                 Folders(settings),
                 CadenceSection(settings.Cadences),
                 Quality(settings.Profile),
-                Client(settings.Client, settings.DryRun),
+                Client(settings.Client),
                 Indexers(settings, present),
                 Trackers(settings, present),
-                Running(settings),
+                Running(),
             ],
         };
     }
@@ -236,7 +236,7 @@ public static class SettingsView
             });
     }
 
-    private static PluginComponent Client(ClientLimits limits, bool dryRun)
+    private static PluginComponent Client(ClientLimits limits)
     {
         return Section(
             "client",
@@ -313,13 +313,6 @@ public static class SettingsView
                     .. Enum.GetNames<EncryptionPolicy>()
                         .Select(name => new PluginFormOption { Label = name, Value = name }),
                 ],
-            },
-            new PluginFormField
-            {
-                Name = "dryRun",
-                Label = "Dry run — decide everything, download nothing",
-                Type = PluginFormFieldType.Toggle,
-                Value = dryRun,
             });
     }
 
@@ -389,14 +382,12 @@ public static class SettingsView
     /// slice came back to turn them into controls, so the plugin had no way at
     /// all to be asked to do something.
     /// </remarks>
-    private static PluginComponent Running(Settings settings)
+    private static PluginComponent Running()
     {
         return Ui.Detail(
             "run",
             "Run",
-            settings.DryRun
-                ? "Dry run is on: a cycle decides for every episode and hands nothing to the torrent client."
-                : "A cycle looks for every missing episode and downloads what it settles on.",
+            "A cycle looks for every missing episode and downloads what it settles on.",
             null,
             Ui.Button(
                 "run-run",

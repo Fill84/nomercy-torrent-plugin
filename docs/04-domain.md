@@ -163,7 +163,6 @@ the same cycle is not asked about again.
 | `MetadataTimeoutMinutes` | 5 | |
 | `ResumeIntervalSeconds` | 60 | named as `ResumeInterval` in `docs/06`; the number is `S5-12`'s |
 | `Encryption` | allowed | not required |
-| `DryRun` | off | decide but hand nothing to the client |
 
 This table said `DefaultTrackers` was "a shipped list" and no document anywhere said which trackers
 were in it. It ships empty until the owner chooses: announcing what is being downloaded to hosts

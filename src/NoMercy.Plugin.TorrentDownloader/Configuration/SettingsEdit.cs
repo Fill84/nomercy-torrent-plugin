@@ -86,9 +86,6 @@ public static class SettingsEdit
         ["intakeFolder"] = new(
             settings => settings.IntakeFolder,
             (settings, value) => settings.IntakeFolder = value.Trim()),
-        ["dryRun"] = new(
-            settings => Text(settings.DryRun),
-            (settings, value) => settings.DryRun = Flag(value)),
 
         ["cadences.transfers"] = new(
             settings => settings.Cadences.Transfers,

@@ -121,10 +121,7 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
             CancellationToken.None);
     }
 
-    /// <summary>
-    /// A plugin with somewhere to put things and a library to read, in dry run
-    /// so that no cycle reaches for a network.
-    /// </summary>
+    /// <summary>A plugin with somewhere to put things and a library to read.</summary>
     private async Task<TorrentDownloaderPlugin> Configured()
     {
         FakeLibraryQuery shelves = new FakeLibraryQuery()
@@ -149,7 +146,6 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
             {
                 IncompleteFolder = _folder,
                 IntakeFolder = _folder,
-                DryRun = true,
             },
             CancellationToken.None);
 

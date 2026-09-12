@@ -165,17 +165,26 @@ public class SettingsViewTests
     }
 
     /// <remarks>
-    /// Dry run changes what a cycle does with what it decides, so the page says
-    /// which of the two the button in front of it will start.
+    /// Dry run is gone from the page and the stored settings: it was a testing
+    /// switch on an owner's own page, and <c>CycleOptions.DryRun</c> — the seam
+    /// the pipeline tests decide a whole cycle through with no client behind it
+    /// — stays without anything on this page ever writing it. So the Running
+    /// sentence has one answer now rather than two.
     /// </remarks>
-    [Theory]
-    [InlineData(true, "hands nothing")]
-    [InlineData(false, "downloads what it settles on")]
-    public void ThePageSaysWhatPressingRunWouldDo(bool dryRun, string expected)
+    [Fact]
+    public void NothingOnThePageOffersADryRun()
     {
-        PluginView view = SettingsView.Render(new() { DryRun = dryRun }, [], []);
+        PluginView view = SettingsView.Render(new(), [], []);
 
-        Assert.Contains(expected, string.Join(" ", Rendered.Words(view)), StringComparison.Ordinal);
+        Assert.DoesNotContain("dryRun", Rendered.EveryValue(view));
+        Assert.DoesNotContain(
+            "hands nothing",
+            string.Join(" ", Rendered.Words(view)),
+            StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(
+            "downloads what it settles on",
+            string.Join(" ", Rendered.Words(view)),
+            StringComparison.Ordinal);
     }
 
     /// <remarks>

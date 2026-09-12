@@ -112,7 +112,6 @@ public class TheLibraryIsReadTests : IDisposable
             {
                 IncompleteFolder = _folder,
                 IntakeFolder = _folder,
-                DryRun = true,
             },
             CancellationToken.None);
 

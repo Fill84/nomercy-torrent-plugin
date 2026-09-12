@@ -511,7 +511,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // the next cycle chooses the same release and fails the
                     // same way, for as long as the plugin runs.
                     await grabs.BlacklistedAsync(ct),
-                    settings.DryRun,
+
+                    // Dry run is gone from the page and the stored settings —
+                    // it was a testing switch on an owner's own page. The
+                    // pipeline keeps the seam because its own tests decide a
+                    // whole cycle with no torrent client behind it, but
+                    // nothing here ever asks for one.
+                    false,
                     settings.IncompleteFolder)
                 {
                     DefaultTrackers = settings.Client.DefaultTrackers,

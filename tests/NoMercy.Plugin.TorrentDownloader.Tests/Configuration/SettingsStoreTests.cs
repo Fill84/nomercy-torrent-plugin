@@ -117,7 +117,76 @@ public class SettingsStoreTests : IDisposable
         Assert.Empty(settings.Indexers);
         Assert.Empty(settings.PrivateTrackers);
         Assert.Empty(settings.DisabledDefaultSources);
-        Assert.False(settings.DryRun);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The owner's own <c>config.json</c> survives sprint 12.</strong>
+    /// It was written by a version that still had all six of these, and a
+    /// settings file is read into <see cref="Settings"/> field by field: a key
+    /// the type no longer has is simply not there to bind to, so it is ignored
+    /// rather than refusing the whole file. <c>PortMapping</c> is not one of
+    /// the six yet — its own slice has not run — so it is asserted as a real
+    /// setting here, not as a leftover key.
+    /// </para>
+    /// <para>
+    /// The second half is what makes the first half worth anything: a save is
+    /// always a fresh serialise of <see cref="Settings"/>, so a key the type no
+    /// longer carries cannot survive one. Proved once here rather than assumed,
+    /// because a removed setting that lingered in the file forever would still
+    /// pass every other test in this class.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASettingsFileFromAnOlderVersionStillLoads()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        string incomplete = Folder();
+        string intake = Folder();
+
+        // The shape an older version wrote: everything this version still
+        // has, plus the six keys an owner's real file may still carry.
+        context.Config.SaveConfiguration(new
+        {
+            IncompleteFolder = incomplete,
+            IntakeFolder = intake,
+            Profile = new
+            {
+                MaximumResolution = "1080p",
+                MaxSearchAttempts = 3,
+                MinimumSeeders = 1,
+                SeasonPackThreshold = 2,
+                AllowSeasonPacks = true,
+            },
+            Client = new
+            {
+                ListenPort = 51413,
+                PortMapping = true,
+            },
+            DryRun = true,
+        });
+
+        Settings settings = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(incomplete, settings.IncompleteFolder);
+        Assert.Equal(intake, settings.IntakeFolder);
+        Assert.Equal("1080p", settings.Profile.MaximumResolution);
+        Assert.Equal(51413, settings.Client.ListenPort);
+
+        // Still a real setting at this point in the sprint: S12-06 removes the
+        // switch and changes this assertion to "ignored".
+        Assert.True(settings.Client.PortMapping);
+
+        SaveResult saved = await store.SaveAsync(settings, CancellationToken.None);
+        Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+
+        Assert.DoesNotContain("DryRun", context.Config.Written, StringComparison.Ordinal);
+        Assert.DoesNotContain("MaxSearchAttempts", context.Config.Written, StringComparison.Ordinal);
+        Assert.DoesNotContain("MinimumSeeders", context.Config.Written, StringComparison.Ordinal);
+        Assert.DoesNotContain("SeasonPackThreshold", context.Config.Written, StringComparison.Ordinal);
+        Assert.DoesNotContain("AllowSeasonPacks", context.Config.Written, StringComparison.Ordinal);
     }
 
     /// <remarks>

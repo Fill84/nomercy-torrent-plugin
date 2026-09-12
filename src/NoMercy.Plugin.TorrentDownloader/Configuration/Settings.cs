@@ -76,9 +76,6 @@ public sealed class Settings
 
     /// <summary>Shipped sources the owner switched off, by name.</summary>
     public List<string> DisabledDefaultSources { get; set; } = [];
-
-    /// <summary>Run the whole chain to a decision and hand nothing to the client.</summary>
-    public bool DryRun { get; set; }
 }
 
 /// <summary>

@@ -111,9 +111,6 @@ public class EveryHostIsAskedForTests : IDisposable
             {
                 IncompleteFolder = _folder,
                 IntakeFolder = _folder,
-
-                // Nothing of the owner's own, which is every fresh install.
-                DryRun = true,
             },
             CancellationToken.None);
 

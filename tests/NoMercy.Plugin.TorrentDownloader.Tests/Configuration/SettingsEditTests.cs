@@ -45,10 +45,10 @@ public class SettingsEditTests
         Settings settings = new();
         settings.Client.ListenPort = 6881;
 
-        SettingsEdit.Apply(settings, new Dictionary<string, string?> { ["dryRun"] = "true" });
+        SettingsEdit.Apply(settings, new Dictionary<string, string?> { ["profile.englishOnly"] = "false" });
 
         Assert.Equal(6881, settings.Client.ListenPort);
-        Assert.True(settings.DryRun);
+        Assert.False(settings.Profile.EnglishOnly);
     }
 
     /// <remarks>
