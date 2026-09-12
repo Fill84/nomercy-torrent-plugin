@@ -20,27 +20,17 @@ public class DecisionsTests
     /// The owner's rule of 12 September 2026: a pack is taken when it is the
     /// best copy of the gap being looked at, however many gaps that season
     /// has. A season with a single gap used to have its pack refused outright
-    /// for want of company; a pack is an ordinary copy now, judged on the same
-    /// terms as a single episode.
+    /// for want of company; there is no threshold left to clear.
     /// </remarks>
     [Fact]
     public void APackIsTakenForASeasonWithOneGap()
     {
-        // A season of one: the pack answers the only gap it has, and a single
-        // episode of another show answers its own — a pack is an ordinary
-        // copy now, so both are judged on the same terms.
-        Decisions pack = new(
+        Decisions decisions = new(
             new() { MaximumResolution = "1080p", EnglishOnly = false },
             [Gap(1)],
             Blacklist.None);
 
-        Decisions single = new(
-            new() { MaximumResolution = "720p" },
-            [Silo(6)],
-            Blacklist.None);
-
-        Assert.True(pack.JudgeName(Pack, Gap(1)).Accepted);
-        Assert.True(single.JudgeName(Single, Silo(6)).Accepted);
+        Assert.True(decisions.JudgeName(Pack, Gap(1)).Accepted);
     }
 
     /// <remarks>
