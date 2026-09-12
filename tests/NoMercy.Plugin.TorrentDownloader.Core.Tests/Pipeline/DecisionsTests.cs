@@ -10,48 +10,37 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 /// What one cycle has decided so far.
 /// </summary>
 /// <remarks>
-/// The rules that need to know about more than one episode at a time: whether a
-/// season has enough gaps to be worth a pack, which episodes a pack already
-/// taken has settled, and what was refused and why. <strong>H1:</strong> the
-/// real profile throughout, never a stand-in chooser.
+/// The rules that need to know about more than one episode at a time: which
+/// episodes a pack already taken has settled, and what was refused and why.
+/// <strong>H1:</strong> the real profile throughout, never a stand-in chooser.
 /// </remarks>
 public class DecisionsTests
 {
     /// <remarks>
-    /// A pack is worth its bytes when the season has enough gaps in it. Two
-    /// missing episodes out of ten do not justify downloading the season, and
-    /// the threshold is the owner's to set.
+    /// The owner's rule of 12 September 2026: a pack is taken when it is the
+    /// best copy of the gap being looked at, however many gaps that season
+    /// has. A season with a single gap used to have its pack refused outright
+    /// for want of company; a pack is an ordinary copy now, judged on the same
+    /// terms as a single episode.
     /// </remarks>
     [Fact]
-    public void APackIsRefusedUntilTheSeasonHasEnoughGaps()
+    public void APackIsTakenForASeasonWithOneGap()
     {
-        Profile profile = new() { MaximumResolution = "1080p", EnglishOnly = false, SeasonPackThreshold = 3 };
-
-        Decisions two = new(profile, [Gap(1), Gap(2)], Blacklist.None);
-        Decisions three = new(profile, [Gap(1), Gap(2), Gap(3)], Blacklist.None);
-
-        Verdict refused = two.JudgeName(Pack, Gap(1));
-
-        Assert.False(refused.Accepted);
-        Assert.Contains("gaps", refused.Reason, StringComparison.OrdinalIgnoreCase);
-
-        Assert.True(three.JudgeName(Pack, Gap(1)).Accepted);
-    }
-
-    /// <remarks>
-    /// And only when the owner wants packs at all. The threshold does not
-    /// override the switch: a season with twenty gaps in it is still twenty
-    /// episodes to somebody who does not want packs.
-    /// </remarks>
-    [Fact]
-    public void APackIsRefusedWhenPacksAreNotWantedHoweverManyGapsThereAre()
-    {
-        Decisions decisions = new(
-            new() { MaximumResolution = "1080p", EnglishOnly = false, AllowSeasonPacks = false },
-            [Gap(1), Gap(2), Gap(3), Gap(4)],
+        // A season of one: the pack answers the only gap it has, and a single
+        // episode of another show answers its own — a pack is an ordinary
+        // copy now, so both are judged on the same terms.
+        Decisions pack = new(
+            new() { MaximumResolution = "1080p", EnglishOnly = false },
+            [Gap(1)],
             Blacklist.None);
 
-        Assert.False(decisions.JudgeName(Pack, Gap(1)).Accepted);
+        Decisions single = new(
+            new() { MaximumResolution = "720p" },
+            [Silo(6)],
+            Blacklist.None);
+
+        Assert.True(pack.JudgeName(Pack, Gap(1)).Accepted);
+        Assert.True(single.JudgeName(Single, Silo(6)).Accepted);
     }
 
     /// <remarks>
@@ -175,23 +164,6 @@ public class DecisionsTests
         Assert.Contains("720p is not 2160p", skipped.Reason, StringComparison.Ordinal);
     }
 
-    /// <remarks>
-    /// The gaps counted are the ones this cycle is looking at, per show and per
-    /// season. Another show's gaps are another show's.
-    /// </remarks>
-    [Fact]
-    public void GapsAreCountedPerShowAndPerSeason()
-    {
-        Decisions decisions = new(
-            new(),
-            [Gap(1), Gap(2), OtherSeason(1), OtherShow(1), OtherShow(2)],
-            Blacklist.None);
-
-        Assert.Equal(2, decisions.GapsIn(Show, 5));
-        Assert.Equal(1, decisions.GapsIn(Show, 6));
-        Assert.Equal(2, decisions.GapsIn(Show + 1, 5));
-    }
-
     private const string Title = "Pokemon Master Quest";
 
     private static readonly int Show = Title.GetHashCode(StringComparison.Ordinal);
@@ -231,16 +203,6 @@ public class DecisionsTests
     private static TrackedEpisode Gap(int number)
     {
         return Episode(Show, 5, number);
-    }
-
-    private static TrackedEpisode OtherSeason(int number)
-    {
-        return Episode(Show, 6, number);
-    }
-
-    private static TrackedEpisode OtherShow(int number)
-    {
-        return Episode(Show + 1, 5, number);
     }
 
     private static TrackedEpisode Episode(int show, int season, int number)

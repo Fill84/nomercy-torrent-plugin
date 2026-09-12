@@ -215,20 +215,6 @@ public static class SettingsView
             },
             new PluginFormField
             {
-                Name = "profile.allowSeasonPacks",
-                Label = "Take season packs",
-                Type = PluginFormFieldType.Toggle,
-                Value = profile.AllowSeasonPacks,
-            },
-            new PluginFormField
-            {
-                Name = "profile.seasonPackThreshold",
-                Label = "Gaps before a season pack is worth it",
-                Type = PluginFormFieldType.Number,
-                Value = profile.SeasonPackThreshold,
-            },
-            new PluginFormField
-            {
                 Name = "profile.englishOnly",
                 Label = "English only",
                 Type = PluginFormFieldType.Toggle,

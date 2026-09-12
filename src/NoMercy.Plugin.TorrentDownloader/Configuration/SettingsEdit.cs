@@ -118,12 +118,6 @@ public static class SettingsEdit
         ["profile.includeSpecials"] = new(
             settings => Text(settings.Profile.IncludeSpecials),
             (settings, value) => settings.Profile.IncludeSpecials = Flag(value)),
-        ["profile.allowSeasonPacks"] = new(
-            settings => Text(settings.Profile.AllowSeasonPacks),
-            (settings, value) => settings.Profile.AllowSeasonPacks = Flag(value)),
-        ["profile.seasonPackThreshold"] = new(
-            settings => Text(settings.Profile.SeasonPackThreshold),
-            (settings, value) => settings.Profile.SeasonPackThreshold = Whole(value)),
         ["profile.excludeTerms"] = new(
             settings => string.Join(", ", settings.Profile.ExcludeTerms),
             (settings, value) => settings.Profile.ExcludeTerms = Line(value)),

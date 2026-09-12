@@ -52,11 +52,6 @@ public sealed class Profile
 
     public List<string> ExcludeTerms { get; set; } = [];
 
-    public bool AllowSeasonPacks { get; set; } = true;
-
-    /// <summary>How many gaps in a season before a pack is worth its bytes.</summary>
-    public int SeasonPackThreshold { get; set; } = 3;
-
     /// <summary>
     /// Whether an untagged release is refused.
     /// </summary>

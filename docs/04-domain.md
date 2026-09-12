@@ -127,9 +127,10 @@ a downgrade, because the 720p copy is usually posted first.
 
 ## Season packs
 
-A pack is taken only when the number of gaps in that season reaches `SeasonPackThreshold` and the
-profile allows packs. A pack that is taken answers for every gap in the season it covers; an episode
-settled by a pack earlier in the same cycle is not asked about again.
+A pack is an ordinary copy: judged by the same rules as a single episode, with no threshold and no
+switch to refuse it outright. The owner's rule of 12 September 2026 is to take what is found. A pack
+that is taken answers for every gap in the season it covers; an episode settled by a pack earlier in
+the same cycle is not asked about again.
 
 ## Settings
 
@@ -147,8 +148,6 @@ settled by a pack earlier in the same cycle is not asked about again.
 | `RequireCodecTag` | true when a codec is named | an untagged release is where the unwanted codec hides |
 | `EnglishOnly` | true | |
 | `ExcludeTerms` | empty | |
-| `AllowSeasonPacks` | true | |
-| `SeasonPackThreshold` | 3 | gaps needed before a pack is worth its bytes |
 | `MaxConcurrentDownloads` | 5 | |
 | `DefaultTrackers` | **empty, then learned** | every tracker the plugin comes across, no duplicates, attached to every grab |
 | `Indexers` | empty | the owner's own — see `docs/05-sources.md` |

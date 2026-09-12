@@ -306,12 +306,14 @@ public class ReleaseFilterTests
     }
 
     /// <remarks>
-    /// A pack is a name for a season, and it is refused outright when the owner
-    /// does not want packs. Whether a wanted pack is worth its bytes is a
-    /// different question, asked of the gaps rather than of the name.
+    /// The owner's rule of 12 September 2026: a pack is an ordinary copy, with
+    /// no switch to refuse it outright for being one. <c>Profile</c> no longer
+    /// carries a switch to ask, so there is nothing left for
+    /// <see cref="ReleaseFilter.JudgeName"/> to be wired into by mistake — but
+    /// the outcome this test names is still the one that matters.
     /// </remarks>
     [Fact]
-    public void ASeasonPackIsRefusedWhenPacksAreNotAllowed()
+    public void APackIsNeverRefusedForBeingAPack()
     {
         ReleaseName pack = ReleaseName.Parse(Real(
             "nyaa-diacritic.xml",
@@ -320,11 +322,10 @@ public class ReleaseFilterTests
 
         TrackedEpisode episode = Episode("Pokemon Master Quest", 5, 3);
 
-        Assert.False(Filter(new() { MaximumResolution = "1080p", EnglishOnly = false, AllowSeasonPacks = false })
-            .JudgeName(pack, episode, Blacklist.None).Accepted);
+        Verdict verdict = Filter(new() { MaximumResolution = "1080p", EnglishOnly = false })
+            .JudgeName(pack, episode, Blacklist.None);
 
-        Assert.True(Filter(new() { MaximumResolution = "1080p", EnglishOnly = false, AllowSeasonPacks = true })
-            .JudgeName(pack, episode, Blacklist.None).Accepted);
+        Assert.True(verdict.Accepted, verdict.Reason);
     }
 
     /// <remarks>

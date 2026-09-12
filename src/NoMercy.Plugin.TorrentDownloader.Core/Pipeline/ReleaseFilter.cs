@@ -133,11 +133,6 @@ public sealed class ReleaseFilter(Profile profile)
             return Verdict.No($"'{name.Original}' is not {episode.Key}.");
         }
 
-        if (name.IsPack && !profile.AllowSeasonPacks)
-        {
-            return Verdict.No($"'{name.Original}' is a season pack and packs are not wanted.");
-        }
-
         if (name.Resolution is null)
         {
             // Refused for not saying, which is a different sentence from being
@@ -271,11 +266,7 @@ public sealed class ReleaseFilter(Profile profile)
     }
 
     /// <summary>Whether this name is for this episode.</summary>
-    /// <remarks>
-    /// A pack answers for the season it covers. Whether one is worth its bytes
-    /// is asked of the gaps, not of the name, and belongs to the stage that
-    /// knows how many there are.
-    /// </remarks>
+    /// <remarks>A pack answers for the season it covers, as an ordinary copy of it.</remarks>
     private static bool Slot(ReleaseName name, TrackedEpisode episode)
     {
         if (name.Season == episode.Key.Season && name.Episode == episode.Key.Number)

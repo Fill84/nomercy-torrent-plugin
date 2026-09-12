@@ -101,8 +101,6 @@ public class SettingsStoreTests : IDisposable
         Assert.True(settings.Profile.RequireCodecTag);
         Assert.True(settings.Profile.EnglishOnly);
         Assert.Empty(settings.Profile.ExcludeTerms);
-        Assert.True(settings.Profile.AllowSeasonPacks);
-        Assert.Equal(3, settings.Profile.SeasonPackThreshold);
 
         Assert.Equal(5, settings.Client.MaxConcurrentDownloads);
         Assert.Empty(settings.Client.DefaultTrackers);

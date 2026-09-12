@@ -21,11 +21,10 @@ public sealed record SkippedRelease(EpisodeKey Episode, string Title, string? So
 /// </summary>
 /// <remarks>
 /// <para>
-/// The rules that cannot be answered from one release alone: whether a season
-/// has enough gaps to be worth a pack, which episodes a pack already taken has
-/// settled, and everything that was refused. It is deliberately a per-cycle
-/// object with state rather than a static rule — the answers change as the
-/// cycle takes things.
+/// The rules that cannot be answered from one release alone: which episodes a
+/// pack already taken has settled, and everything that was refused. It is
+/// deliberately a per-cycle object with state rather than a static rule — the
+/// answers change as the cycle takes things.
 /// </para>
 /// <para>
 /// It holds the real profile and the real filter. <strong>H1:</strong> every
@@ -35,7 +34,6 @@ public sealed record SkippedRelease(EpisodeKey Episode, string Title, string? So
 /// </remarks>
 public sealed class Decisions
 {
-    private readonly Profile _profile;
     private readonly ReleaseFilter _filter;
     private readonly ReleaseDecider _decider;
     private readonly IReadOnlySet<string> _blacklisted;
@@ -45,7 +43,6 @@ public sealed class Decisions
 
     public Decisions(Profile profile, IReadOnlyList<TrackedEpisode> missing, IReadOnlySet<string> blacklisted)
     {
-        _profile = profile;
         _filter = new(profile);
         _decider = new(profile);
         _blacklisted = blacklisted;
@@ -75,12 +72,6 @@ public sealed class Decisions
     /// </remarks>
     public IReadOnlyList<SkippedRelease> Skipped => _skipped;
 
-    /// <summary>How many episodes of that season this cycle is looking for.</summary>
-    public int GapsIn(int showId, int season)
-    {
-        return _gaps.TryGetValue((showId, season), out List<EpisodeKey>? keys) ? keys.Count : 0;
-    }
-
     /// <summary>
     /// Whether something already taken this cycle answers for this episode.
     /// </summary>
@@ -98,34 +89,15 @@ public sealed class Decisions
     /// Whether this name is worth searching for, for this episode.
     /// </summary>
     /// <remarks>
-    /// The profile's own rules, and then the one rule that needs the rest of
-    /// the cycle: a pack is worth its bytes only when the season has enough
-    /// gaps in it. Every refusal is recorded on the way out.
+    /// The profile's own rules, and nothing more: a pack is an ordinary copy,
+    /// judged the same as a single episode. Every refusal is recorded on the
+    /// way out.
     /// </remarks>
     public Verdict JudgeName(ReleaseName name, TrackedEpisode episode)
     {
         Verdict verdict = _filter.JudgeName(name, episode, _blacklisted);
 
-        if (!verdict.Accepted)
-        {
-            return Refuse(episode.Key, name.Original, null, verdict);
-        }
-
-        if (!name.IsPack)
-        {
-            return verdict;
-        }
-
-        int gaps = GapsIn(episode.Key.ShowId, episode.Key.Season);
-
-        return gaps >= _profile.SeasonPackThreshold
-            ? verdict
-            : Refuse(
-                episode.Key,
-                name.Original,
-                null,
-                Verdict.No(
-                    $"Season {episode.Key.Season} has {gaps} gaps and a pack is worth taking at {_profile.SeasonPackThreshold}."));
+        return verdict.Accepted ? verdict : Refuse(episode.Key, name.Original, null, verdict);
     }
 
     /// <summary>
@@ -166,13 +138,6 @@ public sealed class Decisions
             }
 
             Verdict verdict = _filter.JudgeName(parsed, episode, _blacklisted);
-
-            if (verdict.Accepted && parsed.IsPack && !WorthAPack(episode))
-            {
-                verdict = Verdict.No(
-                    $"Season {episode.Key.Season} has {GapsIn(episode.Key.ShowId, episode.Key.Season)} gaps "
-                    + $"and a pack is worth taking at {_profile.SeasonPackThreshold}.");
-            }
 
             if (verdict.Accepted)
             {
@@ -256,12 +221,6 @@ public sealed class Decisions
     public void Unreachable(TrackedEpisode episode, ReleaseCopy copy, string reason)
     {
         _skipped.Add(new(episode.Key, copy.Title, copy.Source, reason));
-    }
-
-    /// <summary>Whether a pack is worth its bytes for this episode's season.</summary>
-    private bool WorthAPack(TrackedEpisode episode)
-    {
-        return GapsIn(episode.Key.ShowId, episode.Key.Season) >= _profile.SeasonPackThreshold;
     }
 
     /// <summary>

@@ -253,7 +253,7 @@ public class SearchCycleTests
 
         CycleReport report = await Cycle(fetch, engine, sources: WithNyaa).RunAsync(
             [Pokemon(1), Pokemon(2), Pokemon(3)],
-            new(new() { MaximumResolution = "1080p", EnglishOnly = false, SeasonPackThreshold = 3 }, Blacklist.None, DryRun: false, Folder),
+            new(new() { MaximumResolution = "1080p", EnglishOnly = false }, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         TorrentRequest taken = Assert.Single(engine.Taken);
@@ -297,7 +297,7 @@ public class SearchCycleTests
 
         CycleReport report = await Cycle(fetch, new(), sources: WithNyaa).RunAsync(
             [Pokemon(1), Pokemon(2), Pokemon(3)],
-            new(new() { MaximumResolution = "1080p", EnglishOnly = false, SeasonPackThreshold = 3 }, Blacklist.None, DryRun: false, Folder),
+            new(new() { MaximumResolution = "1080p", EnglishOnly = false }, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         EpisodeOutcome taken = Assert.Single(report.Outcomes, outcome => outcome.HandedOver);
