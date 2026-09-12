@@ -28,20 +28,35 @@ keeps the same data folder, the same grants and the same settings location.
 | Interface | What the server does with it |
 | --- | --- |
 | `IPlugin` | loads it, calls `Initialize(IPluginContext)`, disposes it on shutdown |
-| `IScheduledTaskPlugin` | registers its four cron jobs and calls `ExecuteAsync(jobName, ct)` |
+| `IScheduledTaskPlugin` | registers its one job and calls `ExecuteAsync(jobName, ct)` |
 | `IUiPlugin` | asks it for pages via `GetViewAsync(PluginViewRequest, ct)` and mounts its nav entries |
 
 Plus its own REST endpoints through `NoMercy.Plugins.Mvc`, and live pushes through
 `IPluginHubContext`.
 
-## The four cadences
+## The four cadences, and the plugin's own clock
 
-| Job | Default cron | Does |
+| Cadence | Default cron | Does |
 | --- | --- | --- |
 | `transfers` | `* * * * *` | watch what is downloading; stage and dispatch what finished |
 | `feed` | `*/15 * * * *` | read every feed into the name pool |
 | `search` | `0 */6 * * *` | resolve names for missing episodes, find copies, grab |
 | `maintenance` | `0 4 * * *` | re-derive the missing list, prune old refusals, clear duplicate grab rows |
+
+**Only one job is registered with the host: `transfers`, every minute (S12-05).** The host reads
+`IScheduledTaskPlugin.Jobs` only when the plugin is installed, hot-swapped or enabled —
+`PluginCronRegistrar.RegisterPlugin` re-reads it, but only those three call it, and there is no
+capability for a plugin to ask for its own re-registration (media-server #53). A saved cadence
+therefore cannot take effect by changing a registration: it takes effect because `Hosting/Clock.cs`
+is asked, fresh, on every transfers tick, which of `feed`, `search` and `maintenance` are due —
+judged by the owner's saved interval and a `cadences` table holding when each last finished. A
+cadence with no row has never run and is due at once, which is the right answer on a fresh install.
+When #53 is closed, the plugin can hand the timing back to the host and this clock goes.
+
+**A tick under one of the three retired job names is still accepted.** A host that has not yet
+re-read `Jobs` after this upgrade is still holding its previous four-job registration, each still
+firing on its own old cadence, and `ExecuteAsync` still runs that one pass for that one name — it is
+only the tick under `transfers` that also asks the clock.
 
 **Every piece of periodic housekeeping is in `maintenance`.** Not because it is tidy, but because
 housekeeping spread across the cadence that happened to be running when somebody needed it is
@@ -54,9 +69,9 @@ run left behind. On 24 August 2026 that was shows a broken build had put there t
 not have. A restart settles within the minute instead. It runs the maintenance work, so no cadence
 has a first tick unlike its others.
 
-**Cadences are registered once, when the server starts.** A plugin loads a minute or two after the
-server, and changing a cron at runtime re-registers nothing — only a server restart applies a new
-schedule. This is the server's behaviour, not a bug to chase.
+**A saved cadence takes effect on the very next tick, not on the next restart.** That is the whole
+point of the clock above: `feed`, `search` and `maintenance` are judged against the owner's current
+setting every single time, never against a schedule fixed when the server started.
 
 ## What the server gives it
 

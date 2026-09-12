@@ -53,7 +53,12 @@ public sealed class FakePluginContext : IPluginContext
     IPluginSecretStore IPluginContext.Secrets => Secrets;
 
     public IEventBus EventBus => throw NotProvided(nameof(EventBus));
-    public IServiceProvider Services => throw NotProvided(nameof(Services));
+
+    /// <summary>What the server would resolve types through, when a test provides one.</summary>
+    public IServiceProvider? Container { get; init; }
+
+    public IServiceProvider Services => Container ?? throw NotProvided(nameof(Services));
+
     public HttpClient HttpClient => throw NotProvided(nameof(HttpClient));
     /// <summary>The server's library, when a test provides one.</summary>
     public FakeLibraryQuery? Shelves { get; init; }

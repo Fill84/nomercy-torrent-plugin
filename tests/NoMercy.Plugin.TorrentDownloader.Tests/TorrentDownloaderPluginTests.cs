@@ -1,5 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
@@ -28,23 +29,21 @@ public class TorrentDownloaderPluginTests
     }
 
     /// <remarks>
-    /// The four cadences are registered when the server starts and never again,
-    /// so a job this list forgets does not begin ticking when a later slice
-    /// implements it — it waits for the next restart.
+    /// <strong>S12-05.</strong> The host reads a plugin's job list only when it
+    /// is installed, hot-swapped or enabled, so a saved cadence cannot take
+    /// effect by changing what is registered here — only one job is declared
+    /// at all now, and the plugin's own clock decides the rest on every tick.
+    /// See <see cref="OneJobTicksAndTheWorkIsChosenByTheClock"/>.
     /// </remarks>
     [Fact]
-    public void TheFourCadencesAreDeclaredWithTheirDefaults()
+    public void OneJobIsDeclaredEveryMinute()
     {
         using TorrentDownloaderPlugin plugin = new();
 
-        Assert.Equal(
-            [
-                ("transfers", "* * * * *"),
-                ("feed", "*/15 * * * *"),
-                ("search", "0 */6 * * *"),
-                ("maintenance", "0 4 * * *"),
-            ],
-            plugin.Jobs.Select(job => (job.Name, job.CronExpression)));
+        PluginScheduledJob job = Assert.Single(plugin.Jobs);
+
+        Assert.Equal(JobNames.Transfers, job.Name);
+        Assert.Equal("* * * * *", job.CronExpression);
     }
 
     /// <remarks>
@@ -108,7 +107,7 @@ public class TorrentDownloaderPluginTests
     /// is loaded — the question a deploy that copied nothing leaves open.
     /// </remarks>
     [Fact]
-    public async Task FourTicksSayOnceThatThisVersionIsAwake()
+    public async Task EveryTickSaysOnceThatThisVersionIsAwake()
     {
         using TorrentDownloaderPlugin plugin = new();
         FakePluginContext context = new();
@@ -209,55 +208,119 @@ public class TorrentDownloaderPluginTests
 
     /// <remarks>
     /// <para>
-    /// <strong>The cadence settings did nothing at all.</strong> The Settings
-    /// page offers all four — transfers, feed, search, maintenance — and checks
-    /// what is typed against a cron parser before it will save it, and
-    /// <c>Jobs</c> was a property initialiser over the constants in
-    /// <c>JobNames</c>. So the server was handed <c>* * * * *</c> for transfers
-    /// whatever the owner had saved, and the four fields on that page were
-    /// decoration.
+    /// <strong>S12-05, replacing <c>TheCadencesTheOwnerSavedAreTheCadencesTheServerIsGiven</c>.</strong>
+    /// That test asserted the four-job shape this plugin used to register —
+    /// which is exactly the fault the design now avoids, because the host
+    /// only ever re-reads a job list on an install, a hot-swap or an enable,
+    /// and a saved cadence has to take effect without waiting for one of
+    /// those. So there is one job, and this plugin decides for itself what a
+    /// tick under it does.
     /// </para>
     /// <para>
-    /// The owner found it from the other end, on 3 September 2026: the
-    /// dashboard announced the transfers tick every single minute and they
-    /// asked whether it could be turned down. The field for it was already
-    /// there and already ignored.
-    /// </para>
-    /// <para>
-    /// Read once, at startup, because that is when the server registers a
-    /// cadence — a change takes effect on the next restart, which is what
-    /// <c>Jobs</c> has always said.
+    /// Nothing has ever run before, so every one of the three retired
+    /// cadences is due at once — which is what <c>MissingRefresh</c> running
+    /// during the first tick proves. A second tick, straight after the first
+    /// with a new episode added to the library in between, must not pick it
+    /// up: none of the three has finished long enough ago for its own
+    /// interval to have come round again, and if the clock were not gating
+    /// them the new episode would appear immediately.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task TheCadencesTheOwnerSavedAreTheCadencesTheServerIsGiven()
+    public async Task OneJobTicksAndTheWorkIsChosenByTheClock()
     {
-        FakePluginContext host = new();
+        FakeLibraryQuery shelves = new();
 
-        using TorrentDownloaderPlugin plugin = new();
-        plugin.Initialize(host);
+        shelves
+            .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
+            .Show(41, "Silo", "01HQ5W4AVF30N10RT6XCF6AJHM", 2021, folder: "/Silo.(2021)")
 
-        Settings settings = await plugin.Settings.LoadAsync(CancellationToken.None);
-        settings.IncompleteFolder = Path.GetTempPath();
-        settings.IntakeFolder = Path.GetTempPath();
-        settings.Cadences.Transfers = "*/5 * * * *";
-        settings.Cadences.Feed = "*/30 * * * *";
+            // One file on disk, which is what makes this a show the owner
+            // actually has — Ownership.Theirs — and one missing episode for
+            // the refresh to pick up.
+            .Episode(41, 3, 5, "The Getaway", new DateTime(2020, 1, 1), hasFile: false)
+            .Episode(41, 3, 7, "Descent", new DateTime(2020, 1, 15), hasFile: true);
 
-        SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(folder);
 
-        Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+        try
+        {
+            using TorrentDownloaderPlugin plugin = new();
 
-        // A second plugin over the same configuration, which is what the next
-        // start is.
-        using TorrentDownloaderPlugin restarted = new();
-        restarted.Initialize(new FakePluginContext { Config = host.Config });
+            plugin.Initialize(new FakePluginContext
+            {
+                DataFolderPath = folder,
+                Shelves = shelves,
+                Permits = new FakeGrants(),
+                Container = new FakeProvider(),
+            });
 
-        Assert.Equal(
-            "*/5 * * * *",
-            restarted.Jobs.Single(job => job.Name == JobNames.Transfers).CronExpression);
-        Assert.Equal(
-            "*/30 * * * *",
-            restarted.Jobs.Single(job => job.Name == JobNames.Feed).CronExpression);
+            PluginScheduledJob job = Assert.Single(plugin.Jobs);
+            Assert.Equal(JobNames.Transfers, job.Name);
+            Assert.Equal("* * * * *", job.CronExpression);
+
+            await plugin.Settings.SaveAsync(
+                new Settings { IncompleteFolder = folder, IntakeFolder = folder },
+                CancellationToken.None);
+
+            // The one job's own name, ticking for the first time ever: every
+            // cadence is due, including search and maintenance, both of which
+            // derive the missing list from the library.
+            await plugin.ExecuteAsync(job.Name, CancellationToken.None);
+
+            IReadOnlyList<TrackedEpisode> afterFirstTick =
+                await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
+
+            Assert.Single(afterFirstTick);
+
+            // A second episode airs, straight after the first tick.
+            shelves.Episode(41, 3, 6, "Under Pressure", new DateTime(2020, 1, 8), hasFile: false);
+
+            await plugin.ExecuteAsync(job.Name, CancellationToken.None);
+
+            IReadOnlyList<TrackedEpisode> afterSecondTick =
+                await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
+
+            // Still one: search and maintenance both finished a moment ago,
+            // and neither the six-hourly nor the daily slot has come round
+            // again since. The clock, not this test, is what kept the second
+            // tick from redoing their work.
+            Assert.Single(afterSecondTick);
+        }
+        finally
+        {
+            TemporaryFolder.Forget(folder);
+        }
     }
 
+    /// <remarks>
+    /// A host that has not yet re-read <see cref="TorrentDownloaderPlugin.Jobs"/>
+    /// after this upgrade is still holding its previous four-job registration,
+    /// each still firing on its own old cadence. A tick under any of those
+    /// three retired names has to be accepted rather than thrown — thrown is
+    /// for a name genuinely unknown to this plugin, which
+    /// <see cref="AnUnknownJobNameThrows"/> already covers — and it still runs
+    /// exactly the one pass that name has always meant, not the clock's
+    /// combined tick.
+    /// </remarks>
+    [Fact]
+    public async Task ATickUnderAnOldJobNameIsStillAccepted()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        plugin.Initialize(context);
+
+        await plugin.ExecuteAsync(JobNames.Feed, CancellationToken.None);
+        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+        await plugin.ExecuteAsync(JobNames.Maintenance, CancellationToken.None);
+
+        // Each of the three reached ConfiguredAsync and found nothing set up
+        // — the same guard an unconfigured plugin always hits — rather than
+        // the clock's own due-cadence loop, which an unknown name would never
+        // reach at all.
+        string[] said = [.. context.Log.Lines.Where(line => line.Contains("No folders", StringComparison.Ordinal))];
+
+        Assert.Single(said);
+    }
 }

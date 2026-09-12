@@ -67,6 +67,23 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     private RunRepository? _runs;
 
+    private CadenceRepository? _cadences;
+
+    /// <summary>
+    /// Decides which cadence is due, because the host reads <see cref="Jobs"/>
+    /// only when the plugin is installed, hot-swapped or enabled and a saved
+    /// cadence has to take effect without waiting for one of those. S12-05.
+    /// </summary>
+    private Clock? _clock;
+
+    /// <summary>
+    /// When the search cadence is next due, read from <see cref="_clock"/> on
+    /// every transfers tick and cached here purely so <see cref="CurrentCycle"/>
+    /// can stay synchronous — it is a status-bar figure, not a scheduling
+    /// decision, and nothing reads it before the first tick.
+    /// </summary>
+    private DateTimeOffset? _nextSearchDue;
+
     /// <summary>The running cycle's own stopping token, or null when none runs.</summary>
     private CancellationTokenSource? _cycle;
 
@@ -110,74 +127,54 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public CancellationToken Lifetime => _lifetime.Token;
 
     /// <summary>
-    /// Ignored by a server that understands <see cref="Jobs"/>, which registers
-    /// each of them separately. It names the fastest cadence so that a host
-    /// with only the single slot still ticks the work that cannot wait.
+    /// Ignored by a server that understands <see cref="Jobs"/>. It names the
+    /// one job's own expression, so a host with only the single slot still
+    /// ticks the work that cannot wait.
     /// </summary>
+    /// <remarks>
+    /// <c>First</c> throws when nothing matches, which is deliberate: if the
+    /// one job <see cref="Jobs"/> declares is ever renamed away from
+    /// <see cref="JobNames.Transfers"/> without updating this derivation, every
+    /// host that reads <see cref="CronExpression"/> instead of <see cref="Jobs"/>
+    /// must fail loudly rather than silently register nothing.
+    /// </remarks>
     public string CronExpression => Jobs.First(job => job.Name == JobNames.Transfers).CronExpression;
 
     /// <summary>
-    /// All four, at whatever the owner has them set to.
+    /// The one job the host registers: <see cref="JobNames.Transfers"/>, every
+    /// minute.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Cadences are registered once, when the server starts, so a change takes
-    /// effect on the next restart. A job added to this list in a later slice
-    /// does not begin ticking when it is implemented either; declaring all four
-    /// from the first version costs nothing and saves a restart nobody would
-    /// connect to the cause.
+    /// <strong>S12-05.</strong> The host reads this list only when the plugin
+    /// is installed, hot-swapped or enabled — <c>PluginCronRegistrar.RegisterPlugin</c>
+    /// re-reads it, but only those three call it, and there is no capability
+    /// for a plugin to ask for its own re-registration (media-server #53). A
+    /// saved cadence therefore cannot take effect by changing what is
+    /// registered here: it takes effect because <see cref="_clock"/> is asked
+    /// fresh, on every tick, which of the other three cadences are due.
+    /// docs/01-plugin.md § Cadences.
     /// </para>
     /// <para>
-    /// <strong>These used to be the constants in <c>JobNames</c>, so the four
+    /// Fixed and read with no I/O, unlike the field this used to be cached in:
+    /// a changed cadence has to be visible to the host the next time it
+    /// registers the plugin too, and a cache populated from the first read
+    /// would go on handing out that first answer for ever.
+    /// </para>
+    /// <para>
+    /// <strong>This used to be four jobs, one per cadence, and the four
     /// cadence fields on the Settings page were decoration.</strong> The page
-    /// offers them and checks what is typed against a cron parser before it
-    /// will save it, and the server was handed <c>* * * * *</c> for transfers
-    /// regardless. The owner found it from the other end on 3 September 2026:
-    /// the dashboard announced the transfers tick every minute and they asked
-    /// whether it could be turned down. The field for it was already there and
-    /// already ignored.
+    /// offered them and checked what was typed against a cron parser before it
+    /// would save, and the server was handed <c>* * * * *</c> for transfers
+    /// regardless, because this list was cached from the first read and a
+    /// changed cadence never reached a host that never asked again. The owner
+    /// found it from the other end on 3 September 2026: the dashboard
+    /// announced the transfers tick every minute and they asked whether it
+    /// could be turned down. The field for it was already there and already
+    /// ignored.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<PluginScheduledJob> Jobs => _jobs ??= Scheduled();
-
-    private IReadOnlyList<PluginScheduledJob>? _jobs;
-
-    /// <summary>The four cadences, from the owner's settings.</summary>
-    /// <remarks>
-    /// Read here rather than in <see cref="Initialize"/>, which touches no
-    /// disk, and once rather than per read: the host asks for this while it is
-    /// registering schedules, and a cadence cannot change without a restart
-    /// anyway. Blocking is a local JSON file, once, at startup.
-    /// </remarks>
-    private IReadOnlyList<PluginScheduledJob> Scheduled()
-    {
-        Cadences cadences = new();
-
-        try
-        {
-            if (_settings is not null)
-            {
-                cadences = _settings.LoadAsync(CancellationToken.None).GetAwaiter().GetResult().Cadences;
-            }
-        }
-        catch (Exception unreadable) when (unreadable is not OperationCanceledException)
-        {
-            // The defaults, and the server still schedules. Settings this
-            // plugin cannot read is a thing to say out loud on the pages, not a
-            // reason to register no cadence at all and tick nothing for ever.
-            _context?.Logger.LogWarning(
-                "The saved cadences could not be read, so the defaults are registered: {Reason}",
-                unreadable.Message);
-        }
-
-        return
-        [
-            new(JobNames.Transfers, cadences.Transfers),
-            new(JobNames.Feed, cadences.Feed),
-            new(JobNames.Search, cadences.Search),
-            new(JobNames.Maintenance, cadences.Maintenance),
-        ];
-    }
+    public IReadOnlyList<PluginScheduledJob> Jobs { get; } = [new(JobNames.Transfers, JobNames.TransfersCron)];
 
     public IReadOnlyList<PluginNavEntry> NavEntries => Pages.NavEntries;
 
@@ -215,6 +212,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _grabs = new(_database);
         _ledger = new(_database);
         _runs = new(_database);
+        _cadences = new(_database);
+        _clock = new(_cadences, TimeProvider.System);
         _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
 
         // The one line that makes the pages live. Without it LiveSnapshot is a
@@ -328,6 +327,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         switch (jobName)
         {
+            // A tick under one of the three retired job names: a host that
+            // has not yet re-read Jobs after an upgrade is still holding its
+            // previous four-job registration, each still firing on its own
+            // old cadence. Accepted, and still runs the one pass that name
+            // has always meant — nothing here needs to know the clock exists.
             case JobNames.Feed:
                 await HarvestAsync(work.Token);
                 break;
@@ -336,17 +340,97 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 await CycleAsync(work.Token);
                 break;
 
-            case JobNames.Transfers:
-                await TransfersAsync(work.Token);
-                break;
-
             case JobNames.Maintenance:
                 await MaintainAsync(work.Token);
+                break;
+
+            case JobNames.Transfers:
+                // The one job Jobs declares now. Transfers is not a cadence
+                // choice here: it is what this tick promises the host every
+                // time it fires, so it never waits on the clock. The other
+                // three no longer have a registration of their own to tick on
+                // — this is the only place left that can start them.
+                await TransfersAsync(work.Token);
+                await TickDueCadencesAsync(work.Token);
                 break;
 
             default:
                 break;
         }
+    }
+
+    /// <summary>
+    /// Runs whichever of feed, search and maintenance the clock says are due
+    /// right now, and records each one's finish once it really has run.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Nothing to judge cadences against when the plugin is unconfigured:
+    /// <see cref="ConfiguredAsync"/> already says so once, and there is
+    /// nowhere for any of the three to search, harvest or refresh into.
+    /// </para>
+    /// <para>
+    /// Search records a finish only when <see cref="CycleAsync"/> answers that
+    /// it really ran. Its own overlap guard drops a tick that arrives while a
+    /// cycle — cadence or the Run button — is already going, and recording a
+    /// finish for a cycle that was dropped would tell the clock a run happened
+    /// that did not, delaying the next real one by a whole interval.
+    /// </para>
+    /// </remarks>
+    private async Task TickDueCadencesAsync(CancellationToken ct)
+    {
+        if (await ConfiguredAsync(ct) is not Settings settings)
+        {
+            return;
+        }
+
+        Clock clock = await ClockAsync(ct);
+        DateTimeOffset now = DateTimeOffset.UtcNow;
+
+        Dictionary<string, string> expressions = new(StringComparer.Ordinal)
+        {
+            [JobNames.Feed] = settings.Cadences.Feed,
+            [JobNames.Search] = settings.Cadences.Search,
+            [JobNames.Maintenance] = settings.Cadences.Maintenance,
+        };
+
+        foreach (string name in await clock.DueAsync(expressions, now, ct))
+        {
+            switch (name)
+            {
+                case JobNames.Feed:
+                    await HarvestAsync(ct);
+                    await clock.FinishedAsync(name, ct);
+                    break;
+
+                case JobNames.Maintenance:
+                    await MaintainAsync(ct);
+                    await clock.FinishedAsync(name, ct);
+                    break;
+
+                case JobNames.Search:
+                    if (await CycleAsync(ct))
+                    {
+                        await clock.FinishedAsync(name, ct);
+                    }
+
+                    break;
+            }
+        }
+
+        // Refreshed every tick regardless of whether search itself ran this
+        // time, so the dashboard's figure moves even on the minutes in
+        // between — the same way CurrentCycle has always read a live cron
+        // string rather than a snapshot taken once.
+        _nextSearchDue = await clock.NextAsync(JobNames.Search, settings.Cadences.Search, ct);
+    }
+
+    /// <summary>The clock, once the database behind it has been migrated.</summary>
+    private async Task<Clock> ClockAsync(CancellationToken ct)
+    {
+        await EpisodesAsync(ct);
+
+        return _clock ?? throw new InvalidOperationException("The plugin has not been initialised, so it has no clock yet.");
     }
 
     /// <summary>
@@ -556,7 +640,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// release for one episode twice over, because what one has decided is
     /// state the other cannot see.
     /// </remarks>
-    private async Task CycleAsync(CancellationToken ct, EpisodeKey? only = null, bool holding = false)
+    /// <returns>
+    /// Whether this call was the one that ran the cycle, rather than finding
+    /// one already going and dropping its own. The search cadence uses this to
+    /// decide whether it really has anything to tell the clock's own record of
+    /// cadence finishes — a dropped tick did no work and must not be written
+    /// down as one that did.
+    /// </returns>
+    private async Task<bool> CycleAsync(CancellationToken ct, EpisodeKey? only = null, bool holding = false)
     {
         if (!holding && !_running.TryEnter())
         {
@@ -564,7 +655,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // the cycle is already doing the work of.
             SayOnce(ref _overlapping, "A cycle is already running, so this one was not started.");
 
-            return;
+            return false;
         }
 
         using CancellationTokenSource cycle = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -622,6 +713,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // on every page that was open when it finished.
             Moved();
         }
+
+        // Ran, whatever it ended in. Stopped and failed are still finishes —
+        // the clock's own record is of when a cycle last ended, not of when
+        // one last succeeded, and treating a failure as though it never
+        // finished would have the very next tick try again a minute later
+        // instead of waiting out the owner's own interval.
+        return true;
     }
 
     /// <summary>Whether a cycle is running now.</summary>
@@ -1537,20 +1635,22 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// in the store, so a restart does not turn it into "never run".
     /// </para>
     /// <para>
-    /// The next run is the search cadence's next time, worked out as the
-    /// server works it out: NCrontab, in UTC. Only once the server has asked
-    /// for the cadences — before that nothing is scheduled, and the page says
-    /// the time is not known rather than inventing one.
+    /// The next run is read from <see cref="_clock"/>'s own record of when
+    /// search last finished, not from a job's cron string: there is no job
+    /// registered for search any more, only the clock's own decision on every
+    /// transfers tick (S12-05). <see cref="_nextSearchDue"/> is refreshed
+    /// there and simply read here, because this method has to stay
+    /// synchronous for <see cref="LiveSnapshot"/>'s callback — before the
+    /// first tick it is null, and the page says the time is not known rather
+    /// than inventing one.
     /// </para>
     /// </remarks>
     private CycleStatus CurrentCycle()
     {
-        string? search = _jobs?.FirstOrDefault(job => job.Name == JobNames.Search)?.CronExpression;
-
         return new(
             _running.Busy,
             _lastRun?.EndedAt,
-            search is null ? null : Cron.NextAfter(search, DateTimeOffset.UtcNow))
+            _nextSearchDue)
         {
             StartedAt = _running.Busy ? _runStartedAt : null,
             LastEnd = _lastRun?.How,
