@@ -92,13 +92,14 @@ to nothing else.
 | Forbidden terms | ✅ | |
 | Season pack allowed | ✅ | |
 | Blacklisted title or hash | ✅ | ✅ |
-| **Seeders at or above the minimum** | | ✅ |
 | **Size within bounds** | | ✅ |
 
-A copy nobody is seeding is refused with a history line naming the site and the count. A site that
-does not publish a count has **not** said nought: judging a copy on a number nobody gave is the same
-category error as judging a name on one, and it would silently drop every source that leaves the
-count out.
+**There is no seeder gate.** The owner's decision, 12 September 2026: there is no threshold, download
+what is found — an episode taken the moment it airs has no crowd behind it yet, and refusing it for
+that would refuse the exact case worth downloading for. The count is still read off every row, still
+shown, and still decides which of two copies wins when `ReleaseDecider` ranks them, but it never
+refuses one outright. A copy nobody is seeding still starts; the stall rule ends it after
+`StallMinutes` with no progress **and** no peers, which is the rule that already existed for it.
 
 **Two rows in that table have no data behind them anywhere in these documents.** *Blocked group* has
 no list of groups in the settings, and it is `ExcludeTerms` doing the work: a forbidden term is
@@ -146,7 +147,6 @@ settled by a pack earlier in the same cycle is not asked about again.
 | `RequireCodecTag` | true when a codec is named | an untagged release is where the unwanted codec hides |
 | `EnglishOnly` | true | |
 | `ExcludeTerms` | empty | |
-| `MinimumSeeders` | 2 | judged on the copy, never on a name |
 | `AllowSeasonPacks` | true | |
 | `SeasonPackThreshold` | 3 | gaps needed before a pack is worth its bytes |
 | `MaxConcurrentDownloads` | 5 | |

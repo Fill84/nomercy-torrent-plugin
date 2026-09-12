@@ -64,7 +64,7 @@ public class DecisionsTests
     public void APackThatIsTakenSettlesEveryGapInItsSeason()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "1080p", EnglishOnly = false, MinimumSeeders = 2 },
+            new() { MaximumResolution = "1080p", EnglishOnly = false },
             [Gap(1), Gap(2), Gap(3)],
             Blacklist.None);
 
@@ -91,7 +91,7 @@ public class DecisionsTests
     public void ASingleEpisodeSettlesOnlyItself()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "720p", MinimumSeeders = 2 },
+            new() { MaximumResolution = "720p" },
             [Silo(6), Silo(7)],
             Blacklist.None);
 
@@ -112,7 +112,7 @@ public class DecisionsTests
     public void ABlacklistedTitleOrHashIsNeverChosen()
     {
         Decisions byTitle = new(
-            new() { MaximumResolution = "720p", MinimumSeeders = 2 },
+            new() { MaximumResolution = "720p" },
             [Silo(6)],
             Blacklist.Of(Blacklist.KeyOf(Single.Original)));
 
@@ -120,7 +120,7 @@ public class DecisionsTests
         Assert.Null(byTitle.Rank(Silo(6), [Copy(Single.Original, seeders: 40)]).Chosen);
 
         Decisions byHash = new(
-            new() { MaximumResolution = "720p", MinimumSeeders = 2 },
+            new() { MaximumResolution = "720p" },
             [Silo(6)],
             Blacklist.Of(Hash));
 
@@ -131,15 +131,16 @@ public class DecisionsTests
     /// Every refusal is kept with the episode it was refused for and the reason
     /// it was refused, which is what the Skipped page renders and what the
     /// control to allow one anyway acts on. "Nothing worth taking" is the
-    /// sentence that hid a release's worth of faults.
+    /// sentence that hid a release's worth of faults. Seeders no longer refuse
+    /// a copy, so the blacklist is what this test uses to produce one.
     /// </remarks>
     [Fact]
     public void ARefusedReleaseIsRecordedWithItsReason()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "720p", MinimumSeeders = 10 },
+            new() { MaximumResolution = "720p" },
             [Silo(6)],
-            Blacklist.None);
+            Blacklist.Of(Blacklist.KeyOf(Single.Original)));
 
         decisions.Rank(Silo(6), [Copy(Single.Original, seeders: 1)]);
 
@@ -148,7 +149,7 @@ public class DecisionsTests
         Assert.Equal(Silo(6).Key, skipped.Episode);
         Assert.Equal(Single.Original, skipped.Title);
         Assert.Equal("LimeTorrents", skipped.Source);
-        Assert.Contains("10 are wanted", skipped.Reason, StringComparison.Ordinal);
+        Assert.Contains("blacklisted", skipped.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <remarks>

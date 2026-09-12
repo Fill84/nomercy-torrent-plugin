@@ -19,55 +19,51 @@ public class ReleaseFilterTests
     /// <remarks>
     /// <strong>A1, the fault this whole plugin was rewritten for.</strong> A
     /// name is a name. It has no seeders, no size and no site, and asking it
-    /// how many seeders it has answers nought — which is below every minimum,
-    /// so every announcement was refused, the resolver was never reached and
-    /// not one indexer was ever asked. The log said "searched 24 episodes,
-    /// found nothing worth taking".
+    /// how many seeders it has answers nought. 0.3.4 asked anyway, so every
+    /// announcement was refused, the resolver was never reached and not one
+    /// indexer was ever asked. The log said "searched 24 episodes, found
+    /// nothing worth taking". <c>Profile</c> no longer carries a seeder
+    /// threshold at all, on a name or a copy, so there is nothing left for
+    /// <see cref="ReleaseFilter.JudgeName"/> to be wired into by mistake — but
+    /// the outcome this test names is still the one that matters.
     /// </remarks>
     [Fact]
     public void ANameIsNeverJudgedOnSeeders()
     {
-        Profile profile = new() { MinimumSeeders = 500 };
-
-        Verdict verdict = new ReleaseFilter(profile).JudgeName(
+        Verdict verdict = Filter().JudgeName(
             ReleaseName.Parse(Real("1337x.html", "1337x", "Silo.S03E06.1080p.x265-ELiTE")),
             Episode("Silo", 3, 6),
             Blacklist.None);
 
         Assert.True(verdict.Accepted, verdict.Reason);
-
-        // And the rule really is armed: the same profile refuses a copy for it.
-        Assert.False(new ReleaseFilter(profile).JudgeCopy(Copy(seeders: 12), Blacklist.None).Accepted);
     }
 
     /// <remarks>
-    /// A copy nobody is seeding is refused, and the reason names the site and
-    /// the count. "Nothing worth taking" is what 0.3.4 said, and it is the
-    /// sentence that made a whole release's worth of faults invisible.
+    /// The owner's decision, 12 September 2026: there is no threshold, download
+    /// what is found. An episode taken the moment it airs has no crowd behind
+    /// it yet, and refusing it for that would refuse the exact case worth
+    /// downloading for. A copy nobody is serving still starts; the stall rule
+    /// ends it after <c>StallMinutes</c> with no progress and no peers, which
+    /// is the rule that already covered this — the seeder count is not.
     /// </remarks>
     [Fact]
-    public void ACopyBelowTheMinimumIsRefusedWithTheSiteAndTheCount()
+    public void ACopyNobodyIsServingIsStillTaken()
     {
-        Verdict verdict = new ReleaseFilter(new() { MinimumSeeders = 2 })
-            .JudgeCopy(Copy(seeders: 1, source: "LimeTorrents"), Blacklist.None);
+        Verdict verdict = Filter().JudgeCopy(Copy(seeders: 0, source: "LimeTorrents"), Blacklist.None);
 
-        Assert.False(verdict.Accepted);
-        Assert.Contains("LimeTorrents", verdict.Reason, StringComparison.Ordinal);
-        Assert.Contains("1", verdict.Reason, StringComparison.Ordinal);
-        Assert.Contains("2", verdict.Reason, StringComparison.Ordinal);
+        Assert.True(verdict.Accepted, verdict.Reason);
     }
 
     /// <remarks>
-    /// A site that does not publish a seeder count has not said nought. Judging
-    /// a copy on a number nobody gave is the same category error as judging a
-    /// name on one, and it would silently drop every source that leaves the
-    /// count out.
+    /// A site that does not publish a seeder count has not said nought. Once a
+    /// real category error — judging a copy on a number nobody gave, the same
+    /// mistake as judging a name on one — it is now simply the ordinary case:
+    /// no seeder count refuses a copy any more, known or not.
     /// </remarks>
     [Fact]
     public void ACopyWhoseSeedersAreUnknownIsNotRefusedForHavingNone()
     {
-        Verdict verdict = new ReleaseFilter(new() { MinimumSeeders = 2 })
-            .JudgeCopy(Copy(seeders: null), Blacklist.None);
+        Verdict verdict = Filter().JudgeCopy(Copy(seeders: null), Blacklist.None);
 
         Assert.True(verdict.Accepted, verdict.Reason);
     }

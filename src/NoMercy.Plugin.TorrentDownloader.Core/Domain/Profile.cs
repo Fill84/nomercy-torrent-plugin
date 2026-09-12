@@ -52,9 +52,6 @@ public sealed class Profile
 
     public List<string> ExcludeTerms { get; set; } = [];
 
-    /// <summary>Judged on a copy, never on a name: a name has no seeders.</summary>
-    public int MinimumSeeders { get; set; } = 2;
-
     public bool AllowSeasonPacks { get; set; } = true;
 
     /// <summary>How many gaps in a season before a pack is worth its bytes.</summary>

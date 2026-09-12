@@ -21,7 +21,6 @@ public class ProfileTests
         Assert.True(profile.RequireCodecTag);
         Assert.True(profile.EnglishOnly);
         Assert.Empty(profile.ExcludeTerms);
-        Assert.Equal(2, profile.MinimumSeeders);
         Assert.True(profile.AllowSeasonPacks);
         Assert.Equal(3, profile.SeasonPackThreshold);
     }

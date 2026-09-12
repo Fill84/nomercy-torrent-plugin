@@ -215,13 +215,6 @@ public static class SettingsView
             },
             new PluginFormField
             {
-                Name = "profile.minimumSeeders",
-                Label = "Minimum seeders",
-                Type = PluginFormFieldType.Number,
-                Value = profile.MinimumSeeders,
-            },
-            new PluginFormField
-            {
                 Name = "profile.allowSeasonPacks",
                 Label = "Take season packs",
                 Type = PluginFormFieldType.Toggle,

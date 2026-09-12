@@ -118,9 +118,6 @@ public static class SettingsEdit
         ["profile.includeSpecials"] = new(
             settings => Text(settings.Profile.IncludeSpecials),
             (settings, value) => settings.Profile.IncludeSpecials = Flag(value)),
-        ["profile.minimumSeeders"] = new(
-            settings => Text(settings.Profile.MinimumSeeders),
-            (settings, value) => settings.Profile.MinimumSeeders = Whole(value)),
         ["profile.allowSeasonPacks"] = new(
             settings => Text(settings.Profile.AllowSeasonPacks),
             (settings, value) => settings.Profile.AllowSeasonPacks = Flag(value)),

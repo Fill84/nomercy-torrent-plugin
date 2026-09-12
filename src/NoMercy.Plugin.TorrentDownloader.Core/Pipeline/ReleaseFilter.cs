@@ -228,10 +228,15 @@ public sealed class ReleaseFilter(Profile profile)
     /// Whether this copy is worth taking.
     /// </summary>
     /// <remarks>
-    /// Only the two rules that can be true of a copy and cannot be true of a
-    /// name, plus the blacklist, which is the one rule that applies to both.
-    /// Size is not among them: no setting anywhere gives it bounds, and a
-    /// bound nobody wrote down is one this plugin will not invent.
+    /// The blacklist is the only rule left that can refuse a copy outright.
+    /// The owner's decision, 12 September 2026: there is no seeder threshold —
+    /// download what is found, because an episode taken the moment it airs has
+    /// no crowd behind it yet and refusing it for that refuses the exact case
+    /// worth downloading for. A copy nobody is serving still starts; the stall
+    /// rule ends it after <c>StallMinutes</c> with no progress and no peers,
+    /// which is the rule that already covered this. Size is not among the
+    /// rules either: no setting anywhere gives it bounds, and a bound nobody
+    /// wrote down is one this plugin will not invent.
     /// </remarks>
     public Verdict JudgeCopy(ReleaseCopy copy, IReadOnlySet<string> blacklisted)
     {
@@ -243,15 +248,6 @@ public sealed class ReleaseFilter(Profile profile)
         if (blacklisted.Contains(Blacklist.KeyOf(copy.Title)))
         {
             return Verdict.No($"'{copy.Title}' is blacklisted.");
-        }
-
-        // Null is not nought. A site that does not publish a count has not said
-        // there is nobody there, and refusing on a number nobody gave is the
-        // category error this plugin was rewritten for.
-        if (copy.Seeders is int seeders && seeders < profile.MinimumSeeders)
-        {
-            return Verdict.No(
-                $"{seeders} seeders on {copy.Source}, and {profile.MinimumSeeders} are wanted.");
         }
 
         return Verdict.Yes;

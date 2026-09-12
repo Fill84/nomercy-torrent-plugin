@@ -101,7 +101,6 @@ public class SettingsStoreTests : IDisposable
         Assert.True(settings.Profile.RequireCodecTag);
         Assert.True(settings.Profile.EnglishOnly);
         Assert.Empty(settings.Profile.ExcludeTerms);
-        Assert.Equal(2, settings.Profile.MinimumSeeders);
         Assert.True(settings.Profile.AllowSeasonPacks);
         Assert.Equal(3, settings.Profile.SeasonPackThreshold);
 

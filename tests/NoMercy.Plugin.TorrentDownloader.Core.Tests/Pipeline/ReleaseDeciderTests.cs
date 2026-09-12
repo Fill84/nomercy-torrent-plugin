@@ -21,7 +21,7 @@ public class ReleaseDeciderTests
     [Fact]
     public void TheCopyWithTheMostSeedersIsTaken()
     {
-        Decision decision = new ReleaseDecider(new() { MinimumSeeders = 2 }).Decide(
+        Decision decision = new ReleaseDecider(new()).Decide(
             [Copy("LimeTorrents", priority: 35, seeders: 4), Copy("The Pirate Bay", priority: 45, seeders: 40)],
             Blacklist.None);
 
@@ -36,7 +36,7 @@ public class ReleaseDeciderTests
     [Fact]
     public void LevelOnSeedersTheHigherRatedSiteWins()
     {
-        Decision decision = new ReleaseDecider(new() { MinimumSeeders = 2 }).Decide(
+        Decision decision = new ReleaseDecider(new()).Decide(
             [Copy("LimeTorrents", priority: 35, seeders: 40), Copy("The Pirate Bay", priority: 45, seeders: 40)],
             Blacklist.None);
 
@@ -46,32 +46,42 @@ public class ReleaseDeciderTests
     /// <remarks>
     /// A copy the profile refuses is not chosen, and the reason is kept: the
     /// Skipped page exists to say why, and "nothing worth taking" is the
-    /// sentence that hid a whole release's worth of faults.
+    /// sentence that hid a whole release's worth of faults. Seeders no longer
+    /// refuse anything, so the blacklist stands in as the refusal this test
+    /// needs — the one rule still able to take a copy out of the running.
     /// </remarks>
     [Fact]
     public void ARefusedCopyIsNotChosenAndItsReasonIsKept()
     {
-        Decision decision = new ReleaseDecider(new() { MinimumSeeders = 10 }).Decide(
-            [Copy("LimeTorrents", priority: 35, seeders: 1), Copy("The Pirate Bay", priority: 45, seeders: 40)],
-            Blacklist.None);
+        // A hash of its own, not the shared title: the two copies below
+        // otherwise share one release name, and blacklisting that would take
+        // both out rather than just the one this test means to refuse.
+        const string hash = "92D8A3F6864911EF292B4BE0DD5286406396D2B3";
+        ReleaseCopy blacklisted = Copy("LimeTorrents", priority: 35, seeders: 1) with { InfoHash = hash };
+
+        Decision decision = new ReleaseDecider(new()).Decide(
+            [blacklisted, Copy("The Pirate Bay", priority: 45, seeders: 40)],
+            Blacklist.Of(hash));
 
         Assert.Equal("The Pirate Bay", decision.Chosen!.Source);
 
         (ReleaseCopy Copy, string Reason) refused = Assert.Single(decision.Refused);
         Assert.Equal("LimeTorrents", refused.Copy.Source);
-        Assert.Contains("LimeTorrents", refused.Reason, StringComparison.Ordinal);
+        Assert.Contains("blacklisted", refused.Reason, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <remarks>
     /// Nothing acceptable is nothing chosen, with every refusal kept. An empty
     /// answer with no reasons behind it is the one the owner cannot act on.
+    /// Both copies here share one title, so blacklisting it — the one rule
+    /// still able to refuse a copy now that seeders do not — takes both out.
     /// </remarks>
     [Fact]
     public void WhenNoCopyIsAcceptableNoneIsChosenAndEveryReasonIsKept()
     {
-        Decision decision = new ReleaseDecider(new() { MinimumSeeders = 10 }).Decide(
+        Decision decision = new ReleaseDecider(new()).Decide(
             [Copy("LimeTorrents", priority: 35, seeders: 1), Copy("The Pirate Bay", priority: 45, seeders: 2)],
-            Blacklist.None);
+            Blacklist.Of(Blacklist.KeyOf("Silo.S03E06.1080p.WEB.H264-CAKES")));
 
         Assert.Null(decision.Chosen);
         Assert.Equal(2, decision.Refused.Count);
