@@ -2285,6 +2285,248 @@ at all. `S11-34` added that filter, and the test it added asserted the silence.
 holds — nobody asking is still nothing sent, which is what stops this being a poll.
 Read first: `docs/plan/PROGRESS.md` § Log `S11-34`.
 
+## S12-01 · The attempt limit leaves the plugin
+
+`MaxSearchAttempts` never held. An episode was marked `Unavailable` after its search and the refresh
+at the top of the next run derived it as `Missing` again, keeping the count — so the owner's Freak
+Brothers episodes stood at 67 to 69 attempts on 11 September 2026 while the setting read 3. Asked
+whether it should hold for a time, the owner chose to drop it outright: every gap is searched on
+every run, for ever. The cost is accepted and measured — six episodes nobody serves, about two
+minutes each, every run.
+
+**Files:** `Core/Domain/EpisodeState.cs`, `Core/Domain/Profile.cs`, `Core/Pipeline/ShowSummaries.cs`,
+`Core/Pipeline/MissingRefresh.cs` (comment), `Storage/EpisodeRepository.cs`,
+`Storage/Migrations/009-no-giving-up.sql` (new), `Hosting/CycleRecord.cs`, `Views/QueueView.cs`,
+`Configuration/SettingsEdit.cs`, `Views/SettingsView.cs`, `TorrentDownloaderPlugin.cs:505`,
+`docs/04-domain.md` § Episode states and § Settings, `docs/08-ui.md` § Pages.
+
+**Steps**
+
+1. Test (red): `StoreTests.AnEpisodeGivenUpOnComesBackAsMissing` — a store seeded with a row holding
+   `'unavailable'`, migrated; the row reads `missing` and its attempt count is untouched. It fails
+   because migration 009 does not exist.
+2. `009-no-giving-up.sql`: `UPDATE episodes SET state = 'missing' WHERE state = 'unavailable';`
+   with the reason above in its comment. Without it `EpisodeStates.FromStored` throws on the rows
+   already on the owner's disk.
+3. Test (red): `ShowSummariesTests` — a show with an episode at seventy attempts counts it as
+   missing and reports no given-up count. `ShowSummary` loses that member.
+4. Test (red): `ShowsAndQueueViewTests` — the Queue page draws two lists, not three, and a row
+   carries its attempts and when it was last tried.
+5. Remove `EpisodeState.Unavailable`, `EpisodeStates.Unavailable`, both switch arms,
+   `EpisodeRepository.MarkUnavailableAsync`, the `maxAttempts` argument of
+   `CycleRecord.WriteAsync` and its call at `CycleRecord.cs:189`, `Profile.MaxSearchAttempts`, its
+   editor at `SettingsEdit.cs:131`, its field at `SettingsView.cs:256`, and the argument at
+   `TorrentDownloaderPlugin.cs:505`. `RecordSearchAsync` stays: attempts are still counted and still
+   drawn.
+6. Correct the state table in `docs/04-domain.md`, its § Settings row, and the Queue line in
+   `docs/08-ui.md`.
+
+**Done when** the four tests pass, the suite is green, and an episode at seventy attempts is asked
+about on the next run. Read first: `docs/plan/DESIGN-2026-09-12-settings-and-pages.md`,
+`docs/04-domain.md` § Episode states.
+
+## S12-02 · No copy is refused for its seeder count
+
+The owner, 12 September 2026: there is no threshold, download what you find; an episode taken when
+it airs has seeds. The count is still read, still shown and still decides which of two copies wins —
+it never refuses one. A copy nobody is serving starts, and the stall rule ends it after
+`StallMinutes` with no progress **and** no peers, which is the rule that already existed for it.
+
+**Files:** `Core/Pipeline/ReleaseFilter.cs:251-254`, `Core/Domain/Profile.cs:56`,
+`Configuration/SettingsEdit.cs:122`, `Views/SettingsView.cs:221`, `docs/04-domain.md` § The profile
+and § Settings.
+
+**Steps**
+
+1. Test (red): `ReleaseFilterTests.ACopyNobodyIsServingIsStillTaken` — a real captured row whose
+   only copy reports nought seeders is accepted. It fails on the gate at `ReleaseFilter.cs:251`.
+2. Delete the gate and `Profile.MinimumSeeders` with its editor and its field.
+3. Test (green, unchanged): `ReleaseDeciderTests.TheCopyWithTheMostSeedersIsTaken` and
+   `LevelOnSeedersTheHigherRatedSiteWins` still pass — ranking is not what changed.
+4. `ReleaseFilterTests.ANameIsNeverJudgedOnSeeders` and
+   `ACopyWhoseSeedersAreUnknownIsNotRefusedForHavingNone` are re-read: the first still holds, the
+   second becomes the ordinary case rather than an exception.
+
+**Done when** those tests pass, the suite is green, and no refusal in the history can name a seeder
+count. Read first: `docs/plan/DESIGN-2026-09-12-settings-and-pages.md`, `docs/04-domain.md` § The
+profile.
+
+## S12-03 · A pack is an ordinary copy
+
+The threshold goes with the seeder gate, and for the same reason. A pack is taken when it is the
+best copy of the gap being looked at, however many gaps that season has.
+
+**Files:** `Core/Pipeline/Decisions.cs:121,128,174,264`, `Core/Pipeline/ReleaseFilter.cs:136`,
+`Core/Domain/Profile.cs:58,61`, `Configuration/SettingsEdit.cs:125,128`,
+`Views/SettingsView.cs:228,235`, `docs/04-domain.md` § Settings.
+
+**Steps**
+
+1. Test (red): `DecisionsTests.APackIsTakenForASeasonWithOneGap` — one gap, a pack and a single
+   episode in the same answer; the pack is acceptable rather than refused for the season having too
+   few gaps. It fails at `Decisions.cs:264`.
+2. Remove `Profile.SeasonPackThreshold` and `Profile.AllowSeasonPacks`, the four reads in
+   `Decisions.cs`, the check at `ReleaseFilter.cs:136`, both editors and both fields. The refusal
+   sentences that named the threshold go with them.
+3. Test (green, unchanged): `SearchCycleTests.APackTakenForOneGapSettlesTheRestOfItsSeason` still
+   passes — what a pack settles has not changed.
+
+**Done when** those tests pass and the suite is green. Read first:
+`docs/plan/DESIGN-2026-09-12-settings-and-pages.md`.
+
+## S12-04 · Dry run leaves the page and the settings
+
+A testing switch on an owner's page. `CycleOptions.DryRun` stays, because the tests decide a whole
+cycle with no client behind it; nothing written by an owner reaches it.
+
+**Files:** `Configuration/Settings.cs:81`, `Configuration/SettingsEdit.cs:90`,
+`Views/SettingsView.cs:60,347,425`, `TorrentDownloaderPlugin.cs:515`, `docs/08-ui.md` § Settings,
+`docs/04-domain.md` § Settings.
+
+**Steps**
+
+1. Test (red): `SettingsViewTests.NothingOnThePageOffersADryRun` — the rendered page holds no field
+   named `dryRun` and no sentence about one.
+2. Remove `Settings.DryRun`, its editor, its field, the sentence in `Running`, and pass `false` at
+   `TorrentDownloaderPlugin.cs:515`.
+3. Test (green, unchanged): `SearchCycleTests.WithDryRunOnNothingIsHandedOverAndTheReportSaysWhatItWouldTake`
+   still passes through `CycleOptions`.
+4. Test (red): `SettingsStoreTests.ASettingsFileFromAnOlderVersionStillLoads` — a file carrying
+   `dryRun`, `maxSearchAttempts`, `minimumSeeders`, `seasonPackThreshold`, `allowSeasonPacks` and
+   `portMapping` loads, every key that remains keeps its value, and the removed ones are ignored
+   rather than refused. This is the one test that proves the owner's own `config.json` survives
+   sprint 12; it is written here because this is the slice that empties the last of those keys.
+   Its second half asserts what follows: the settings are re-serialised on the next save, so those
+   keys leave the file rather than lingering.
+
+**Done when** those tests pass and the suite is green. Read first:
+`docs/plan/DESIGN-2026-09-12-settings-and-pages.md`.
+
+## S12-05 · The plugin keeps its own clock
+
+A saved cadence takes effect on the next server restart and nowhere else. The host reads
+`IScheduledTaskPlugin.Jobs` when a plugin is installed, hot-swapped or enabled and at no other time —
+`PluginCronRegistrar.RegisterPlugin` re-reads them, but only those three call it — and
+`IPluginSystem`, where a `tasks` command would live, has no implementation in the server at all
+(media-server #53). So the plugin declares one job, ticking every minute, and decides for itself
+what is due.
+
+**Files:** `TorrentDownloaderPlugin.cs` (`Jobs`, `Scheduled`, `ExecuteAsync`, `CurrentCycle`),
+`Hosting/Clock.cs` (new), `Storage/CadenceRepository.cs` (new),
+`Storage/Migrations/009-no-giving-up.sql` (the `cadences` table, added in `S12-01`'s migration),
+`JobNames.cs`, `Core/Domain/Cadences.cs`, `docs/01-plugin.md` § Cadences, `docs/08-ui.md` § Settings.
+
+**Steps**
+
+1. Test (red): `ClockTests.ACadenceIsDueWhenItsIntervalHasPassedSinceItLastFinished` — a
+   `FakeTimeProvider`, a `cadences` table holding when each last finished; `Due(now)` answers the
+   names that are due. A cadence with no row is due at once.
+2. Test (red): `ClockTests.ASavedCadenceIsDueByTheNewIntervalWithoutARestart` — the clock is asked,
+   the settings are saved with a shorter interval, and the next ask uses the new one.
+3. `Clock` reads the four expressions through `Cron.NextAfter` from the last finish, and
+   `CadenceRepository` reads and writes `cadences (name, last_finished_at)`.
+4. Test (red): `TorrentDownloaderPluginTests.OneJobTicksAndTheWorkIsChosenByTheClock` — `Jobs` holds
+   exactly one job, `* * * * *`; a tick runs transfers every time and the others only when the clock
+   says so. Replaces `TheCadencesTheOwnerSavedAreTheCadencesTheServerIsGiven`, which asserted the
+   four-job shape.
+5. Drop the `_jobs` cache. `CurrentCycle`'s next-run time is read from the clock rather than from a
+   cron string on a job.
+6. `plugin.json` declares the one job; `docs/01-plugin.md` § Cadences says why, and names #53 as
+   what would let the timing go back to the host.
+
+**Done when** those four tests pass, the suite is green, and a cadence saved on a running server is
+used by the next tick. Read first: `docs/plan/DESIGN-2026-09-12-settings-and-pages.md`,
+`docs/plan/PROGRESS.md` § Log `S11-23`.
+
+## S12-06 · The listen port says what is known, and warns only when it is shut
+
+The page reported every failed UPnP and NAT-PMP attempt. On the owner's network neither protocol
+ever answers and the port is forwarded by hand, so that line was wrong every time it appeared — and
+a line that is always wrong is one nobody reads. The port is 6881 by default on a fresh install
+(6881 to 6889 is the BitTorrent default; 51413 was Transmission's and is what this plugin shipped
+with). An existing install keeps what it has.
+
+**Files:** `Core/Domain/ClientLimits.cs:27`, `Configuration/SettingsEdit.cs:141`,
+`Views/SettingsView.cs:273-286`, `Hosting/BittorrentEngine.cs`, `Hosting/PortState.cs` (new),
+`TorrentDownloaderPlugin.cs:1197`, `docs/06-torrent-client.md` § Ports, `docs/08-ui.md` § Settings.
+
+**Steps**
+
+1. Test (red): `SettingsViewTests.ThePortSaysOpenShutOrNotKnownYet` — the three states render, and
+   only *shut* carries a warning. A mapping refusal renders *not known yet*.
+2. `PortState` is `Open`, `Shut` or `Unknown`, decided from one fact: a peer has dialled in from
+   outside. `BittorrentEngine` already knows it (`Reached`); nothing else may set `Open`.
+3. Test (red): `BittorrentEngineTests.APeerDiallingInProvesThePortIsOpen` — a peer accepted on the
+   listening socket moves the state from `Unknown` to `Open`, and a mapping failure never moves it.
+4. Remove `ClientLimits.PortMapping`, its editor and its field; the router is always asked for the
+   configured port, and a refusal is logged at debug rather than drawn.
+5. Default `ListenPort` becomes 6881 for a settings file that names none; a file that names one is
+   untouched.
+6. `docs/06-torrent-client.md` § Ports is rewritten to the three states, and says that the live
+   check waits on media-server #52 — `INetworkDiscovery.IsPortOpenAsync()` is wired to the server's
+   own external port, and the plugin reaches server services through `IPluginContext.Services`, the
+   path `Hosting/ShowImport.cs` already uses.
+
+**Done when** those tests pass, the suite is green, and the owner's server shows *not known yet*
+rather than a warning while nothing is downloading. Read first:
+`docs/plan/DESIGN-2026-09-12-settings-and-pages.md`, `docs/06-torrent-client.md` § Ports.
+
+## S12-07 · Settings, rebuilt into sections, with one Show advanced
+
+What is left after `S12-01` to `S12-06` is laid out as the owner asked: one page, sections that save
+on their own, and a single **Show advanced** switch per page that is remembered and writes nothing.
+
+**Files:** `Views/SettingsView.cs`, `Views/Ui.cs`, `Configuration/SettingsEdit.cs`,
+`Controllers/SettingsController.cs`, `docs/08-ui.md` § Settings.
+
+**Steps**
+
+1. Test (red): `SettingsViewTests.EverySectionSavesOnItsOwn` — folders, quality, client, private
+   trackers and advanced each render their own Save, and saving one leaves the others' values alone.
+2. Test (red): `SettingsViewTests.SeedingIsDrawnOnlyWhenAPrivateTrackerExists` — rendered with none,
+   the three seeding fields are absent and a line says why; with one, they are there.
+3. Test (red): `SettingsViewTests.AdvancedHoldsTheExpertFields` — stall minutes, metadata timeout,
+   encryption, resume interval and the cron boxes are in the advanced block; everything else is not.
+4. Test (red): `SettingsEditTests.ASpeedIsTypedInMegabytesAndStoredInBytes` — the presets and the
+   custom box write `MaxDownloadRate` and `MaxUploadRate` in bytes per second, nought meaning
+   unlimited.
+5. Test (red): `SettingsViewTests.ACadenceIsChosenFromAList` — the four cadences render as intervals,
+   with the cron box under advanced; an invalid expression is refused with its reason.
+6. Test (red): `SettingsEditTests.EveryAdvancedFieldRoundTripsThroughSave` — each advanced field is
+   typed, saved and read back unchanged. **Show advanced** is a display state: it writes nothing to
+   `config.json`, and a field hidden behind it still applies. A switch that quietly changed
+   behaviour would be the worst kind of setting.
+7. Rebuild the view against those tests. `ControlsOnPagesTests`, `ControlsReachTheirEndpointsTests`,
+   `EveryComponentIsOneTheClientDrawsTests` and `UiHoldsOnlyWhatThePagesDrawTests` must stay green:
+   nothing new may be sent under a design-system name.
+
+**Done when** those five tests pass, the four page-wide tests still pass, and the suite is green.
+Read first: `docs/plan/DESIGN-2026-09-12-settings-and-pages.md`, `docs/08-ui.md` § Components.
+
+## S12-08 · The Sources page owns every source, and a private tracker is not editable
+
+Every shipped source and every own indexer is on by default and can be switched off — under **Show
+advanced**, because an owner should not meet seventeen switches to change a folder. A source or
+indexer in use is not editable and its address is not shown.
+
+**Files:** `Views/SourcesView.cs`, `Views/SettingsView.cs` (the indexer block leaves it),
+`Configuration/Settings.cs` (`DisabledDefaultSources` is unchanged in shape),
+`Controllers/SettingsController.cs`, `docs/08-ui.md` § Pages and § Actions, `docs/05-sources.md`.
+
+**Steps**
+
+1. Test (red): `SourcesViewTests.EverySourceHasASwitchAndTheyAreAllOnByDefault` — a catalogue with
+   nothing in `DisabledDefaultSources` renders every row switched on, under the advanced block.
+2. Test (red): `SourcesViewTests.ASourceSwitchedOffIsWrittenToDisabledDefaultSources` — the control
+   reaches `SaveSettings` and the name lands in the list.
+3. Test (red): `SourcesViewTests.ASourceInUseIsNotEditableAndItsAddressIsNotShown` — a shipped
+   source renders no address field and no editor.
+4. Move the own-indexer block from Settings to Sources, keeping the API key write-only:
+   `SecretsNeverEscapeTests` must stay green.
+
+**Done when** those tests pass, the suite is green, and `PagesReachableTests` still answers for
+every page. Read first: `docs/plan/DESIGN-2026-09-12-settings-and-pages.md`, `docs/05-sources.md`.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

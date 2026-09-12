@@ -4,6 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S12-01` is next.** The settings and the pages, rebuilt: the owner's decisions of 12 September
+2026, designed in `docs/plan/DESIGN-2026-09-12-settings-and-pages.md` and approved that day. Eight
+slices, `S12-01` to `S12-08`, in order — the removals first, because every page change after them is
+smaller for it. Nothing in sprint 12 is started.
+
 **`S11-41` is built and green locally, not deployed.** One release under two hashes: both start,
 the first to finish is kept, the other is stopped and its files deleted. Nothing is pushed and no
 release is made until the owner has checked everything and says so.
@@ -311,6 +316,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-39` The audit: sources, indexers, the merge, Chrome and the dashboard, measured
 - [x] `S11-40` Exact names, sources every run, Stop, the status bar, stage rows and every question on the page
 - [x] `S11-41` One release under two hashes: both start, the first to finish is kept
+- [ ] `S12-01` The attempt limit leaves the plugin
+- [ ] `S12-02` No copy is refused for its seeder count
+- [ ] `S12-03` A pack is an ordinary copy
+- [ ] `S12-04` Dry run leaves the page and the settings
+- [ ] `S12-05` The plugin keeps its own clock
+- [ ] `S12-06` The listen port says what is known, and warns only when it is shut
+- [ ] `S12-07` Settings, rebuilt into sections, with one Show advanced
+- [ ] `S12-08` The Sources page owns every source, and a private tracker is not editable
 
 ## Log
 
