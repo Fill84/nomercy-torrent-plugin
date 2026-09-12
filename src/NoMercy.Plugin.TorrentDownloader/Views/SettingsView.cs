@@ -250,13 +250,6 @@ public static class SettingsView
             },
             new PluginFormField
             {
-                Name = "profile.maxSearchAttempts",
-                Label = "Give up on an episode after this many searches",
-                Type = PluginFormFieldType.Number,
-                Value = profile.MaxSearchAttempts,
-            },
-            new PluginFormField
-            {
                 Name = "profile.excludeTerms",
                 Label = "Forbidden terms, separated by commas",
                 Value = string.Join(", ", profile.ExcludeTerms),

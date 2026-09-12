@@ -63,31 +63,64 @@ public class ShowsAndQueueViewTests : IDisposable
     }
 
     /// <remarks>
-    /// Three lists, never one. An unaired episode among the missing is work the
-    /// plugin is not doing, and one in no list at all is an episode nobody can
-    /// see has stopped moving.
+    /// Two lists, never one. An unaired episode among the missing is work the
+    /// plugin is not doing. There used to be a third, <em>given up for now</em>
+    /// — the owner's decision of 12 September 2026 dropped the state behind it,
+    /// so an episode however many times searched stays in Looking rather than
+    /// disappearing into a list that no longer exists.
     /// </remarks>
     [Fact]
-    public async Task TheQueueSeparatesLookingFromWaitingToAir()
+    public async Task TheQueueDrawsTwoListsNotThree()
     {
         using TorrentDownloaderPlugin plugin = await Seeded(
         [
             Episode(1, 1, 1, EpisodeState.Missing),
             Episode(1, 1, 2, EpisodeState.NotAired),
-            Episode(1, 1, 3, EpisodeState.Unavailable),
+            Episode(1, 1, 3, EpisodeState.Missing) with { Attempts = 70 },
         ]);
 
         PluginView page = await View(plugin, Pages.QueueRoute);
 
         Assert.Equal(
-            ["Silo S01E01"],
+            ["Silo S01E01", "Silo S01E03"],
             RowsOf(page, QueueView.LookingTableId));
         Assert.Equal(
             ["Silo S01E02"],
             RowsOf(page, QueueView.WaitingTableId));
-        Assert.Equal(
-            ["Silo S01E03"],
-            RowsOf(page, QueueView.GivenUpTableId));
+
+        // Nothing on the page still calls this "given up" — the heading is
+        // gone along with the state, not merely emptied.
+        Assert.DoesNotContain("Given up for now", Rendered.Words(page));
+    }
+
+    /// <remarks>
+    /// A hopeless episode is still visible as one rather than gone from the
+    /// page: it stays in Looking, and its attempts and when it was last tried
+    /// travel with the row exactly as any other episode's do.
+    /// </remarks>
+    [Fact]
+    public async Task ALookingRowCarriesItsAttemptsAndWhenItWasLastTried()
+    {
+        using TorrentDownloaderPlugin plugin = await Seeded([Episode(1, 1, 1, EpisodeState.Missing)]);
+
+        // attempts and last_search_at are this plugin's own bookkeeping, never
+        // part of what a refresh derives — recording a search is the one way
+        // anything moves them, so that is the only way to seed them here too.
+        EpisodeRepository episodes = await plugin.EpisodesAsync(CancellationToken.None);
+        DateTimeOffset lastTried = new(2026, 9, 10, 3, 0, 0, TimeSpan.Zero);
+
+        for (int already = 0; already < 69; already++)
+        {
+            await episodes.RecordSearchAsync(new(1, 1, 1), lastTried.AddDays(-1), CancellationToken.None);
+        }
+
+        await episodes.RecordSearchAsync(new(1, 1, 1), lastTried, CancellationToken.None);
+
+        PluginComponent row = Rendered.All(await View(plugin, Pages.QueueRoute))
+            .Single(component => component.Id == $"{QueueView.LookingTableId}-1-1-1");
+
+        Assert.Equal(70, row.Props["attempts"]);
+        Assert.Equal("2026-09-10 03:00:00Z", row.Props["last"]);
     }
 
     /// <remarks>

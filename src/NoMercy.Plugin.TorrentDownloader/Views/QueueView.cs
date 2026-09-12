@@ -5,14 +5,17 @@ using NoMercy.Plugins.Abstractions;
 namespace NoMercy.Plugin.TorrentDownloader.Views;
 
 /// <summary>
-/// What is being looked for, what has been given up on for now, and what has
-/// not aired yet — three lists, never one.
+/// What is being looked for, and what has not aired yet — two lists, never one.
 /// </summary>
 /// <remarks>
 /// Separated because they answer different questions and mixing them makes both
 /// answers wrong: an unaired episode counted among the missing is work the
-/// plugin is not doing, and one left out of every list altogether is an episode
-/// nobody can see has stopped moving.
+/// plugin is not doing. There used to be a third list, <em>given up for now</em>
+/// — the owner's decision of 12 September 2026 dropped the state behind it
+/// outright, so there is nothing left for a third list to hold: an episode
+/// stays in Looking however many times it has been searched, with its attempts
+/// and when it was last tried carried on the row, so a hopeless one is still
+/// visible as one rather than gone from the page.
 /// </remarks>
 public static class QueueView
 {
@@ -24,7 +27,6 @@ public static class QueueView
     // route gave every button on every page a URL this plugin does not serve,
     // and nothing anyone pressed did anything at all.
     public const string SearchAction = "queue/search";
-    public const string GivenUpTableId = "givenup";
     public const string WaitingTableId = "waiting";
 
     public static PluginView Render(IReadOnlyList<TrackedEpisode> tracked)
@@ -36,9 +38,6 @@ public static class QueueView
             [
                 Ui.Text("looking-heading", "Looking", "title"),
                 Looking(QueueOrder.Order(tracked)),
-
-                Ui.Text("givenup-heading", "Given up for now", "title"),
-                GivenUp(tracked.Where(episode => episode.State == EpisodeState.Unavailable)),
 
                 Ui.Text("waiting-heading", "Waiting to air", "title"),
                 Waiting(tracked.Where(episode => episode.State == EpisodeState.NotAired)),
@@ -96,28 +95,6 @@ public static class QueueView
                 ["episode"] = episode.Key.Number,
             },
             PluginActionTransport.Rest);
-    }
-
-    private static PluginComponent GivenUp(IEnumerable<TrackedEpisode> episodes)
-    {
-        return Ui.Table(
-            GivenUpTableId,
-            [
-                new() { Key = "episode", Label = "Episode" },
-                new() { Key = "attempts", Label = "Attempts" },
-            ],
-            [
-                .. episodes.Select(episode => Ui.Row(
-                    $"{GivenUpTableId}-{Id(episode)}",
-                    new Dictionary<string, object?>
-                    {
-                        ["episode"] = Name(episode),
-                        ["attempts"] = episode.Attempts,
-                    })),
-            ],
-            // It says "for now" because it is: the next maintenance pass
-            // re-derives from the library and puts these back to missing.
-            "Nothing has been given up on.");
     }
 
     private static PluginComponent Waiting(IEnumerable<TrackedEpisode> episodes)

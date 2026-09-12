@@ -23,15 +23,13 @@ public static class CycleRecord
     /// <param name="at">When the cycle finished.</param>
     /// <param name="ct">Cancellation.</param>
     /// <param name="episodes">Where a search attempt is counted, when there is one to count it in.</param>
-    /// <param name="maxAttempts">How many searches an episode gets before it is given up on for now.</param>
     public static async Task WriteAsync(
         CycleReport report,
         IReadOnlyList<TrackedEpisode> looked,
         GrabRepository grabs,
         DateTimeOffset at,
         CancellationToken ct,
-        EpisodeRepository? episodes = null,
-        int maxAttempts = 0)
+        EpisodeRepository? episodes = null)
     {
         Dictionary<EpisodeKey, string> titles = [];
 
@@ -110,7 +108,7 @@ public static class CycleRecord
             }
         }
 
-        await CountSearchesAsync(report, looked, at, episodes, maxAttempts, ct);
+        await CountSearchesAsync(report, at, episodes, ct);
 
         foreach (SkippedRelease skipped in report.Skipped)
         {
@@ -126,18 +124,15 @@ public static class CycleRecord
     }
 
     /// <summary>
-    /// Counts a search against every episode one was really made for, and gives
-    /// up on the ones that have had their share.
+    /// Counts a search against every episode one was really made for.
     /// </summary>
     /// <remarks>
     /// <para>
     /// Nothing counted a search at all. <c>attempts</c> stayed at nought on
-    /// every row of the owner's library, so <c>MaxSearchAttempts</c> decided
-    /// nothing, no episode ever reached <em>given up for now</em>, and the
-    /// Queue page's third list could not fill. <c>last_search_at</c> stayed
-    /// null with it — and that is what the queue is ordered by, so "never
-    /// searched first, then longest waiting" ordered every cycle the same way
-    /// and the episodes at the end of it were reached last for ever.
+    /// every row of the owner's library, and <c>last_search_at</c> stayed null
+    /// with it — and that is what the queue is ordered by, so "never searched
+    /// first, then longest waiting" ordered every cycle the same way and the
+    /// episodes at the end of it were reached last for ever.
     /// </para>
     /// <para>
     /// <strong>B2:</strong> only a search counts. An episode settled by a pack
@@ -146,25 +141,24 @@ public static class CycleRecord
     /// either, which is why the cycle says whether an indexer was actually
     /// asked rather than leaving this to guess from the outcome.
     /// </para>
+    /// <para>
+    /// There used to be a give-up here too, once an episode's attempts reached
+    /// <c>MaxSearchAttempts</c>. It never held — the refresh at the top of the
+    /// next run derived the episode as missing again and kept the count
+    /// climbing regardless — so the owner dropped the limit outright rather
+    /// than have it hold for a time. An attempt is still worth recording; there
+    /// is nothing left it can exhaust.
+    /// </para>
     /// </remarks>
     private static async Task CountSearchesAsync(
         CycleReport report,
-        IReadOnlyList<TrackedEpisode> looked,
         DateTimeOffset at,
         EpisodeRepository? episodes,
-        int maxAttempts,
         CancellationToken ct)
     {
         if (episodes is null)
         {
             return;
-        }
-
-        Dictionary<EpisodeKey, int> already = [];
-
-        foreach (TrackedEpisode episode in looked)
-        {
-            already[episode.Key] = episode.Attempts;
         }
 
         foreach (EpisodeOutcome outcome in report.Outcomes)
@@ -175,19 +169,6 @@ public static class CycleRecord
             }
 
             await episodes.RecordSearchAsync(outcome.Episode, at, ct);
-
-            if (outcome.HandedOver || maxAttempts <= 0)
-            {
-                continue;
-            }
-
-            // The attempt just recorded included. Giving up is a consequence of
-            // the attempts already made, so the count that decides it is the
-            // one after this search rather than the one before.
-            if (already.GetValueOrDefault(outcome.Episode) + 1 >= maxAttempts)
-            {
-                await episodes.MarkUnavailableAsync(outcome.Episode, ct);
-            }
         }
     }
 }

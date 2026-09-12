@@ -502,7 +502,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     tracked,
                     grabs,
                     await EpisodesAsync(ct),
-                    settings.Profile.MaxSearchAttempts,
                     () => DateTimeOffset.UtcNow)).RunAsync(
                 tracked,
                 new(

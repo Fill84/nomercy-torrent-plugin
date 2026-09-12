@@ -26,7 +26,6 @@ public sealed class CycleWriter(
     IReadOnlyList<TrackedEpisode> looked,
     GrabRepository grabs,
     EpisodeRepository episodes,
-    int maxAttempts,
     Func<DateTimeOffset> now) : ICycleJournal
 {
     private readonly Dictionary<EpisodeKey, TrackedEpisode> _looked =
@@ -45,7 +44,6 @@ public sealed class CycleWriter(
             grabs,
             at,
             ct,
-            episodes,
-            maxAttempts);
+            episodes);
     }
 }

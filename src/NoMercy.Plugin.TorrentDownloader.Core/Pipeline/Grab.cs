@@ -48,9 +48,9 @@ public enum GrabResult
 /// attempt against the episode — <strong>B2</strong>, which it never does. It
 /// was hard-wired to false at all four construction sites and read by nothing,
 /// a second expression of a rule that is really enforced elsewhere:
-/// <c>EpisodeOutcome.Searched</c> gates it and <c>CycleRecord</c> counts against
-/// <c>MaxSearchAttempts</c>. Two sources of truth for one rule is how they drift,
-/// so there is one.
+/// <c>EpisodeOutcome.Searched</c> gates it and <c>CycleRecord</c> is what
+/// counts it. Two sources of truth for one rule is how they drift, so there is
+/// one.
 /// </remarks>
 public sealed record Grabbed(GrabResult Result, string? InfoHash, string? Reason);
 

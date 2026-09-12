@@ -29,10 +29,11 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
     /// </summary>
     /// <remarks>
     /// State comes from the library every time and is never carried over from
-    /// what was stored. That is what makes <c>Unavailable</c> temporary: an
-    /// episode that had been given up on is derived as missing again and gets
-    /// another turn. 0.3.4 preserved the state instead, and an episode that
-    /// went unavailable once was invisible for ever.
+    /// what was stored: an episode still without a file is derived as missing
+    /// again however many times it has been searched, and there is no other
+    /// state a refresh could leave it stuck in. 0.3.4 filtered its given-up
+    /// episodes out of the refresh and preserved their state instead, and one
+    /// that went unavailable once was invisible for ever.
     /// </remarks>
     public async Task<IReadOnlyList<TrackedEpisode>> DeriveAsync(Profile profile, CancellationToken ct)
     {

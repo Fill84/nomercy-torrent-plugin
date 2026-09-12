@@ -145,6 +145,58 @@ public class StoreTests : IDisposable
         Assert.Equal(1, database.TimesPrepared);
     }
 
+    /// <remarks>
+    /// Migration 009. <c>Unavailable</c> never held — the refresh at the top of
+    /// the next run derived the row as missing again and kept the attempt count
+    /// climbing regardless, which is exactly what left the owner's Freak
+    /// Brothers episodes at 67-69 attempts on 11 September 2026. The state is
+    /// gone from the domain because of it, so a row already on disk that still
+    /// says 'unavailable' has to become one <c>EpisodeStates.FromStored</c> can
+    /// still read, without losing what it had already tried.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeGivenUpOnComesBackAsMissing()
+    {
+        Store database = new(_folder);
+        await database.MigrateAsync(CancellationToken.None);
+
+        await using (SqliteConnection connection = await database.OpenAsync(CancellationToken.None))
+        {
+            // The owner's disk, before this version ever ran: 008 has already
+            // been applied — the table exists — but 009 has not, so the row it
+            // carries still says what an older release wrote. Rolling the
+            // version pragma back is the only way to put a fresh test database
+            // in that state, since a migration this test adds nothing to.
+            await using SqliteCommand rollBack = connection.CreateCommand();
+            rollBack.CommandText = "PRAGMA user_version=8;";
+            await rollBack.ExecuteNonQueryAsync(CancellationToken.None);
+
+            await using SqliteCommand insert = connection.CreateCommand();
+            insert.CommandText =
+                """
+                INSERT INTO episodes (show_id, season, episode, show_title, library_type, state, attempts)
+                VALUES (1, 1, 1, 'Silo', 'tv', 'unavailable', 68);
+                """;
+            await insert.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        // Only 009 is pending now, and it is the one this test is about.
+        await database.MigrateAsync(CancellationToken.None);
+
+        await using SqliteConnection read = await database.OpenAsync(CancellationToken.None);
+        await using SqliteCommand select = read.CreateCommand();
+        select.CommandText =
+            "SELECT state, attempts FROM episodes WHERE show_id = 1 AND season = 1 AND episode = 1;";
+
+        await using SqliteDataReader row = await select.ExecuteReaderAsync(CancellationToken.None);
+        Assert.True(await row.ReadAsync(CancellationToken.None));
+
+        // Back to missing, and every attempt already spent on it kept — giving
+        // up is gone, not the cost already paid finding out it was hopeless.
+        Assert.Equal("missing", row.GetString(0));
+        Assert.Equal(68, row.GetInt32(1));
+    }
+
     private static async Task<long> Version(Store database)
     {
         await using SqliteConnection connection = await database.OpenAsync(CancellationToken.None);

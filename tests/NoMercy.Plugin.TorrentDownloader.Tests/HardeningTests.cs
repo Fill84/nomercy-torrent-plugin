@@ -51,10 +51,10 @@ public class HardeningTests : IDisposable
 
     /// <remarks>
     /// <para>
-    /// A restart mid-cycle must not grab again what it has already grabbed. The
-    /// episode was marked unavailable when it was taken, so the missing list
-    /// the next cycle works from does not have it — and the grab is still in
-    /// the store for recovery to re-add rather than re-download.
+    /// A restart mid-cycle must not grab again what it has already grabbed.
+    /// Taking an episode does not change its row — the grab is what says it is
+    /// spoken for — so what a restart must not lose is the grab itself, still
+    /// in the store for recovery to re-add rather than re-download.
     /// </para>
     /// <para>
     /// Nor re-harvest: the names are in the pool, written before anything read
@@ -71,8 +71,8 @@ public class HardeningTests : IDisposable
 
             await (await before.EpisodesAsync(CancellationToken.None)).ReplaceAsync(
                 [
-                    new(Taken, "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Unavailable),
-                    new(Waiting, "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Missing),
+                    new(Taken, "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Missing),
+                    new(Waiting, "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.NotAired),
                 ],
                 CancellationToken.None);
 
@@ -98,9 +98,11 @@ public class HardeningTests : IDisposable
         IReadOnlyList<TrackedEpisode> tracked =
             await (await after.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
 
-        // The one it took is not waiting to be looked for again.
-        Assert.Equal(EpisodeState.Unavailable, tracked.Single(one => one.Key == Taken).State);
-        Assert.Equal(EpisodeState.Missing, tracked.Single(one => one.Key == Waiting).State);
+        // Rows survive the restart exactly as they were: nothing re-derives
+        // them from the library here, so what was Missing stays Missing and
+        // what was waiting to air stays waiting.
+        Assert.Equal(EpisodeState.Missing, tracked.Single(one => one.Key == Taken).State);
+        Assert.Equal(EpisodeState.NotAired, tracked.Single(one => one.Key == Waiting).State);
 
         // And the grab is still there for recovery to re-add rather than
         // download all over again.

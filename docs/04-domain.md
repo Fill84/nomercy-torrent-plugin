@@ -7,12 +7,15 @@ Where the episode list comes from is `docs/02-library.md`. This is what the plug
 | State | Meaning | Shown as |
 | --- | --- | --- |
 | `NotAired` | `AirDate` is null or in the future | *waiting to air* — never searched, never counted as missing |
-| `Missing` | aired, no file | *looking* |
-| `Unavailable` | asked `MaxSearchAttempts` times, nothing acceptable exists | *given up for now* |
+| `Missing` | aired, no file | *looking*, however many times it has been searched |
 
-`Unavailable` is not permanent. Every maintenance pass re-derives the list from the library; a
-release that appears next week puts the episode back to `Missing`. 0.3.4 filtered `Unavailable` out
-of the refresh and an episode that went unavailable once was invisible forever.
+There used to be a third state, `Unavailable`: asked `MaxSearchAttempts` times, nothing acceptable
+exists. It never held — every maintenance pass re-derives the list from the library, so the very next
+refresh put the episode back to `Missing` and counted another attempt regardless. The owner's Freak
+Brothers episodes stood at 67–69 attempts on 11 September 2026 while the setting read 3. Asked whether
+it should hold for a time instead, the owner's decision of 12 September 2026 was to drop it outright:
+every gap is searched on every run, for ever. Migration `009` rewrites what `Unavailable` left on the
+owner's own disk, back to `Missing`.
 
 ## Release names
 
@@ -146,7 +149,6 @@ settled by a pack earlier in the same cycle is not asked about again.
 | `MinimumSeeders` | 2 | judged on the copy, never on a name |
 | `AllowSeasonPacks` | true | |
 | `SeasonPackThreshold` | 3 | gaps needed before a pack is worth its bytes |
-| `MaxSearchAttempts` | 3 | before an episode goes `Unavailable` |
 | `MaxConcurrentDownloads` | 5 | |
 | `DefaultTrackers` | **empty, then learned** | every tracker the plugin comes across, no duplicates, attached to every grab |
 | `Indexers` | empty | the owner's own — see `docs/05-sources.md` |
@@ -191,7 +193,7 @@ CREATE TABLE episodes (
     absolute       INTEGER NULL,              -- anime only
     episode_title  TEXT    NULL,
     air_date       TEXT    NULL,
-    state          TEXT    NOT NULL,          -- notaired | missing | unavailable
+    state          TEXT    NOT NULL,          -- notaired | missing
     attempts       INTEGER NOT NULL DEFAULT 0,
     last_search_at TEXT    NULL,
     PRIMARY KEY (show_id, season, episode)

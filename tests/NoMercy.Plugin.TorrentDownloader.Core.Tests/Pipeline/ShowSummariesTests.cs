@@ -19,13 +19,29 @@ public class ShowSummariesTests
             Episode(1, 1, 1, EpisodeState.Missing),
             Episode(1, 1, 2, EpisodeState.Missing),
             Episode(1, 1, 3, EpisodeState.NotAired),
-            Episode(1, 1, 4, EpisodeState.Unavailable),
         ]);
 
         ShowSummary show = Assert.Single(summaries);
         Assert.Equal(2, show.Missing);
         Assert.Equal(1, show.WaitingToAir);
-        Assert.Equal(1, show.GivenUpForNow);
+    }
+
+    /// <remarks>
+    /// The owner's decision of 12 September 2026: giving up never held, so it is
+    /// gone rather than fixed. However many times an episode has been searched,
+    /// it is still missing — there is no given-up count left to report, which
+    /// this proves the only way a count's absence can be proved: there is no
+    /// member on <see cref="ShowSummary"/> left to read it from.
+    /// </remarks>
+    [Fact]
+    public void AnEpisodeWithSeventyAttemptsStillCountsAsMissing()
+    {
+        ShowSummary show = Assert.Single(ShowSummaries.Summarise(
+        [
+            Episode(1, 1, 1, EpisodeState.Missing) with { Attempts = 70 },
+        ]));
+
+        Assert.Equal(1, show.Missing);
     }
 
     /// <remarks>

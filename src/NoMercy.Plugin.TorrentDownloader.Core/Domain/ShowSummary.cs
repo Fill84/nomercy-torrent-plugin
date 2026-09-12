@@ -12,18 +12,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Domain;
 /// <param name="Title">The library's title.</param>
 /// <param name="Year">Its first air date's year, or null.</param>
 /// <param name="Kind">Television or anime, as the server filed it.</param>
-/// <param name="Missing">Aired, no file, still being looked for.</param>
+/// <param name="Missing">Aired, no file, still being looked for — however many times.</param>
 /// <param name="WaitingToAir">Not aired yet. Never counted as missing.</param>
-/// <param name="GivenUpForNow">
-/// Searched as often as the profile allows without finding anything acceptable.
-/// Counted separately rather than dropped: an episode that appears in no count
-/// at all is one nobody can see has stopped moving.
-/// </param>
 public sealed record ShowSummary(
     int ShowId,
     string Title,
     int? Year,
     LibraryKind Kind,
     int Missing,
-    int WaitingToAir,
-    int GivenUpForNow);
+    int WaitingToAir);

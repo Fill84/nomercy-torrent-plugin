@@ -73,8 +73,7 @@ public class QueueOrderTests
 
     /// <remarks>
     /// Only what is being looked for. An unaired episode in the search queue
-    /// would be asked about before it exists, and an unavailable one has been
-    /// given up on until the next maintenance pass puts it back.
+    /// would be asked about before it exists.
     /// </remarks>
     [Fact]
     public void OnlyMissingEpisodesAreInTheQueue()
@@ -83,7 +82,6 @@ public class QueueOrderTests
         [
             Missing(1, 1, 1),
             Missing(1, 1, 2) with { State = EpisodeState.NotAired },
-            Missing(1, 1, 3) with { State = EpisodeState.Unavailable },
         ]);
 
         Assert.Equal([new EpisodeKey(1, 1, 1)], ordered.Select(episode => episode.Key));

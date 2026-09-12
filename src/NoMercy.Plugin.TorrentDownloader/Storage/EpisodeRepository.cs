@@ -20,11 +20,11 @@ public sealed class EpisodeRepository(Store database)
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The state written is always the derived one. That is what makes
-    /// <c>Unavailable</c> temporary: an episode given up on last night is
-    /// derived as missing again this morning and gets another turn. 0.3.4
-    /// filtered unavailable episodes out of the refresh and preserved their
-    /// state, so an episode that went unavailable once was invisible for ever.
+    /// The state written is always the derived one, never carried over from
+    /// what the row said before: an episode still without a file is missing
+    /// again however many times it has been searched. 0.3.4 filtered its
+    /// given-up episodes out of the refresh and preserved their state instead,
+    /// so one that went unavailable once was invisible for ever.
     /// </para>
     /// <para>
     /// <c>attempts</c> and <c>last_search_at</c> are the exception and are left
@@ -158,30 +158,6 @@ public sealed class EpisodeRepository(Store database)
             WHERE show_id = $show AND season = $season AND episode = $episode;
             """;
         command.Parameters.AddWithValue("$at", at.ToString("O"));
-        command.Parameters.AddWithValue("$show", key.ShowId);
-        command.Parameters.AddWithValue("$season", key.Season);
-        command.Parameters.AddWithValue("$episode", key.Number);
-
-        await command.ExecuteNonQueryAsync(ct);
-    }
-
-    /// <summary>
-    /// Gives up on an episode for now.
-    /// </summary>
-    /// <remarks>
-    /// It does not touch <c>attempts</c>: giving up is a consequence of the
-    /// attempts already recorded, not another one of them.
-    /// </remarks>
-    public async Task MarkUnavailableAsync(EpisodeKey key, CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-        command.CommandText =
-            """
-            UPDATE episodes SET state = $state
-            WHERE show_id = $show AND season = $season AND episode = $episode;
-            """;
-        command.Parameters.AddWithValue("$state", EpisodeStates.Unavailable);
         command.Parameters.AddWithValue("$show", key.ShowId);
         command.Parameters.AddWithValue("$season", key.Season);
         command.Parameters.AddWithValue("$episode", key.Number);

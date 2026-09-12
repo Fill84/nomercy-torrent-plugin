@@ -90,8 +90,9 @@ owner added. The server keeps rows for shows nobody asked for, in the same table
 library id, with a folder and a full episode list, and nothing in such a row tells it apart from a
 show they added. Having a file is the only thing that does.
 
-`MaxSearchAttempts` does not save this. It bounds how long each episode is looked for; it does not
-stop 456 of them being looked for at all.
+A per-episode search limit would not have saved this either, even while one existed: it bounded how
+long each episode was looked for, never whether 456 of them were looked for at all — and the owner's
+decision of 12 September 2026 dropped that limit outright, so nothing bounds it any more.
 
 **It is a workaround and it is known to be one.** A show just added has nothing on disk and is
 therefore invisible to this plugin, which is exactly when it would be most use. That is a gap in the

@@ -29,7 +29,6 @@ public static class ShowsView
                         new() { Key = "type", Label = "Type" },
                         new() { Key = "missing", Label = "Missing" },
                         new() { Key = "waiting", Label = "Waiting to air" },
-                        new() { Key = "givenup", Label = "Given up for now" },
                     ],
                     [
                         .. shows.Select(show => Ui.Row(
@@ -43,7 +42,6 @@ public static class ShowsView
                                 ["type"] = show.Kind == LibraryKind.Anime ? "anime" : "tv",
                                 ["missing"] = show.Missing,
                                 ["waiting"] = show.WaitingToAir,
-                                ["givenup"] = show.GivenUpForNow,
                             })),
                     ],
                     // Not an EmptyState: nothing outstanding means every episode

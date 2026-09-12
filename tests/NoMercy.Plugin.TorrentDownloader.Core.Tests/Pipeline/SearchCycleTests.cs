@@ -201,14 +201,15 @@ public class SearchCycleTests
 
     /// <remarks>
     /// An episode has many spellings of its release in the pool, and every one
-    /// of them is searched — but never more than the owner's own
-    /// <c>MaxSearchAttempts</c>. Twenty spellings times seventeen indexers is a
-    /// cycle that gets the plugin banned from every site it asks, so the cap is
-    /// what bounds the cost; nothing is taken until the names within it have all
-    /// been asked.
+    /// of them is searched — but no more than that: the one name the profile
+    /// accepts and the four rungs below it, a fixed set rather than an
+    /// unbounded search of the pool. Asking for ever more spellings is a cycle
+    /// that gets the plugin banned from every site it asks, so a fixed set is
+    /// what bounds the cost; nothing is taken until the names within it have
+    /// all been asked.
     /// </remarks>
     [Fact]
-    public async Task NoMoreNamesAreSearchedForThanTheOwnerAllowsAttempts()
+    public async Task NoMoreNamesAreSearchedForThanTheSpellingsAndRungsAllow()
     {
         FakeFetch fetch = new();
         fetch.AnswersAnything(Capture.Fixture("srrdb-search.json"));
@@ -219,7 +220,7 @@ public class SearchCycleTests
 
         CycleReport report = await Cycle(fetch, new()).RunAsync(
             [Silo(6)],
-            new(new() { MaximumResolution = "1080p", MaxSearchAttempts = 2 }, Blacklist.None, DryRun: false, Folder),
+            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         // The one name the profile accepts, letter for letter and then without
@@ -739,7 +740,7 @@ public class SearchCycleTests
     /// the episode as this plugin spells it — are not asked at all while the
     /// source's own name is answering. They used to go first and always, ahead
     /// of every name the sources gave, which is not what the architecture
-    /// describes and spent the owner's <c>MaxSearchAttempts</c> on guesses.
+    /// describes and spent the search budget on guesses.
     /// </para>
     /// </remarks>
     [Fact]

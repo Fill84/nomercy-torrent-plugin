@@ -97,12 +97,9 @@ public class GrabRepositoryTests : IDisposable
             [Tracked(1), Tracked(2), Tracked(3)],
             CancellationToken.None);
 
-        // All three grabbed as one season pack, and all three unavailable — as
-        // they would be while it was downloading.
-        await episodes.MarkUnavailableAsync(Episode(1), CancellationToken.None);
-        await episodes.MarkUnavailableAsync(Episode(2), CancellationToken.None);
-        await episodes.MarkUnavailableAsync(Episode(3), CancellationToken.None);
-
+        // All three grabbed as one season pack, and all three still missing —
+        // taking an episode does not change its row, only the grab says it is
+        // spoken for.
         await Record(grabs, Hash, [Episode(1), Episode(2), Episode(3)]);
 
         int returned = await grabs.FailedAsync(

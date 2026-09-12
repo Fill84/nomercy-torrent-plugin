@@ -115,13 +115,10 @@ public class CycleRecordTests : IDisposable
 
     /// <remarks>
     /// <strong>Nothing counted a search at all.</strong> On the owner's own
-    /// library every row still read nought attempts and a null last-search,
-    /// which cost two things. <c>MaxSearchAttempts</c> decided nothing, so no
-    /// episode ever reached <em>given up for now</em> and the Queue page's
-    /// third list could not fill. And the queue is ordered by last-search —
-    /// never searched first, then longest waiting — so with the column never
-    /// written every cycle ran in the same order and whatever was at the end of
-    /// it stayed there.
+    /// library every row still read nought attempts and a null last-search. And
+    /// the queue is ordered by last-search — never searched first, then
+    /// longest waiting — so with the column never written every cycle ran in
+    /// the same order and whatever was at the end of it stayed there.
     /// </remarks>
     [Fact]
     public async Task ASearchThatWasReallyMadeIsCountedAgainstItsEpisode()
@@ -134,15 +131,15 @@ public class CycleRecordTests : IDisposable
             grabs,
             When,
             CancellationToken.None,
-            episodes,
-            maxAttempts: 3);
+            episodes);
 
         TrackedEpisode after = Assert.Single(await episodes.AllAsync(CancellationToken.None));
 
         Assert.Equal(1, after.Attempts);
         Assert.Equal(When, after.LastSearchAt);
 
-        // One of three, so it is still being looked for.
+        // However many times searched, still missing: there is nothing left
+        // for an attempt count to exhaust.
         Assert.Equal(EpisodeState.Missing, after.State);
     }
 
@@ -164,8 +161,7 @@ public class CycleRecordTests : IDisposable
             grabs,
             When,
             CancellationToken.None,
-            episodes,
-            maxAttempts: 3);
+            episodes);
 
         TrackedEpisode after = Assert.Single(await episodes.AllAsync(CancellationToken.None));
 
@@ -174,35 +170,34 @@ public class CycleRecordTests : IDisposable
     }
 
     /// <remarks>
-    /// The last of the owner's attempts gives up on the episode for now. Not
-    /// for good: the next maintenance pass re-derives every state from the
-    /// library, so a release that appears next week puts it back to missing —
-    /// which is <strong>B1</strong>, and the reason this is written here rather
-    /// than in the refresh.
+    /// However many searches an episode has had, it is asked about again next
+    /// run. Giving up never held — the refresh at the top of the next run
+    /// always derived the episode as missing regardless — so the owner's
+    /// decision of 12 September 2026 was to drop the limit outright rather
+    /// than have it hold for a time.
     /// </remarks>
     [Fact]
-    public async Task TheLastAttemptGivesUpOnTheEpisodeForNow()
+    public async Task AnEpisodeWithManyAttemptsStaysMissingRatherThanGivingUp()
     {
-        (GrabRepository grabs, EpisodeRepository episodes) = await Both(attempts: 2);
+        (GrabRepository grabs, EpisodeRepository episodes) = await Both(attempts: 69);
 
         await CycleRecord.WriteAsync(
             new([Taken with { HandedOver = false, InfoHash = null, Searched = true }], []),
-            [Tracked with { Attempts = 2 }],
+            [Tracked with { Attempts = 69 }],
             grabs,
             When,
             CancellationToken.None,
-            episodes,
-            maxAttempts: 3);
+            episodes);
 
         TrackedEpisode after = Assert.Single(await episodes.AllAsync(CancellationToken.None));
 
-        Assert.Equal(3, after.Attempts);
-        Assert.Equal(EpisodeState.Unavailable, after.State);
+        Assert.Equal(70, after.Attempts);
+        Assert.Equal(EpisodeState.Missing, after.State);
     }
 
     /// <remarks>
-    /// An episode whose release was taken is not given up on, whatever it cost
-    /// to find. It is about to stop being missing at all.
+    /// An episode whose release was taken is about to stop being missing at
+    /// all, whatever it cost to find.
     /// </remarks>
     [Fact]
     public async Task AnEpisodeWhoseReleaseWasTakenIsNeverGivenUpOn()
@@ -215,8 +210,7 @@ public class CycleRecordTests : IDisposable
             grabs,
             When,
             CancellationToken.None,
-            episodes,
-            maxAttempts: 3);
+            episodes);
 
         TrackedEpisode after = Assert.Single(await episodes.AllAsync(CancellationToken.None));
 

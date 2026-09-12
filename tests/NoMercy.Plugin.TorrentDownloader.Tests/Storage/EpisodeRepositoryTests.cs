@@ -37,26 +37,6 @@ public class EpisodeRepositoryTests : IAsyncLifetime
     }
 
     /// <remarks>
-    /// <strong>B1.</strong> Every field the library owns is rewritten from the
-    /// derivation, state included. That is what makes <c>Unavailable</c>
-    /// temporary: an episode given up on last night is derived as missing again
-    /// this morning and gets another turn. 0.3.4 preserved the state instead
-    /// and an episode that went unavailable once was invisible for ever.
-    /// </remarks>
-    [Fact]
-    public async Task AnUnavailableEpisodeReturnsToMissingOnARefresh()
-    {
-        await _episodes.ReplaceAsync([Missing(1, 1, 1)], CancellationToken.None);
-        await _episodes.MarkUnavailableAsync(new(1, 1, 1), CancellationToken.None);
-
-        Assert.Equal(EpisodeState.Unavailable, (await All())[0].State);
-
-        await _episodes.ReplaceAsync([Missing(1, 1, 1)], CancellationToken.None);
-
-        Assert.Equal(EpisodeState.Missing, (await All())[0].State);
-    }
-
-    /// <remarks>
     /// The two things the library cannot tell us are the two things a refresh
     /// must not touch. Rewriting them would forget, every night, everything the
     /// plugin had learnt about how hard an episode is to find.
@@ -88,7 +68,6 @@ public class EpisodeRepositoryTests : IAsyncLifetime
     {
         await _episodes.ReplaceAsync([Missing(1, 1, 1)], CancellationToken.None);
 
-        await _episodes.MarkUnavailableAsync(new(1, 1, 1), CancellationToken.None);
         await _episodes.ReplaceAsync([Missing(1, 1, 1)], CancellationToken.None);
         await _episodes.ReplaceAsync([Missing(1, 1, 1)], CancellationToken.None);
 

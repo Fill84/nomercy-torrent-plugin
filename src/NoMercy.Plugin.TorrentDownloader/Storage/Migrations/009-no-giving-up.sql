@@ -1,0 +1,11 @@
+-- The owner's decision of 12 September 2026: MaxSearchAttempts never held —
+-- an episode marked 'unavailable' after its search was derived as 'missing'
+-- again by the very next refresh, which kept the attempt count climbing
+-- while the state did nothing. The owner's Freak Brothers episodes stood at
+-- 67-69 attempts on 11 September 2026 while the setting read 3. Asked
+-- whether it should hold for a time instead, the owner chose to drop it
+-- outright: every gap is searched on every run, for ever. 'unavailable' is
+-- therefore gone from the domain, and EpisodeStates.FromStored throws on a
+-- row that still carries it — this rewrites what is already on the owner's
+-- disk so those rows stay readable.
+UPDATE episodes SET state = 'missing' WHERE state = 'unavailable';

@@ -43,9 +43,8 @@ public sealed record EpisodeOutcome(
     /// <remarks>
     /// What makes a search attempt an attempt. An episode nothing could be
     /// asked about, and one settled by a pack taken earlier, have not been
-    /// looked for — counting either would spend the owner's
-    /// <c>MaxSearchAttempts</c> on work nobody did and give up on an episode
-    /// that was never searched for once.
+    /// looked for — counting either would credit an indexer asking that never
+    /// happened to an episode that was never searched for once.
     /// </remarks>
     public bool Searched { get; init; }
 

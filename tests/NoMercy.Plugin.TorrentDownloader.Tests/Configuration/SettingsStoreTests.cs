@@ -104,7 +104,6 @@ public class SettingsStoreTests : IDisposable
         Assert.Equal(2, settings.Profile.MinimumSeeders);
         Assert.True(settings.Profile.AllowSeasonPacks);
         Assert.Equal(3, settings.Profile.SeasonPackThreshold);
-        Assert.Equal(3, settings.Profile.MaxSearchAttempts);
 
         Assert.Equal(5, settings.Client.MaxConcurrentDownloads);
         Assert.Empty(settings.Client.DefaultTrackers);

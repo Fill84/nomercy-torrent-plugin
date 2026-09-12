@@ -60,9 +60,6 @@ public sealed class Profile
     /// <summary>How many gaps in a season before a pack is worth its bytes.</summary>
     public int SeasonPackThreshold { get; set; } = 3;
 
-    /// <summary>How many times an episode is looked for before it goes unavailable.</summary>
-    public int MaxSearchAttempts { get; set; } = 3;
-
     /// <summary>
     /// Whether an untagged release is refused.
     /// </summary>

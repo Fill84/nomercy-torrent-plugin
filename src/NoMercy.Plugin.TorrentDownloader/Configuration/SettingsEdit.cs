@@ -127,9 +127,6 @@ public static class SettingsEdit
         ["profile.seasonPackThreshold"] = new(
             settings => Text(settings.Profile.SeasonPackThreshold),
             (settings, value) => settings.Profile.SeasonPackThreshold = Whole(value)),
-        ["profile.maxSearchAttempts"] = new(
-            settings => Text(settings.Profile.MaxSearchAttempts),
-            (settings, value) => settings.Profile.MaxSearchAttempts = Whole(value)),
         ["profile.excludeTerms"] = new(
             settings => string.Join(", ", settings.Profile.ExcludeTerms),
             (settings, value) => settings.Profile.ExcludeTerms = Line(value)),

@@ -32,8 +32,7 @@ public static class ShowSummaries
                     show.First().ShowYear,
                     show.First().Kind,
                     show.Count(episode => episode.State == EpisodeState.Missing),
-                    show.Count(episode => episode.State == EpisodeState.NotAired),
-                    show.Count(episode => episode.State == EpisodeState.Unavailable)))
+                    show.Count(episode => episode.State == EpisodeState.NotAired)))
                 .OrderBy(show => show.Title, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(show => show.ShowId),
         ];

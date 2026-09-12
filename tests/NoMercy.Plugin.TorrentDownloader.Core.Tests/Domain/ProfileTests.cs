@@ -24,7 +24,6 @@ public class ProfileTests
         Assert.Equal(2, profile.MinimumSeeders);
         Assert.True(profile.AllowSeasonPacks);
         Assert.Equal(3, profile.SeasonPackThreshold);
-        Assert.Equal(3, profile.MaxSearchAttempts);
     }
 
     /// <remarks>

@@ -288,7 +288,7 @@ public class DownloadsControllerTests : IDisposable
     {
         await (await plugin.EpisodesAsync(CancellationToken.None)).ReplaceAsync(
             [
-                new(Episode, "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Unavailable),
+                new(Episode, "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Missing),
             ],
             CancellationToken.None);
 
