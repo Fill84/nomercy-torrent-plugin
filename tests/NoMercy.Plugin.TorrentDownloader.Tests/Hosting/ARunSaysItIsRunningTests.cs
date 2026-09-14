@@ -98,10 +98,13 @@ public class ARunSaysItIsRunningTests : IDisposable
 
         plugin.StopRun();
 
-        for (int waited = 0; plugin.Running && waited < 100; waited++)
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(100));
-        }
+        // Bounded, and generously. Running is the whole cycle since S12-15, so
+        // a stopped run is not over until maintenance has run and the finish
+        // is written down — on the CI runner of 14 September 2026, loaded by
+        // every test project at once, opening a database alone took twelve
+        // seconds and a ten-second bound failed with nothing wrong. A run that
+        // never stops still fails here, a minute later.
+        await Until(() => !plugin.Running);
 
         Assert.False(plugin.Running);
         Assert.Empty(plugin.Journal.Snapshot().InFlight);
@@ -127,10 +130,7 @@ public class ARunSaysItIsRunningTests : IDisposable
             Assert.True(before.StartRun());
             before.StopRun();
 
-            for (int waited = 0; before.Running && waited < 100; waited++)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(100));
-            }
+            await Until(() => !before.Running);
 
             Assert.False(before.Running);
         }
@@ -152,6 +152,17 @@ public class ARunSaysItIsRunningTests : IDisposable
             bar.Contains("last run finished at", StringComparison.Ordinal)
             || bar.Contains("stopped at", StringComparison.Ordinal),
             bar);
+    }
+
+    /// <summary>Waits for a condition, for at most a minute.</summary>
+    private static async Task Until(Func<bool> done)
+    {
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromMinutes(1);
+
+        while (!done() && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
     }
 
     public void Dispose()

@@ -51,7 +51,9 @@ public class VideoOnlyTests : IDisposable
 
         Assert.Equal(6, wanted.Count);
 
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         (Stream seeding, Stream leeching) = await LoopbackAsync(stopping.Token);
 

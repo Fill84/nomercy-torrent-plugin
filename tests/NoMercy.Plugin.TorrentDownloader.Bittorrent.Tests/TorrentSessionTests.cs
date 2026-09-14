@@ -54,7 +54,9 @@ public class TorrentSessionTests : IDisposable
 
         Assert.InRange(torrent.PieceCount, 10, 200);
 
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         (Stream seeding, Stream leeching) = await LoopbackAsync(stopping.Token);
 
@@ -378,7 +380,9 @@ public class TorrentSessionTests : IDisposable
     [Fact]
     public async Task ASessionSaysHowManyOfItsPeersAreChokingIt()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         byte[] content = Fixture("ubuntu-desktop.torrent");
         TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768);
@@ -698,7 +702,13 @@ public class TorrentSessionTests : IDisposable
         byte[] content = Fixture("ubuntu-desktop.torrent");
         TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768, secret: true);
 
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // The bound on the whole transfer, and so on how long a session that
+        // never says it finished takes to fail. Thirty seconds was cut through
+        // on the CI runner of 14 September 2026, where the suite ran every test
+        // project at once and ordinary tests took forty seconds: the transfer
+        // was cancelled before its last piece, and the test read that as the
+        // session staying silent.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         (Stream seeding, Stream leeching) = await LoopbackAsync(stopping.Token);
 

@@ -181,7 +181,9 @@ public class TorrentRunTests : IDisposable
     [Fact]
     public async Task APeerThatDidNotSupplyTheMetadataIsStillAskedForPieces()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         ScriptedPeer serving = new(ArchiveHash, ArchiveInfo());
 
@@ -255,7 +257,9 @@ public class TorrentRunTests : IDisposable
     [Fact]
     public async Task AnAddressBehindFiftyOthersIsStillDialledEventually()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 31, 21, 0, 0, TimeSpan.Zero));
 
@@ -301,7 +305,9 @@ public class TorrentRunTests : IDisposable
     [Fact]
     public async Task TheMetadataIsFetchedFromAPeerAndTheTorrentGetsItsFileList()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         byte[] info = ArchiveInfo();
         ScriptedPeer peer = new(ArchiveHash, info);
@@ -341,7 +347,9 @@ public class TorrentRunTests : IDisposable
     [Fact]
     public async Task APeerThatDoesNotSpeakTheMetadataExtensionIsAskedForNothingAndKeptAnyway()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         ScriptedPeer peer = new(ArchiveHash, ArchiveInfo()) { Speaks = false };
 

@@ -174,7 +174,9 @@ public class BittorrentEngineTests : IDisposable
     [Fact]
     public async Task APeerThatDialsInIsTakenUp()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
 
         using BittorrentEngine engine = new(
             0,
