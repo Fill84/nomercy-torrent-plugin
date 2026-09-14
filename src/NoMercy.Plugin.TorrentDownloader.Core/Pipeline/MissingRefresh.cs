@@ -49,7 +49,7 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
             IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
 
             // Whether the owner has this show at all. The rule and the whole of
-            // its reasoning are in Ownership.Theirs, which the transfers tick
+            // its reasoning are in Ownership.Theirs, which a transfers pass
             // asks as well: the two decide the same thing, and two copies of it
             // could disagree.
             if (!Ownership.Theirs(episodes))

@@ -39,6 +39,7 @@ public sealed class LiveSnapshot : IDisposable
     private readonly ILogger _logger;
     private readonly Func<CycleStatus> _cycle;
     private readonly TimeProvider _time;
+    private readonly Action? _told;
     private readonly Lock _lock = new();
 
     private ITimer? _due;
@@ -78,13 +79,15 @@ public sealed class LiveSnapshot : IDisposable
         IActivityJournal journal,
         ILogger logger,
         Func<CycleStatus> cycle,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        Action? told = null)
     {
         _hub = hub;
         _journal = journal;
         _logger = logger;
         _cycle = cycle;
         _time = time ?? TimeProvider.System;
+        _told = told;
     }
 
     /// <summary>What changed since the last push, and nothing else.</summary>
@@ -199,6 +202,11 @@ public sealed class LiveSnapshot : IDisposable
         try
         {
             await _hub.PushAsync(Channel, payload);
+
+            // Out, so whoever is keeping track of whether a page answers can
+            // start waiting for one. A page that is open fetches itself again
+            // on every push; a push nothing fetches after is a push nobody saw.
+            _told?.Invoke();
         }
         catch (Exception exception)
         {

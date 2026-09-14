@@ -50,7 +50,7 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
         await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-OLD", DateTimeOffset.UtcNow.AddDays(-30));
         await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-NEW", DateTimeOffset.UtcNow.AddDays(-1));
 
-        await plugin.ExecuteAsync(JobNames.Maintenance, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         SkippedRelease left = Assert.Single((await grabs.SkippedAsync(1, 50, CancellationToken.None)).Rows);
 
@@ -88,7 +88,7 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
         await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-OLD", DateTimeOffset.UtcNow.AddDays(-30));
         await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-NEW", DateTimeOffset.UtcNow.AddDays(-1));
 
-        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         SkippedRelease left = Assert.Single((await grabs.SkippedAsync(1, 50, CancellationToken.None)).Rows);
 

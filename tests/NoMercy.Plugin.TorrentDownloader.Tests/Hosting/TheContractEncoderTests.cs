@@ -44,10 +44,6 @@ public class TheContractEncoderTests
 
         Assert.True(ask.Taken);
 
-        // The job the server queued, kept so what became of it can be asked
-        // rather than waited out. media-server #31.
-        Assert.Equal("01KZGKX2G0966V80H26EKGG5T1", ask.JobId);
-
         (string File, string Library, string? Media, string? Preset) asked = Assert.Single(encoder.Asked);
 
         Assert.Equal(@"D:\intake\Silo.mkv", asked.File);

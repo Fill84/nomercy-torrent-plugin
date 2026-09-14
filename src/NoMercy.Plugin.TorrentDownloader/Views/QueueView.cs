@@ -46,7 +46,7 @@ public static class QueueView
     }
 
     /// <remarks>
-    /// In the order the search cadence will actually ask, from the same rule it
+    /// In the order a search will actually ask, from the same rule it
     /// uses — a page that showed a different order would be a guess about what
     /// the plugin is about to do.
     /// </remarks>

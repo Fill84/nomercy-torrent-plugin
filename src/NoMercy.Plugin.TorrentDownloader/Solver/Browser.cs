@@ -65,7 +65,7 @@ public sealed class Browser(
 
         try
         {
-            // Checked again inside: a cadence tick and a page render can both
+            // Checked again inside: a cycle and a page render can both
             // arrive at a plugin that has just loaded, and two browsers would
             // each solve every gate.
             if (_process is { IsRunning: true })

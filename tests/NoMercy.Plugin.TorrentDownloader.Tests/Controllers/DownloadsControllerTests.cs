@@ -108,8 +108,7 @@ public class DownloadsControllerTests : IDisposable
 
     /// <remarks>
     /// A magnet added by hand is a grab like any other: it is written down, so
-    /// the Downloads page shows it and the transfers cadence stages it when it
-    /// finishes. One that was taken and never recorded is a file that arrives
+    /// the Downloads page shows it and it is staged the moment it finishes. One that was taken and never recorded is a file that arrives
     /// and is never put anywhere.
     /// </remarks>
     [Fact]

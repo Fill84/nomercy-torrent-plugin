@@ -36,7 +36,7 @@ public class TheLibraryIsReadTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = await Configured();
 
-        await plugin.ExecuteAsync(JobNames.Maintenance, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         IReadOnlyList<TrackedEpisode> tracked =
             await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
@@ -55,7 +55,7 @@ public class TheLibraryIsReadTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = await Configured();
 
-        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         Assert.NotEmpty(
             await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None));
@@ -71,7 +71,7 @@ public class TheLibraryIsReadTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = await Configured();
 
-        await plugin.ExecuteAsync(JobNames.Maintenance, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         IReadOnlyList<TrackedEpisode> tracked =
             await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);

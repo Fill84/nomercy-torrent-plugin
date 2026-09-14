@@ -4,10 +4,16 @@
 -- name, holding when it last finished. A cadence with no row has never run and
 -- is due at once, which is the right answer on a fresh install.
 --
--- This is migration 010, not 009: 009 already shipped and already ran on the
--- owner's server, and PRAGMA user_version carries the number of the last
--- migration that ran. Editing 009 now would never create this table on a
--- server that already has that version recorded.
+-- This is migration 010 and not an edit to 009, because PRAGMA user_version
+-- carries the number of the last migration that ran: editing 009 would never
+-- create this table on any server that already recorded that version.
+--
+-- Corrected 12 September 2026: this said 009 "already ran on the owner's
+-- server". It had not. beast-unit's torrent-downloader.db was at
+-- user_version=8, read straight out of the file header, so 009 and 010 both
+-- run on the first start after the next deploy. The reason above holds either
+-- way and is the real one; the claim about the owner's server was wrong and
+-- would have sent the next reader looking for a state that was never there.
 --
 -- IF NOT EXISTS because StoreTests.AnEpisodeGivenUpOnComesBackAsMissing rolls
 -- PRAGMA user_version back to isolate migration 009 on a database this

@@ -21,10 +21,14 @@ public sealed class ClientLimits
     public int MaxConcurrentDownloads { get; set; } = 5;
 
     /// <summary>TCP and UDP, the same number for both.</summary>
-    public int ListenPort { get; set; } = 51413;
-
-    /// <summary>UPnP IGD, then NAT-PMP.</summary>
-    public bool PortMapping { get; set; } = true;
+    /// <remarks>
+    /// 6881, because 6881 to 6889 is the BitTorrent default and the port a
+    /// stranger's firewall rule is most likely to already allow. This shipped
+    /// as 51413, which is Transmission's default and was never this plugin's
+    /// to inherit. A settings file that names a port keeps it — the owner's own
+    /// server names 51413 and has it forwarded, so nothing moves under them.
+    /// </remarks>
+    public int ListenPort { get; set; } = 6881;
 
     /// <summary>Bytes a second. Nought is unlimited.</summary>
     public long MaxDownloadRate { get; set; }

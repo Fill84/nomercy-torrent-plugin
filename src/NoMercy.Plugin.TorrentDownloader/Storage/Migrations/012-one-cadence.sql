@@ -1,0 +1,18 @@
+-- Four cadences became one.
+--
+-- Transfers every minute, feed every fifteen, search every six hours and
+-- maintenance at four in the morning were never four schedules: they are the
+-- steps of one cycle, each started by the last one finishing. What is left to
+-- ask is how often to start a cycle when nobody has, and that is kept under
+-- 'cycle'.
+--
+-- Transfers in particular was * * * * * and not because anything about
+-- transfers wanted a minute: the torrent client did its whole housekeeping
+-- inside the method the pages call to draw a table, so without a tick a minute
+-- it stopped expiring magnets, noticing stalls, noticing completions and
+-- writing resume files. Those have their own moments now.
+--
+-- The old rows are read by nothing. Left, they would be four last-finished
+-- times for work that no longer has a schedule - which is exactly the sort of
+-- thing that reads as a setting somebody forgot to wire up.
+DELETE FROM cadences WHERE name IN ('transfers', 'feed', 'search', 'maintenance');

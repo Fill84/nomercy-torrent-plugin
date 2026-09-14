@@ -87,13 +87,13 @@ public sealed class ContractEncodeGateway(
             // With the job it queued, which is what makes a failed encode
             // something the plugin can be told about rather than something it
             // waits six hours to infer.
-            return new(true, answer.JobId);
+            return new(true);
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
             // It never throws. An encode that cannot be asked for is one
-            // download left staged and the next tick asking again; throwing
-            // out of here would unwind the whole transfers cadence, so one
+            // download left staged and the next pass asking again; throwing
+            // out of here would unwind the whole transfers pass, so one
             // failure would stop every download in flight from being looked at.
             return Refused(name, wrong.Message);
         }

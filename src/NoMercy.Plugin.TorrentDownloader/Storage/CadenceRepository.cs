@@ -4,11 +4,11 @@ using Microsoft.Data.Sqlite;
 namespace NoMercy.Plugin.TorrentDownloader.Storage;
 
 /// <summary>
-/// When each cadence last finished, in <c>cadences</c> — what the plugin's own
-/// clock reads to decide what is due next. See <c>Hosting/Clock.cs</c>.
+/// When the cycle last finished, in <c>cadences</c> — what the plugin's own
+/// clock reads to work out when the next one is due. See <c>Hosting/Clock.cs</c>.
 /// </summary>
 /// <remarks>
-/// A cadence with no row has never run and is due at once, which is the right
+/// A cycle with no row has never run and is due at once, which is the right
 /// answer on a fresh install. Kept in the database rather than in memory for
 /// the same reason <c>RunRepository</c> is: a restart must not make every
 /// cadence forget it has ever run.

@@ -171,6 +171,15 @@ public class StoreTests : IDisposable
             rollBack.CommandText = "PRAGMA user_version=8;";
             await rollBack.ExecuteNonQueryAsync(CancellationToken.None);
 
+            // And the column 011 takes away, put back with it. Rolling the
+            // pragma back does not undo what the migrations did, so every one
+            // after 008 runs a second time - and 011 drops a column, which the
+            // first run has already taken. SQLite has no DROP COLUMN IF EXISTS,
+            // so the state this test is pretending to be in has to include it.
+            await using SqliteCommand back = connection.CreateCommand();
+            back.CommandText = "ALTER TABLE grabs ADD COLUMN encode_job TEXT;";
+            await back.ExecuteNonQueryAsync(CancellationToken.None);
+
             await using SqliteCommand insert = connection.CreateCommand();
             insert.CommandText =
                 """

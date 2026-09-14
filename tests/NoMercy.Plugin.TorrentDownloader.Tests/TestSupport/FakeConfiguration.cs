@@ -22,9 +22,9 @@ public sealed class FakeConfiguration : IPluginConfiguration
     /// How many times the settings have been read from here.
     /// </summary>
     /// <remarks>
-    /// The transfers cadence runs every minute and every page draws from the
-    /// settings, so this is a read of data that changes when an owner presses
-    /// save, asked for at least once a minute. Nothing about the cost of it
+    /// Every transfers pass, every cycle and every page draws from the settings,
+    /// so this is a read of data that changes when an owner presses save, asked
+    /// for far more often than that. Nothing about the cost of it
     /// shows in an outcome.
     /// </remarks>
     public int Reads { get; private set; }

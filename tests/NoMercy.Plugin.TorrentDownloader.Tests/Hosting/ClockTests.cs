@@ -13,7 +13,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Hosting;
 /// The whole reason this exists: the host reads a plugin's job list only when
 /// it is installed, hot-swapped or enabled, so a saved cadence has to take
 /// effect some other way. It does, here — see
-/// <see cref="ASavedCadenceIsDueByTheNewIntervalWithoutARestart"/>.
+/// <see cref="ASavedCadenceTakesEffectWithoutARestart"/>.
 /// </remarks>
 public class ClockTests : IAsyncLifetime
 {
@@ -33,55 +33,66 @@ public class ClockTests : IAsyncLifetime
     }
 
     /// <remarks>
-    /// Three cadences, three answers: one whose six-hourly slot has not come
-    /// round since it last finished, one whose daily slot came round two days
-    /// ago and was never asked, and one with no row at all — never run, and
-    /// due at once, which is the right answer on a fresh install.
+    /// <para>
+    /// When a cycle next falls due is counted from when the last one finished,
+    /// not from the hour the server happens to have started in. A cycle that
+    /// ended at five past is due again at the next slot after that.
+    /// </para>
+    /// <para>
+    /// <strong>Nothing asks whether one is due.</strong> This used to answer
+    /// "which of these are due now?" and be asked on every tick; the plugin
+    /// sets one timer for the moment this returns and is woken because a cycle
+    /// is due rather than to find out whether one is.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task ACadenceIsDueWhenItsIntervalHasPassedSinceItLastFinished()
+    public async Task WhenTheNextCycleFallsDueIsCountedFromTheLastFinish()
     {
         Store database = new(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         CadenceRepository cadences = new(database);
-        FakeTimeProvider time = new(new DateTimeOffset(2026, 9, 10, 4, 0, 0, TimeSpan.Zero));
+        FakeTimeProvider time = new(new DateTimeOffset(2026, 9, 12, 5, 0, 0, TimeSpan.Zero));
         Clock clock = new(cadences, time);
 
-        // maintenance finished two days ago; its daily 04:00 slot has come
-        // round since, on the 11th and the 12th.
-        await clock.FinishedAsync("maintenance", CancellationToken.None);
+        await clock.FinishedAsync("cycle", CancellationToken.None);
 
-        // search finished five hours into the 12th; its six-hourly slot
-        // (00:00, 06:00, 12:00, 18:00) has not come round since.
-        time.SetUtcNow(new DateTimeOffset(2026, 9, 12, 5, 0, 0, TimeSpan.Zero));
-        await clock.FinishedAsync("search", CancellationToken.None);
-
-        // feed has never finished at all.
-        time.SetUtcNow(new DateTimeOffset(2026, 9, 12, 5, 30, 0, TimeSpan.Zero));
-
-        IReadOnlyList<string> due = await clock.DueAsync(
-            new Dictionary<string, string>
-            {
-                ["search"] = "0 */6 * * *",
-                ["maintenance"] = "0 4 * * *",
-                ["feed"] = "*/15 * * * *",
-            },
-            time.GetUtcNow(),
-            CancellationToken.None);
-
-        Assert.DoesNotContain("search", due);
-        Assert.Contains("maintenance", due);
-        Assert.Contains("feed", due);
+        // Hourly, on the hour: the one after five o'clock is six.
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 12, 6, 0, 0, TimeSpan.Zero),
+            await clock.NextAsync("cycle", "0 * * * *", CancellationToken.None));
     }
 
     /// <remarks>
-    /// This is the whole point of the slice: no restart, no re-registration —
-    /// the same clock, asked again, answers differently because the owner
-    /// saved a shorter interval while the server kept running.
+    /// A cycle that has never run is due at once, which is the right answer on
+    /// a fresh install: the owner has just set the plugin up and is watching it.
     /// </remarks>
     [Fact]
-    public async Task ASavedCadenceIsDueByTheNewIntervalWithoutARestart()
+    public async Task ACycleThatHasNeverRunIsDueAtOnce()
+    {
+        Store database = new(_folder);
+        await database.MigrateAsync(CancellationToken.None);
+
+        CadenceRepository cadences = new(database);
+        Clock clock = new(cadences, new FakeTimeProvider(new DateTimeOffset(2026, 9, 12, 5, 30, 0, TimeSpan.Zero)));
+
+        DateTimeOffset? next = await clock.NextAsync("cycle", "0 * * * *", CancellationToken.None);
+
+        Assert.NotNull(next);
+        Assert.True(next < DateTimeOffset.UtcNow, "a cycle that has never run was not due yet");
+    }
+
+    /// <remarks>
+    /// This is the whole point of the plugin keeping its own clock: no restart,
+    /// no re-registration — the same clock, asked again, answers differently
+    /// because the owner saved a shorter interval while the server kept
+    /// running. The host reads a plugin's job list only when it is installed,
+    /// hot-swapped or enabled, and the owner changed a cadence on 3 September
+    /// 2026, watched the old one go on firing, and reasonably concluded the
+    /// setting did nothing.
+    /// </remarks>
+    [Fact]
+    public async Task ASavedCadenceTakesEffectWithoutARestart()
     {
         Store database = new(_folder);
         await database.MigrateAsync(CancellationToken.None);
@@ -90,37 +101,28 @@ public class ClockTests : IAsyncLifetime
         FakeTimeProvider time = new(new DateTimeOffset(2026, 9, 12, 0, 0, 0, TimeSpan.Zero));
         Clock clock = new(cadences, time);
 
-        await clock.FinishedAsync("search", CancellationToken.None);
+        await clock.FinishedAsync("cycle", CancellationToken.None);
 
-        time.SetUtcNow(new DateTimeOffset(2026, 9, 12, 1, 0, 0, TimeSpan.Zero));
+        // Hourly, which is the default: the next one is an hour away.
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 12, 1, 0, 0, TimeSpan.Zero),
+            await clock.NextAsync("cycle", "0 * * * *", CancellationToken.None));
 
-        // At the six-hourly default, one hour on is nowhere near due.
-        IReadOnlyList<string> before = await clock.DueAsync(
-            new Dictionary<string, string> { ["search"] = "0 */6 * * *" },
-            time.GetUtcNow(),
-            CancellationToken.None);
-
-        Assert.DoesNotContain("search", before);
-
-        // The owner saves a much shorter cadence while the server keeps
-        // running. Nothing about the last finish changes — only the
-        // expression the clock is asked about.
-        IReadOnlyList<string> after = await clock.DueAsync(
-            new Dictionary<string, string> { ["search"] = "*/5 * * * *" },
-            time.GetUtcNow(),
-            CancellationToken.None);
-
-        Assert.Contains("search", after);
+        // The owner saves a shorter cadence while the server keeps running.
+        // Nothing about the last finish changes — only the expression.
+        Assert.Equal(
+            new DateTimeOffset(2026, 9, 12, 0, 5, 0, TimeSpan.Zero),
+            await clock.NextAsync("cycle", "*/5 * * * *", CancellationToken.None));
     }
 
     /// <remarks>
-    /// The settings page already refuses a bad cron on save; this is the
-    /// second line of defence for a file edited by hand that never passed
-    /// through it. Treating an unparseable expression as due would run that
-    /// cadence every single minute from the moment somebody saved it.
+    /// The settings page already refuses a bad cron on save; this is the second
+    /// line of defence for a file edited by hand that never passed through it.
+    /// Null, so no timer is set at all — read as "due now", a bad expression
+    /// would start a cycle every time anything looked, for ever.
     /// </remarks>
     [Fact]
-    public async Task ACadenceWhoseExpressionCannotBeParsedIsNeverDue()
+    public async Task ACadenceWhoseExpressionCannotBeParsedSchedulesNothing()
     {
         Store database = new(_folder);
         await database.MigrateAsync(CancellationToken.None);
@@ -128,11 +130,6 @@ public class ClockTests : IAsyncLifetime
         CadenceRepository cadences = new(database);
         Clock clock = new(cadences, new FakeTimeProvider());
 
-        IReadOnlyList<string> due = await clock.DueAsync(
-            new Dictionary<string, string> { ["search"] = "not a cron" },
-            DateTimeOffset.UtcNow,
-            CancellationToken.None);
-
-        Assert.Empty(due);
+        Assert.Null(await clock.NextAsync("cycle", "not a cron", CancellationToken.None));
     }
 }

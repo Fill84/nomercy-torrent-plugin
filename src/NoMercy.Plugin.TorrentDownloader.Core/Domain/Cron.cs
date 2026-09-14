@@ -57,6 +57,51 @@ public static class Cron
     }
 
     /// <summary>
+    /// Whether <paramref name="expression"/> fires no more often than once an hour,
+    /// and when it does not, what to tell the owner.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The owner's floor for a cycle, set on 13 September 2026.</strong>
+    /// Every cycle reads every feed and searches every indexer, and a trigger
+    /// during an open cycle adds another search to it — so a cycle every minute
+    /// is every indexer asked again and again for as long as anything downloads.
+    /// Nothing shorter than an hour, typed by hand or chosen from the list.
+    /// </para>
+    /// <para>
+    /// <strong>Exact, not sampled.</strong> A cron fires at most once an hour
+    /// precisely when its minute field is a single number: one minute in every
+    /// hour it matches. A list, a range, a step or a star there fires more than
+    /// once in any hour it matches, and every valid expression matches some hour.
+    /// Counting occurrences over a window instead would let a pattern that fires
+    /// twice on the first of the month through a window that missed the first.
+    /// </para>
+    /// </remarks>
+    public static bool AtMostHourly(string? expression, out string? reason)
+    {
+        if (!IsValid(expression, out reason))
+        {
+            return false;
+        }
+
+        string minute = expression!
+            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
+
+        if (minute.All(char.IsAsciiDigit))
+        {
+            reason = null;
+
+            return true;
+        }
+
+        reason =
+            $"'{expression}' would start a cycle more often than once an hour, and every cycle searches every "
+            + "indexer. Give the minute as one number — 0 is on the hour — and use Run for anything sooner.";
+
+        return false;
+    }
+
+    /// <summary>
     /// When <paramref name="expression"/> next fires, strictly after
     /// <paramref name="after"/>, in UTC — or null for an expression the server
     /// could never schedule.

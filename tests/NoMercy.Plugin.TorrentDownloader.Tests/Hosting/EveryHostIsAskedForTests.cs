@@ -40,7 +40,7 @@ public class EveryHostIsAskedForTests : IDisposable
 
         using TorrentDownloaderPlugin plugin = await Configured(grants);
 
-        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         Assert.NotEmpty(grants.Requested);
 
@@ -62,7 +62,7 @@ public class EveryHostIsAskedForTests : IDisposable
 
         using TorrentDownloaderPlugin plugin = await Configured(grants);
 
-        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         // The source, by name. A host two sources share names both, so
         // refusing it is a decision the owner makes about all of them.
@@ -88,7 +88,7 @@ public class EveryHostIsAskedForTests : IDisposable
 
         using TorrentDownloaderPlugin plugin = await Configured(grants);
 
-        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         Assert.DoesNotContain(grants.Requested, request => request.Host == "nyaa.si");
     }

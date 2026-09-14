@@ -81,7 +81,7 @@ public class SettingsEditTests
             new Dictionary<string, string?> { ["client.listenPort"] = "not a port" });
 
         Assert.Contains(problems, problem => problem.Contains("client.listenPort", StringComparison.Ordinal));
-        Assert.Equal(51413, settings.Client.ListenPort);
+        Assert.Equal(6881, settings.Client.ListenPort);
     }
 
     [Theory]
@@ -140,8 +140,7 @@ public class SettingsEditTests
     {
         return name switch
         {
-            "cadences.transfers" or "cadences.feed" or "cadences.search" or "cadences.maintenance"
-                => "0 4 * * *",
+            "cadences.cycle" => "0 4 * * *",
             "profile.maximumResolution" => "1080p",
             "profile.codec" => Profile.AnyCodec,
             "client.encryption" => nameof(EncryptionPolicy.Allowed),
@@ -157,5 +156,93 @@ public class SettingsEditTests
         // it, so the sample comes from the settings rather than from a table
         // here that would drift away from them.
         return SettingsEdit.Read(settings, name) ?? "1";
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The page stops asking the owner to type 10485760.</strong> The
+    /// limits are stored in bytes per second and everything downstream reads
+    /// them that way, so nothing there changes — but a speed is a thing people
+    /// think about in megabytes, and the presets are the common answers.
+    /// </para>
+    /// <para>
+    /// The preset carries bytes because that is what it stands for. The box
+    /// beside it is megabytes per second, because that is what somebody typing
+    /// a number into a box labelled MB/s means, and it wins when it is filled
+    /// in: a preset list can only ever hold the answers somebody thought of.
+    /// Nought is unlimited, which the preset says and the box cannot.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ASpeedIsTypedInMegabytesAndStoredInBytes()
+    {
+        Settings settings = new();
+
+        // A preset, in the bytes it stands for.
+        Assert.Empty(SettingsEdit.Apply(
+            settings,
+            new Dictionary<string, string?> { ["client.maxDownloadRate"] = "10485760" }));
+
+        Assert.Equal(10485760, settings.Client.MaxDownloadRate);
+
+        // The box, in megabytes a second.
+        Assert.Empty(SettingsEdit.Apply(
+            settings,
+            new Dictionary<string, string?> { ["client.maxUploadRateMb"] = "3" }));
+
+        Assert.Equal(3 * 1024 * 1024, settings.Client.MaxUploadRate);
+
+        // Both, which is what a form that draws both posts. What was typed
+        // wins, or the box would be a control that silently did nothing.
+        Assert.Empty(SettingsEdit.Apply(
+            settings,
+            new Dictionary<string, string?>
+            {
+                ["client.maxDownloadRate"] = "1048576",
+                ["client.maxDownloadRateMb"] = "25",
+            }));
+
+        Assert.Equal(25L * 1024 * 1024, settings.Client.MaxDownloadRate);
+
+        // And nought is unlimited, which only the preset can say.
+        Assert.Empty(SettingsEdit.Apply(
+            settings,
+            new Dictionary<string, string?>
+            {
+                ["client.maxDownloadRate"] = "0",
+                ["client.maxDownloadRateMb"] = "",
+            }));
+
+        Assert.Equal(0, settings.Client.MaxDownloadRate);
+    }
+
+    /// <remarks>
+    /// Every field behind <strong>Show advanced</strong>, typed and read back.
+    /// The switch is a display state: a field hidden behind it still applies,
+    /// so each one has to survive a save exactly as any other does. One that
+    /// only worked while the block was open would be a setting that depended on
+    /// whether the owner had clicked something.
+    /// </remarks>
+    [Fact]
+    public void EveryAdvancedFieldRoundTripsThroughSave()
+    {
+        Settings settings = new();
+
+        Dictionary<string, string?> typed = new()
+        {
+            ["client.stallMinutes"] = "45",
+            ["client.metadataTimeoutMinutes"] = "7",
+            ["client.encryption"] = nameof(EncryptionPolicy.Required),
+            ["client.resumeIntervalSeconds"] = "120",
+            ["cadences.cycle"] = "0 */3 * * *",
+        };
+
+        Assert.Empty(SettingsEdit.Apply(settings, typed));
+
+        Assert.Equal(45, settings.Client.StallMinutes);
+        Assert.Equal(7, settings.Client.MetadataTimeoutMinutes);
+        Assert.Equal(EncryptionPolicy.Required, settings.Client.Encryption);
+        Assert.Equal(120, settings.Client.ResumeIntervalSeconds);
+        Assert.Equal("0 */3 * * *", settings.Cadences.Cycle);
     }
 }

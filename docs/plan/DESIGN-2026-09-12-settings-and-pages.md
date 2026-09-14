@@ -38,8 +38,20 @@ settings and no page offers it.
 
 ## What stays, and where
 
-**Settings page, in sections, each with its own Save** — a bad value in one section never blocks
-another, which is how the forms already work.
+**Settings page, in one form with one Save.** *Reversed by the owner on 12 September 2026, having
+seen the page built the other way:* "ik wil ook een save knop hebben die alle instellingen doet
+opslaan". This said sections each with their own Save, so that a bad value in one could never block
+another.
+
+**The cost is exactly what the old shape was avoiding**, and it is worth writing down rather than
+rediscovering: a form posts the fields it holds, so one Save is one post, and the applier refuses
+the whole post when any field in it is refused — nothing is saved. What makes it bearable is that
+the refusal names the field and is drawn at the top of the page.
+
+The groups below are still the reading order of that one form. They are not separate forms any
+more, and **with the current contract they cannot carry headings inside it**: `PluginFormField` has
+no group, so a form is a flat list of fields with one button. Headings between groups need a field
+on the contract, which is the server's to give.
 
 | Section | Holds |
 | --- | --- |

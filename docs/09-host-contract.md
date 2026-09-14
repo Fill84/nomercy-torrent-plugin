@@ -141,17 +141,21 @@ import sits on the server's queue and a tick a minute later still finds the show
 
 ### What became of the job
 
-`IPluginJobs.StatusAsync` answers with `Queued`, `Running`, `Finished`, `Failed` or `Unknown`, and
-with the server's own words when it failed. The plugin keeps the job id on the grab — a restart used
-to lose which encode a grab was waiting on, and eleven of the owner's waited on jobs the encoder had
-already thrown away while the queue sat empty.
+The server says it, on its own bus: `EncodingStartedEvent`, `EncodingCompletedEvent` and
+`EncodingFailedEvent`, the last with the server's own words. Each carries `JobId`, which is the media
+row the encode registers against — the episode id the plugin named when it asked — and that is what
+the plugin matches on. The job id `EncodeAsync` answers with is a hash of the job's payload and matches
+nothing, so it is not kept. `IPluginJobs.StatusAsync` (media-server #31) is no longer asked.
 
-Without it the plugin can see one thing: whether the library has the episode yet. A dead encode and
-a slow one look the same from there, and both are waited out for six hours before the grab fails and
-the episode goes back to missing — the same gigabytes downloaded again for a job that was never
-going to finish. That six hours is still the backstop for a server that will not say.
+**Two endings say nothing.** A job taken out of the queue by hand — the contract has no event for
+that — and a job that ends with nothing to encode: the library folder not found, no preset, or every
+preset already encoded. `VideoEncodeJob` returns from those without a completed or a failed event.
 
-media-server #31, closed on 30 August 2026.
+So the library decides. A grab waiting on an encode is closed by the pass that finds its episode in the
+library; a pass runs on every encoding event, on `LibraryScanCompletedEvent` and on start. It is never
+given up on by a clock and never asked for a second time — the owner's ruling of 14 September 2026,
+replacing a six-hour give-up that put the episode back to missing and downloaded it again, and a
+re-dispatch after every restart that put a second job in a queue that had kept the first.
 
 An implementation that refuses must say why in the log and the journal before it returns. The caller
 learns nothing but "not taken" and acts the same way whatever the reason — leave the file staged,

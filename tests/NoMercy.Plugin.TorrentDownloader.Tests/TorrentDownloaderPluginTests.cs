@@ -1,6 +1,9 @@
+using NoMercy.Events.Encoding;
+using NoMercy.Events.Library;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -30,21 +33,36 @@ public class TorrentDownloaderPluginTests
     }
 
     /// <remarks>
-    /// <strong>S12-05.</strong> The host reads a plugin's job list only when it
-    /// is installed, hot-swapped or enabled, so a saved cadence cannot take
-    /// effect by changing what is registered here — only one job is declared
-    /// at all now, and the plugin's own clock decides the rest on every tick.
-    /// See <see cref="OneJobTicksAndTheWorkIsChosenByTheClock"/>.
+    /// <para>
+    /// <strong>The host is told hourly, and that is not the owner's cadence.</strong>
+    /// A plugin's job list is read when it is installed, hot-swapped or enabled
+    /// and never asked for again, so a cadence the owner saves could not reach
+    /// the host by being declared here — the owner changed one on 3 September
+    /// 2026, watched the old one go on firing, and reasonably concluded the
+    /// setting did nothing. The plugin keeps its own clock, and this tick only
+    /// winds it.
+    /// </para>
+    /// <para>
+    /// Declared rather than declined because the contract has no way to
+    /// decline: a plugin whose Jobs is empty is registered under its single
+    /// CronExpression instead.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void OneJobIsDeclaredEveryMinute()
+    public void OneJobIsDeclaredAndItIsNotTheOwnersCadence()
     {
         using TorrentDownloaderPlugin plugin = new();
 
         PluginScheduledJob job = Assert.Single(plugin.Jobs);
 
-        Assert.Equal(JobNames.Transfers, job.Name);
-        Assert.Equal("* * * * *", job.CronExpression);
+        Assert.Equal(JobNames.Cycle, job.Name);
+        Assert.Equal("0 * * * *", job.CronExpression);
+        Assert.Equal(job.CronExpression, plugin.CronExpression);
+
+        // And it is no longer every minute. Transfers was * * * * * because the
+        // torrent client did its whole housekeeping inside the method the pages
+        // call to draw a table; `S12-13` gave those their own moments.
+        Assert.NotEqual("* * * * *", job.CronExpression);
     }
 
     /// <remarks>
@@ -91,8 +109,7 @@ public class TorrentDownloaderPluginTests
         FakePluginContext context = new();
         plugin.Initialize(context);
 
-        await plugin.ExecuteAsync(JobNames.Feed, CancellationToken.None);
-        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         Assert.Empty(plugin.LastCycle);
         Assert.Empty(plugin.Journal.Snapshot().History);
@@ -209,40 +226,21 @@ public class TorrentDownloaderPluginTests
 
     /// <remarks>
     /// <para>
-    /// <strong>S12-05, replacing <c>TheCadencesTheOwnerSavedAreTheCadencesTheServerIsGiven</c>.</strong>
-    /// That test asserted the four-job shape this plugin used to register —
-    /// which is exactly the fault the design now avoids, because the host
-    /// only ever re-reads a job list on an install, a hot-swap or an enable,
-    /// and a saved cadence has to take effect without waiting for one of
-    /// those. So there is one job, and this plugin decides for itself what a
-    /// tick under it does.
+    /// <strong>One cycle, and the steps are steps rather than schedules.</strong>
+    /// This used to assert that a tick ran whichever of feed, search and
+    /// maintenance the clock said was due, and that a second tick a moment later
+    /// re-ran none of them. There are no longer three cadences to be due: feed
+    /// runs, then search, then what they started, and maintenance once there is
+    /// nothing left in hand.
     /// </para>
     /// <para>
-    /// <strong>Fix round 1.</strong> Feed, search and maintenance run
-    /// fire-and-forget now — the host serialises every tick of the one
-    /// declared job behind a single worker loop, so a tick that awaited a
-    /// fifteen-minute search cycle in-line would leave transfers unable to
-    /// tick again until it let go. <c>ExecuteAsync</c> therefore returns as
-    /// soon as transfers itself has, which means this test cannot prove
-    /// anything by reading state the instant the call returns: it polls the
-    /// <c>cadences</c> table directly, on its own <see cref="Store"/> opened
-    /// against the same folder, until every one of the three has recorded a
-    /// finish, bounded so a real regression fails the test rather than
-    /// hanging it.
-    /// </para>
-    /// <para>
-    /// Nothing has ever run before, so every one of the three is due at once
-    /// — which is what those three finishes, and <c>MissingRefresh</c> having
-    /// derived one episode, both prove. A second tick straight after, with a
-    /// new episode added to the library in between, must record no new
-    /// finish for search or maintenance: neither the six-hourly nor the daily
-    /// slot has come round again, and comparing the exact timestamp — not
-    /// just whether a row exists — is what tells "did not run again" apart
-    /// from "ran again in under a second".
+    /// What is left to prove is that a cycle really runs all of it and writes
+    /// down that it finished — the clock's record is what keeps the next one
+    /// from coming round early.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task OneJobTicksAndTheWorkIsChosenByTheClock()
+    public async Task OneCycleRunsEveryStepAndSaysWhenItFinished()
     {
         FakeLibraryQuery shelves = new();
 
@@ -271,76 +269,37 @@ public class TorrentDownloaderPluginTests
                 Container = new FakeProvider(),
             });
 
-            PluginScheduledJob job = Assert.Single(plugin.Jobs);
-            Assert.Equal(JobNames.Transfers, job.Name);
-            Assert.Equal("* * * * *", job.CronExpression);
-
             Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
 
-            // So the feed cadence asks nobody anything — these tests touch
-            // no network — rather than because leaving them enabled would
-            // fail.
+            // So the feed reads nobody — these tests touch no network.
             DisableEveryShippedSource(settings);
 
             await plugin.Settings.SaveAsync(settings, CancellationToken.None);
 
             // A second reader of the same file, never the plugin's own
-            // repository: what is under test is what actually landed on
-            // disk, from a call that has already returned.
+            // repository: what is under test is what actually landed on disk.
             CadenceRepository cadences = new(new Store(folder));
 
-            // The one job's own name, ticking for the first time ever: every
-            // cadence is due, including search and maintenance, both of which
-            // derive the missing list from the library. ExecuteAsync returns
-            // long before any of that has finished, so this waits for it —
-            // bounded, so a fire-and-forget cadence that broke and never
-            // finished fails the test instead of hanging it.
-            await plugin.ExecuteAsync(job.Name, CancellationToken.None);
+            await plugin.RunCycleAsync(CancellationToken.None);
 
-            IReadOnlyDictionary<string, DateTimeOffset> finishedAfterFirstTick = await UntilAsync(
+            // The library was read, which only search and maintenance do.
+            IReadOnlyList<TrackedEpisode> tracked =
+                await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
+
+            Assert.Single(tracked);
+
+            // And the cycle wrote down that it finished, which is what the next
+            // one is timed from.
+            IReadOnlyDictionary<string, DateTimeOffset> finished = await UntilAsync(
                 cadences,
-                finished => JobNames.All
-                    .Where(name => name != JobNames.Transfers)
-                    .All(finished.ContainsKey),
+                done => done.ContainsKey(JobNames.Cycle),
                 TimeSpan.FromSeconds(20));
 
-            Assert.True(finishedAfterFirstTick.ContainsKey(JobNames.Feed), "feed never recorded a finish");
-            Assert.True(finishedAfterFirstTick.ContainsKey(JobNames.Search), "search never recorded a finish");
-            Assert.True(finishedAfterFirstTick.ContainsKey(JobNames.Maintenance), "maintenance never recorded a finish");
+            Assert.True(finished.ContainsKey(JobNames.Cycle), "the cycle never recorded a finish");
 
-            IReadOnlyList<TrackedEpisode> afterFirstTick =
-                await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
-
-            Assert.Single(afterFirstTick);
-
-            // A second episode airs, straight after the first tick.
-            shelves.Episode(41, 3, 6, "Under Pressure", new DateTime(2020, 1, 8), hasFile: false);
-
-            await plugin.ExecuteAsync(job.Name, CancellationToken.None);
-
-            // The due-check itself is a couple of quick reads with no pass
-            // behind it when nothing is due, so this is a generous margin for
-            // it to have settled — waiting longer only makes the assertion
-            // below stronger, never weaker, since it compares exact
-            // timestamps rather than presence.
-            await Task.Delay(TimeSpan.FromSeconds(1));
-
-            IReadOnlyDictionary<string, DateTimeOffset> finishedAfterSecondTick =
-                await cadences.LastFinishedAsync(CancellationToken.None);
-
-            // Still one: search and maintenance both finished a moment ago,
-            // and neither the six-hourly nor the daily slot has come round
-            // again since. The clock, not this test, is what kept the second
-            // tick from redoing their work — and an equal timestamp is what
-            // proves it did not run again, rather than merely running again
-            // very quickly.
-            Assert.Equal(finishedAfterFirstTick[JobNames.Search], finishedAfterSecondTick[JobNames.Search]);
-            Assert.Equal(finishedAfterFirstTick[JobNames.Maintenance], finishedAfterSecondTick[JobNames.Maintenance]);
-
-            IReadOnlyList<TrackedEpisode> afterSecondTick =
-                await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
-
-            Assert.Single(afterSecondTick);
+            // Nothing was downloading and nothing was waiting on an encode, so
+            // the cycle closed itself rather than staying open.
+            Assert.False(plugin.Running, "the cycle stayed open with nothing in hand");
         }
         finally
         {
@@ -376,37 +335,37 @@ public class TorrentDownloaderPluginTests
 
     /// <remarks>
     /// <para>
-    /// A host that has not yet re-read <see cref="TorrentDownloaderPlugin.Jobs"/>
-    /// after this upgrade is still holding its previous four-job registration,
-    /// each still firing on its own old cadence. A tick under any of those
-    /// three retired names has to be accepted rather than thrown — thrown is
-    /// for a name genuinely unknown to this plugin, which
-    /// <see cref="AnUnknownJobNameThrows"/> already covers.
+    /// <strong>The four retired names are still answered to.</strong> This
+    /// plugin declared transfers, feed, search and maintenance, and now declares
+    /// one. The host registers a plugin's jobs when the plugin loads and removes
+    /// them by the names the loaded instance declares — so an upgrade can leave
+    /// the previous four registrations in the queue with nothing left to take
+    /// them out, and each goes on firing on its own old cadence.
     /// </para>
     /// <para>
-    /// <strong>Fix round 1.</strong> The first version of this test proved
-    /// only "does not throw": run against an <em>unconfigured</em> plugin, its
-    /// one assertion — a single "No folders" line — comes from
-    /// <c>ConfiguredAsync</c>, reached long before the switch on the job name
-    /// is. Deleting all three <c>case</c> branches
-    /// left it green. This version configures the plugin so each branch does
-    /// real work, and asserts two things deleting a branch would break: the
-    /// missing episode <c>MissingRefresh</c> only derives from inside
-    /// <c>HarvestAsync</c>/<c>CycleAsync</c>/<c>MaintainAsync</c> themselves,
-    /// and a recorded finish for all three names — the fix for the "records no
-    /// finish" finding below, and unreachable if the tick fell through to
-    /// <c>default: break;</c> instead.
+    /// A tick under one of those is an upgrade window and not a fault. Thrown
+    /// at, it would be four stack traces an hour in the owner's log for as long
+    /// as it lasted — and thrown is for a name genuinely unknown to this plugin,
+    /// which <see cref="AnUnknownJobNameThrows"/> covers.
+    /// </para>
+    /// <para>
+    /// It starts nothing, which is the same as a tick under the name this
+    /// plugin does declare: the owner's cadence is kept by the plugin's own
+    /// clock, and a tick only winds it.
     /// </para>
     /// </remarks>
-    [Fact]
-    public async Task ATickUnderAnOldJobNameIsStillAccepted()
+    [Theory]
+    [InlineData("transfers")]
+    [InlineData("feed")]
+    [InlineData("search")]
+    [InlineData("maintenance")]
+    public async Task ATickUnderAnOldJobNameIsStillAccepted(string retired)
     {
         FakeLibraryQuery shelves = new();
 
         shelves
             .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
             .Show(41, "Silo", "01HQ5W4AVF30N10RT6XCF6AJHM", 2021, folder: "/Silo.(2021)")
-            .Episode(41, 3, 5, "The Getaway", new DateTime(2020, 1, 1), hasFile: false)
             .Episode(41, 3, 7, "Descent", new DateTime(2020, 1, 15), hasFile: true);
 
         string folder = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
@@ -421,39 +380,24 @@ public class TorrentDownloaderPluginTests
                 DataFolderPath = folder,
                 Shelves = shelves,
                 Permits = new FakeGrants(),
+                Container = new FakeProvider(),
             });
 
             Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
 
-            // So the feed branch asks nobody anything — these tests touch no
-            // network — rather than because leaving them enabled would fail.
             DisableEveryShippedSource(settings);
 
             await plugin.Settings.SaveAsync(settings, CancellationToken.None);
 
-            await plugin.ExecuteAsync(JobNames.Feed, CancellationToken.None);
-            await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
-            await plugin.ExecuteAsync(JobNames.Maintenance, CancellationToken.None);
+            // Accepted. The assertion is that this returns at all.
+            await plugin.ExecuteAsync(retired, CancellationToken.None);
 
-            // Search and maintenance both run through RefreshAsync, so the
-            // one missing episode is derived — proof the switch reached at
-            // least one real branch rather than default: break;.
-            IReadOnlyList<TrackedEpisode> tracked =
-                await (await plugin.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
-
-            Assert.Single(tracked);
-
-            // All three names ticked directly, none through the clock's own
-            // due-cadence loop: each still has to record its own finish (the
-            // "records no finish" finding), or an upgrade window would have
-            // the clock repeat work a moment after the host's own old
-            // schedule already did it.
-            CadenceRepository cadences = new(new Store(folder));
-            IReadOnlyDictionary<string, DateTimeOffset> finished = await cadences.LastFinishedAsync(CancellationToken.None);
-
-            Assert.True(finished.ContainsKey(JobNames.Feed), "a tick under 'feed' recorded no finish");
-            Assert.True(finished.ContainsKey(JobNames.Search), "a tick under 'search' recorded no finish");
-            Assert.True(finished.ContainsKey(JobNames.Maintenance), "a tick under 'maintenance' recorded no finish");
+            // Nothing about the tick. The listen port may be held by another
+            // test running beside this one, and the client saying so is not this
+            // tick's business.
+            Assert.DoesNotContain(
+                plugin.Journal.Snapshot().History,
+                entry => entry.Outcome == ActivityOutcome.Failed && entry.Stage != ActivityStage.Download);
         }
         finally
         {
@@ -473,5 +417,241 @@ public class TorrentDownloaderPluginTests
         {
             settings.DisabledDefaultSources.Add(source);
         }
+    }
+
+    /// <summary>
+    /// The plugin hears the server's own encoding events, from the moment it is
+    /// loaded.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>From the moment it is loaded, and that is the whole of this
+    /// test.</strong> The listener was built on the first transfers pass at
+    /// first, which meant a plugin that had not ticked yet heard nothing — and
+    /// a restart part way through an encode is exactly when the event matters
+    /// and exactly when no pass has run. A listener is only worth anything for
+    /// having been listening.
+    /// </para>
+    /// <para>
+    /// What is asserted is that the pages are told, because that is the visible
+    /// end of the chain: the server says an encode finished, the plugin acts on
+    /// it, and every open page is pushed to. Until this the plugin learned of a
+    /// finished encode only by asking about every job it had dispatched, once a
+    /// job, on every tick of a cadence set to a minute for that reason.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheServerSayingAnEncodeIsDoneReachesThePlugin()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+
+        plugin.Initialize(context);
+
+        Assert.Empty(context.Pushes.Pushes);
+
+        await context.Bus.PublishAsync(new EncodingCompletedEvent
+        {
+            JobId = 153823,
+            OutputPath = "/data/tv/Silo/Season 3/Silo.S03E06.mkv",
+            Duration = TimeSpan.FromMinutes(11),
+        });
+
+        // Bounded rather than slept through: the push is coalesced by
+        // LiveSnapshot, so it follows within its own floor of a second rather
+        // than at once.
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (context.Pushes.Pushes.Count == 0 && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50));
+        }
+
+        Assert.NotEmpty(context.Pushes.Pushes);
+    }
+
+    /// <summary>
+    /// The server finishing a library scan starts a cycle.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// One of the three things that start one — the owner's words on
+    /// 13 September 2026: the same chain Run starts should also be started
+    /// "door de library update van de media-server zelf".
+    /// </para>
+    /// <para>
+    /// <strong>The scan, and not a file appearing.</strong>
+    /// <c>LibraryFileWatcher</c> raises <c>FileCreatedEvent</c> live, and an
+    /// encode this plugin asked for lands a file in the library — so a cycle
+    /// hung on that would start itself, and then start itself again, for ever.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheServerFinishingALibraryScanStartsACycle()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            using TorrentDownloaderPlugin plugin = new();
+            FakePluginContext context = new()
+            {
+                DataFolderPath = folder,
+                Permits = new FakeGrants(),
+                Container = new FakeProvider(),
+            };
+
+            plugin.Initialize(context);
+
+            Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
+
+            DisableEveryShippedSource(settings);
+
+            await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+
+            Assert.False(plugin.Running);
+
+            // The database is created and migrated on first use, and a test that
+            // reads it from the side has to wait for that rather than race it.
+            _ = await plugin.EpisodesAsync(CancellationToken.None);
+
+            await context.Bus.PublishAsync(new LibraryScanCompletedEvent
+            {
+                LibraryId = Ulid.NewUlid(),
+                LibraryName = "Series",
+                ItemsFound = 3,
+                Duration = TimeSpan.FromSeconds(2),
+            });
+
+            CadenceRepository cadences = new(new Store(folder));
+
+            IReadOnlyDictionary<string, DateTimeOffset> finished = await UntilAsync(
+                cadences,
+                done => done.ContainsKey(JobNames.Cycle),
+                TimeSpan.FromSeconds(20));
+
+            Assert.True(finished.ContainsKey(JobNames.Cycle), "a finished library scan started no cycle");
+        }
+        finally
+        {
+            TemporaryFolder.Forget(folder);
+        }
+    }
+
+    /// <summary>
+    /// A cycle stays open while something it started is still in hand, and
+    /// maintenance waits for it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The owner's model of 13 September 2026: a cycle is over when everything
+    /// is downloaded and there are no encodes left, and only then does
+    /// maintenance run. That order is not a preference — maintenance sweeps
+    /// download folders no grab answers for, and a sweep that runs while a
+    /// download is in flight is a sweep that can take it.
+    /// </para>
+    /// <para>
+    /// A grab that has been handed to the encoder is exactly that case: nothing
+    /// is downloading any more, the episode is not in the library yet, and the
+    /// file the server is reading is still on disk.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ACycleStaysOpenWhileAnEncodeItAskedForIsStillGoing()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            using TorrentDownloaderPlugin plugin = new();
+
+            plugin.Initialize(new FakePluginContext
+            {
+                DataFolderPath = folder,
+                Permits = new FakeGrants(),
+                Container = new FakeProvider(),
+            });
+
+            Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
+
+            DisableEveryShippedSource(settings);
+
+            await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+
+            // A grab the plugin has already handed to the encoder.
+            GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
+
+            await grabs.RecordAsync(
+                new EpisodeKey(41, 3, 6),
+                "Silo",
+                "Silo S03E06 1080p WEB H264-CAKES",
+                "1337x",
+                "0123456789ABCDEF0123456789ABCDEF01234567",
+                "magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567",
+                [new EpisodeKey(41, 3, 6)],
+                DateTimeOffset.UtcNow,
+                CancellationToken.None);
+
+            await grabs.StateAsync(
+                "0123456789ABCDEF0123456789ABCDEF01234567", GrabState.Dispatched, CancellationToken.None);
+
+            await plugin.RunCycleAsync(CancellationToken.None);
+
+            // Feed and search are done, and the cycle is not: the encoder still
+            // has the file this cycle gave it.
+            Assert.True(plugin.Running, "the cycle closed while an encode was still going");
+
+            CadenceRepository cadences = new(new Store(folder));
+
+            Assert.False(
+                (await cadences.LastFinishedAsync(CancellationToken.None)).ContainsKey(JobNames.Cycle),
+                "the cycle wrote down a finish it had not reached");
+        }
+        finally
+        {
+            TemporaryFolder.Forget(folder);
+        }
+    }
+
+    /// <summary>
+    /// A page being fetched is what says somebody is looking, and nothing else does.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The owner asked on 13 September 2026 for the pages to be told of a change
+    /// only while one is open, because every push makes the web app fetch the
+    /// whole view again. The hub cannot say who is watching; a fetch can.
+    /// </para>
+    /// <para>
+    /// A plugin that has only been loaded has nobody looking, however much it is
+    /// doing — a cycle, a download, an encode — and so nothing samples the client
+    /// on a page's behalf.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APageBeingFetchedIsWhatSaysSomebodyIsLooking()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+
+        plugin.Initialize(context);
+
+        Assert.False(plugin.Watched, "a plugin nobody has opened said somebody was looking.");
+
+        // Something happening on the server is not somebody looking.
+        await context.Bus.PublishAsync(new EncodingCompletedEvent
+        {
+            JobId = 153823,
+            OutputPath = "/data/tv/Silo/Season 3/Silo.S03E06.mkv",
+            Duration = TimeSpan.FromMinutes(11),
+        });
+
+        Assert.False(plugin.Watched, "the server doing its work was taken for somebody looking.");
+
+        _ = await plugin.GetViewAsync(new() { Route = "/downloads" }, CancellationToken.None);
+
+        Assert.True(plugin.Watched, "a page was fetched and nobody was said to be looking.");
     }
 }

@@ -1,5 +1,7 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using NoMercy.Events.Library;
+using NoMercy.Events.Plugins;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
@@ -15,7 +17,7 @@ using NoMercy.Plugins.Abstractions;
 namespace NoMercy.Plugin.TorrentDownloader;
 
 /// <summary>
-/// The plugin the server loads: its identity, its four cadences and its pages.
+/// The plugin the server loads: its identity, its one cycle and its pages.
 /// </summary>
 public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUiPlugin, IPluginServiceRegistrator
 {
@@ -31,6 +33,27 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private LiveSnapshot? _live;
     private Chain? _chain;
     private BittorrentEngine? _engine;
+
+    /// <summary>
+    /// Whether the advanced blocks are drawn on the settings page.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A display state, and it is written nowhere.</strong> The design
+    /// of 12 September is explicit: Show advanced changes what is drawn and
+    /// nothing about what the plugin does, and a field hidden behind it still
+    /// applies. So it is not in the settings, not in config.json, and it does
+    /// not survive a restart - which costs an owner one click and keeps a
+    /// switch that decides nothing out of the file that decides everything.
+    /// </remarks>
+    public bool ShowAdvanced { get; private set; }
+
+    /// <summary>Flips it, and answers what it became.</summary>
+    public bool ToggleAdvanced()
+    {
+        ShowAdvanced = !ShowAdvanced;
+
+        return ShowAdvanced;
+    }
 
     /// <summary>Tells the open pages that a transfer has moved.</summary>
     /// <remarks>
@@ -51,6 +74,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private Heartbeat? _heartbeat;
     private HttpClient? _trackerHttp;
     private Transfers? _transfers;
+
+    /// <summary>What the server has said about the encodes this plugin asked for.</summary>
+    /// <remarks>
+    /// Built once and kept, because it is only worth anything for having been
+    /// listening: one built per transfers pass would know nothing about an
+    /// encode that finished before it existed.
+    /// </remarks>
+    private EncoderSays? _says;
     private int _settled;
     private SourceLedgerRepository? _ledger;
     private IReadOnlyList<SourceDefinition>? _shipped;
@@ -77,12 +108,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private Clock? _clock;
 
     /// <summary>
-    /// When the search cadence is next due, read from <see cref="_clock"/> on
-    /// every transfers tick and cached here purely so <see cref="CurrentCycle"/>
-    /// can stay synchronous — it is a status-bar figure, not a scheduling
-    /// decision, and nothing reads it before the first tick.
+    /// When the next cycle is due, read from <see cref="_clock"/> whenever the
+    /// clock is wound and cached here purely so <see cref="CurrentCycle"/> can
+    /// stay synchronous — it is a status-bar figure, not a scheduling decision.
     /// </summary>
-    private DateTimeOffset? _nextSearchDue;
+    private DateTimeOffset? _nextCycleDue;
 
     /// <summary>The running cycle's own stopping token, or null when none runs.</summary>
     private CancellationTokenSource? _cycle;
@@ -102,7 +132,57 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private readonly OneAtATime _feedRunning = new();
 
-    private readonly OneAtATime _maintenanceRunning = new();
+    /// <summary>Keeps two transfers passes from staging the same file twice.</summary>
+    private readonly OneAtATime _transfersRunning = new();
+
+    /// <summary>A pass was asked for while one ran, so that one goes round again.</summary>
+    private int _transfersAgain;
+
+    /// <summary>Whether a start has put back what the client held.</summary>
+    private int _startedUp;
+
+    /// <summary>What the plugin hears the server say it has loaded through.</summary>
+    private IDisposable? _loaded;
+
+    /// <summary>What the cycle's own state is read and written under.</summary>
+    private readonly Lock _cycleLock = new();
+
+    /// <summary>A cycle has been started and its maintenance has not run yet.</summary>
+    /// <remarks>
+    /// What the status bar draws and what the Run button is disabled by — the
+    /// owner's ruling of 13 September 2026: Running means the whole cycle, not
+    /// the searching half of it, because downloads and encodes a cycle started
+    /// are still that cycle.
+    /// </remarks>
+    private bool _open;
+
+    /// <summary>Feed and search are in flight.</summary>
+    private bool _finding;
+
+    /// <summary>A trigger arrived while they were, so they run once more.</summary>
+    private bool _again;
+
+    /// <summary>The cycle that is open, so a caller can wait for it.</summary>
+    private Task? _cycling;
+
+    /// <summary>Whether anybody has a page of this plugin open.</summary>
+    /// <remarks>
+    /// Built with the plugin rather than with the client, because a page can be
+    /// opened long before anything is downloaded, and the client is built on
+    /// first use.
+    /// </remarks>
+    private readonly Onlookers _onlookers = new();
+
+    /// <summary>What the plugin listens to the server's library scans through.</summary>
+    private IDisposable? _scanning;
+
+    /// <summary>When the next cycle falls due, set to that moment and no sooner.</summary>
+    /// <remarks>
+    /// One shot, never a repeat: it is wound for the moment the owner's cadence
+    /// next comes round and wound again when a cycle closes. Nothing here ever
+    /// wakes to ask whether something is due.
+    /// </remarks>
+    private ITimer? _due;
 
     private int _unconfigured;
     private int _overlapping;
@@ -142,54 +222,42 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public CancellationToken Lifetime => _lifetime.Token;
 
     /// <summary>
-    /// Ignored by a server that understands <see cref="Jobs"/>. It names the
-    /// one job's own expression, so a host with only the single slot still
-    /// ticks the work that cannot wait.
+    /// What the host ticks this plugin on, which is not the owner's cadence.
     /// </summary>
     /// <remarks>
-    /// <c>First</c> throws when nothing matches, which is deliberate: if the
-    /// one job <see cref="Jobs"/> declares is ever renamed away from
-    /// <see cref="JobNames.Transfers"/> without updating this derivation, every
-    /// host that reads <see cref="CronExpression"/> instead of <see cref="Jobs"/>
-    /// must fail loudly rather than silently register nothing.
+    /// <para>
+    /// Hourly, and it starts nothing at all — see <see cref="ExecuteAsync(string, CancellationToken)"/>.
+    /// The host reads a plugin's schedule when the plugin loads and never asks
+    /// again, so a cadence the owner changes could never reach it: the owner
+    /// changed one on 3 September 2026, watched the old one go on firing, and
+    /// reasonably concluded the setting did nothing. The plugin keeps its own
+    /// clock instead, and this tick only makes sure that clock is wound.
+    /// </para>
+    /// <para>
+    /// Declared rather than declined because the contract has no way to
+    /// decline: a plugin whose <see cref="Jobs"/> is empty is registered under
+    /// this single expression instead, so there is no "no schedule" to ask for.
+    /// </para>
     /// </remarks>
-    public string CronExpression => Jobs.First(job => job.Name == JobNames.Transfers).CronExpression;
+    public string CronExpression => JobNames.HostCron;
 
     /// <summary>
-    /// The one job the host registers: <see cref="JobNames.Transfers"/>, every
-    /// minute.
+    /// One job, and it is the same tick as <see cref="CronExpression"/>.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>S12-05.</strong> The host reads this list only when the plugin
-    /// is installed, hot-swapped or enabled — <c>PluginCronRegistrar.RegisterPlugin</c>
-    /// re-reads it, but only those three call it, and there is no capability
-    /// for a plugin to ask for its own re-registration (media-server #53). A
-    /// saved cadence therefore cannot take effect by changing what is
-    /// registered here: it takes effect because <see cref="_clock"/> is asked
-    /// fresh, on every tick, which of the other three cadences are due.
-    /// docs/01-plugin.md § Cadences.
-    /// </para>
-    /// <para>
-    /// Fixed and read with no I/O, unlike the field this used to be cached in:
-    /// a changed cadence has to be visible to the host the next time it
-    /// registers the plugin too, and a cache populated from the first read
-    /// would go on handing out that first answer for ever.
-    /// </para>
-    /// <para>
-    /// <strong>This used to be four jobs, one per cadence, and the four
-    /// cadence fields on the Settings page were decoration.</strong> The page
-    /// offered them and checked what was typed against a cron parser before it
-    /// would save, and the server was handed <c>* * * * *</c> for transfers
-    /// regardless, because this list was cached from the first read and a
-    /// changed cadence never reached a host that never asked again. The owner
-    /// found it from the other end on 3 September 2026: the dashboard
-    /// announced the transfers tick every minute and they asked whether it
-    /// could be turned down. The field for it was already there and already
-    /// ignored.
+    /// <strong>This used to be four, and then one every minute.</strong>
+    /// Transfers, feed, search and maintenance are not four jobs on four
+    /// schedules — they are the steps of one cycle, each started by the last
+    /// one finishing. Transfers was <c>* * * * *</c> and not because anything
+    /// about transfers wanted a minute: the torrent client did its whole
+    /// housekeeping inside the method the pages call to draw a table, so
+    /// without a tick a minute it stopped expiring magnets, noticing stalls,
+    /// noticing completions and writing its resume files. `S12-13` gave those
+    /// their own moments, which is what let this go.
     /// </para>
     /// </remarks>
-    public IReadOnlyList<PluginScheduledJob> Jobs { get; } = [new(JobNames.Transfers, JobNames.TransfersCron)];
+    public IReadOnlyList<PluginScheduledJob> Jobs { get; } = [new(JobNames.Cycle, JobNames.HostCron)];
 
     public IReadOnlyList<PluginNavEntry> NavEntries => Pages.NavEntries;
 
@@ -229,13 +297,68 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _runs = new(_database);
         _cadences = new(_database);
         _clock = new(_cadences, TimeProvider.System);
-        _live = new(context.Hub, _journal, context.Logger, CurrentCycle);
+        _live = new(context.Hub, _journal, context.Logger, CurrentCycle, told: _onlookers.Told);
+
+        // The page heartbeat beats while somebody is looking and at no other
+        // time. It was a timer set to go off every second for the life of the
+        // server, pushing every change to pages nobody had open — and every push
+        // makes the web app fetch the whole view again. The owner saw that as
+        // the web app flooded with pushes that told it nothing.
+        _onlookers.Arrived += () => _heartbeat?.StartBeating();
+        _onlookers.Left += () => _heartbeat?.StopBeating();
 
         // The one line that makes the pages live. Without it LiveSnapshot is a
         // push nothing ever asks for: a dashboard opened during a cycle showed
         // the stage the plugin was on when the page loaded and never moved
         // again, and the owner reported it before any test did.
         _journal.Recorded += Moved;
+
+        // The server finishing a library scan, which is one of the three things
+        // that start a cycle. The owner's own words on 13 September 2026: the
+        // same chain that Run starts should also be started "door de library
+        // update van de media-server zelf".
+        //
+        // The scan and not a file appearing. LibraryFileWatcher raises
+        // FileCreatedEvent live, and an encode this plugin asked for lands a
+        // file in the library — so a cycle hung on that would start itself, for
+        // ever.
+        _scanning = context.EventBus.Subscribe<LibraryScanCompletedEvent>((scan, _) =>
+        {
+            Trigger($"the server finished scanning {scan.LibraryName}");
+
+            // And a transfers pass, because a scan is the server saying the
+            // library has just been read — which is what closes a grab waiting
+            // on an encode the server never says anything about: one the owner
+            // took out of the queue by hand, or one that ended with nothing to
+            // encode. The owner's ruling of 14 September 2026 is that the
+            // library decides, not a clock.
+            StartTransfers();
+
+            return Task.CompletedTask;
+        });
+
+        // And what a start owes — the torrents that were running, the clock —
+        // when the server says this plugin has loaded, which is after this
+        // method. Not here: this runs while the server is still coming up, and
+        // all of it is I/O.
+        _loaded = context.EventBus.Subscribe<PluginLoadedEvent>((loaded, publishing) =>
+        {
+            if (string.Equals(loaded.PluginId, PluginIdentity.IdText, StringComparison.OrdinalIgnoreCase))
+            {
+                _ = Task.Run(() => StartUpAsync(Lifetime), CancellationToken.None);
+            }
+
+            return Task.CompletedTask;
+        });
+
+        // And the server's own encoding events, listened to from the moment
+        // this plugin is loaded rather than from its first transfers pass.
+        // Built here because a listener is only worth anything for having been
+        // listening: one made later knows nothing about an encode that
+        // finished before it existed, and a restart during an encode is
+        // exactly when that matters. Subscribing is not I/O, so it breaks
+        // nothing this method promises.
+        _ = Says();
     }
 
     /// <summary>The database, migrated up to date before anything opens it.</summary>
@@ -251,7 +374,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </summary>
     /// <remarks>
     /// Migrating on first use rather than during <c>Initialize</c>, which does
-    /// no I/O. Behind a semaphore because a cadence tick and a page render can
+    /// no I/O. Behind a semaphore because a cycle and a page render can
     /// arrive at once on a plugin that has only just loaded, and two threads
     /// running <c>001-initial.sql</c> together would have one of them fail on a
     /// table the other had just created.
@@ -315,12 +438,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </summary>
     public Task ExecuteAsync(CancellationToken ct = default)
     {
-        return ExecuteAsync(JobNames.Transfers, ct);
+        return ExecuteAsync(JobNames.Cycle, ct);
     }
 
     public async Task ExecuteAsync(string jobName, CancellationToken ct = default)
     {
-        if (!JobNames.All.Contains(jobName))
+        if (!JobNames.Answers(jobName))
         {
             // Rather than shrug: the server only ever passes back a name it was
             // given, so an unknown one means its list and this one have drifted,
@@ -335,223 +458,386 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         AnnounceOnce();
 
         // The plugin's own lifetime, never the caller's: a cycle belongs to the
-        // plugin and a cadence tick that returns must not take it down with it.
+        // plugin and a host tick that returns must not take it down with it.
         using CancellationTokenSource work = CancellationTokenSource.CreateLinkedTokenSource(Lifetime);
 
-        await SettleOnceAsync(work.Token);
+        // What a start owes, for a server that never said this plugin loaded.
+        // Once: every part of it remembers that it has run.
+        await StartUpAsync(work.Token);
 
-        switch (jobName)
+        // One tick, and it starts nothing new. The owner's cadence is kept by this
+        // plugin's own clock, which is set to the moment the next cycle is due
+        // rather than woken to ask whether one is; the host cannot be told
+        // about it, because a schedule is read from a plugin when the plugin
+        // loads and never asked for again. All this does is make sure that
+        // clock is wound, which matters after a restart and at no other time.
+        await WindAsync(work.Token);
+    }
+
+    /// <summary>
+    /// Starts a cycle, or adds to the one that is already open.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The one door in.</strong> Three things start a cycle — the owner
+    /// pressing Run, the server finishing a library scan, and the owner's own
+    /// cadence coming round — and all three arrive here.
+    /// </para>
+    /// <para>
+    /// <strong>A trigger during an open cycle is an addition, not a second
+    /// cycle and not a dropped one.</strong> The owner's words on 13 September
+    /// 2026: "een nieuwe run is een toevoeging van de draaiende run". What the
+    /// open cycle has already taken is written down as it takes it, so the feed
+    /// and search it runs again exclude those by themselves and nothing is
+    /// grabbed twice.
+    /// </para>
+    /// </remarks>
+    /// <returns>Whether this opened a cycle, as opposed to joining one.</returns>
+    private bool Trigger(string why)
+    {
+        lock (_cycleLock)
         {
-            // A tick under one of the three retired job names: a host that
-            // has not yet re-read Jobs after an upgrade is still holding its
-            // previous four-job registration, each still firing on its own
-            // old cadence. Accepted, and still runs the one pass that name
-            // has always meant — and now records a finish too, so the clock
-            // does not repeat work this tick already did once the host does
-            // catch up and start driving all four through Transfers instead.
-            case JobNames.Feed:
-                await RunFeedAsync(work.Token);
-                break;
+            if (_open)
+            {
+                _again = true;
 
-            case JobNames.Search:
-                await RunSearchAsync(work.Token);
-                break;
+                _context?.Logger.LogInformation(
+                    "{Why}, and a cycle is already open, so it was added to that one.", why);
 
-            case JobNames.Maintenance:
-                await RunMaintenanceAsync(work.Token);
-                break;
+                return false;
+            }
 
-            case JobNames.Transfers:
-                // The one job Jobs declares now, and the host serialises every
-                // tick of it behind a single worker loop (AllowConcurrent is
-                // false). Transfers must therefore never wait on the others:
-                // a fifteen-minute search cycle awaited in-line here would
-                // leave nothing staged and no encode asked for until it let
-                // go, which is the exact fault this slice exists to remove.
-                // So the due cadences are started and left running on the
-                // plugin's own lifetime — never on `work`, which is disposed
-                // the moment this method returns — and this tick returns as
-                // soon as transfers itself has.
-                await TransfersAsync(work.Token);
-                StartDueCadences();
-                break;
+            // Set on the caller's thread and before anything is started, so a
+            // page drawn the instant the Run button is pressed already says the
+            // cycle is running. It used to be claimed inside the task, and the
+            // owner saw a Run button still enabled on a run they had started.
+            _open = true;
+            _finding = true;
 
-            default:
-                break;
+            _context?.Logger.LogInformation("{Why}, so a cycle was started.", why);
+
+            // Kept, so a caller that wants the work done before it looks at the
+            // result can wait for it. The button never does - an HTTP request
+            // holding a cycle open threw away half an hour when a tab closed,
+            // which is F1 - but RunCycleAsync does, and so does every test of
+            // the chain.
+            _cycling = Task.Run(() => CycleThroughAsync(Lifetime), CancellationToken.None);
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// One whole cycle, waited for: feed, search, and maintenance once there is
+    /// nothing left in hand.
+    /// </summary>
+    /// <remarks>
+    /// What <see cref="StartRun"/> starts, with the waiting. Where a cycle is
+    /// already open this waits for that one rather than starting a second, which
+    /// is the same rule <see cref="Trigger"/> follows.
+    /// </remarks>
+    public async Task RunCycleAsync(CancellationToken ct = default)
+    {
+        if (ct.IsCancellationRequested)
+        {
+            // Asked for by something that has already gone, which is what the
+            // plugin's own lifetime looks like once the server has said it is
+            // shutting down. A shutdown is not a fault, and a cycle started for
+            // nobody is work thrown away.
+            return;
+        }
+
+        Trigger("a caller asked for a cycle and is waiting for it");
+
+        Task? going;
+
+        lock (_cycleLock)
+        {
+            going = _cycling;
+        }
+
+        if (going is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await going.WaitAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // The caller stopped waiting. The cycle runs on the plugin's own
+            // lifetime and carries on, which is F1: a browser tab closed after
+            // half an hour must not throw away twenty-nine minutes of work.
         }
     }
 
     /// <summary>
-    /// Starts <see cref="TickDueCadencesAsync"/> without waiting for it, on the
-    /// plugin's own lifetime rather than the tick's own token.
+    /// Feed, then search, then again for every trigger that arrived meanwhile.
     /// </summary>
     /// <remarks>
-    /// Fire-and-forget rather than <c>AllowConcurrent: true</c> on the one
-    /// declared job — the reviewer's ruling. <c>AllowConcurrent</c> would let
-    /// the host start a second Transfers tick before the first has returned,
-    /// and transfers itself would then be able to overlap itself and stage
-    /// the same finished download twice. Started here instead, transfers
-    /// keeps ticking once a minute, serialised, exactly as before; only the
-    /// slower cadences run alongside it rather than inside it.
+    /// The searching half of a cycle. What it finds it hands to the torrent
+    /// client, and the rest of the cycle is the client, the stager and the
+    /// encoder telling each other what they have done — see
+    /// <see cref="SettledAsync"/> for where it ends.
     /// </remarks>
-    private void StartDueCadences()
-    {
-        _ = Task.Run(() => TickDueCadencesGuardedAsync(Lifetime), CancellationToken.None);
-    }
-
-    /// <summary>
-    /// <see cref="TickDueCadencesAsync"/>, with nothing left to escape it.
-    /// </summary>
-    /// <remarks>
-    /// A fire-and-forget <see cref="Task"/> has no caller to throw to: an
-    /// exception deciding which cadences are due — a settings read, a database
-    /// error — would otherwise be an unobserved task exception, which is a
-    /// fault with no line in this plugin's own log at all.
-    /// </remarks>
-    private async Task TickDueCadencesGuardedAsync(CancellationToken ct)
+    private async Task CycleThroughAsync(CancellationToken ct)
     {
         try
         {
-            await TickDueCadencesAsync(ct);
+            while (!ct.IsCancellationRequested)
+            {
+                await HarvestGuardedAsync(ct);
+
+                if (_running.TryEnter())
+                {
+                    try
+                    {
+                        await CycleAsync(ct, only: null, holding: true);
+                    }
+                    finally
+                    {
+                        _running.Leave();
+                    }
+                }
+
+                lock (_cycleLock)
+                {
+                    if (!_again)
+                    {
+                        break;
+                    }
+
+                    _again = false;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The plugin is shutting down, or the owner pressed Stop.
+        }
+        catch (Exception wrong)
+        {
+            _context?.Logger.LogError(wrong, "The cycle stopped: {Reason}", wrong.Message);
+        }
+        finally
+        {
+            lock (_cycleLock)
+            {
+                _finding = false;
+            }
+        }
+
+        await SettledAsync(ct);
+    }
+
+    /// <summary>
+    /// Closes the cycle and runs maintenance, once there is nothing left in
+    /// hand.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Called where work might have ended, never on a clock.</strong>
+    /// That is after the searching half of a cycle, and after every transfers
+    /// pass — and a transfers pass runs when a download finishes or the server
+    /// says something about an encode, so this is asked exactly when the answer
+    /// can have changed.
+    /// </para>
+    /// <para>
+    /// <strong>In hand</strong> is what the client is really holding and what is
+    /// waiting on an encode — the owner's ruling of 13 September 2026. A grab
+    /// written down but not yet started does not hold a cycle open, because one
+    /// that stuck would hold it open for ever.
+    /// </para>
+    /// <para>
+    /// Maintenance last, and this is why it waits: it sweeps download folders
+    /// no grab answers for, and a sweep that runs while a download is in flight
+    /// is a sweep that can take it.
+    /// </para>
+    /// </remarks>
+    private async Task SettledAsync(CancellationToken ct)
+    {
+        lock (_cycleLock)
+        {
+            if (!_open || _finding)
+            {
+                return;
+            }
+        }
+
+        if (await InHandAsync(ct))
+        {
+            return;
+        }
+
+        lock (_cycleLock)
+        {
+            // Read again now the slow part is over: a trigger or a transfers
+            // pass may have arrived while the store was being asked, and this
+            // is the only place a cycle is closed.
+            if (!_open || _finding)
+            {
+                return;
+            }
+
+            _open = false;
+        }
+
+        try
+        {
+            await MaintainAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            // Shutting down.
+        }
+        catch (Exception wrong)
+        {
+            _context?.Logger.LogWarning(wrong, "Maintenance failed: {Reason}", wrong.Message);
+        }
+
+        // Written down however it ended. The clock's record is of when a cycle
+        // last ended, not of when one last succeeded: a failure treated as
+        // though it never finished would have the next one come round at once
+        // instead of waiting out the owner's own interval.
+        try
+        {
+            await (await ClockAsync(ct)).FinishedAsync(JobNames.Cycle, ct);
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            _context?.Logger.LogWarning(wrong, "Deciding which cadences are due failed: {Reason}", wrong.Message);
+            _context?.Logger.LogWarning(wrong, "The cycle's finish was not written down: {Reason}", wrong.Message);
+        }
+
+        // The cycle is over, and the pages say so.
+        Moved();
+
+        // And the clock is set for the next one.
+        await WindAsync(ct);
+    }
+
+    /// <summary>Whether the plugin is still holding work a cycle started.</summary>
+    private async Task<bool> InHandAsync(CancellationToken ct)
+    {
+        try
+        {
+            // The client first, because it answers without touching a disk.
+            if (_engine is BittorrentEngine client && client.Watching)
+            {
+                return true;
+            }
+
+            if (await ConfiguredAsync(ct) is null)
+            {
+                return false;
+            }
+
+            return (await (await GrabsAsync(ct)).OpenAsync(ct))
+                .Any(one => one.State is GrabState.Staged or GrabState.Dispatched);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            // Being wrong here costs a cycle that stays open until the next
+            // thing happens; being wrong the other way runs the folder sweep
+            // while a download is in flight.
+            _context?.Logger.LogWarning(wrong, "What is still in hand could not be read: {Reason}", wrong.Message);
+
+            return true;
         }
     }
 
     /// <summary>
-    /// Runs whichever of feed, search and maintenance the clock says are due
-    /// right now.
+    /// Sets the clock for the moment the next cycle falls due.
     /// </summary>
     /// <remarks>
-    /// Nothing to judge cadences against when the plugin is unconfigured:
-    /// <see cref="ConfiguredAsync"/> already says so once, and there is
-    /// nowhere for any of the three to search, harvest or refresh into.
+    /// <para>
+    /// <strong>Wound, not ticking.</strong> One shot at the moment the owner's
+    /// cadence next comes round, and wound again when a cycle closes. Nothing
+    /// wakes to ask whether a cycle is due — it wakes because one is.
+    /// </para>
+    /// <para>
+    /// The host's own tick calls this too, which is all that tick does. A
+    /// schedule is read from a plugin when the plugin loads and never asked for
+    /// again, so the host cannot be told the owner's cadence; what it can do is
+    /// make sure the plugin's own clock is wound, which matters after a restart
+    /// and at no other time.
+    /// </para>
     /// </remarks>
-    private async Task TickDueCadencesAsync(CancellationToken ct)
+    private async Task WindAsync(CancellationToken ct)
     {
         if (await ConfiguredAsync(ct) is not Settings settings)
         {
             return;
         }
 
-        Clock clock = await ClockAsync(ct);
-        DateTimeOffset now = DateTimeOffset.UtcNow;
+        DateTimeOffset? next = await (await ClockAsync(ct)).NextAsync(
+            JobNames.Cycle, settings.Cadences.Cycle, ct);
 
-        Dictionary<string, string> expressions = new(StringComparer.Ordinal)
-        {
-            [JobNames.Feed] = settings.Cadences.Feed,
-            [JobNames.Search] = settings.Cadences.Search,
-            [JobNames.Maintenance] = settings.Cadences.Maintenance,
-        };
+        _nextCycleDue = next;
 
-        foreach (string name in await clock.DueAsync(expressions, now, ct))
+        lock (_cycleLock)
         {
-            switch (name)
+            _due?.Dispose();
+            _due = null;
+
+            if (next is not DateTimeOffset moment)
             {
-                case JobNames.Feed:
-                    await RunFeedAsync(ct);
-                    break;
-
-                case JobNames.Maintenance:
-                    await RunMaintenanceAsync(ct);
-                    break;
-
-                case JobNames.Search:
-                    await RunSearchAsync(ct);
-                    break;
+                // No cadence this plugin can read. Run and a library scan still
+                // start one; nothing is guessed.
+                return;
             }
+
+            TimeSpan wait = moment - DateTimeOffset.UtcNow;
+
+            _due = TimeProvider.System.CreateTimer(
+                _ => Trigger("the owner's cadence came round"),
+                null,
+                wait > TimeSpan.Zero ? wait : TimeSpan.Zero,
+                Timeout.InfiniteTimeSpan);
         }
-
-        // Refreshed every tick regardless of whether search itself ran this
-        // time, so the dashboard's figure moves even on the minutes in
-        // between — the same way CurrentCycle has always read a live cron
-        // string rather than a snapshot taken once.
-        _nextSearchDue = await clock.NextAsync(JobNames.Search, settings.Cadences.Search, ct);
     }
 
-    /// <summary>Runs the feed cadence behind its own overlap guard.</summary>
-    private Task RunFeedAsync(CancellationToken ct)
+    /// <summary>Wound without a caller to fault, for the timer that wound itself.</summary>
+    private async Task WindGuardedAsync(CancellationToken ct)
     {
-        return RunCadenceAsync(_feedRunning, JobNames.Feed, () => HarvestAsync(ct), ct);
-    }
-
-    /// <summary>Runs the maintenance cadence behind its own overlap guard.</summary>
-    private Task RunMaintenanceAsync(CancellationToken ct)
-    {
-        return RunCadenceAsync(_maintenanceRunning, JobNames.Maintenance, () => MaintainAsync(ct), ct);
-    }
-
-    /// <summary>
-    /// Runs the search cadence, recording a finish only when it really ran.
-    /// </summary>
-    /// <remarks>
-    /// <see cref="CycleAsync"/> already guards itself with <see cref="_running"/>
-    /// — shared with the Run button — and already turns a failure or a stop
-    /// into a recorded finish rather than losing it, so it needs none of
-    /// <see cref="RunCadenceAsync"/>'s own guarding or catching. Only whether
-    /// it actually ran, versus was dropped because a cycle was already going,
-    /// decides whether the clock hears about it: a dropped tick did no work,
-    /// and recording one anyway would delay the next real cycle by a whole
-    /// interval for nothing.
-    /// </remarks>
-    private async Task RunSearchAsync(CancellationToken ct)
-    {
-        if (await CycleAsync(ct))
+        try
         {
-            await (await ClockAsync(ct)).FinishedAsync(JobNames.Search, ct);
+            await WindAsync(ct);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            _context?.Logger.LogWarning(
+                wrong, "When the next cycle is due could not be worked out: {Reason}", wrong.Message);
         }
     }
 
-    /// <summary>
-    /// Runs one cadence pass behind its own overlap guard, and records its
-    /// finish however it ended.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// Feed and maintenance run fire-and-forget now (see
-    /// <see cref="StartDueCadences"/>), so a slow one can still be going when
-    /// its own next tick falls due; dropped here rather than piled up, the
-    /// same choice <see cref="OneAtATime"/> already makes for search.
-    /// </para>
-    /// <para>
-    /// A finish is recorded even when <paramref name="pass"/> throws. Nothing
-    /// here has a caller to report the exception to beyond a log line, and an
-    /// exception that also froze the clock's own record of this cadence's
-    /// last finish would have a feed that fails once retry every single
-    /// minute instead of waiting out the owner's own interval — the same
-    /// reasoning <see cref="CycleAsync"/> already applies to a failed search.
-    /// </para>
-    /// </remarks>
-    private async Task RunCadenceAsync(OneAtATime guard, string name, Func<Task> pass, CancellationToken ct)
+    /// <summary>Reads every feed, and never lets it take a cycle down.</summary>
+    private async Task HarvestGuardedAsync(CancellationToken ct)
     {
-        if (!guard.TryEnter())
+        if (!_feedRunning.TryEnter())
         {
             return;
         }
 
         try
         {
-            await pass();
+            await HarvestAsync(ct);
         }
         catch (OperationCanceledException)
         {
-            // The plugin is shutting down. Not a fault, and recorded as a
-            // finish below exactly like a completed pass — the alternative is
-            // a restart finding this cadence still "due" from the moment
-            // before and repeating it immediately.
+            throw;
         }
         catch (Exception wrong)
         {
-            _context?.Logger.LogWarning(wrong, "The {Name} cadence failed: {Reason}", name, wrong.Message);
+            // One bad feed is not a reason to skip the search: the name pool
+            // still holds everything every earlier harvest put in it.
+            _context?.Logger.LogWarning(wrong, "Reading the feeds failed: {Reason}", wrong.Message);
         }
         finally
         {
-            guard.Leave();
+            _feedRunning.Leave();
         }
-
-        await (await ClockAsync(ct)).FinishedAsync(name, ct);
     }
 
     /// <summary>The clock, once the database behind it has been migrated.</summary>
@@ -566,8 +852,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// One pass over everything the torrent client is holding.
     /// </summary>
     /// <remarks>
-    /// The fastest cadence, because a completion nobody notices is an episode
-    /// nobody gets. It runs on a plugin that has folders and does nothing at
+    /// Run when a download finishes, when the server says something about an
+    /// encode and when it says a library scan finished, because a completion
+    /// nobody notices is an episode nobody gets.
+    /// It runs on a plugin that has folders and does nothing at
     /// all on one that does not: there is nowhere to stage to, so noticing a
     /// completion could only end in a file thrown away.
     /// </remarks>
@@ -596,9 +884,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             Context.Logger,
             time: null,
 
-            // Where the server will say what became of an encode. Without it a
-            // failed job and a slow one look the same and both are waited out.
-            jobs: EncodeGateway.JobsOf(Context.Services),
+            // Where the server says what became of an encode. Without it a
+            // failed job and a slow one look the same, and a failed one is
+            // waited on until the owner cancels it.
+            says: Says(),
 
             // What adds a show the owner does not have yet. Until this, a pack
             // for one could not be dispatched at all: an encode is asked for by
@@ -613,6 +902,173 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // For anything this tick has to add again: the magnet the store kept
             // names no tracker, so without these it comes back with none.
             settings.Client.DefaultTrackers);
+    }
+
+    /// <summary>
+    /// What the server has said about this plugin's encodes, listening from the
+    /// first time it is wanted.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>And its saying so is what sets the rest going.</strong> Staging
+    /// the next episode, deleting a download the encoder has finished with and
+    /// marking a grab done all used to wait for the transfers cadence to come
+    /// round, which is why that cadence was a minute. They happen when the
+    /// encode really ends now.
+    /// </para>
+    /// <para>
+    /// The pass is started and not awaited, on the plugin's own lifetime: this
+    /// is called from the media server's event bus, which publishes to every
+    /// subscriber in turn, and a plugin that staged a file and asked for an
+    /// encode before returning would hold up everything else the server wanted
+    /// to tell about its own encode.
+    /// </para>
+    /// </remarks>
+    private EncoderSays Says()
+    {
+        if (_says is not null)
+        {
+            return _says;
+        }
+
+        _says = new(Context.EventBus, Context.Logger);
+
+        _says.Said += media =>
+        {
+            _context?.Logger.LogDebug("The server has spoken about encode {Media}.", media);
+
+            StartTransfers();
+
+            // And the pages, which draw what the History says about a dispatch.
+            Moved();
+        };
+
+        return _says;
+    }
+
+    /// <summary>
+    /// One transfers pass, with nothing left to escape it and never two at once.
+    /// </summary>
+    /// <remarks>
+    /// Started from an event rather than from a caller, so there is nobody to
+    /// throw to: an exception escaping would be an unobserved task exception,
+    /// which is a fault with no line in this plugin's own log at all. Dropped
+    /// rather than queued when one is already running — the pass reads
+    /// everything fresh, so the one in flight covers whatever this one would
+    /// have.
+    /// </remarks>
+    private async Task TransfersGuardedAsync(CancellationToken ct)
+    {
+        if (!_transfersRunning.TryEnter())
+        {
+            // Not dropped. The pass that is running read the client before this
+            // was asked for, so a download that finished a moment ago is one it
+            // may not have seen — dropped here, it would sit in the incomplete
+            // folder until something else happened to start another pass. The
+            // one running goes round once more instead.
+            Volatile.Write(ref _transfersAgain, 1);
+
+            return;
+        }
+
+        try
+        {
+            do
+            {
+                Volatile.Write(ref _transfersAgain, 0);
+
+                await TransfersAsync(ct);
+            }
+            while (Volatile.Read(ref _transfersAgain) != 0 && !ct.IsCancellationRequested);
+        }
+        catch (OperationCanceledException)
+        {
+            // The plugin is shutting down.
+        }
+        catch (Exception wrong)
+        {
+            _context?.Logger.LogWarning(wrong, "A transfers pass failed: {Reason}", wrong.Message);
+        }
+        finally
+        {
+            _transfersRunning.Leave();
+        }
+
+        // Asked for while the guard was being let go: nobody is left to go round
+        // for it, so it is taken on here rather than lost in the gap.
+        if (Volatile.Read(ref _transfersAgain) != 0 && !ct.IsCancellationRequested)
+        {
+            StartTransfers();
+        }
+
+        // A pass is what turns a finished download into a staged file and a
+        // staged file into an episode, so it is exactly where the last of the
+        // work a cycle started can have gone. Asked here and after the search,
+        // and on no clock at all.
+        try
+        {
+            await SettledAsync(ct);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            _context?.Logger.LogWarning(wrong, "Closing the cycle failed: {Reason}", wrong.Message);
+        }
+    }
+
+    /// <summary>Starts a transfers pass on the plugin's own lifetime, and answers at once.</summary>
+    /// <remarks>
+    /// The one door into a pass for everything that is not a caller waiting on
+    /// it: a download finishing, the server saying something about an encode, a
+    /// start. Each of those is an event with nobody to hand a task back to.
+    /// </remarks>
+    private void StartTransfers()
+    {
+        _ = Task.Run(() => TransfersGuardedAsync(Lifetime), CancellationToken.None);
+    }
+
+    /// <summary>
+    /// What a start owes, once: the housekeeping, the torrents that were in the
+    /// client when it stopped, and the clock.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is what nothing did once the transfers job was gone.</strong>
+    /// The torrent client is built on first use, and the job ticking every minute
+    /// was what used it first — so it was also what put back every download that
+    /// was running when the server stopped. With it gone, those sat untouched
+    /// until somebody opened a page.
+    /// </para>
+    /// <para>
+    /// Started when the server says this plugin has loaded, which is after
+    /// <c>Initialize</c> — that must not do I/O, because the server is still
+    /// coming up while it runs. The host's own tick asks too, for a server that
+    /// never says it; either way it runs once.
+    /// </para>
+    /// </remarks>
+    private async Task StartUpAsync(CancellationToken ct)
+    {
+        try
+        {
+            await SettleOnceAsync(ct);
+
+            // Once, and only once there is somewhere to put a download: a pass
+            // on a plugin with no folders has nothing to re-add and nowhere to
+            // stage to, and must still happen when the owner does set them.
+            if (await ConfiguredAsync(ct) is not null && Interlocked.Exchange(ref _startedUp, 1) == 0)
+            {
+                // The pass builds the client, and recovery puts back every grab
+                // that is not done. One already whole on disk says so as it
+                // opens, which stages it — the download that finished while the
+                // server was down.
+                StartTransfers();
+            }
+
+            await WindAsync(ct);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            _context?.Logger.LogWarning(wrong, "Starting up failed: {Reason}", wrong.Message);
+        }
     }
 
     /// <summary>Reads every feed into the name pool.</summary>
@@ -769,14 +1225,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// release for one episode twice over, because what one has decided is
     /// state the other cannot see.
     /// </remarks>
-    /// <returns>
-    /// Whether this call was the one that ran the cycle, rather than finding
-    /// one already going and dropping its own. The search cadence uses this to
-    /// decide whether it really has anything to tell the clock's own record of
-    /// cadence finishes — a dropped tick did no work and must not be written
-    /// down as one that did.
-    /// </returns>
-    private async Task<bool> CycleAsync(CancellationToken ct, EpisodeKey? only = null, bool holding = false)
+    /// <param name="ct">The plugin's own lifetime, or the Stop button's, never a caller's request.</param>
+    /// <param name="only">One episode to search for, or null for every one that is missing.</param>
+    /// <param name="holding">
+    /// Whether the caller already holds the guard. If it does, it lets it go;
+    /// this lets go only what it took itself. It used to let go either way, and
+    /// with <see cref="CycleThroughAsync"/> holding the guard around it that was
+    /// a release in the gap between two — room for a search for one episode to
+    /// take the guard and then have it let go under it.
+    /// </param>
+    private async Task CycleAsync(CancellationToken ct, EpisodeKey? only = null, bool holding = false)
     {
         if (!holding && !_running.TryEnter())
         {
@@ -784,7 +1242,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // the cycle is already doing the work of.
             SayOnce(ref _overlapping, "A cycle is already running, so this one was not started.");
 
-            return false;
+            return;
         }
 
         using CancellationTokenSource cycle = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -795,8 +1253,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _journal.RunStarted();
 
         // Already set when the button claimed the run, so the page said
-        // "running since" from the instant it was pressed; a cadence tick sets
-        // it here.
+        // "running since" from the instant it was pressed; a cycle nobody
+        // pressed for sets it here.
         _runStartedAt ??= DateTimeOffset.UtcNow;
         DateTimeOffset started = _runStartedAt.Value;
         RunEnd how = RunEnd.Finished;
@@ -835,61 +1293,82 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             _runStartedAt = null;
             await RememberAsync(new(started, DateTimeOffset.UtcNow, how));
 
-            _running.Leave();
+            if (!holding)
+            {
+                _running.Leave();
+            }
 
             // The last thing a run does. Nothing is recorded in the journal by
             // stopping, so without this the status bar keeps saying "Running"
             // on every page that was open when it finished.
             Moved();
         }
-
-        // Ran, whatever it ended in. Stopped and failed are still finishes —
-        // the clock's own record is of when a cycle last ended, not of when
-        // one last succeeded, and treating a failure as though it never
-        // finished would have the very next tick try again a minute later
-        // instead of waiting out the owner's own interval.
-        return true;
     }
 
-    /// <summary>Whether a cycle is running now.</summary>
+    /// <summary>Whether anybody has a page of this plugin open, as far as can be known.</summary>
     /// <remarks>
+    /// Known without asking: a page fetched says yes, a push nothing fetched
+    /// after says no, and a long stretch with nothing to push lets it rest until
+    /// the client does something again.
+    /// </remarks>
+    public bool Watched => _onlookers.Present;
+
+    /// <summary>Whether a cycle is open now.</summary>
+    /// <remarks>
+    /// <para>
     /// What the status bar draws its badge and its button from, and the one
     /// thing a page has to be right about the instant a run is started.
+    /// </para>
+    /// <para>
+    /// <strong>The whole cycle, not the searching half of it.</strong> The
+    /// owner's ruling of 13 September 2026: a download and an encode a cycle
+    /// asked for are still that cycle, so this stays true until maintenance has
+    /// run — which is when there is nothing left in hand. Pressing Run again
+    /// meanwhile is refused, and the two triggers that are not a button add
+    /// their work to the open cycle instead.
+    /// </para>
     /// </remarks>
-    public bool Running => _running.Busy;
+    public bool Running
+    {
+        get
+        {
+            lock (_cycleLock)
+            {
+                return _open;
+            }
+        }
+    }
 
     /// <summary>
-    /// Starts a full cycle in the background, and answers at once.
+    /// Starts a cycle in the background, and answers at once.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// <strong>F1.</strong> 0.3.4 awaited the cycle inside the HTTP request, so
     /// it ran on the caller's cancellation token — a browser tab closed after
     /// half an hour threw away twenty-nine minutes of work. The cycle is
     /// started on the plugin's own lifetime and the request only asks for it.
+    /// </para>
+    /// <para>
+    /// The whole cycle now, not the search alone: feed, then search, then
+    /// whatever they start, and maintenance when nothing is left in hand.
+    /// </para>
     /// </remarks>
-    /// <returns>Whether one was started, or false when one was already running.</returns>
+    /// <returns>Whether one was started, or false when one was already open.</returns>
     public bool StartRun()
     {
-        // Claimed here, on the caller's thread, and not inside the task.
-        //
-        // **It used to be claimed in the task, and the page said so.** The
-        // endpoint answered "started", the task had not reached the guard yet,
-        // and everything that asked in between — the push below, and any page
-        // loaded or refreshed in that window — was told the cycle was idle. The
-        // owner saw a Run button still enabled on a run they had just started.
-        if (!_running.TryEnter())
+        // And since when, before anything is started: the push below is what
+        // redraws every open page, and it should say "running since" straight
+        // away. It used to be set inside the task, and the owner saw a Run
+        // button still enabled on a run they had just pressed.
+        _runStartedAt ??= DateTimeOffset.UtcNow;
+
+        if (!Trigger("the owner pressed Run"))
         {
+            _runStartedAt = null;
+
             return false;
         }
-
-        // And since when, for the same reason: the push below is what redraws
-        // every open page, and it should say "running since" straight away.
-        _runStartedAt = DateTimeOffset.UtcNow;
-
-        // Never the caller's token, and never awaited: the endpoint answers
-        // that a cycle has begun, not that it has finished. It is handed the
-        // guard it already holds, so nothing claims it twice.
-        _ = Task.Run(() => CycleAsync(Lifetime, holding: true), CancellationToken.None);
 
         // Now, and not before: the snapshot this sends says the cycle is
         // running, because by now it is.
@@ -925,6 +1404,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // It finished between the read and the cancel, which is a race a
             // button really runs.
             return false;
+        }
+
+        // And nothing more is added to it. A trigger that arrived while the
+        // owner was deciding to stop would otherwise start the search again the
+        // moment they did.
+        lock (_cycleLock)
+        {
+            _again = false;
         }
 
         return true;
@@ -1017,8 +1504,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// Takes on a torrent the owner found themselves.
     /// </summary>
     /// <remarks>
-    /// Written down like any other grab, so the Downloads page shows it and the
-    /// transfers cadence stages it when it finishes. It answers for no episode
+    /// Written down like any other grab, so the Downloads page shows it and it
+    /// is staged the moment it finishes. It answers for no episode
     /// yet: what it turns out to be is the staging stage's business, and the
     /// dispatch says which file it could not place.
     /// </remarks>
@@ -1169,8 +1656,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// attempts, last search — for the rows that survive.
     /// </para>
     /// <para>
-    /// Both halves existed and neither had a caller. The maintenance cadence
-    /// was a <c>default: break;</c>, so on a real server every page said every
+    /// Both halves existed and neither had a caller. What was then the
+    /// maintenance job was a <c>default: break;</c>, so on a real server every page said every
     /// episode of every show was on disk over a library with nearly two
     /// thousand that were not.
     /// </para>
@@ -1195,12 +1682,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// The periodic housekeeping, in the cadence named for it.
+    /// The housekeeping a cycle ends with, once nothing is left in hand.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// It used to be scattered: this cadence's whole body was a refresh the
-    /// search cadence already did before each of its four daily cycles, old
+    /// It used to be scattered: the maintenance job's whole body was a refresh
+    /// search already did before each of its four daily cycles, old
     /// refusals were pruned as a side effect of that refresh, and duplicate
     /// grab rows were cleared on the first transfers tick after a start behind
     /// a flag. Three pieces of periodic work, none of them here.
@@ -1266,7 +1753,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// The housekeeping a start owes, done once, whichever cadence ticks first.
+    /// The housekeeping a start owes, done once, whichever asks for it first.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1303,7 +1790,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         if (Interlocked.Exchange(ref _settled, 1) != 0)
         {
-            // Another cadence ticked at the same moment and got there first.
+            // Something else asked at the same moment and got there first.
             return;
         }
 
@@ -1324,8 +1811,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <remarks>
     /// Not in <c>Initialize</c>, which does no I/O: this reads the settings,
     /// the catalogue beside the assembly and asks the server for grants. Behind
-    /// the same semaphore as the migration because two cadences can tick at
-    /// once on a plugin that has just loaded.
+    /// the same semaphore as the migration because a cycle and a page can both
+    /// arrive at once on a plugin that has just loaded.
     /// </remarks>
     private async Task<(Chain Chain, Settings Settings)?> ChainAsync(CancellationToken ct)
     {
@@ -1398,8 +1885,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// One for the process, whatever ticks in between: the client owns sockets
     /// and a port mapping, and a second would bind a port the first already has
     /// and report it as somebody else's. Behind the same semaphore as the
-    /// migration, because two cadences can tick at once on a plugin that has
-    /// only just loaded.
+    /// migration, because a cycle, a transfers pass and a page can all arrive at
+    /// once on a plugin that has only just loaded.
     /// </remarks>
     private async Task<BittorrentEngine> EngineAsync(Settings settings, CancellationToken ct)
     {
@@ -1424,11 +1911,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     settings.Client.MaxDownloadRate,
                     settings.Client.MaxUploadRate,
 
-                    // The owner's choice. Off is off: no search goes out and no
-                    // datagram is sent to the gateway.
-                    settings.Client.PortMapping
-                        ? new PortMapping([new UpnpMapper(_trackerHttp), new NatPmpMapper()])
-                        : null,
+                    // Always asked, and the answer never drawn. The switch
+                    // that used to guard this was the owner's way of silencing
+                    // a notice that should not have existed: a refusal says the
+                    // router would not open the port by itself, which on a
+                    // hand-forwarded port means nothing at all. It is logged
+                    // and no page reports it, so there is nothing left to
+                    // switch off.
+                    new PortMapping([new UpnpMapper(_trackerHttp), new NatPmpMapper()]),
                     _journal,
                     Context.Logger,
                     new SocketTrackerTransport(_trackerHttp),
@@ -1454,7 +1944,34 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 // peer arriving, a seed arriving, a peer choking us, a torrent
                 // stalling are all changes to what is on the screen, and none
                 // of them shifts a byte.
-                _heartbeat = new(() => _engine?.Drawn, Moved, Context.Logger);
+                _heartbeat = new(
+                    () => _engine?.Drawn,
+
+                    // And only while it is holding something. Without this the
+                    // client was read once a second for the life of the server,
+                    // whether it had a torrent or not.
+                    () => _engine?.Watching ?? false,
+                    Moved,
+                    Context.Logger);
+
+                // The client moving wakes a watch that went to rest over a page
+                // with nothing changing on it. A stalled torrent starting again
+                // is the one somebody was staring at. S11-29.
+                _engine.Stirred += _onlookers.Stirred;
+
+                // A download finishing is what starts staging it. The client
+                // raised this from the day it could say so, and nothing here
+                // listened: the transfers job ticking every minute was what
+                // joined them, and when it went a finished download would have
+                // sat in the incomplete folder for ever.
+                _engine.Completed += _ => StartTransfers();
+
+                // And a page already open when the client was built is watched
+                // from now, rather than from the next time it is fetched.
+                if (_onlookers.Present)
+                {
+                    _heartbeat.StartBeating();
+                }
             }
 
             return _engine;
@@ -1474,7 +1991,25 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // Every page carries the plugin's own navigation, put on here rather
         // than by each view: six of the eight are mounted nowhere in the
         // server's navigation and were reachable only by typing an address.
-        return Pages.WithNavigation(await PageAsync(request, ct), request.Route);
+        PluginView view = Pages.WithNavigation(await PageAsync(request, ct), request.Route);
+
+        // What this page was drawn with, taken straight after it was, so the
+        // heartbeat pushes only what differs from it. Read off a client that
+        // already exists and never by building one: opening a page must not
+        // start a torrent client on a plugin that has not needed one yet.
+        if (_engine is BittorrentEngine client)
+        {
+            _heartbeat?.Shown(client.Drawn);
+        }
+
+        // The proof somebody is looking, and the only one there is. The hub adds
+        // a connection to this plugin's group and tells the plugin nothing; but a
+        // page that is open fetches itself again on every push, so every fetch
+        // is somebody with this plugin in front of them. After the page is drawn,
+        // so the first beat is never compared with what it was before.
+        _onlookers.Looked();
+
+        return view;
     }
 
     /// <summary>
@@ -1508,15 +2043,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     await Settings.SecretsSetAsync(ct),
                     [],
 
-                    // What the router said, when there is a client to have
-                    // asked it. Read off the field rather than through Engine():
+                    // What is known about the port, which on an idle server is
+                    // nothing. Read off the field rather than through Engine():
                     // opening the Settings page must not start a torrent client
-                    // that is not running.
-                    _engine?.Mapped,
-
-                    // And whether anybody has come through the port, which is
-                    // what says it is open however the mapping went.
-                    _engine?.Reached ?? false);
+                    // that is not running, and a client that is not running has
+                    // proved nothing either way.
+                    _engine?.PortCondition ?? PortState.Unknown,
+                    ShowAdvanced);
 
             case Pages.ShowsRoute:
                 return ShowsView.Render(ShowSummaries.Summarise(await Tracked(ct)));
@@ -1528,7 +2061,19 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 return DownloadsView.Render(await DownloadRowsAsync(ct));
 
             case Pages.SourcesRoute:
-                return SourcesView.Render(await SourceReportsAsync(ct), DateTimeOffset.UtcNow);
+                return SourcesView.Render(
+                    await SourceReportsAsync(ct),
+                    DateTimeOffset.UtcNow,
+
+                    // The shipped catalogue, so every source has a switch, and
+                    // the settings so each switch knows which way it is.
+                    Shipped(),
+                    await Settings.LoadAsync(ct),
+
+                    // Only which secrets exist, never their values: the page
+                    // draws that a key is set and has nothing it could leak.
+                    await Settings.SecretsSetAsync(ct),
+                    ShowAdvanced);
 
             case Pages.SkippedRoute:
                 // A page of them, not all of them: one refusal is written for
@@ -1764,14 +2309,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// in the store, so a restart does not turn it into "never run".
     /// </para>
     /// <para>
-    /// The next run is read from <see cref="_clock"/>'s own record of when
-    /// search last finished, not from a job's cron string: there is no job
-    /// registered for search any more, only the clock's own decision on every
-    /// transfers tick (S12-05). <see cref="_nextSearchDue"/> is refreshed
-    /// there and simply read here, because this method has to stay
-    /// synchronous for <see cref="LiveSnapshot"/>'s callback — before the
-    /// first tick it is null, and the page says the time is not known rather
-    /// than inventing one.
+    /// The next run is read from <see cref="_clock"/>'s own record of when the
+    /// last cycle finished, never from a job's cron string: the host's job starts
+    /// nothing, and the clock is what starts a cycle. <see cref="_nextCycleDue"/>
+    /// is set whenever the clock is wound and simply read here, because this
+    /// method has to stay synchronous for <see cref="LiveSnapshot"/>'s callback —
+    /// before the clock is first wound it is null, and the page says the time is
+    /// not known rather than inventing one.
     /// </para>
     /// </remarks>
     private CycleStatus CurrentCycle()
@@ -1779,7 +2323,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return new(
             _running.Busy,
             _lastRun?.EndedAt,
-            _nextSearchDue)
+            _nextCycleDue)
         {
             StartedAt = _running.Busy ? _runStartedAt : null,
             LastEnd = _lastRun?.How,
@@ -1802,6 +2346,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         // Before the engine, which it reads on every tick.
         _heartbeat?.Dispose();
+        _onlookers.Dispose();
+        _says?.Dispose();
+        _scanning?.Dispose();
+        _loaded?.Dispose();
+
+        lock (_cycleLock)
+        {
+            _due?.Dispose();
+            _due = null;
+        }
 
         // Before the chain, because the client holds the listening sockets and
         // the port mapping: a plugin the server believes is gone must not still
@@ -1820,12 +2374,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// Says something once, however many times a cadence ticks.
+    /// Says something once, however many times it comes up.
     /// </summary>
     /// <remarks>
-    /// Transfers alone ticks every minute, and a line a minute is a line
-    /// nobody reads — which is how a message that mattered went unnoticed in
-    /// 0.3.4's log.
+    /// A plugin with no folders set is asked for them on every cycle, every
+    /// transfers pass and every page, and a line each time is a line nobody reads
+    /// — which is how a message that mattered went unnoticed in 0.3.4's log.
     /// </remarks>
     private void SayOnce(ref int said, string message)
     {
@@ -1839,8 +2393,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// Says once, in the server's own log, which version is running.
     /// </summary>
     /// <remarks>
-    /// Once, not once per tick: transfers ticks every minute and a line a
-    /// minute is a line nobody reads. It answers the question a deploy leaves
+    /// Once, not once per tick: a line every time the host ticks is a line
+    /// nobody reads. It answers the question a deploy leaves
     /// open — a plugin's assembly is held open by a running server, so a copy
     /// onto one that was not stopped fails and the old build stays, which looks
     /// exactly like a deploy that worked (docs/01-plugin.md § Deploying).

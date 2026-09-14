@@ -3,21 +3,20 @@ using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 namespace NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
 /// <summary>What came of asking for an encode.</summary>
+/// <remarks>
+/// <strong>It used to carry the job id the server named, and that is gone on
+/// purpose.</strong> Nothing read it: what the server's own encoding events
+/// carry is the media row the encode registers against — the episode id this
+/// plugin named when it asked — and the id handed back here is something else,
+/// a hash of the job's payload, chosen because a queue row id is not stable.
+/// Kept, it would be a field nobody read that looks exactly like the one to
+/// match an event on, and matching on it would find nothing, quietly, for ever.
+/// </remarks>
 /// <param name="Taken">Whether the server took it. False leaves the file staged.</param>
-/// <param name="JobId">
-/// The job it queued, where the server named one. Null both when it was refused
-/// and when it was taken by a server with no way to name the job — the older
-/// dispatch cannot, because it builds the job itself and hands it to a queue
-/// that answers nothing.
-///
-/// It is what <see cref="IEncodeJobs"/> is asked about, so a grab that has one
-/// can be told a dead job from a slow one instead of waiting six hours to find
-/// out which it was.
-/// </param>
-public sealed record EncodeAsk(bool Taken, string? JobId)
+public sealed record EncodeAsk(bool Taken)
 {
     /// <summary>Refused, with the reason already said out loud by whoever refused it.</summary>
-    public static EncodeAsk No { get; } = new(false, null);
+    public static EncodeAsk No { get; } = new(false);
 }
 
 /// <summary>
@@ -59,7 +58,7 @@ public interface IEncodeGateway
     /// <para>
     /// <strong>It never throws.</strong> An encode that cannot be asked for is
     /// one download left staged and the next tick asking again — it used to
-    /// throw out of a reflection call and unwind the whole transfers cadence,
+    /// throw out of a reflection call and unwind the whole transfers pass,
     /// so one type mismatch stopped every download in flight from being looked
     /// at.
     /// </para>

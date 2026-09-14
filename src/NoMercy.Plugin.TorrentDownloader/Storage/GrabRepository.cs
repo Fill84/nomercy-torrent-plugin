@@ -97,8 +97,7 @@ public sealed class GrabRepository(Store database)
                 state         = excluded.state,
                 covers        = excluded.covers,
                 folder        = excluded.folder,
-                staged_path   = NULL,
-                encode_job    = NULL
+                staged_path   = NULL
             -- Failed or done, never open: a grab still running is the first
             -- recording of this torrent and it wins. Done is taken on again
             -- only because a run takes a torrent for an episode the library
@@ -152,7 +151,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, encode_job, folder FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed', 'lost');
             """;
 
@@ -170,14 +169,12 @@ public sealed class GrabRepository(Store database)
             {
                 Covers = Covered(reader.GetString(4)),
                 StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
-                EncodeJobId = reader.IsDBNull(6) ? null : reader.GetString(6),
-                Folder = reader.IsDBNull(7) ? null : reader.GetString(7),
+                Folder = reader.IsDBNull(6) ? null : reader.GetString(6),
             });
         }
 
         return open;
     }
-
 
     /// <summary>
     /// Every grab there has ever been, whatever became of it.
@@ -195,7 +192,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, encode_job, folder FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder FROM grabs
             WHERE info_hash IS NOT NULL;
             """;
 
@@ -213,8 +210,7 @@ public sealed class GrabRepository(Store database)
             {
                 Covers = Covered(reader.GetString(4)),
                 StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
-                EncodeJobId = reader.IsDBNull(6) ? null : reader.GetString(6),
-                Folder = reader.IsDBNull(7) ? null : reader.GetString(7),
+                Folder = reader.IsDBNull(6) ? null : reader.GetString(6),
             });
         }
 
@@ -250,65 +246,6 @@ public sealed class GrabRepository(Store database)
             "$covers",
             JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })));
 
-        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
-
-        await command.ExecuteNonQueryAsync(ct);
-    }
-
-    /// <summary>Writes down the encode job one of a grab's episodes is waiting on.</summary>
-    /// <remarks>
-    /// <para>
-    /// Written down rather than remembered, so that a restart does not lose it.
-    /// The one case worth answering is exactly the one memory cannot: the
-    /// plugin comes back, the grab is still dispatched, and nothing knows
-    /// whether the job died with the old process.
-    /// </para>
-    /// <para>
-    /// <strong>Added, never replacing.</strong> This overwrote, so a pack that
-    /// dispatched nine encodes kept the last of them and threw the other eight
-    /// away. The plugin then asked "is the encode still running?" about one
-    /// episode out of nine: when that one finished it read the whole pack as
-    /// finished, dispatched all nine a second time on top of the eight still
-    /// running, and two of the owner's episodes died in the collision on
-    /// 1 September 2026.
-    /// </para>
-    /// <para>
-    /// Each is tagged with the episode it belongs to, so a failure can be laid
-    /// at the episode that failed instead of at the whole pack. Space
-    /// separated, which no job id and no tag contains; a row written before the
-    /// tags carries a bare id and still reads as one job for the grab.
-    /// </para>
-    /// </remarks>
-    public async Task EncodeJobAsync(string infoHash, EpisodeKey episode, string jobId, CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        // Its own tag replaced rather than added twice: an episode asked for a
-        // second time has one job, the newer one.
-        command.CommandText =
-            """
-            UPDATE grabs SET encode_job = TRIM(
-                COALESCE(
-                    (SELECT GROUP_CONCAT(part, ' ') FROM (
-                        SELECT part FROM (
-                            WITH split(part, rest) AS (
-                                SELECT '', COALESCE(encode_job, '') || ' '
-                                UNION ALL
-                                SELECT substr(rest, 1, instr(rest, ' ') - 1), substr(rest, instr(rest, ' ') + 1)
-                                FROM split WHERE rest <> ''
-                            )
-                            SELECT part FROM split
-                            WHERE part <> '' AND part NOT LIKE $tag || ':%'
-                        )
-                    )),
-                    '')
-                || ' ' || $tag || ':' || $job)
-            WHERE info_hash = $hash;
-            """;
-
-        command.Parameters.AddWithValue("$tag", Tag(episode));
-        command.Parameters.AddWithValue("$job", jobId);
         command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
 
         await command.ExecuteNonQueryAsync(ct);

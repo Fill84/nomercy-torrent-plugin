@@ -1,4 +1,6 @@
 using System.Globalization;
+using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Views;
@@ -46,12 +48,15 @@ public static class SourcesView
 {
     public const string TableId = "sources";
 
-    public static PluginView Render(IReadOnlyList<SourceReport> sources, DateTimeOffset now)
+    public static PluginView Render(
+        IReadOnlyList<SourceReport> sources,
+        DateTimeOffset now,
+        IReadOnlyList<SourceDefinition>? shipped = null,
+        Settings? settings = null,
+        IReadOnlyCollection<string>? secretsSet = null,
+        bool advanced = false)
     {
-        return new()
-        {
-            Layout = PluginLayout.Wide,
-            Components =
+        List<PluginComponent> page =
             [
                 Ui.Text("sources-heading", "Sources", "title"),
                 Ui.Text(
@@ -88,8 +93,85 @@ public static class SourcesView
                             })),
                     ],
                     "No source has been asked yet."),
-            ],
+        ];
+
+        // The indexers of the owner live here now rather than on the settings
+        // page: this is the page about sources, and an indexer is one.
+        if (settings is not null)
+        {
+            page.Add(Indexers(settings, new(secretsSet ?? [], StringComparer.Ordinal)));
+        }
+
+        // Under advanced, because an owner who came to look at what answered
+        // should not have to walk past a switch for every site.
+        if (advanced && shipped is not null)
+        {
+            page.Add(Switches(shipped, settings));
+        }
+
+        return new()
+        {
+            Layout = PluginLayout.Wide,
+            Components = [.. page],
         };
+    }
+
+    /// <summary>
+    /// The indexers the owner added, and whether each has its key.
+    /// </summary>
+    /// <remarks>
+    /// Moved here from the settings page by <c>S12-08</c>. The API key stays
+    /// write-only: the page renders that one is set and never the value, and it
+    /// is handed only the names of the secrets that exist, so it has no value
+    /// it could render even by mistake.
+    /// </remarks>
+    private static PluginComponent Indexers(Settings settings, HashSet<string> present)
+    {
+        return Ui.Detail(
+            "indexers",
+            "Own indexers",
+            settings.Indexers.Count == 0 ? "None added." : null,
+            null,
+            [
+                .. settings.Indexers.SelectMany(indexer => (PluginComponent[])
+                [
+                    Ui.Text($"indexer-{indexer.Id}", $"{indexer.Name} - {indexer.Address}"),
+                    Ui.Text(
+                        $"indexer-{indexer.Id}-key",
+                        $"API key: {(present.Contains(SettingsStore.IndexerApiKey(indexer.Id)) ? "set" : "not set")}",
+                        "caption"),
+                ]),
+            ]);
+    }
+
+    /// <summary>
+    /// One switch per shipped source, on unless the owner turned it off.
+    /// </summary>
+    /// <remarks>
+    /// <c>DisabledDefaultSources</c> records what is off rather than what is
+    /// on, so a source nobody has touched is simply absent from it. That is
+    /// what keeps a source added by a later version enabled instead of
+    /// silently missing from a list written before it existed.
+    /// </remarks>
+    private static PluginComponent Switches(IReadOnlyList<SourceDefinition> shipped, Settings? settings)
+    {
+        HashSet<string> off = new(
+            settings?.DisabledDefaultSources ?? [],
+            StringComparer.OrdinalIgnoreCase);
+
+        return Ui.Form(
+            "source-switches",
+            "Save",
+            PluginActionIntent.CallPlugin(SettingsView.SaveAction, null, PluginActionTransport.Rest),
+            [
+                .. shipped.Select(source => new PluginFormField
+                {
+                    Name = SettingsEdit.SourcePrefix + source.Name,
+                    Label = source.Name,
+                    Type = PluginFormFieldType.Toggle,
+                    Value = !off.Contains(source.Name),
+                }),
+            ]);
     }
 
     /// <summary>What a source that has never been asked says.</summary>

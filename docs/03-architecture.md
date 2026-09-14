@@ -20,12 +20,12 @@ Three ideas fix it:
 
 ```
                   ┌──────────────┐
-cadence: feed ───▶│ 1 Harvest    │  all feed sources in parallel, gated per host
+trigger ─────────▶│ 1 Harvest    │  all feed sources in parallel, gated per host
                   └──────┬───────┘
                          │ NamePool
                          ▼
                   ┌──────────────┐
-cadence: search ─▶│ 2 Name       │  pool first; misses ask the name databases
+then ────────────▶│ 2 Name       │  pool first; misses ask the name databases
                   │   resolve    │  once per (show, season), memoised
                   └──────┬───────┘
                          ▼
@@ -49,13 +49,22 @@ cadence: search ─▶│ 2 Name       │  pool first; misses ask the name data
                   └──────┬───────┘
                          ▼
                   ┌──────────────┐
-cadence: transfer │ 7 Watch      │  progress, completion, failure, stall
+events ──────────▶│ 7 Watch      │  completion, failure and stall, each said by the client
                   └──────┬───────┘
                          ▼
                   ┌──────────────┐
                   │ 8 Hand off   │  stage the video, dispatch the encode job
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+events ──────────▶│ 9 Close      │  the server says the encode ended; nothing
+                  │              │  left in hand, so maintenance, and the cycle ends
                   └──────────────┘
 ```
+
+A trigger is the Run button, a finished library scan or the owner's cadence. Every arrow after it is
+an event or a completed task, and nothing on the line is a clock — see `docs/01-plugin.md` § One
+cycle, driven by events.
 
 Stages 2–6 run per episode, concurrently. Stages 1 and 4 fan out per source, concurrently. Nothing
 is serial except where a host's gate makes it so.
@@ -90,8 +99,9 @@ Defaults live in `PipelineOptions`, not as constants scattered through the code.
 ## Ownership of work
 
 A cycle is owned by the plugin, never by the request that started it. The Run button starts a cycle
-and answers immediately; the cycle runs on the plugin's lifetime token. A cadence tick arriving
-while its own cadence is still running is dropped, not queued.
+and answers immediately; the cycle runs on the plugin's lifetime token. A trigger arriving while a
+cycle is open is added to that cycle — its feed and search run once more — and is neither dropped nor
+run beside it.
 
 ## The plugin's own subsystems
 

@@ -292,6 +292,9 @@ public sealed class TorrentRun : IDisposable
     /// </remarks>
     private TaskCompletionSource _opened = Done();
 
+    /// <summary>A session made this pass and not yet asked whether it is whole.</summary>
+    private TorrentSession? _fresh;
+
     /// <summary>How many peers one DHT search asks for.</summary>
     /// <remarks>
     /// The same fifty a tracker is asked for. More than a swarm's worth of
@@ -517,6 +520,63 @@ public sealed class TorrentRun : IDisposable
     /// rather than nought per cent of downloading.
     /// </remarks>
     public Task Metadata => _metadata.Task;
+
+    /// <summary>Raised once, when this run's torrent is whole.</summary>
+    /// <remarks>
+    /// Passed straight up from the session, which is where the last piece
+    /// verifies. The run adds nothing to it beyond being the thing the client
+    /// holds: it is the client that knows which info hash this run is for.
+    /// </remarks>
+    public event Action? Finished;
+
+    /// <summary>Raised whenever a piece of this torrent has verified.</summary>
+    /// <remarks>
+    /// What the client hangs its stall deadline on: a torrent that is alive
+    /// keeps resetting it, so the deadline fires only for one that has really
+    /// stopped. Also what tells the resume files there is something new worth
+    /// writing down — they used to be written by whoever happened to ask the
+    /// client for its status.
+    /// </remarks>
+    public event Action? Progressed;
+
+    /// <summary>
+    /// Raised when this run has settled what its torrent is: opened its
+    /// session, or decided there is nothing in it worth a byte.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Not when the metadata arrives, which is sooner and is not enough.
+    /// Whether a torrent holds a video file at all is decided here, while the
+    /// session is being opened — a fake release is a torrent whose metadata is
+    /// perfectly good — and so is how big the download really is, which is
+    /// only the files that will be fetched.
+    /// </para>
+    /// <para>
+    /// Raised outside this run's lock, like everything else it says. A handler
+    /// asks the run about itself, and a run that announced while holding its
+    /// own lock would be answering a caller that cannot have it.
+    /// </para>
+    /// </remarks>
+    public event Action? Opened;
+
+    /// <summary>
+    /// Says when this torrent has given back what the owner asked of it.
+    /// </summary>
+    /// <remarks>
+    /// Only once the session is open, which for a complete torrent it always
+    /// is: the ratio cannot be met by a torrent that has downloaded nothing.
+    /// </remarks>
+    public void TellMeWhenGivenBack(long bytes, Action said)
+    {
+        TorrentSession? session;
+
+        lock (_lock)
+        {
+            session = _session;
+        }
+
+        session?.TellMeWhenGivenBack(bytes, said);
+    }
 
     /// <summary>Where it stands, with every number real or absent.</summary>
     public RunProgress Progress()
@@ -1410,6 +1470,7 @@ public sealed class TorrentRun : IDisposable
             TorrentMetadata torrent;
             IReadOnlyList<TorrentFileEntry> keeping;
             Task? somebodyElse = null;
+            bool nothing = false;
 
             lock (_lock)
             {
@@ -1444,15 +1505,28 @@ public sealed class TorrentRun : IDisposable
                         // started: the caller stops this torrent and blames it,
                         // and creating a session that wants no pieces would
                         // report itself finished the moment it existed.
-                        return null;
+                        //
+                        // Told below and not here, because saying it under this
+                        // lock would have the client asking this run about
+                        // itself from inside a handler that holds it.
+                        nothing = true;
                     }
+                    else
+                    {
+                        torrent = _torrent;
+                        _verifying = true;
+                        _opened = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-                    torrent = _torrent;
-                    _verifying = true;
-                    _opened = new(TaskCreationOptions.RunContinuationsAsynchronously);
-
-                    goto opening;
+                        goto opening;
+                    }
                 }
+            }
+
+            if (nothing)
+            {
+                Settled();
+
+                return null;
             }
 
             try
@@ -1460,7 +1534,7 @@ public sealed class TorrentRun : IDisposable
                 // Never for ever: a pass that faulted completes this on its way
                 // out, and the limit is a backstop for a caller that should
                 // never be left here.
-                await somebodyElse.WaitAsync(Opening, ct).ConfigureAwait(false);
+                await somebodyElse!.WaitAsync(Opening, ct).ConfigureAwait(false);
             }
             catch (TimeoutException)
             {
@@ -1510,17 +1584,30 @@ public sealed class TorrentRun : IDisposable
                 {
                     _disk = disk;
 
-                    _session ??= new(
-                        torrent,
-                        disk,
-                        have,
-                        keeping.Count == torrent.Files.Count ? null : torrent.PiecesOf(keeping),
-                        time: _time,
-                        limits: _limits,
+                    if (_session is null)
+                    {
+                        _session = new(
+                            torrent,
+                            disk,
+                            have,
+                            keeping.Count == torrent.Files.Count ? null : torrent.PiecesOf(keeping),
+                            time: _time,
+                            limits: _limits,
 
-                        // What the session is told about, this run dials. The
-                        // session owns no sockets on purpose.
-                        met: addresses => _ = MeetAsync(addresses, _stopping.Token));
+                            // What the session is told about, this run dials. The
+                            // session owns no sockets on purpose.
+                            met: addresses => _ = MeetAsync(addresses, _stopping.Token));
+
+                        // Under the lock, which only adds a delegate and raises
+                        // nothing. Attached here rather than after it, because a
+                        // block arriving in between would latch the session's
+                        // one announcement with nobody listening for it.
+                        _session.Finished += PassedOn;
+                        _session.Progressed += Moved;
+
+                        // Said outside the lock, in the finally below.
+                        _fresh = _session;
+                    }
 
                     return _session;
                 }
@@ -1539,9 +1626,37 @@ public sealed class TorrentRun : IDisposable
                 // here takes the lock next, and waking it while holding the
                 // lock is how the deadlock above was built.
                 opened.TrySetResult();
+
+                // And last of all, a torrent that was already whole when it was
+                // opened. This is what a restart finds — the plugin re-adds
+                // every grab that is not done, failed or lost, and a staged or
+                // dispatched one has its files on disk, so no piece of it will
+                // ever verify again and nothing else would ever say so.
+                //
+                // After opened is set, not before: a handler does real work and
+                // may come back round to this run, and anything waiting to be
+                // told the session is open would wait on a caller that is
+                // inside the handler.
+                TorrentSession? fresh = Interlocked.Exchange(ref _fresh, null);
+
+                fresh?.AnnounceIfFinished();
+
+                // And that this run now knows what it is holding, which is what
+                // the client has been waiting for to judge the contents and the
+                // room on the disk.
+                Settled();
             }
         }
     }
+
+    /// <summary>Passes the session's one announcement up to whoever holds this run.</summary>
+    private void PassedOn() => Finished?.Invoke();
+
+    /// <summary>Passes a verified piece up to whoever holds this run.</summary>
+    private void Moved() => Progressed?.Invoke();
+
+    /// <summary>Says this run has settled what it is holding.</summary>
+    private void Settled() => Opened?.Invoke();
 
     /// <summary>A completion that is already over, for a run nobody is opening.</summary>
     private static TaskCompletionSource Done()

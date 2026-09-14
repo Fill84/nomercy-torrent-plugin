@@ -90,10 +90,7 @@ public class SettingsStoreTests : IDisposable
 
         Settings settings = await store.LoadAsync(CancellationToken.None);
 
-        Assert.Equal("* * * * *", settings.Cadences.Transfers);
-        Assert.Equal("*/15 * * * *", settings.Cadences.Feed);
-        Assert.Equal("0 */6 * * *", settings.Cadences.Search);
-        Assert.Equal("0 4 * * *", settings.Cadences.Maintenance);
+        Assert.Equal("0 * * * *", settings.Cadences.Cycle);
 
         Assert.False(settings.Profile.IncludeSpecials);
         Assert.Equal("1080p", settings.Profile.MaximumResolution);
@@ -104,8 +101,7 @@ public class SettingsStoreTests : IDisposable
 
         Assert.Equal(5, settings.Client.MaxConcurrentDownloads);
         Assert.Empty(settings.Client.DefaultTrackers);
-        Assert.Equal(51413, settings.Client.ListenPort);
-        Assert.True(settings.Client.PortMapping);
+        Assert.Equal(6881, settings.Client.ListenPort);
         Assert.Equal(0, settings.Client.MaxDownloadRate);
         Assert.Equal(0, settings.Client.MaxUploadRate);
         Assert.Equal(1.0, settings.Client.SeedRatio);
@@ -175,9 +171,6 @@ public class SettingsStoreTests : IDisposable
         Assert.Equal("1080p", settings.Profile.MaximumResolution);
         Assert.Equal(51413, settings.Client.ListenPort);
 
-        // Still a real setting at this point in the sprint: S12-06 removes the
-        // switch and changes this assertion to "ignored".
-        Assert.True(settings.Client.PortMapping);
 
         SaveResult saved = await store.SaveAsync(settings, CancellationToken.None);
         Assert.True(saved.Saved, string.Join("; ", saved.Errors));
@@ -187,6 +180,12 @@ public class SettingsStoreTests : IDisposable
         Assert.DoesNotContain("MinimumSeeders", context.Config.Written, StringComparison.Ordinal);
         Assert.DoesNotContain("SeasonPackThreshold", context.Config.Written, StringComparison.Ordinal);
         Assert.DoesNotContain("AllowSeasonPacks", context.Config.Written, StringComparison.Ordinal);
+
+        // S12-06 took the switch out. The owner's own file still carries the
+        // key — beast-unit's says PortMapping: true — so the load has to walk
+        // past it rather than refuse the file, and the save must not write it
+        // back and make it look like a setting that still does something.
+        Assert.DoesNotContain("PortMapping", context.Config.Written, StringComparison.Ordinal);
     }
 
     /// <remarks>
@@ -202,8 +201,8 @@ public class SettingsStoreTests : IDisposable
 
         Settings settings = await store.LoadAsync(CancellationToken.None);
 
-        Assert.Equal("0 4 * * *", settings.Cadences.Maintenance);
-        Assert.Equal(51413, settings.Client.ListenPort);
+        Assert.Equal("0 * * * *", settings.Cadences.Cycle);
+        Assert.Equal(6881, settings.Client.ListenPort);
     }
 
     /// <remarks>
@@ -219,18 +218,18 @@ public class SettingsStoreTests : IDisposable
         await store.SaveAsync(Writable(new Settings()), CancellationToken.None);
 
         Settings broken = Writable(new Settings());
-        broken.Cadences.Search = "0 */6 * *";
-        broken.Client.ListenPort = 6881;
+        broken.Cadences.Cycle = "0 */6 * *";
+        broken.Client.ListenPort = 6999;
 
         SaveResult result = await store.SaveAsync(broken, CancellationToken.None);
 
         Assert.False(result.Saved);
-        Assert.Contains(result.Errors, error => error.Contains("search", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(result.Errors, error => error.Contains("cycle", StringComparison.OrdinalIgnoreCase));
         Assert.Contains(result.Errors, error => error.Contains("five fields", StringComparison.OrdinalIgnoreCase));
 
         Settings stored = await store.LoadAsync(CancellationToken.None);
-        Assert.Equal("0 */6 * * *", stored.Cadences.Search);
-        Assert.Equal(51413, stored.Client.ListenPort);
+        Assert.Equal("0 * * * *", stored.Cadences.Cycle);
+        Assert.Equal(6881, stored.Client.ListenPort);
     }
 
     /// <remarks>
@@ -338,9 +337,9 @@ public class SettingsStoreTests : IDisposable
     /// <remarks>
     /// <para>
     /// <strong>The settings are read from the host once, not on every ask.</strong>
-    /// The transfers cadence runs every minute and every page draws from them,
-    /// so this is a read of data that changes only when an owner presses save,
-    /// asked for at least once a minute for as long as the plugin runs.
+    /// Every transfers pass, every cycle and every page draws from them, so this
+    /// is a read of data that changes only when an owner presses save, asked for
+    /// far more often than that for as long as the plugin runs.
     /// </para>
     /// <para>
     /// Nothing about the cost of it shows in an outcome, which is why this
@@ -412,7 +411,7 @@ public class SettingsStoreTests : IDisposable
 
         Settings wrong = Writable(new Settings());
         wrong.Client.MaxConcurrentDownloads = 9;
-        wrong.Cadences.Transfers = "not a cron";
+        wrong.Cadences.Cycle = "not a cron";
 
         Assert.False((await store.SaveAsync(wrong, CancellationToken.None)).Saved);
 
@@ -510,5 +509,75 @@ public class SettingsStoreTests : IDisposable
         // And a save with nothing to say says nothing, rather than an empty
         // string the page would draw as a blank line under the form.
         Assert.Null(new SaveResult(true, [], []).Said());
+    }
+
+    /// <remarks>
+    /// Refused where the owner saves it, with the reason, and the stored cadence
+    /// is left as it was — the same as a cron that is not a cron. The raw box
+    /// under Show advanced goes through here too, so typing one by hand is no way
+    /// round it.
+    /// </remarks>
+    [Fact]
+    public async Task ACycleMoreOftenThanHourlyIsRefusedAndChangesNothing()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+        await store.SaveAsync(Writable(new Settings()), CancellationToken.None);
+
+        Settings eager = Writable(new Settings());
+        eager.Cadences.Cycle = "*/5 * * * *";
+
+        SaveResult result = await store.SaveAsync(eager, CancellationToken.None);
+
+        Assert.False(result.Saved);
+        Assert.Contains(result.Errors, error => error.Contains("once an hour", StringComparison.Ordinal));
+
+        Settings stored = await store.LoadAsync(CancellationToken.None);
+        Assert.Equal("0 * * * *", stored.Cadences.Cycle);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The owner's own settings, as they are on beast-unit today.</strong>
+    /// They were saved with four cadences — transfers every minute, feed every
+    /// fifteen, search every six hours, maintenance at four — and the upgrade
+    /// that makes those one must load them rather than fail on them.
+    /// </para>
+    /// <para>
+    /// The retired four are not read into anything, and the cycle comes out at
+    /// its default of hourly: none of the four was ever a cadence for starting a
+    /// cycle, so carrying one of them over would be guessing which. And saving
+    /// again writes none of them back.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SettingsSavedWithFourCadencesLoadAsOneHourlyCycle()
+    {
+        FakePluginContext context = new();
+
+        context.Config.SaveConfiguration(new
+        {
+            IncompleteFolder = @"D:\incomplete",
+            IntakeFolder = @"D:\intake",
+            Cadences = new
+            {
+                Transfers = "* * * * *",
+                Feed = "*/15 * * * *",
+                Search = "0 */6 * * *",
+                Maintenance = "0 4 * * *",
+            },
+        });
+
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        Settings loaded = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal("0 * * * *", loaded.Cadences.Cycle);
+        Assert.Equal(@"D:\incomplete", loaded.IncompleteFolder);
+
+        await store.SaveAsync(Writable(loaded), CancellationToken.None);
+
+        Assert.DoesNotContain("Transfers", context.Config.Written, StringComparison.Ordinal);
+        Assert.DoesNotContain("Maintenance", context.Config.Written, StringComparison.Ordinal);
     }
 }

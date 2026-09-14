@@ -52,7 +52,15 @@ public sealed class FakePluginContext : IPluginContext
 
     IPluginSecretStore IPluginContext.Secrets => Secrets;
 
-    public IEventBus EventBus => throw NotProvided(nameof(EventBus));
+    /// <summary>The server's own bus, which the plugin listens to for encoding events.</summary>
+    /// <remarks>
+    /// A real <c>InMemoryEventBus</c> and not a stand in for one: it is the
+    /// class the media server itself uses, so a test can publish what the
+    /// encoder publishes and the plugin hears exactly what it would hear.
+    /// </remarks>
+    public InMemoryEventBus Bus { get; } = new();
+
+    public IEventBus EventBus => Bus;
 
     /// <summary>What the server would resolve types through, when a test provides one.</summary>
     public IServiceProvider? Container { get; init; }

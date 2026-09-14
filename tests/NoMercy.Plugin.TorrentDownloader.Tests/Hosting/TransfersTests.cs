@@ -644,7 +644,7 @@ public class TransfersTests : IDisposable
 
         // A server that names the job it queued, and then says it died.
         RecordingEncoder encoder = new() { JobId = "01KZGKX2G0966V80H26EKGG5T1" };
-        SayingJobs jobs = new(new(EncodeJobState.Failed, "the source file has no audio stream"));
+        SaidOfEverything jobs = new(new(EncodeJobState.Failed, "the source file has no audio stream"));
 
         Transfers transfers = new(
             engine,
@@ -920,7 +920,7 @@ public class TransfersTests : IDisposable
             grabs,
             server,
             encoder: new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
-            jobs: new SayingJobs(new(EncodeJobState.Running, null)));
+            says: new SaidOfEverything(new(EncodeJobState.Running, null)));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
@@ -994,7 +994,7 @@ public class TransfersTests : IDisposable
             grabs,
             server,
             encoder: new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
-            jobs: new SayingJobs(new(EncodeJobState.Finished, null)));
+            says: new SaidOfEverything(new(EncodeJobState.Finished, null)));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
@@ -1063,7 +1063,7 @@ public class TransfersTests : IDisposable
             server.Journal,
             server.Log,
             TimeProvider.System,
-            new SayingJobs(new(EncodeJobState.Finished, null)));
+            new SaidOfEverything(new(EncodeJobState.Finished, null)));
 
         // Staged and dispatched on the first, finished on the second.
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
@@ -1106,7 +1106,7 @@ public class TransfersTests : IDisposable
             grabs,
             server,
             encoder: new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
-            jobs: new SayingJobs(new(EncodeJobState.Finished, null)));
+            says: new SaidOfEverything(new(EncodeJobState.Finished, null)));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
@@ -1231,39 +1231,6 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
-    /// <strong>Every dispatch's job is kept, not the last one.</strong> The
-    /// column overwrote, so a pack that asked for nine encodes remembered one
-    /// of them. The plugin then asked "is the encode still running?" about one
-    /// episode out of nine, read the whole pack as finished when that one was,
-    /// and dispatched all nine a second time on top of the eight still running.
-    /// </remarks>
-    [Fact]
-    public async Task EveryEpisodeOfAPackKeepsItsOwnEncodeJob()
-    {
-        GrabRepository grabs = await Grabs();
-        await ByHand(grabs);
-
-        await grabs.CoversAsync(Hash, [new(41, 3, 6), new(41, 3, 7)], CancellationToken.None);
-
-        await grabs.EncodeJobAsync(Hash, new(41, 3, 6), "01KZGKX2G0966V80H26EKGG5T1", CancellationToken.None);
-        await grabs.EncodeJobAsync(Hash, new(41, 3, 7), "01KZGKX2G0966V80H26EKGG5T2", CancellationToken.None);
-
-        StoredDownload stored = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
-
-        Assert.Contains("01KZGKX2G0966V80H26EKGG5T1", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains("01KZGKX2G0966V80H26EKGG5T2", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
-
-        // And an episode asked for a second time carries one job, the newer.
-        await grabs.EncodeJobAsync(Hash, new(41, 3, 6), "01KZGKX2G0966V80H26EKGG5T3", CancellationToken.None);
-
-        stored = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
-
-        Assert.DoesNotContain("01KZGKX2G0966V80H26EKGG5T1", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains("01KZGKX2G0966V80H26EKGG5T2", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
-        Assert.Contains("01KZGKX2G0966V80H26EKGG5T3", stored.EncodeJobId ?? string.Empty, StringComparison.Ordinal);
-    }
-
-    /// <remarks>
     /// <strong>One episode's encode failing costs that episode and no other.</strong>
     /// It used to fail the whole grab: on 1 September 2026 episode one's encode
     /// died, the grab went with it, and the sweep then took the staged files of
@@ -1287,8 +1254,6 @@ public class TransfersTests : IDisposable
 
         await grabs.CoversAsync(Hash, [new(41, 3, 6), new(41, 3, 7)], CancellationToken.None);
         await grabs.StagedAsync(Hash, [first, second], CancellationToken.None);
-        await grabs.EncodeJobAsync(Hash, new(41, 3, 6), "dead", CancellationToken.None);
-        await grabs.EncodeJobAsync(Hash, new(41, 3, 7), "alive", CancellationToken.None);
         await grabs.StateAsync(Hash, GrabState.Dispatched, CancellationToken.None);
 
         FakeProvider server = Server();
@@ -1309,10 +1274,11 @@ public class TransfersTests : IDisposable
             server.Journal,
             server.Log,
             TimeProvider.System,
-            new PerJob(new()
+            new SaidPerEpisode(new()
             {
-                ["dead"] = new(EncodeJobState.Failed, "the source has no audio stream"),
-                ["alive"] = new(EncodeJobState.Running, null),
+                // S03E06 and S03E07, as the server numbers them.
+                [41306] = new(EncodeJobState.Failed, "the source has no audio stream"),
+                [41307] = new(EncodeJobState.Running, null),
             }));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
@@ -1352,7 +1318,6 @@ public class TransfersTests : IDisposable
 
         await grabs.CoversAsync(Hash, [new(41, 3, 6)], CancellationToken.None);
         await grabs.StagedAsync(Hash, [encoding], CancellationToken.None);
-        await grabs.EncodeJobAsync(Hash, new(41, 3, 6), "alive", CancellationToken.None);
 
         // Finished with, as far as the grab goes — which is exactly the state
         // that used to make the sweep take the file.
@@ -1364,7 +1329,7 @@ public class TransfersTests : IDisposable
             new StandingEngine(),
             grabs,
             server,
-            jobs: new SayingJobs(new(EncodeJobState.Running, null)));
+            says: new SaidOfEverything(new(EncodeJobState.Running, null)));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
@@ -1372,30 +1337,48 @@ public class TransfersTests : IDisposable
     }
 
     /// <summary>A server that answers about each job by name.</summary>
-    private sealed class PerJob(Dictionary<string, EncodeJob> standing) : IEncodeJobs
+    /// <summary>A server that has said a different thing about each media row.</summary>
+    /// <remarks>
+    /// Keyed by the media id, because that is what the server's own encoding
+    /// events carry — the row the encode registers against, which is the
+    /// episode id this plugin named when it asked. <c>FakeLibraryQuery</c>
+    /// numbers an episode <c>show * 1000 + season * 100 + number</c>, so
+    /// Silo S03E06 is 41306.
+    /// </remarks>
+    private sealed class SaidPerEpisode(Dictionary<int, EncodeJob> said) : IEncoderSays
     {
-        public Task<EncodeJob?> StatusAsync(string jobId, CancellationToken ct)
+        public EncodeJob? About(int mediaId)
         {
-            return Task.FromResult(standing.GetValueOrDefault(jobId));
+            return said.GetValueOrDefault(mediaId);
         }
     }
 
-    /// <summary>A server that says the same thing about every job.</summary>
-    private sealed class SayingJobs(EncodeJob standing) : IEncodeJobs
+    /// <summary>A server that has said the same thing about every encode.</summary>
+    private sealed class SaidOfEverything(EncodeJob said) : IEncoderSays
     {
-        public Task<EncodeJob?> StatusAsync(string jobId, CancellationToken ct)
+        public EncodeJob? About(int mediaId)
         {
-            return Task.FromResult<EncodeJob?>(standing);
+            return said;
         }
     }
 
     /// <remarks>
-    /// The backstop, for a server that cannot say. It is what every grab
-    /// dispatched by the older gateway falls back to, because that one builds
-    /// its own job and hands it to a queue that names nothing.
+    /// <para>
+    /// <strong>No clock decides an encode is lost; the library decides it has
+    /// arrived.</strong> The encoder says when it finished and when it failed. It
+    /// says nothing about a job the owner took out of the queue by hand, or one
+    /// that ended with nothing to encode — and for those this gave up after six
+    /// hours, marked the grab failed, and so put the episode back to missing to
+    /// be downloaded a second time.
+    /// </para>
+    /// <para>
+    /// The owner's ruling of 14 September 2026: the library decides. Seven hours
+    /// on with nothing heard, the grab is still waiting and nothing has been
+    /// asked twice; the pass after the library has the episode closes it.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task AnEncodeThatNeverArrivesIsGivenUpOn()
+    public async Task AnEncodeNobodyHearsAboutIsWaitedOnUntilTheLibraryHasIt()
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
 
@@ -1403,7 +1386,6 @@ public class TransfersTests : IDisposable
         await Grabbed(grabs);
 
         string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
-        string staged = Staged;
 
         StandingEngine engine = new StandingEngine().Holding(
             Finished() with { State = TorrentState.Finished },
@@ -1411,10 +1393,6 @@ public class TransfersTests : IDisposable
 
         FakeProvider server = Server();
 
-
-        // One instance across both ticks, as the plugin keeps one: how long an
-        // encode has been waited on is held in memory, and a restart is a good
-        // enough reason to start that clock again.
         Transfers transfers = Transfers(engine, grabs, server, clock: clock);
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
@@ -1423,14 +1401,23 @@ public class TransfersTests : IDisposable
             GrabState.Dispatched,
             Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
 
-        // Six hours later the library still does not have it.
-        clock.Advance(TimeSpan.FromHours(6));
+        // Seven hours later nothing has been heard and the library does not
+        // have it yet.
+        clock.Advance(TimeSpan.FromHours(7));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+        Assert.Equal(
+            GrabState.Dispatched,
+            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+        Assert.Equal(1, server.Encoder.Dispatches);
 
-        // Once, and not dispatched again on the way out.
+        // And then it does.
+        Transfers arrived = Transfers(engine, grabs, server, encoded: true, clock: clock);
+
+        await arrived.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
         Assert.Equal(1, server.Encoder.Dispatches);
     }
 
@@ -1540,20 +1527,20 @@ public class TransfersTests : IDisposable
 
     /// <remarks>
     /// <para>
-    /// <strong>An encode dispatched before a restart is asked for once
-    /// more.</strong> The owner's queue was empty while eleven grabs sat
-    /// waiting on jobs the encoder had already thrown away, and the plugin
-    /// cannot see the queue to tell a job that died from one still running.
+    /// <strong>An encode dispatched before a restart is not asked for
+    /// again.</strong> The server's queue outlives a restart, and the job it
+    /// holds says what became of it when it runs. Asking a second time put a
+    /// second job in that queue for every grab that was waiting — on
+    /// 14 September 2026 the owner restarted the server and found the encoder
+    /// busy with episodes it had already been asked for.
     /// </para>
     /// <para>
-    /// Waiting six hours and then giving up would put the episode back to
-    /// missing and download it a second time, with the file already staged the
-    /// whole time. So it is asked for again on the first tick after a start,
-    /// and then waited on properly.
+    /// A fresh instance, as a restart gives, and two passes over the grab the
+    /// run before left dispatched: nothing is sent, and it is still waiting.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AnEncodeDispatchedBeforeARestartIsAskedForOnceMore()
+    public async Task AnEncodeDispatchedBeforeARestartIsNotAskedForAgain()
     {
         GrabRepository grabs = await Grabs();
         await Grabbed(grabs);
@@ -1568,19 +1555,16 @@ public class TransfersTests : IDisposable
         FakeProvider server = Server();
 
 
-        // A fresh instance, as a restart gives: how long an encode has been
-        // waited on is held in memory and nowhere else.
+        // A fresh instance, as a restart gives.
         Transfers transfers = Transfers(new StandingEngine(), grabs, server);
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
-
-        Assert.Equal(1, server.Encoder.Dispatches);
-
-        // Once, and then waited on: this is recovery from a restart, not a
-        // second chance on every tick.
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Equal(1, server.Encoder.Dispatches);
+        Assert.Equal(0, server.Encoder.Dispatches);
+        Assert.Equal(
+            GrabState.Dispatched,
+            Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
@@ -1699,7 +1683,7 @@ public class TransfersTests : IDisposable
         bool encoded = false,
         bool owned = true,
         TimeProvider? clock = null,
-        IEncodeJobs? jobs = null,
+        IEncoderSays? says = null,
         IEncodeGateway? encoder = null,
         IShowImport? imports = null)
     {
@@ -1728,7 +1712,7 @@ public class TransfersTests : IDisposable
             server.Journal,
             server.Log,
             clock ?? TimeProvider.System,
-            jobs,
+            says,
             imports);
     }
 

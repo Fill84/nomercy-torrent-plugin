@@ -46,8 +46,7 @@ public class ClientLimitsTests
         ClientLimits limits = new();
 
         Assert.Equal(5, limits.MaxConcurrentDownloads);
-        Assert.Equal(51413, limits.ListenPort);
-        Assert.True(limits.PortMapping);
+        Assert.Equal(6881, limits.ListenPort);
         Assert.Equal(0, limits.MaxDownloadRate);
         Assert.Equal(0, limits.MaxUploadRate);
         Assert.Equal(1.0, limits.SeedRatio);

@@ -55,15 +55,49 @@ public static class SettingsEdit
     {
         List<string> problems = [];
 
-        foreach ((string name, string? value) in fields)
+        foreach ((string name, string? value) in fields.Where(field => field.Key.StartsWith(SourcePrefix, StringComparison.Ordinal)))
         {
-            if (!Known.TryGetValue(name, out Field? field))
+            // One switch per shipped source, so the names cannot be listed here
+            // the way every other setting is: they are the catalogue's, and the
+            // catalogue is a file that ships beside the assembly. The prefix is
+            // the contract instead.
+            //
+            // Off is the thing recorded. The list holds what the owner turned
+            // off, so a source nobody has touched is absent from it - which is
+            // what makes every source on by default, including one added by a
+            // later version that no stored list could have known about.
+            string source = name[SourcePrefix.Length..];
+
+            if (Flag(value ?? string.Empty))
             {
-                // Named, never ignored. A field silently skipped is one the
-                // owner filled in, watched save, and believes took effect.
-                problems.Add($"There is no setting called '{name}'.");
-                continue;
+                settings.DisabledDefaultSources.RemoveAll(one =>
+                    string.Equals(one, source, StringComparison.OrdinalIgnoreCase));
             }
+            else if (!settings.DisabledDefaultSources.Any(one =>
+                         string.Equals(one, source, StringComparison.OrdinalIgnoreCase)))
+            {
+                settings.DisabledDefaultSources.Add(source);
+            }
+        }
+
+        foreach (string name in fields.Keys.Where(name =>
+                     !Known.ContainsKey(name) && !name.StartsWith(SourcePrefix, StringComparison.Ordinal)))
+        {
+            // Named, never ignored. A field silently skipped is one the owner
+            // filled in, watched save, and believes took effect.
+            problems.Add($"There is no setting called '{name}'.");
+        }
+
+        // In a decided order, not the order they happened to arrive in. A speed
+        // is drawn as a preset list and a box beside it, so a form posts both
+        // keys for the same setting — and whichever was written last won, which
+        // in a dictionary is whatever the caller built it in. An override is
+        // applied after the preset it overrides, always.
+        foreach ((string name, Field field) in Known.Where(known => fields.ContainsKey(known.Key))
+                     .OrderBy(known => Overrides(known.Key) ? 1 : 0)
+                     .Select(known => (known.Key, known.Value)))
+        {
+            string? value = fields[name];
 
             try
             {
@@ -87,18 +121,13 @@ public static class SettingsEdit
             settings => settings.IntakeFolder,
             (settings, value) => settings.IntakeFolder = value.Trim()),
 
-        ["cadences.transfers"] = new(
-            settings => settings.Cadences.Transfers,
-            (settings, value) => settings.Cadences.Transfers = value.Trim()),
-        ["cadences.feed"] = new(
-            settings => settings.Cadences.Feed,
-            (settings, value) => settings.Cadences.Feed = value.Trim()),
-        ["cadences.search"] = new(
-            settings => settings.Cadences.Search,
-            (settings, value) => settings.Cadences.Search = value.Trim()),
-        ["cadences.maintenance"] = new(
-            settings => settings.Cadences.Maintenance,
-            (settings, value) => settings.Cadences.Maintenance = value.Trim()),
+        // One, where there were four. Transfers, feed, search and maintenance
+        // are not four schedules: they are the steps of one cycle, each started
+        // by the last one finishing, and the only question left to ask is how
+        // often to start one when nobody has.
+        ["cadences.cycle"] = new(
+            settings => settings.Cadences.Cycle,
+            (settings, value) => settings.Cadences.Cycle = value.Trim()),
 
         ["profile.maximumResolution"] = new(
             settings => settings.Profile.MaximumResolution,
@@ -122,9 +151,6 @@ public static class SettingsEdit
         ["client.listenPort"] = new(
             settings => Text(settings.Client.ListenPort),
             (settings, value) => settings.Client.ListenPort = Whole(value)),
-        ["client.portMapping"] = new(
-            settings => Text(settings.Client.PortMapping),
-            (settings, value) => settings.Client.PortMapping = Flag(value)),
         ["client.maxDownloadRate"] = new(
             settings => Text(settings.Client.MaxDownloadRate),
             (settings, value) => settings.Client.MaxDownloadRate = Long(value)),
@@ -149,7 +175,55 @@ public static class SettingsEdit
         ["client.encryption"] = new(
             settings => settings.Client.Encryption.ToString(),
             (settings, value) => settings.Client.Encryption = Policy(value)),
+        ["client.resumeIntervalSeconds"] = new(
+            settings => Text(settings.Client.ResumeIntervalSeconds),
+            (settings, value) => settings.Client.ResumeIntervalSeconds = Whole(value)),
+
+        // The boxes beside the preset lists, in megabytes a second because that
+        // is the unit on the label. Declared after the byte keys and applied
+        // after them, so what the owner typed wins over what the list offered.
+        ["client.maxDownloadRateMb"] = new(
+            settings => string.Empty,
+            (settings, value) => settings.Client.MaxDownloadRate =
+                Megabytes(value) ?? settings.Client.MaxDownloadRate),
+        ["client.maxUploadRateMb"] = new(
+            settings => string.Empty,
+            (settings, value) => settings.Client.MaxUploadRate =
+                Megabytes(value) ?? settings.Client.MaxUploadRate),
     };
+
+    /// <summary>What a switch for one shipped source is called.</summary>
+    /// <remarks>
+    /// A prefix rather than a name in <c>Known</c>: there is one per entry of a
+    /// catalogue that ships as a file, so the set is not known at compile time.
+    /// </remarks>
+    public const string SourcePrefix = "source.";
+
+    /// <summary>Whether a field overrides another and must therefore be applied after it.</summary>
+    private static bool Overrides(string name)
+    {
+        return name.EndsWith("Mb", StringComparison.Ordinal);
+    }
+
+    /// <summary>
+    /// Megabytes a second as bytes a second, or null where nothing was typed.
+    /// </summary>
+    /// <remarks>
+    /// Blank is not nought. Nought is unlimited and the preset list is what says
+    /// it; an empty box means the owner left the box alone and the preset is
+    /// the answer.
+    /// </remarks>
+    private static long? Megabytes(string value)
+    {
+        string typed = value.Trim();
+
+        if (typed.Length == 0)
+        {
+            return null;
+        }
+
+        return (long)(double.Parse(typed, CultureInfo.InvariantCulture) * 1024 * 1024);
+    }
 
     /// <summary>
     /// A tick, however the thing that sent it spells one.

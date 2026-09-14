@@ -132,7 +132,7 @@ public class HardeningTests : IDisposable
 
         await stopped.CancelAsync();
 
-        await plugin.ExecuteAsync(JobNames.Search, stopped.Token);
+        await plugin.RunCycleAsync(stopped.Token);
 
         // Nothing about the cycle. The listen port may be held by another test
         // running beside this one, and the client saying so is not this
@@ -157,7 +157,7 @@ public class HardeningTests : IDisposable
         using TorrentDownloaderPlugin plugin = Initialised();
 
         await Configure(plugin);
-        await plugin.ExecuteAsync(JobNames.Search, CancellationToken.None);
+        await plugin.RunCycleAsync(CancellationToken.None);
 
         // Named, not counted. Another test may already hold the listen port, and
         // the client says so in the same journal — asserting this was the only
@@ -209,7 +209,7 @@ public class HardeningTests : IDisposable
 
         await plugin.Settings.SaveAsync(settings, CancellationToken.None);
 
-        Task tick = plugin.ExecuteAsync(JobNames.Feed, CancellationToken.None);
+        Task tick = plugin.RunCycleAsync(CancellationToken.None);
 
         Assert.Same(tick, await Task.WhenAny(tick, Task.Delay(TimeSpan.FromSeconds(30))));
 

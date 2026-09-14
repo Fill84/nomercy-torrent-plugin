@@ -4,159 +4,309 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**`S12-01` is next.** The settings and the pages, rebuilt: the owner's decisions of 12 September
-2026, designed in `docs/plan/DESIGN-2026-09-12-settings-and-pages.md` and approved that day. Eight
-slices, `S12-01` to `S12-08`, in order — the removals first, because every page change after them is
-smaller for it. Nothing in sprint 12 is started.
+**Next: a server stop is not a failed encode.** Stopping the server during encodes made it publish
+`EncodingFailedEvent` for each one (`ActivityLogs`, 14 September 2026, 12:36:00–12:36:05 UTC); after
+the restart the queued jobs failed with "Input file not found" in the intake folder. Find out what the
+plugin did with those reports — failed the grab, swept the staged file, put the episode back to
+missing — and what it should do. Then look on beast-unit whether a cycle closes and maintenance runs.
 
-**`S11-41` is built and green locally, not deployed.** One release under two hashes: both start,
-the first to finish is kept, the other is stopped and its files deleted. Nothing is pushed and no
-release is made until the owner has checked everything and says so.
+**`S12-10` to `S12-17` and the fix below are seen working on beast-unit and committed** — the owner's
+word on 14 September 2026, "alles klaar van S12". **The version is 0.5.0**, with
+`docs/releases/0.5.0.md` and `README.md` brought up to what landed since 0.4.1, on the owner's word
+that it may go in if it is 0.5.0. No tag and no artefact: releasing is the owner's call.
 
-**`S11-40` is built and green locally and waits on a deploy and a live run.** The first live run
-of `S11-39` on 11 September 2026 showed the sources were not asked, names went out as loose words,
-Stop looked like a pause and the dashboard said too little; `S11-40` is the owner's answer to all
-of it. Then the same live run as below, plus: Stop clears the page and closes Chrome, the next Run
-starts at the top, and every question shows under its episode.
+**Found on beast-unit on 14 September 2026 and fixed, not yet seen there: an encode is never asked
+for twice, and no clock gives up on one.** After a restart `Transfers` asked again for every grab
+waiting on an encode, so the server's queue — which had kept the first job — held two. And six hours
+without the library having the episode failed the grab and put the episode back to missing. The
+server says nothing about a job taken out of the queue by hand or one that ends with nothing to
+encode, so the owner ruled that the library decides: a waiting grab closes on the pass that finds its
+episode, and `LibraryScanCompletedEvent` now starts a transfers pass as well as a cycle.
+`Transfers.Patience` and the in-memory clock are gone. Tests, each seen red first:
+`AnEncodeDispatchedBeforeARestartIsNotAskedForAgain`, `AnEncodeNobodyHearsAboutIsWaitedOnUntilTheLibraryHasIt`
+(both replacing tests that pinned the old behaviour) and
+`TheServerFinishingAScanClosesAGrabWhoseEpisodeHasArrived`. `01-plugin.md` and `09-host-contract.md`
+§ What became of the job say so.
 
-**`S11-39` is committed and deployed to `beast-unit`, and waits on one live run.** The audit of
-10 and 11 September 2026 — `docs/plan/AUDIT-2026-09-10.md` — and everything the owner asked for
-during it. The owner's instruction: once a live run on their server is green, push and release
-`v0.5.0`. Until then nothing is pushed. What that run has to show, and nothing less: the warm-up
-on the dashboard and Chrome gone after it; a source asked about an episode with the owner's
-quality and answering with a release name; that name put whole to every indexer; the merge
-carrying every tracker; and a download starting the moment its episode is decided.
+**`S12-17` is done and green, and it found that the chain was not joined.**
 
-Not audited yet, and the owner asked for the whole chain: reading the library and working out
-what is missing, the torrent client itself, staging, and dispatch.
+**The finding that matters most: `BittorrentEngine.Completed` had no listener.** `S12-12` raised it
+where a download really finishes and proved it raised; `Transfers` staged a finished download and was
+proved to; and nothing in the plugin listened to the one to start the other. The transfers job ticking
+every minute had been joining them, and `S12-15` removed that job — so from `S12-15` a finished
+download would have sat in the incomplete folder for ever. Every link had a test and the chain had
+none. Found while reading why `InitializeTouchesNoDisk` had started failing, not by any test.
 
-**Current: nothing. Sprint 11 is finished.** Every slice is ticked, and `S11-05` — the end-to-end
-run watched on the owner's own server — was a forty-five gigabyte pack for a show the owner did not
-have, which went from a pasted magnet to eight episodes in the library with nobody pressing
-anything. What is left is not this repository's: media-server #38, and a version and a tag, which
-are the owner's to give. `docs/plan/SPRINTS.md` § Sprint 11 opens with a
-correction it is built on, and it is the one thing to read before starting: **the encode job does
-not add a show.** `PluginEncoder` puts `mediaId` straight into `VideoEncodeJob.Id`, and
-`GetFileMetaData` resolves that against `Movies.Id` or `Episodes.Id` and nothing else — so a show id
-matches nothing, a null matches nothing, and the job returns having done no work while the queue
-records it finished. Adding a show is `ShowImportJob` and nothing else, and that is the server's to
-dispatch. Read against contract `0.1.481`.
+**And nothing started the client after a restart.** It is built on first use, and the transfers job
+was what used it first — so it was also what put back every download that had been running. Now the
+server's own `PluginLoadedEvent`, which it publishes after `Initialize`, starts what a start owes: the
+housekeeping once, one transfers pass (which re-adds every open grab, and one whole on disk says so as
+it opens), and the clock. The host's hourly tick asks too, for a server that never says it loaded;
+each part runs once. `Initialize` itself still does no I/O.
 
-**S10-09 is done but for its version and its tag, and those are the owner's to give.**
+**`TheChainIsJoinedTests` goes through the plugin as the server loads it, and each was seen to fail
+with its one join removed:**
 
-**Library membership is not the rule, and the attempt is worth reading before anyone tries a third
-time.** On 31 August 2026 `Ownership.Theirs` was changed from "has a file" to "is in a library", on
-the grounds that media-server #34 and #36 had closed and the rows nobody asked for were gone. The
-check that said so asked the wrong table: `LibraryTv` holds fifty-five shows and every one has a
-file, but the plugin reads membership from `Tvs.LibraryId`, which holds sixty-seven. The twelve in
-between are exactly those rows. Within a minute of the plugin starting, the owner saw it offering to
-fetch every episode of The Simpsons — a folder, eight hundred and eighty-seven episodes, not one
-file. It was undone the same hour.
+| Test | The join |
+| --- | --- |
+| `AFinishedDownloadIsStagedWithoutAnythingAsking` | `engine.Completed` → a transfers pass → staged |
+| `ADownloadThatFinishedWhileTheServerWasDownIsStagedOnStart` | `PluginLoadedEvent` → start-up → recovery → staged |
+| `TheServerSayingAnEncodeEndedClosesTheGrab` | `EncodingCompletedEvent` → a pass → the grab done, the staged copy gone |
+| `TheCadenceStartsACycleWithNothingElseAsking` | the clock → `Trigger` → a cycle that finishes and is written down |
+| `APushNobodyAnswersStopsThePluginWatchingForThem` | a push → `Onlookers.Told` → nobody answers → not watched |
+| `NothingIsStartedUntilTheServerSaysThePluginHasLoaded` | `Initialize` touches no disk and says nothing |
 
-What #34 and #36 gave is a newly added show being visible, which is not the same as a way to tell a
-show the owner added from a row the server made. Until there is one, having a file is the rule.
+Not joined by a test of their own, and proved only in their parts: the heartbeat starting and stopping
+with `Onlookers` when a client exists, and `BittorrentEngine.Stirred` waking a resting watch. Both are
+one line each; say so rather than claim more.
 
-**Nothing on the way to an encode reflects.** `EncodeDispatch.cs` is deleted — 588 lines that
-named `IJobDispatcher`, `VideoEncodeJob`, `MediaContext` and `IFileListService` by hand because
-there was no other way to ask. It broke four times on server changes it could not see coming, and
-those four are why media-server #30 and #35 were opened.
+**Two more faults of `S12-15`/`S12-16`, found by this slice.**
 
-**One file reflects, and it adds a show the way the dashboard does.** `Hosting/ShowImport.cs` asks
-`IInboxMetadataProbe.SearchTvAsync` which show a torrent names and dispatches
-`DispatchJob<ShowImportJob>(id, libraryId)` for it — the same call *Add content* makes, and the only
-thing anywhere that puts a show in a library. The contract offers no way to ask a provider anything
-or to queue one of the server's jobs, so there is nothing else to call. It is the only place in
-`src/` that names a server type not in `NoMercy.Plugins.Abstractions`.
+- **A request for a transfers pass during one was dropped.** The pass running had read the client
+  before a download finished a moment later, so that download would have waited for the next event.
+  Now the pass goes round once more, and a request that lands while the guard is being let go starts
+  its own.
+- **`CycleAsync` let the guard go even when its caller held it**, so between the two releases a search
+  for one episode could take the guard and have it let go under it. It lets go only what it took.
+- **A page drew a stale rate that the heartbeat never corrected.** A rate is measured between two
+  readings, and with nobody looking the client can go unread for hours, so a page opened after that
+  drew the average over those hours. `S12-16` took the first beat as a baseline, the beats after it
+  agreed with it, and a stalled torrent went on showing a speed it had not had for an hour. The
+  heartbeat now compares with what the page was drawn with (`Heartbeat.Shown`), and the first beat puts
+  it right. `APageDrawnWithAStaleRateIsPutRightByTheFirstBeat` was seen to fail against the old code.
 
-The encode is asked for through `IPluginEncoder` with the server's own episode id, what became of a
-job is asked through `IPluginJobs`, library membership is the rule for whose show it is, folders are
-chosen rather than typed, and a folder that cannot be written names the places the server can. That
-is every one of the five closed media-server issues, except writing through `IPluginStorage`, which
-cannot be adopted while the encode is asked for with an absolute path.
+**The cadence is never more often than hourly** — the owner's ruling of 13 September 2026, because
+every cycle searches every indexer and a trigger during an open cycle adds another search. The list
+offers every hour, 6 hours, 12 hours and once a day; a typed expression is held to the same floor.
+`Cron.AtMostHourly` is exact rather than sampled: a cron fires at most once an hour precisely when its
+minute field is a single number. **The owner's settings saved with four cadences load as one hourly
+cycle** — the host deserialises case-insensitively and ignores what it does not know —
+`SettingsSavedWithFourCadencesLoadAsOneHourlyCycle`.
 
-A server without the contract is told so, once, and needs `0.1.479` or newer.
+**Six engine tests read a deadline's result straight after advancing a fake clock, and failed about
+once in seven.** `FakeTimeProvider.Advance` fires due timers on its own thread unless another thread is
+already waking timers on the same clock — and the announce loop sets its own on it — in which case the
+deadline runs on that other thread and the test reads before it is written. Before `S12-13` expiry ran
+inside `StatusAsync` on the test's thread, so it never showed. They wait for the result now, bounded;
+thirty runs of the engine tests without a failure afterwards, and three full runs. Proved by
+diagnostics that the deadline fired late rather than never? No — logging hid it. The mechanism is the
+one that fits every observation, and the fix is correct whichever thread runs the timer.
 
-Nothing here is released. The version says `0.3.18`, and it moves when the owner says so.
+**Every living document says one cycle:** `docs/01-plugin.md` § One cycle, driven by events replaces
+§ The four cadences; `02`, `03`, `04`, `06` (a new § Nothing is done on asking), `08` and `10` are
+corrected, and so is every code comment that said something about a transfers tick or four cadences
+that is no longer true. History — the audits, closed slices and release notes — is left as it was
+written. `SPRINTS.md` marks `S12-10`'s steps as superseded and lists `S12-11` to `S12-17` with the
+test that proves each.
 
-**What 0.3.9 is: the chain closed, and the audit closed with it.** On 25 August 2026 Sugar S02E04
-was downloaded, staged, dispatched with its own episode id and encoded into the owner's library at
-22:33 — the first episode this plugin has delivered end to end. `docs/plan/AUDIT-0.3.9.md` is a full
-read of the source made the same day, and Sprint 10 closed all eleven of its findings. **Not one of
-them changed what the plugin does**: each removed work, moved a rule to one place, or put a seam
-where the next change already lands.
+**`S12-16` is done and green. The pages are told only while somebody is looking.** The owner's rule of
+13 September 2026: "alleen als een pagina open staat, en alleen bij echte verandering". Every push makes
+`PluginScreen.vue` fetch the whole view over HTTP, so a running download was a page load a second per
+open tab — and the same work pushed to nobody on a server with no tab open.
 
-What that came to: the rule for whose show it is written once instead of twice; a tick that asks the
-library each question once instead of eight times; a database that prepares its file once a run
-instead of 21,600 times a day; every piece of periodic housekeeping in the cadence named for it;
-nothing in `Ui` that no page draws; and the encode behind a port, so the day the contract lands is
-an addition rather than surgery.
+**The hub cannot say who is watching; a fetch can.** `PluginHub.Subscribe` adds a connection to
+`plugin:{ulid}` and tells the plugin nothing. `Onlookers` knows without asking, from three things that
+happen:
 
-**What 0.3.9 is not.** It still reaches into the server by name — five types, in one file. It still
-decides a show is the owner's by whether it has a file on disk, which makes a show just added
-invisible. Both are known, both are written down, and both are waiting on the media server.
+| What happened | What it means |
+| --- | --- |
+| A page was fetched (`GetViewAsync`) | Somebody is looking |
+| A push went unanswered for fifteen seconds | Nobody is — the tab was closed |
+| Ten minutes with nothing to push | The watch rests, and the client doing anything wakes it (`S11-29`) |
 
-**0.4.0 is not a date.** It is the version where this plugin stops reaching into the server by name,
-and it waits on media-server #30, #34, #35, #36 and #37 — none of them this repository's to close.
-S10-06 and S10-01 exist so that day is two additions rather than surgery. **S10-09**, and only when
-the owner asks.
+A page that is open fetches itself on every push, so the push is its own probe. Two one-shot timers
+measure the two stretches; neither repeats.
 
-**0.3.9 is on both forges, built by CI from the tag.** The same package, the same bytes, published
-by `.forgejo/workflows/build.yml` on the `v0.3.9` tag — forgejo builds it and writes the release to
-forgejo and to GitHub. Nothing about a release is made by hand any more.
+**The heartbeat was still a timer going off every second for the life of the server.** `S12-10` gated
+what a beat *did* on whether a torrent was held, and that stopped the work and not the waking. It beats
+only between `StartBeating` and `StopBeating` now, and those follow `Onlookers`. And **the first beat
+after a page opens is a baseline that pushes nothing**: the page was fetched a moment ago and already
+shows what is true, so pushing what it shows would be exactly the empty push the owner asked to be rid
+of. `TheFirstBeatAfterAPageOpensPushesNothing` fails on nothing else.
 
-Getting the first CI this repository has ever had to green found four faults, three of them real:
-`fetch-abstractions.sh` packed two of the contract's four packages and defaulted to a branch pinned
-at a version that never moves — both invisible on a machine whose `_nupkgs` was already warm;
-`EpisodeName` asked the operating system which characters a file name may not carry, so a Linux
-server wrote names no Windows client could open; and the workflow's own `on.push` carried
-`branches: ['**']` beside `tags: ['v*']`, which ran on every branch and silently never fired for a
-tag, so a tag could be pushed with CI green and no release built anywhere.
+**`BittorrentEngine.Stirred`** is raised when the client settles a torrent, finishes one, decides a
+deadline, or verifies pieces — the last on the stall deadline's own debounce, a few times a stall limit,
+because a torrent at ten megabytes a second verifies several pieces a second. It is what wakes a resting
+watch: a page open over a torrent that stood still for ten minutes is the page somebody was staring at
+when it starts again. It does not bring back a page that failed to answer.
 
-**The branch is `master`.** The refactor was `full-clean-refactor` until 25 August 2026; the old
-plugin's `master` is kept by the `v0.2.0` tag alone, which is what a tag is for.
+**Named `StartBeating`/`StopBeating` because of a guard, not a preference.**
+`TheBrowserOutlivesItsTabsTests.OnlyTheBrowserItselfStopsTheBrowser` searches every source file for
+`.Stop();`, because the clearance was once lost to somebody stopping the browser for a reason nobody
+wrote down. `_heartbeat?.Stop();` tripped it. The rule is a real one, so the names changed and the guard
+did not.
 
-**Still to do, and neither is this repository's code.** Forgejo does not push refs to GitHub by
-itself — a push mirror has to be set on the repository, or the two only stay level because a person
-pushes to both. And the plugin has never been built or run on Linux beyond CI.
+**`S12-15` is done and green. There is one cycle, and no cadence drives the work.** The owner's model
+of 13 September 2026, in their own words:
 
-**0.3.9 was published on GitHub by hand first**: `NoMercy.Plugin.TorrentDownloader-0.3.9.zip`, on the owner's ask of
-25 August 2026. **Not yet on forgejo, which is where the releases live** — see the S10-08 entry. The `v0.4.0` tag that stood in the way is gone. It named `ecc0241` of 21 August — 74 commits behind,
-older than every fix of the week that followed, and never published as a release; only `v0.1.0` ever
-was.
+> feed → feed klaar → search → downloads direct starten → download klaar → verplaatsen → encode job
+> dispatchen → volledige run klaar → maintenance.
 
-The section below is what was true **before 25 August 2026**, and is kept because it is what the
-proving looked like. Read it as a record, not as a statement of what holds now: the encode it says
-has never happened has since happened, and the library rule it lists as done was reverted.
+| Was | Is |
+| --- | --- |
+| Four cadences: transfers `* * * * *`, feed `*/15`, search `0 */6`, maintenance `0 4` | One setting — how often to start a cycle when nobody has, hourly by default |
+| A tick decided which of the four were due | Three things start a cycle: the Run button, `LibraryScanCompletedEvent`, and the owner's cadence |
+| A cadence tick during a cycle was dropped | A trigger during an open cycle is **added to it** — what the open cycle already took is written down as it takes it, so the feed and search it runs again exclude those by themselves |
+| Maintenance ran at four in the morning whatever was downloading | Maintenance runs when there is nothing left in hand, and only then |
 
-**Everything up to staging is proved on the owner's own server. The step the plugin exists for —
-asking the encoder, and knowing what became of that — has never once succeeded there.**
+**Running means the whole cycle now**, not the searching half — the owner's ruling, and the Run
+button is refused until maintenance has run. **In hand** is what the client is really holding and
+what is waiting on an encode, also the owner's ruling: a grab written down but never started does not
+hold a cycle open, because one that stuck would hold it open for ever.
 
-Between 22 and 24 August 2026 the plugin ran on `beast-unit` through several restarts and the whole
-of the chain was watched rather than trusted. It picks the right release, refuses what it should,
-downloads at full speed, stages the episode into the intake folder, and gives nothing back to a
-public swarm. Twenty-three grabs reached `done`, the first that had ever existed.
+**The host is still told to tick this plugin, and that tick starts nothing.** The contract has no way
+to decline — a plugin whose `Jobs` is empty is registered under its single `CronExpression` instead —
+so it is declared hourly and does one thing: makes sure the plugin's own clock is wound. The clock is
+what starts a cycle, and it is **set to the moment the next one is due** rather than woken to ask
+whether one is. That is why the owner's cadence takes effect the moment they save it: a host reads a
+plugin's schedule when the plugin loads and never asks again, which is what the owner found on
+3 September 2026 when they changed a cadence and watched the old one go on firing.
 
-What is proved on real data:
+**The four retired names are still answered to and start nothing.** The host removes a plugin's jobs
+by the names the loaded instance declares, so an upgrade can leave the previous four registrations in
+the queue with nothing to take them out. Thrown at, that would be four stack traces an hour in the
+owner's log. `ATickUnderAnOldJobNameIsStillAccepted` covers all four.
 
-- The right release, from the name sources rather than an indexer's rendering.
-- h265, 2160p and foreign audio refused, each with a reason on the Skipped page.
-- A 1.2 GB executable named after an episode **refused before a byte of it was fetched**.
-- Downloads at 7.2 MB/s where they had sat at nought, and no upload at all on a public torrent.
-- Five faults that each alone stopped the episode ever reaching the library, all found by watching:
-  the stager asking for a share mode Windows refuses while the client holds the file; the delete
-  afterwards counted as a failure of the copy; a multi-file torrent's video looked for in the wrong
-  folder; the encode dispatch resolving an ambiguous overload and writing a string into a `Ulid`;
-  and the resume file that was read on every start and written by nothing at all, so every restart
-  re-downloaded everything.
+**Removed as dead:** `StartDueCadences`, `TickDueCadencesAsync`, `TickDueCadencesGuardedAsync`,
+`RunFeedAsync`, `RunSearchAsync`, `RunMaintenanceAsync`, `RunCadenceAsync`, `Clock.DueAsync`, the
+unused `_maintenanceRunning` guard, `JobNames.TransfersCron`/`FeedCron`/`SearchCron`/`MaintenanceCron`
+and three of the four `Cadences` fields. Migration `012-one-cadence.sql` clears the rows the retired
+cadences left behind — a last-finished time for work that has no schedule reads as a setting somebody
+forgot to wire up. `ClockTests` was rewritten against `NextAsync`, which is what the plugin uses;
+its three rules survive, including the one this all turns on — a saved cadence takes effect without a
+restart.
 
-**What has never happened: one `encode dispatched` on the real server.** That is the whole of what is
-left. Sprint 9's other five slices are done — the contract moved to the released version, the
-buttons live in the table row, every show in a library was put in scope whatever it had on disk
-(**reverted the same afternoon — see S9-03 and § Decisions**), an episode left in the intake folder
-is dispatched anyway, and a torrent still seeding is not cleared up under it.
+**Found by running, not by reading:** nothing wrote down that a cycle had finished, and the clock's
+record of the last finish is what the next one is timed from. A cycle would have come round again
+immediately, for ever. `OneCycleRunsEveryStepAndSaysWhenItFinished` fails on nothing else.
 
-Until one episode has gone from missing to in the library with nothing done by hand, 0.4.0 does not
-go out.
+**`S12-14` is done and green. The encoder is heard now, never asked.** `Transfers.StandingAsync`
+called `IEncodeJobs.StatusAsync` once per job, per grab, on every transfers tick — nine questions a
+minute for one season pack, for as long as its encodes took, and the cadence was a minute so a
+finished encode was not noticed much later than it happened. `EncoderSays` subscribes to the media
+server's own `EncodingStartedEvent`, `EncodingCompletedEvent` and `EncodingFailedEvent`, and its
+saying so is what starts the staging, the deleting and the marking done.
+
+**It listens from the moment the plugin is loaded**, not from its first transfers pass. That was the
+first shape and it was wrong: a restart part way through an encode is exactly when the event matters
+and exactly when no pass has run, and a listener is only worth anything for having been listening.
+`TorrentDownloaderPluginTests.TheServerSayingAnEncodeIsDoneReachesThePlugin` fails on nothing else.
+
+**Matched on the media id, and getting that wrong would have failed silently for ever.**
+`EncodingCompletedEvent.JobId` is not a job id: `VideoEncodeJob` sets it from `fileMetadata.Id`,
+which is `movie?.Id ?? episode!.Id` — the row the encode registers against, and the same id this
+plugin names when it asks. The id the plugin gets *back* is `QueuePayloadHash.For(payload)`, chosen
+deliberately because a queue row id is not stable: a finished job is deleted and a failed one is
+rewritten under a new identity. The two never matched and never could.
+
+**So the stored job id is gone, and so is the column.** Nothing read it once the lookup was by media
+row, and `EncodeAsk.JobId` with it — kept, it would be a field nobody reads that looks exactly like
+the one to match an event on. Migration `011-drop-encode-job.sql` takes the column. Removed entire:
+`IEncodeJobs`, `HostEncodeJobs`, `EncodeGateway.JobsOf`, `GrabRepository.EncodeJobAsync`,
+`StoredDownload.EncodeJobId`, `Transfers.Named`. `EncodeJob` and `EncodeJobState` survive in
+`IEncoderSays.cs`, less `EncodeJobState.Unknown`: nothing can be unknown now, because nothing is
+asked. Null means nothing has been said, which is not "finished" — a pack is deleted on that answer,
+and where nothing has been said the library is the proof and is the stronger of the two anyway.
+
+**One test went with the column.** `EveryEpisodeOfAPackKeepsItsOwnEncodeJob` proved that one
+episode's job did not overwrite another's in a shared column. There is no shared column: the lookup
+is per media row, so the rule it protected cannot be broken. What it was really guarding —
+`AFailedEncodeCostsItsOwnEpisodeAndNoOther` — is still there and still bites.
+
+**`StoreTests.AnEpisodeGivenUpOnComesBackAsMissing` needed a line.** It rolls `user_version` back to
+8 so `009` runs again, which runs `011` again with it — and SQLite has no `DROP COLUMN IF EXISTS`, so
+the state it pretends to be in has to include the column.
+
+**`S12-13` is done and green, and it is the one that had to come first.**
+`BittorrentEngine.StatusAsync` was not a read. It was the client's entire housekeeping — `Expire`,
+`Stalled`, `Seeded`, `Queue` and the resume write — hidden inside the method the pages call to draw a
+table, and nothing else called any of them. So the real reason `TransfersCron` was `* * * * *` was
+never transfers: without a tick a minute the client stopped expiring magnets, noticing stalls,
+noticing completions, obeying its own concurrency limit and writing resume files. **Taking the cron
+away before this would have broken the client.**
+
+Each of the five now runs when its own moment comes:
+
+| Was, every tick | Runs when |
+| --- | --- |
+| `Refuse`, `Cramped` | `TorrentRun.Opened` — when the run settles what it is holding. **Not when the metadata arrives:** whether there is a video file in it at all is decided while the session is opened, and a fake release has perfectly good metadata. |
+| `Seeded` | `TorrentRun.Finished`, and for the ratio, `TorrentSession.TellMeWhenGivenBack` — a ratio is a count of bytes once the download has stopped moving, so the session says when they have gone out. |
+| `Queue` | Add, settle, finish, pause, resume, remove. |
+| The resume write | A verified piece, a run settling, a torrent finishing, the owner pausing one. **A verified piece is not enough on its own:** a torrent already whole on disk never verifies another, so a resume file hung on progress alone would never be written for exactly the torrents whose resume file matters most. `ClientAcceptanceTests.WhatIsAlreadyOnDiskIsFoundWithoutAResumeFile` caught that — it went from twenty seconds and failing to 128 milliseconds. |
+| `Expire`, `Stalled` | One deadline per torrent, and only these two plus the seeding hours have one. |
+
+**Why three deadlines survive, and why they are not polling.** The owner asked for none at all.
+Three things in this client cannot be told by an event because they are about something *not*
+happening: nobody sends a message saying they will not serve a magnet's metadata, nothing announces
+that no byte has arrived for twenty minutes, and the passage of two hours is itself the seeding
+condition. `MetadataTimeoutMinutes`, `StallMinutes` and `SeedHours` are the owner's own settings and
+they are durations. A duration can be measured by asking over and over — the poll this work removes —
+or by waking once at the end of it. Each torrent holds **one** timer, set to the earliest of what it
+owes, and `Moved` pushes it back every time a piece really verifies: **on a download that is running
+it never goes off**, and a client holding nothing has no timer at all. The owner was shown this and
+chose to keep the three (13 September 2026).
+
+**Why this client gives up when no ordinary one does.** qBittorrent leaves a magnet on "fetching
+metadata" for ever and calls a dead torrent "stalled" in a list, because a person decides what to do
+about it. libtorrent, its engine, runs `session_impl::on_tick()` **every second** for everything.
+Here there is nobody watching, and the failure is what frees the episode to be searched for again —
+without it the episode is never looked for.
+
+**Two gaps this slice found by running, not by reading.** The queue was not run when a torrent was
+added, so the concurrency limit was whatever the last page drawn had left it at; and `Owed` took the
+first deadline rather than the earliest, so a magnet with no peer at all waited out its metadata
+limit however much sooner the stall limit came round. Both are covered.
+
+**One test was fixed rather than its subject.**
+`LocalDiscoveryIntegrationTests.AClientDoesNotHearItsOwnAnnounceIntegration` asserted that nothing at
+all was heard on the LSD group. The group belongs to the whole machine, so a second copy of this
+client in another test project running beside it was heard — and the test failed about half the time
+while nothing was wrong. It announces something unique to its run now and asserts the rule it is
+actually about: whatever comes back round the group, this client's own packet is never among it.
+
+**`S12-11` and `S12-12` are done and green.** The chain now has its first two links, and neither is
+used by anything yet — the plugin behaves exactly as it did, which is why this was a safe place to
+stop.
+
+- `TorrentSession.Finished` is raised once, where the last wanted piece verifies, **outside every
+  lock**. `S11-37` was a wait taken under that same lock, so the test proves the raise is outside it:
+  the handler blocks on another thread reading `Progress()`, which cannot have the lock if the event
+  is raised while it is held. Sabotaged by raising it inside the lock, the test fails on that exact
+  sentence.
+- `TorrentSession.AnnounceIfFinished` covers the torrent that is already whole when it is opened,
+  which is what a restart finds: every staged and dispatched grab is re-added and no piece of one
+  will ever verify again. Without it, a download that finished while the server was down would never
+  be staged — the gap the sweep every minute was filling.
+- `TorrentRun.Finished` passes it up; `BittorrentEngine.Completed(infoHash)` says which torrent.
+  `BittorrentEngineTests.TheClientSaysWhichTorrentFinishedWithoutBeingAsked` proves it by what it
+  never does: it calls no `StatusAsync` and renders no page.
+
+**The two facts that make the encoder half possible**, both checked in the media server rather than
+assumed. `EncodingCompletedEvent.JobId` is not a job id — it is `fileMetadata.Id`, which is
+`movie?.Id ?? episode!.Id`, the same media id this plugin hands to `IPluginEncoder.EncodeAsync`. So
+an event can be matched to the grab that asked for it. `PluginEncodeResult.JobId` cannot: it is
+`QueuePayloadHash.For(payload)`, deliberately, because a queue row id is not stable.
+
+**And one the owner believed otherwise about:** the media server has no periodic library scan.
+`ServiceConfiguration.Cron.cs` registers nine cron jobs and none of them scans a library;
+`LibraryScanJob` is dispatched only from `LibrariesController` and after an import. `LibraryFileWatcher`
+does watch live, but it must never be the trigger — an encode landing an episode in the library
+raises it, so the plugin would trigger itself for ever.
+
+**The heartbeat half of `S12-10` is done and green.** `Heartbeat` sampled `BittorrentEngine.Drawn`
+once a second from the moment the client started — every server, downloading or not, page open or
+not — and each reading takes the client's lock and builds a string over every torrent.
+`BittorrentEngine.Watching` was written for exactly this and was wired to nothing: dead code, while
+the work it was meant to stop ran on. It is wired now. `Watching`, never moving: a stalled download
+is the one being stared at and its peers and chokes are what say what is happening to it, which is
+`S11-29` and had to survive this. Test:
+`HeartbeatTests.NothingIsSampledWhileThereIsNothingToWatch`.
+
+`S12-16` finishes it: the heartbeat must run only while someone is looking. The plugin cannot ask the
+hub who is watching — `PluginHub.Subscribe` adds the connection to `plugin:{ulid}` and tells the
+plugin nothing — but it does not need to. Rendering the view is the proof, and since every push makes
+`PluginScreen.vue` re-fetch the whole view, the watermark renews itself for as long as anyone is
+looking and goes stale on its own when the last page closes.
 
 ## Blocked
 
@@ -316,18 +466,173 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S11-39` The audit: sources, indexers, the merge, Chrome and the dashboard, measured
 - [x] `S11-40` Exact names, sources every run, Stop, the status bar, stage rows and every question on the page
 - [x] `S11-41` One release under two hashes: both start, the first to finish is kept
-- [ ] `S12-01` The attempt limit leaves the plugin
-- [ ] `S12-02` No copy is refused for its seeder count
-- [ ] `S12-03` A pack is an ordinary copy
-- [ ] `S12-04` Dry run leaves the page and the settings
-- [ ] `S12-05` The plugin keeps its own clock
-- [ ] `S12-06` The listen port says what is known, and warns only when it is shut
-- [ ] `S12-07` Settings, rebuilt into sections, with one Show advanced
-- [ ] `S12-08` The Sources page owns every source, and a private tracker is not editable
+- [x] `S12-01` The attempt limit leaves the plugin
+- [x] `S12-02` No copy is refused for its seeder count
+- [x] `S12-03` A pack is an ordinary copy
+- [x] `S12-04` Dry run leaves the page and the settings
+- [x] `S12-05` The plugin keeps its own clock
+- [x] `S12-06` The listen port says what is known, and warns only when it is shut
+- [x] `S12-07` Settings, rebuilt into sections, with one Show advanced
+- [x] `S12-08` The Sources page owns every source, and a private tracker is not editable
+- [x] `S12-09` One Save, and a list that keeps what is stored
+- [ ] `S12-10` A finished download says so, instead of being found by a sweep
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S12-09` One Save, and a list that keeps what is stored.** The owner saw the page `S12-07` built
+  and asked for one Save button for every setting. That reverses their own decision of the same
+  week, so `docs/plan/DESIGN-2026-09-12-settings-and-pages.md` is corrected rather than
+  contradicted, with the cost written into it: one Save is one post, and a single refused field
+  saves none of them — which is exactly what the section-per-Save shape was avoiding. The refusal
+  names the field and is drawn at the top of the page, which is what makes it bearable.
+  **And with the current contract the page cannot have headings inside that one form**:
+  `PluginFormField` carries no group, so a form is a flat list of fields with one button. The groups
+  survive only as reading order. Headings need a field on the contract and that is the server's to
+  give.
+  **A real fault came out of the same screenshot:** Transfers drew an empty "Select...", because the
+  expression stored on the owner's server is not one of the seven intervals the list offered — so
+  the page said a cadence was unset while it was running, and saving from there would have written
+  whatever the empty box fell back to. A stored value the list does not offer is now added to it and
+  stays selected. That is the first thing this page has been looked at with real settings behind it,
+  and it found something no test had.
+  Tests: `OneSaveSavesEveryRenderedField`, `ACadenceKeepsAStoredExpressionTheListDoesNotOffer`.
+  `EverySectionSavesOnItsOwn` and `EverySectionIsAFormTheOwnerCanChange` are gone — the first
+  asserted the shape the owner reversed — and `AdvancedHoldsTheExpertFields` now asserts that the
+  expert fields are drawn with the switch and absent without it, because with one form which form
+  holds a field says nothing.
+  **Two faults in the screenshot are `nomercy-app-web`'s and are written up in `SPRINTS.md`:** a
+  toggle's label is drawn twice by `PluginForm.vue`, and a form's fields waterfall across the full
+  width. The owner's decision that day was the plugin side first.
+
+  **Then the page was looked at on the server and three buttons were wrong, and those were the
+  plugin's.** Show advanced, Run now and Stop each drew as a full-width strip with its words at the
+  far left, reading as a section heading rather than something to press. `PluginButton` is
+  `inline-flex` and asks to be as wide as its words — but a page's component column and a
+  `PluginDetail` body are both `flex-col`, and a flex column stretches its children across. The
+  client cannot help that and should not: **a plugin chooses the container and the container decides
+  the width.** A `PluginRow` is `flex-row items-center` and stretches nothing, so every button on
+  this page is in one now.
+
+  Every other button on every other page was already right — the dashboard's Run, the tab bar, the
+  Skipped paging — which is exactly what made the settings page look broken beside them. Rather than
+  fix the page that happened to be wrong, `EveryPageIsTheSameShellTests.NoButtonOnAnyPageIsStretchedAcrossIt`
+  walks every route the plugin serves and names the button and the page, because the next one will be
+  a different page. Seen to fail with one row taken out: *'advanced-toggle' on /settings is not
+  inside a row*.
+
+  And `* * * * *` reads as "every minute" now. It is what the owner's server has Transfers on, and
+  with the interval missing from the list the page drew the raw expression — better than the empty
+  box it drew before the fix, and still not something to make an owner read.
+
+  **The duplicate toggle label was fixed in `nomercy-app-web` after all**, at the owner's word:
+  `PluginForm.vue` no longer draws a span after `NMToggle`, which already draws `labelText` itself
+  and uses it for the accessible name. `PluginForm.spec.ts` gained "names a switch once, not twice",
+  seen to fail with the span back — *expected 2 to be 1*. That repository is committed and deployed
+  separately, so the owner's page keeps showing the duplicate until it is built.
+
+- **`S12-08` The Sources page owns every source, and a shipped one is not editable.** Every shipped
+  source now has a switch, under Show advanced, and **until this slice nothing on any page could
+  write `DisabledDefaultSources` at all**: the setting existed, `Chain.Catalogue` read it, and there
+  was no way to put a name into it. The switches post `source.<name>`, which cannot be a key in
+  `SettingsEdit.Known` the way every other setting is — there is one per entry of a catalogue that
+  ships as a file, so the set is not known at compile time and the prefix is the contract instead.
+  The list records what is **off**, so a source nobody has touched is absent from it and one added
+  by a later version is enabled rather than missing from a list written before it existed.
+  A shipped source gets a switch and nothing else: no address is drawn and no editor offered,
+  because its address and reader are measured against a real capture and a page that let them be
+  typed over is a page that breaks a reader. The indexers of the owner moved here from the settings
+  page with the API key still write-only — the page is handed only the names of the secrets that
+  exist, so it has no value it could render. `AnIndexerWithNoApiKeySaysNotSet` moved with the block
+  rather than being deleted: the guarantee is the same wherever it is drawn. Tests:
+  `EverySourceHasASwitchAndTheyAreAllOnByDefault`,
+  `ASourceSwitchedOffIsWrittenToDisabledDefaultSources`,
+  `ASourceInUseIsNotEditableAndItsAddressIsNotShown`. `SecretsNeverEscapeTests` and
+  `PagesReachableTests` stayed green. Docs: `docs/08-ui.md` gained a § Sources and lost those two
+  bullets from § Settings. **A correction to `docs/05-sources.md` was attempted and was wrong.**
+  Its "five name sources and eleven indexers" looked like a miscount against a file holding sixteen
+  entries, because the role sets read earlier in the day put `eztv-api` among the feeds. Commit
+  `de55857` had moved it to the indexers — EZTV's API takes a search parameter and ignores it — so
+  five and eleven is right and six and ten was the error.
+  `TheCatalogueAndItsSpecificationTests.BothDocumentsNameTheCountsTheFileReallyHolds` caught it
+  before it went anywhere, which is exactly what that test exists for: it derives both counts from
+  the file through `SourceRole` and pins the sentence to them. **The lesson is the cheap one:** a
+  count read earlier in a session is not a count, and this document has a test precisely because it
+  drifted twice before. What the slice did add is the line saying every source is on unless the
+  owner switches it off, and that YTS and EZTV latest ship off, so fourteen are asked.
+
+- **`S12-07` The settings page, rebuilt into sections with one Show advanced.** Five forms, each
+  with its own Save, so a bad value in one never blocks another: folders, quality, cadences, the
+  client, and the advanced block. **Seeding moved to the private trackers and is drawn only when one
+  exists** — seed ratio, seed hours and maximum upload decide nothing without one, because
+  `docs/06-torrent-client.md` § Uploading says a public torrent never uploads, and a line now says so
+  rather than leaving three dead boxes on the page. The design contradicted itself here: its section
+  table lists "upload limit" under the client while its seeding paragraph counts it as one of the
+  three that disappear. The paragraph is the half that agrees with the uploading rule, so it was
+  built to the paragraph and the table row is noted as loose wording.
+  **A cadence is a choice, not a syntax:** four selects whose option values are the cron expressions
+  they stand for, with the raw boxes under advanced on the same four settings. **And no label claims
+  a restart is needed any more** — every one of them did, which was true until `S12-05` gave the
+  plugin its own clock, and a page that asks for a restart for nothing gets restarted for nothing.
+  `TheCadenceSectionSaysAChangeNeedsARestart` is replaced by `NoCadenceClaimsAChangeNeedsARestart`,
+  which asserts the opposite.
+  **Speeds are presets with a box:** unlimited, 1, 5, 10, 25 MB/s, stored in bytes a second exactly
+  as before so nothing downstream changes, plus a box in MB/s that wins when it is filled in.
+  That needed `SettingsEdit.Apply` to stop applying fields in whatever order the caller built the
+  dictionary in — a form that draws a preset and a box posts two keys for one setting, and whichever
+  landed last won. It now reports unknown keys first and then applies known ones with overrides
+  last, always. **Show advanced is a button, not a field:** a field would be posted with its section
+  and written into `config.json`, so it calls `settings/advanced`, which flips a flag the plugin
+  holds in memory. It writes nothing and does not survive a restart, which is what the design asked
+  for. `client.resumeIntervalSeconds` became editable for the first time; it had a property and no
+  way to reach it. Tests: `EverySectionSavesOnItsOwn`, `SavingOneSectionLeavesTheOthersAlone`,
+  `SeedingIsDrawnOnlyWhenAPrivateTrackerExists`, `AdvancedHoldsTheExpertFields`,
+  `ShowAdvancedOnlyDecidesWhatIsDrawn`, `ACadenceIsChosenFromAList`,
+  `ASpeedIsTypedInMegabytesAndStoredInBytes`, `EveryAdvancedFieldRoundTripsThroughSave`.
+  `ThePageOffersEveryFieldThatCanBeApplied` now renders the page at its fullest — advanced open, one
+  private tracker — because that is what reachable means once fields sit behind a switch. The four
+  page-wide guards stayed green, so nothing new went out under a design-system name.
+  `docs/08-ui.md` § Settings rewritten.
+
+- **`S12-06` The listen port says what is known, and the notice that was always wrong is gone.**
+  `PortState` is `Unknown`, `Open` or `Shut`, and `BittorrentEngine.PortCondition` derives it from
+  one fact: whether any peer has ever arrived on the listening socket. `Mapped` is deliberately not
+  consulted — the page used to draw "the router would not open port 51413, forward TCP and UDP 51413
+  by hand" out of a mapping refusal, on a machine where 51413 had been forwarded by hand since
+  August, so the one notice on the Settings page was the only thing on it that was untrue. The
+  router is still asked on every start and its answer is logged and never drawn, so the switch that
+  guarded it had nothing left to guard and is gone from the settings, the editor and the page. A
+  file that still carries `PortMapping` loads and the key is not written back — the owner's own
+  `config.json` on `beast-unit` says `PortMapping: true`, read on 12 September, so that path is the
+  real one and not a hypothetical. `ListenPort` now defaults to 6881 (6881-6889 is the BitTorrent
+  default; 51413 is Transmission's and was never this plugin's to inherit) and a file that names a
+  port keeps it: beast-unit's names 51413, checked before the default was touched, so nothing moves
+  under the owner. Tests: `SettingsViewTests.ThePortSaysOpenShutOrNotKnownYet` and
+  `BittorrentEngineTests.APeerDiallingInProvesThePortIsOpen`, both red first — the view had no
+  `port-state` component and the engine answered `Unknown` after a real dial-in. Four tests that
+  asserted the old notice were replaced by
+  `SettingsViewTests.NoStateOfThePortTellsTheOwnerToForwardItByHand`, which holds for all three
+  states, and `AnInvalidCronIsRefusedWithTheReasonAndChangesNothing` had its sentinel port moved off
+  6881 — with 6881 the default it would have proved nothing.
+
+  **The slice rested on a premise that was not quite true, and it is corrected.** Step 2 said the
+  state is decided from "a peer has dialled in from outside" and that `BittorrentEngine` already
+  knew it. It did not: `Reached` was set by any accepted socket at all, and this client announces
+  itself on the local network, so a neighbour found by local service discovery reaches the listening
+  socket without the forwarded port being involved. Drawing *open* from that is the same fault as
+  the notice this slice removed, pointing the other way. `DialIn.ProvesThePortIsOpen` now decides
+  it — loopback, RFC 1918, RFC 6598 carrier-grade NAT, link-local and IPv6 unique-local prove
+  nothing — with `PortStateTests` covering fifteen addresses including both edges of the 172.16-31
+  block. The slice's step-3 test is therefore
+  `BittorrentEngineTests.APeerDiallingInFromThisMachineProvesNothing` rather than
+  `APeerDiallingInProvesThePortIsOpen`: a loopback dial-in is the only kind a test can make, and it
+  cannot prove an outside arrival. Seen to fail with the rule deleted — *Expected Unknown, Actual
+  Open*, within 39 ms. The outside case is `PortStateTests.ADialInFromOutsideProvesThePortIsOpen`.
+  `SPRINTS.md` § `S12-06` is corrected to match. **`Shut` is built and set by nobody:**
+  it waits on media-server #52, so an idle server reads *not known yet*, which is what the live run
+  has to show. Docs: `docs/06-torrent-client.md` § Ports rewritten to the three states,
+  `docs/04-domain.md` and `docs/08-ui.md` corrected.
 
 - **`S11-41` One release under two hashes: both start, the first to finish is kept.** The owner's
   decision, `docs/06-torrent-client.md` § One release under two hashes. The cycle takes every other

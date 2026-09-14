@@ -201,6 +201,26 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
     }
 
     /// <summary>
+    /// Shows or hides the advanced blocks on the settings page.
+    /// </summary>
+    /// <remarks>
+    /// An endpoint rather than a field, because a field would be posted with
+    /// the rest of a section and written into config.json. Nothing is saved
+    /// here: it flips a flag the plugin holds in memory and the page is drawn
+    /// again from it.
+    /// </remarks>
+    [HttpPost("settings/advanced")]
+    public IActionResult Advanced()
+    {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound(Unreachable);
+        }
+
+        return Status(plugin.ToggleAdvanced(), "ok");
+    }
+
+    /// <summary>
     /// Cancels the running cycle.
     /// </summary>
     /// <remarks>

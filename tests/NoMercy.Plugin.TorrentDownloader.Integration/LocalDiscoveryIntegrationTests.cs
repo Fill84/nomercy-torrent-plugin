@@ -49,25 +49,58 @@ public class LocalDiscoveryIntegrationTests
     }
 
     /// <remarks>
+    /// <para>
     /// Every packet comes back round the group to the client that sent it. One
     /// that took its own announce would spend the afternoon connecting to
     /// itself, and this is the socket half of that — the cookie is the only
     /// thing that tells them apart, since the address is this machine either
     /// way.
+    /// </para>
+    /// <para>
+    /// <strong>It used to assert that nothing at all was heard, and that is not
+    /// the rule.</strong> The group belongs to the whole machine and anybody on
+    /// it may announce: a second copy of this client in another test project
+    /// running beside this one is heard here, and the test failed for it — on
+    /// 13 September 2026, about half the time, while nothing at all was wrong.
+    /// A test that fails for something it is not about is worse than no test,
+    /// because the next person reads a real failure as that one.
+    /// </para>
+    /// <para>
+    /// So it announces something nobody else can be announcing, and asserts
+    /// what it is really about: whatever comes back round the group in the
+    /// window, this client's own packet is never among it.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task AClientDoesNotHearItsOwnAnnounceIntegration()
     {
+        // Unique to this run, so no neighbour on the group can be mistaken for
+        // it and it cannot be mistaken for a neighbour.
+        string mine = Convert.ToHexString(System.Security.Cryptography.RandomNumberGenerator.GetBytes(20));
+        string cookie = "same-cookie-" + mine[..8];
+
         using LsdSocket socket = new();
 
         using CancellationTokenSource waiting = new(TimeSpan.FromSeconds(4));
 
-        Task<(LsdAnnounce Announce, System.Net.IPAddress From)> heard =
-            socket.ReceiveAsync(ours: "same-cookie", waiting.Token);
+        await socket.AnnounceAsync(51413, [mine], cookie, waiting.Token);
 
-        await socket.AnnounceAsync(51413, [Ubuntu], "same-cookie", waiting.Token);
+        while (!waiting.IsCancellationRequested)
+        {
+            try
+            {
+                (LsdAnnounce announce, System.Net.IPAddress _) =
+                    await socket.ReceiveAsync(ours: cookie, waiting.Token);
 
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => heard);
+                Assert.DoesNotContain(mine, announce.InfoHashes);
+            }
+            catch (OperationCanceledException)
+            {
+                // The window closed with nothing of this client's heard, which
+                // is the rule holding.
+                break;
+            }
+        }
     }
 
     /// <remarks>

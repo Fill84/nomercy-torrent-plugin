@@ -145,7 +145,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
     /// </summary>
     /// <remarks>
     /// It is written down like any other grab, so the Downloads page shows it
-    /// and the transfers cadence stages it when it finishes. One that was taken
+    /// and it is staged the moment it finishes. One that was taken
     /// and never recorded is a file that arrives and is never put anywhere.
     /// </remarks>
     [HttpPost("downloads")]

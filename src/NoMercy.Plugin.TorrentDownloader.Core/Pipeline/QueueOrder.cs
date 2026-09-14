@@ -6,7 +6,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// The order missing episodes are asked about in.
 /// </summary>
 /// <remarks>
-/// One rule, used both by the search cadence and by the Queue page. Two would
+/// One rule, used both by search and by the Queue page. Two would
 /// make the page a guess about what the plugin is going to do rather than a
 /// statement of it, and the page nobody can trust is the one nobody reads.
 /// </remarks>

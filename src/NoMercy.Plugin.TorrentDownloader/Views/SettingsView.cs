@@ -1,8 +1,8 @@
 using System.Globalization;
 
-using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Views;
@@ -32,6 +32,15 @@ public static class SettingsView
     /// <summary>Saving whatever section of the page was filled in.</summary>
     public const string SaveAction = "settings/edit";
 
+    /// <summary>Shows or hides every advanced block on this page.</summary>
+    /// <remarks>
+    /// An action rather than a field, because a field would be posted and
+    /// written down. <strong>Show advanced is a display state:</strong> it
+    /// changes what is drawn and nothing about what the plugin does, and a
+    /// field hidden behind it still applies.
+    /// </remarks>
+    public const string AdvancedAction = "settings/advanced";
+
     /// <summary>
     /// The page. <c>secretsSet</c> is the keys the secret store holds — names
     /// only, see the remarks above — and <c>problems</c> is why the last save
@@ -41,82 +50,132 @@ public static class SettingsView
         Settings settings,
         IReadOnlyCollection<string> secretsSet,
         IReadOnlyList<string> problems,
-        PortMapResult? mapping = null,
-        bool reached = false)
+        PortState port = PortState.Unknown,
+        bool advanced = false)
     {
         HashSet<string> present = new(secretsSet, StringComparer.Ordinal);
+
+        // Seeding decides nothing without one. docs/06-torrent-client.md
+        // § Uploading: a public torrent never uploads, not while it is
+        // downloading and not once it is finished.
+        bool privately = settings.PrivateTrackers.Count > 0;
+
+        List<PluginFormField> fields =
+        [
+            .. Folders(settings),
+            .. Quality(settings.Profile),
+            .. Cadences(settings.Cadences),
+            .. Client(settings.Client),
+        ];
+
+        if (privately)
+        {
+            fields.AddRange(Seeding(settings.Client));
+        }
+
+        if (advanced)
+        {
+            fields.AddRange(Advanced(settings));
+        }
+
+        List<PluginComponent> page =
+        [
+            .. problems.Select((string problem, int index) =>
+                Ui.Text($"problem-{index}", problem, "caption")),
+            AdvancedToggle(advanced),
+
+            // One form and one Save, for everything on the page. The owner
+            // asked for it on 12 September 2026 after seeing four of them
+            // scattered down the page, which reverses the decision of the same
+            // week that gave each group its own.
+            //
+            // It costs what that decision was avoiding: a form posts the fields
+            // it holds, so one Save is one post, and a single refused field
+            // saves none of them. The refusal names the field, which is what
+            // makes that bearable - and it is drawn at the top of this page, in
+            // problems, rather than left in a log.
+            Ui.Form(
+                FormId,
+                "Save",
+                PluginActionIntent.CallPlugin(SaveAction, null, PluginActionTransport.Rest),
+                [.. fields]),
+            Port(settings, port),
+            TrackerList(settings, present, privately),
+            Running(),
+        ];
 
         return new()
         {
             Layout = PluginLayout.Wide,
-            Components =
-            [
-                .. problems.Select((string problem, int index) =>
-                    Ui.Text($"problem-{index}", problem, "caption")),
-                .. Port(settings, mapping, reached),
-                Folders(settings),
-                CadenceSection(settings.Cadences),
-                Quality(settings.Profile),
-                Client(settings.Client),
-                Indexers(settings, present),
-                Trackers(settings, present),
-                Running(),
-            ],
+            Components = [.. page],
         };
     }
 
     /// <summary>
-    /// What became of the attempt to have the router open the listening port.
+    /// The one switch, and it saves nothing.
     /// </summary>
     /// <remarks>
+    /// In a row, and every other button on this page is too. A
+    /// <c>PluginButton</c> is <c>inline-flex</c> and asks to be as wide as its
+    /// words, but a page column and a <c>PluginDetail</c> body are both
+    /// <c>flex-col</c>, and a flex column stretches its children across. This
+    /// drew as a full-width strip with the words at the far left, which reads
+    /// as a heading rather than something to press. A <c>PluginRow</c> is
+    /// <c>flex-row items-center</c> and stretches nothing.
+    /// </remarks>
+    private static PluginComponent AdvancedToggle(bool advanced)
+    {
+        return Ui.Row(
+            "advanced-row",
+            Ui.Button(
+                "advanced-toggle",
+                advanced ? "Hide advanced" : "Show advanced",
+                PluginActionIntent.CallPlugin(AdvancedAction, null, PluginActionTransport.Rest)));
+    }
+
+    /// <summary>What is known about the listening port, and a warning only when it is shut.</summary>
+    /// <remarks>
     /// <para>
-    /// Nothing at all while it worked, while it has not been tried, and once a
-    /// peer has arrived on the port — that last one being proof, and the only
-    /// proof there is: nothing outside can reach a port that is shut.
+    /// Beside the port the section above it edits, because that is the number
+    /// this is about. Three states and one warning: <em>open</em> and <em>not
+    /// known yet</em> are states rather than problems, and a page that decorates
+    /// both of them with a warning has taught the owner to ignore warnings.
     /// </para>
     /// <para>
-    /// <strong>UPnP and NAT-PMP failing does not mean the port is shut.</strong>
-    /// It means the router would not open it <em>by itself</em>. This said "the
-    /// router would not open port 51413" and told the owner to forward it by
-    /// hand, on a network where 51413 had been forwarded by hand for months —
-    /// so the one notice on this page was the one thing on it that was wrong,
-    /// which is how an owner learns to read past all of them.
-    /// </para>
-    /// <para>
-    /// With the router's own words underneath, because "port mapping failed"
-    /// and "your router has UPnP turned off" are different problems and only
-    /// one of them is worth walking to the cupboard for.
+    /// <strong>No mapping result reaches this method, and that is the point.</strong>
+    /// It used to be handed one and drew "the router would not open port 51413 —
+    /// forward TCP and UDP 51413 by hand" from it, on a machine where 51413 had
+    /// been forwarded by hand for months. UPnP and NAT-PMP failing says the
+    /// router would not open the port <em>itself</em>; it says nothing about
+    /// whether the port is open. The router's answer is logged and never drawn.
     /// </para>
     /// </remarks>
-    private static IEnumerable<PluginComponent> Port(Settings settings, PortMapResult? mapping, bool reached)
+    private static PluginComponent Port(Settings settings, PortState port)
     {
-        if (mapping is null || mapping.Mapped || reached)
+        (string Says, string Variant) said = port switch
         {
-            yield break;
-        }
+            PortState.Open => ("open", PluginBadgeVariant.Success),
+            PortState.Shut => ("shut", PluginBadgeVariant.Warning),
+            _ => ("not known yet", PluginBadgeVariant.Neutral),
+        };
 
-        yield return Ui.Text(
-            "port-mapping",
-            $"Port {settings.Client.ListenPort} could not be opened automatically. "
-            + "If it is already forwarded on the router there is nothing to do — "
-            + "no peer has reached this machine on it yet, which is the only thing that would say so. "
-            + $"Otherwise, forward TCP and UDP {settings.Client.ListenPort} to this machine by hand.",
-            "caption");
-
-        if (mapping.Reason is string refused)
-        {
-            yield return Ui.Text("port-mapping-reason", refused, "caption");
-        }
+        return Ui.Row(
+            "port",
+            Ui.Text(
+                "port-number",
+                $"Listening port {settings.Client.ListenPort.ToString(CultureInfo.InvariantCulture)}",
+                "caption"),
+            Ui.Badge("port-state", said.Says, said.Variant));
     }
 
     /// <remarks>
     /// Nothing downloads until both of these are set, so this is the first
     /// section on the page and it is the one that must be fillable.
     /// </remarks>
-    private static PluginComponent Folders(Settings settings)
+    private static PluginFormField[] Folders(Settings settings)
     {
-        return Section(
-            "folders",
+        return
+        [
             new PluginFormField
             {
                 Name = "incompleteFolder",
@@ -138,47 +197,94 @@ public static class SettingsView
                 Type = PluginFormFieldType.Folder,
                 Value = settings.IntakeFolder,
                 Placeholder = @"D:\torrents\intake",
-            });
+            }];
     }
 
-    private static PluginComponent CadenceSection(Cadences cadences)
+    /// <summary>
+    /// How often a cycle is started when nobody starts one, chosen from a list.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>One, where there were four.</strong> Transfers, feed, search and
+    /// maintenance are the steps of one cycle, each started by the last one
+    /// finishing, so the only schedule left is when to start one.
+    /// </para>
+    /// <para>
+    /// <strong>Cron is not a language the owner has to know.</strong> The ordinary
+    /// control is an interval whose values are the expressions they stand for,
+    /// so nothing in between has to translate. Whoever wants to type one still
+    /// can, under <strong>Show advanced</strong> — and it is held to the same
+    /// floor of once an hour.
+    /// </para>
+    /// <para>
+    /// <strong>And no label says "takes effect on the next server restart" any
+    /// more.</strong> They all did, because the host reads
+    /// <c>IScheduledTaskPlugin.Jobs</c> only when a plugin is installed or
+    /// enabled. <c>S12-05</c> gave the plugin its own clock for that reason, so
+    /// a saved cadence is due by its new interval without a restart and the
+    /// sentence became untrue.
+    /// </para>
+    /// </remarks>
+    private static PluginFormField[] Cadences(Cadences cadences)
     {
-        return Section(
-            "cadences",
-            new PluginFormField
-            {
-                Name = "cadences.transfers",
-                // Said on every one of them, because the alternative is that
-                // the owner changes a cron, watches the old one keep firing,
-                // and concludes the setting does not work. The server registers
-                // cadences once, when the plugin loads.
-                Label = "Transfers — takes effect on the next server restart",
-                Value = cadences.Transfers,
-            },
-            new PluginFormField
-            {
-                Name = "cadences.feed",
-                Label = "Feed — takes effect on the next server restart",
-                Value = cadences.Feed,
-            },
-            new PluginFormField
-            {
-                Name = "cadences.search",
-                Label = "Search — takes effect on the next server restart",
-                Value = cadences.Search,
-            },
-            new PluginFormField
-            {
-                Name = "cadences.maintenance",
-                Label = "Maintenance — takes effect on the next server restart",
-                Value = cadences.Maintenance,
-            });
+        return
+        [
+            Every("cadences.cycle", "Start a cycle", cadences.Cycle)];
     }
 
-    private static PluginComponent Quality(Profile profile)
+    /// <summary>The intervals offered, and what each one really is.</summary>
+    /// <remarks>
+    /// <strong>Nothing sooner than every hour.</strong> This list was written for
+    /// four cadences, one of them transfers, and so began at every minute. For a
+    /// whole cycle that is every feed read and every indexer searched every
+    /// minute, and the owner ruled on 13 September 2026 that nothing shorter
+    /// than an hour is offered or accepted — see <c>Cron.AtMostHourly</c>. For
+    /// anything sooner there is the Run button.
+    /// </remarks>
+    private static readonly (string Says, string Cron)[] Intervals =
+    [
+        ("every hour", "0 * * * *"),
+        ("every 6 hours", "0 */6 * * *"),
+        ("every 12 hours", "0 */12 * * *"),
+        ("once a day, at 4am", "0 4 * * *"),
+    ];
+
+    /// <summary>
+    /// One cadence, as an interval.
+    /// </summary>
+    /// <remarks>
+    /// <strong>A stored expression the list does not offer is added to it.</strong>
+    /// Without that the list has nothing to select and draws empty, which says
+    /// the cadence is unset while it is running perfectly well — and saving
+    /// from there writes whatever the empty box falls back to. Seen on the
+    /// owner's own server on 12 September 2026, the first time this page was
+    /// looked at with real settings behind it: Transfers was on an expression
+    /// none of these offers and the box read "Select...".
+    /// </remarks>
+    private static PluginFormField Every(string name, string label, string cron)
     {
-        return Section(
-            "quality",
+        bool offered = Intervals.Any(one => string.Equals(one.Cron, cron, StringComparison.Ordinal));
+
+        return new()
+        {
+            Name = name,
+            Label = label,
+            Type = PluginFormFieldType.Select,
+            Value = cron,
+            Options =
+            [
+                .. Intervals.Select(one => new PluginFormOption { Label = one.Says, Value = one.Cron }),
+                .. offered || cron.Length == 0
+                    ? Array.Empty<PluginFormOption>()
+                    : [new PluginFormOption { Label = cron, Value = cron }],
+            ],
+        };
+    }
+
+    private static PluginFormField[] Quality(Profile profile)
+    {
+        return
+        [
             new PluginFormField
             {
                 Name = "profile.maximumResolution",
@@ -233,41 +339,45 @@ public static class SettingsView
                 Label = "Forbidden terms, separated by commas",
                 Value = string.Join(", ", profile.ExcludeTerms),
                 Placeholder = "HDCAM, CAM, TS",
-            });
+            }];
     }
 
-    private static PluginComponent Client(ClientLimits limits)
+    /// <summary>
+    /// The client: how much at once, how fast down, and the port.
+    /// </summary>
+    /// <remarks>
+    /// Seeding is not here. Seed ratio, seed hours and the upload limit apply
+    /// to private torrents alone - docs/06-torrent-client.md section Uploading -
+    /// so they live with the private trackers and are drawn only when one
+    /// exists. The expert fields went to the advanced block.
+    /// </remarks>
+    private static PluginFormField[] Client(ClientLimits limits)
     {
-        return Section(
-            "client",
+        return
+        [
+            new PluginFormField
+            {
+                Name = "client.maxConcurrentDownloads",
+                Label = "Downloads at once",
+                Type = PluginFormFieldType.Number,
+                Value = limits.MaxConcurrentDownloads,
+            },
+            Speed("client.maxDownloadRate", "Maximum download", limits.MaxDownloadRate),
+            Typed("client.maxDownloadRateMb", "or type it, in MB/s"),
             new PluginFormField
             {
                 Name = "client.listenPort",
                 Label = "Listen port (TCP and UDP)",
                 Type = PluginFormFieldType.Number,
                 Value = limits.ListenPort,
-            },
-            new PluginFormField
-            {
-                Name = "client.portMapping",
-                Label = "Ask the router to open it",
-                Type = PluginFormFieldType.Toggle,
-                Value = limits.PortMapping,
-            },
-            new PluginFormField
-            {
-                Name = "client.maxDownloadRate",
-                Label = "Maximum download, bytes per second — 0 is unlimited",
-                Type = PluginFormFieldType.Number,
-                Value = limits.MaxDownloadRate,
-            },
-            new PluginFormField
-            {
-                Name = "client.maxUploadRate",
-                Label = "Maximum upload, bytes per second — 0 is unlimited",
-                Type = PluginFormFieldType.Number,
-                Value = limits.MaxUploadRate,
-            },
+            }];
+    }
+
+    /// <summary>Seeding, which only a private tracker makes mean anything.</summary>
+    private static PluginFormField[] Seeding(ClientLimits limits)
+    {
+        return
+        [
             new PluginFormField
             {
                 Name = "client.seedRatio",
@@ -281,39 +391,103 @@ public static class SettingsView
                 Type = PluginFormFieldType.Number,
                 Value = limits.SeedHours,
             },
+            Speed("client.maxUploadRate", "Maximum upload", limits.MaxUploadRate),
+            Typed("client.maxUploadRateMb", "or type it, in MB/s")];
+    }
+
+    /// <summary>
+    /// A speed, as the answers people actually give.
+    /// </summary>
+    /// <remarks>
+    /// Stored in bytes a second, which is what the client reads and what these
+    /// values are, so nothing downstream changes. The page simply stops asking
+    /// the owner to type 10485760.
+    /// </remarks>
+    private static PluginFormField Speed(string name, string label, long bytes)
+    {
+        return new()
+        {
+            Name = name,
+            Label = label,
+            Type = PluginFormFieldType.Select,
+            Value = bytes.ToString(CultureInfo.InvariantCulture),
+            Options =
+            [
+                new PluginFormOption { Label = "unlimited", Value = "0" },
+                new PluginFormOption { Label = "1 MB/s", Value = "1048576" },
+                new PluginFormOption { Label = "5 MB/s", Value = "5242880" },
+                new PluginFormOption { Label = "10 MB/s", Value = "10485760" },
+                new PluginFormOption { Label = "25 MB/s", Value = "26214400" },
+            ],
+        };
+    }
+
+    /// <summary>
+    /// The box beside a preset list, for a speed the list does not offer.
+    /// </summary>
+    /// <remarks>
+    /// Drawn empty every time, and blank means leave the answer of the list
+    /// alone. Showing the stored speed here would make the box and the list two
+    /// controls claiming the same number, and saving would then turn every
+    /// preset into whatever the box happened to be showing.
+    /// </remarks>
+    private static PluginFormField Typed(string name, string label)
+    {
+        return new()
+        {
+            Name = name,
+            Label = label,
+            Type = PluginFormFieldType.Number,
+            Value = string.Empty,
+            Placeholder = "leave empty to use the list",
+        };
+    }
+
+    /// <summary>Everything an owner should not have to walk past to change a folder.</summary>
+    private static PluginFormField[] Advanced(Settings settings)
+    {
+        return
+        [
             new PluginFormField
             {
                 Name = "client.stallMinutes",
                 Label = "Minutes with no progress and no peers before it counts as stalled",
                 Type = PluginFormFieldType.Number,
-                Value = limits.StallMinutes,
+                Value = settings.Client.StallMinutes,
             },
             new PluginFormField
             {
                 Name = "client.metadataTimeoutMinutes",
-                Label = "Minutes to wait for a magnet's metadata",
+                Label = "Minutes to wait for the metadata of a magnet",
                 Type = PluginFormFieldType.Number,
-                Value = limits.MetadataTimeoutMinutes,
-            },
-            new PluginFormField
-            {
-                Name = "client.maxConcurrentDownloads",
-                Label = "Downloads at once",
-                Type = PluginFormFieldType.Number,
-                Value = limits.MaxConcurrentDownloads,
+                Value = settings.Client.MetadataTimeoutMinutes,
             },
             new PluginFormField
             {
                 Name = "client.encryption",
                 Label = "Encryption",
                 Type = PluginFormFieldType.Select,
-                Value = limits.Encryption.ToString(),
+                Value = settings.Client.Encryption.ToString(),
                 Options =
                 [
                     .. Enum.GetNames<EncryptionPolicy>()
                         .Select(name => new PluginFormOption { Label = name, Value = name }),
                 ],
-            });
+            },
+            new PluginFormField
+            {
+                Name = "client.resumeIntervalSeconds",
+                Label = "Seconds between writing what a download has got so far",
+                Type = PluginFormFieldType.Number,
+                Value = settings.Client.ResumeIntervalSeconds,
+            },
+            Cron("cadences.cycle", "Starting a cycle, as an expression", settings.Cadences.Cycle)];
+    }
+
+    /// <summary>One cadence, typed out, for whoever wants it.</summary>
+    private static PluginFormField Cron(string name, string label, string cron)
+    {
+        return new() { Name = name, Label = label, Value = cron };
     }
 
     /// <summary>One entry of a list the owner picks from.</summary>
@@ -323,53 +497,28 @@ public static class SettingsView
     }
 
     /// <summary>
-    /// One section of the page: its fields, and the button that saves them.
+    /// The trackers of the owner, and why seeding is missing without one.
     /// </summary>
     /// <remarks>
-    /// A form per section rather than one for the whole page, because a form
-    /// posts only the fields it holds and the applier changes only what it is
-    /// sent. Saving the folders leaves the quality profile exactly as it was,
-    /// which is what lets a page be saved a piece at a time.
+    /// The absence is explained rather than left to be noticed. Three controls
+    /// that cannot affect anything are three an owner reasonably expects to
+    /// work, and a page that simply omits them invites the question of where
+    /// they went.
     /// </remarks>
-    private static PluginComponent Section(string id, params PluginFormField[] fields)
-    {
-        return Ui.Form(
-            id,
-            "Save",
-            PluginActionIntent.CallPlugin(SaveAction, null, PluginActionTransport.Rest),
-            fields);
-    }
-
-    private static PluginComponent Indexers(Settings settings, HashSet<string> present)
+    private static PluginComponent TrackerList(Settings settings, HashSet<string> present, bool privately)
     {
         return Ui.Detail(
-            "indexers",
-            "Own indexers",
-            settings.Indexers.Count == 0 ? "None added." : null,
-            null,
-            [
-                .. settings.Indexers.SelectMany(indexer => (PluginComponent[])
-                [
-                    Ui.Text($"indexer-{indexer.Id}", $"{indexer.Name} — {indexer.Address}"),
-                    Secret($"indexer-{indexer.Id}-key", "API key", present.Contains(SettingsStore.IndexerApiKey(indexer.Id))),
-                ]),
-            ]);
-    }
-
-    private static PluginComponent Trackers(Settings settings, HashSet<string> present)
-    {
-        return Ui.Detail(
-            "trackers",
+            "tracker-list",
             "Private trackers",
-            settings.PrivateTrackers.Count == 0 ? "None added." : null,
+            privately
+                ? null
+                : "None added. Seed ratio, seed hours and the upload limit are not shown: nothing on a "
+                  + "public swarm is ever uploaded, so they would decide nothing.",
             null,
             [
                 .. settings.PrivateTrackers.SelectMany(tracker => (PluginComponent[])
                 [
-                    // The template, which carries {passkey} where the secret
-                    // goes, so the address is showable and the secret is not in
-                    // it to show.
-                    Ui.Text($"tracker-{tracker.Id}", $"{tracker.Host} — {Or(tracker.AnnounceTemplate, "no announce URL")}"),
+                    Ui.Text($"tracker-{tracker.Id}", $"{tracker.Host} - {Or(tracker.AnnounceTemplate, "no announce URL")}"),
                     Secret($"tracker-{tracker.Id}-passkey", "Passkey", present.Contains(SettingsStore.TrackerPasskey(tracker.Id))),
                 ]),
             ]);
@@ -389,15 +538,20 @@ public static class SettingsView
             "Run",
             "A cycle looks for every missing episode and downloads what it settles on.",
             null,
-            Ui.Button(
-                "run-run",
-                "Run now",
-                PluginActionIntent.CallPlugin(RunAction, null, PluginActionTransport.Rest),
-                variant: "primary"),
-            Ui.Button(
-                "run-stop",
-                "Stop",
-                PluginActionIntent.CallPlugin(StopAction, null, PluginActionTransport.Rest)));
+            // Side by side in a row rather than as two items of this panel:
+            // the panel body is a flex column and stretched each of them into
+            // a full-width bar.
+            Ui.Row(
+                "run-buttons",
+                Ui.Button(
+                    "run-run",
+                    "Run now",
+                    PluginActionIntent.CallPlugin(RunAction, null, PluginActionTransport.Rest),
+                    variant: "primary"),
+                Ui.Button(
+                    "run-stop",
+                    "Stop",
+                    PluginActionIntent.CallPlugin(StopAction, null, PluginActionTransport.Rest))));
     }
 
     /// <summary>Whether a secret is stored — never which one, and never what.</summary>

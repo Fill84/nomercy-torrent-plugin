@@ -81,7 +81,7 @@ an episode that aired two years ago counts exactly as much as one that aired las
 **A show is the owner's when at least one of its episodes has a file, and only then.** It is taken
 from the query behind the server's own library page
 (`Episodes.Any(e => e.VideoFiles.Any(v => v.Folder != null))`), and it is written once, in
-`Core/Pipeline/Ownership.cs`, where both the refresh and the transfers tick ask it.
+`Core/Pipeline/Ownership.cs`, where both the refresh and a transfers pass ask it.
 
 **It was widened to every show in a library on 24 August 2026 and put back the same afternoon.**
 Within the hour the plugin was on 479 grabs, 456 of them Family Guy — a show the owner has never

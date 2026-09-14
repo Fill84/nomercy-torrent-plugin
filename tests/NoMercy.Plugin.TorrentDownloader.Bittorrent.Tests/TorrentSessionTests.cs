@@ -666,4 +666,118 @@ public class TorrentSessionTests : IDisposable
 
         return File.ReadAllBytes(Path.Combine(directory!.FullName, "tests", "fixtures", name));
     }
+
+    /// <summary>
+    /// A finished download says so itself, the moment its last piece verifies.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Nothing asks here.</strong> The completion is waited for on the
+    /// session's own event, not by reading <c>Complete</c> in a loop — which is
+    /// the whole point. Until this, a finished download was noticed only when
+    /// something happened to call <c>StatusAsync</c>, and the transfers cadence
+    /// was set to every minute to hide that.
+    /// </para>
+    /// <para>
+    /// <strong>Raised outside the lock, and this proves it.</strong> The
+    /// handler blocks on another thread reading <c>Progress()</c>, which takes
+    /// the session's lock. Raised from inside the lock, that thread cannot have
+    /// it, the handler cannot return, and the wait below times out. `S11-37`
+    /// was exactly this shape — a wait taken under a lock that only something
+    /// holding the same lock could satisfy — and it deadlocked the client.
+    /// </para>
+    /// <para>
+    /// Once, not once a piece. Both ends go on seeding after they are complete,
+    /// so a session that announced on every verified piece would announce for
+    /// as long as it ran.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASessionSaysSoItselfWhenTheLastPieceIsVerified()
+    {
+        byte[] content = Fixture("ubuntu-desktop.torrent");
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768, secret: true);
+
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(30));
+
+        (Stream seeding, Stream leeching) = await LoopbackAsync(stopping.Token);
+
+        using TorrentSession seeder = Seeding(torrent, content);
+        using TorrentSession leecher = Fresh(torrent);
+
+        TaskCompletionSource said = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int times = 0;
+        bool readable = false;
+
+        leecher.Finished += () =>
+        {
+            Interlocked.Increment(ref times);
+
+            // On another thread on purpose: it has to take the session's lock,
+            // which is only free if this is being raised outside it.
+            readable = Task.Run(() => leecher.Progress()).Wait(TimeSpan.FromSeconds(5));
+
+            said.TrySetResult();
+        };
+
+        Task<PeerConnection?> serving = PeerConnection.IntroduceAsync(
+            seeding, Hash(torrent), Id("SEED"), torrent.PieceCount, dialling: false, stopping.Token);
+
+        Task<PeerConnection?> asking = PeerConnection.IntroduceAsync(
+            leeching, Hash(torrent), Id("LEECH"), torrent.PieceCount, dialling: true, stopping.Token);
+
+        PeerConnection?[] both = await Task.WhenAll(serving, asking);
+
+        Task serves = seeder.RunAsync(both[0]!, stopping.Token);
+        Task asks = leecher.RunAsync(both[1]!, stopping.Token);
+
+        await Task.WhenAny(Task.WhenAll(serves, asks), said.Task);
+
+        Assert.True(said.Task.IsCompletedSuccessfully, "the session never said it had finished.");
+        Assert.True(readable, "the session was still holding its lock when it said so.");
+
+        await stopping.CancelAsync();
+
+        await Task.WhenAll(
+            serves.ContinueWith(_ => { }, TaskScheduler.Default),
+            asks.ContinueWith(_ => { }, TaskScheduler.Default));
+
+        Assert.Equal(1, times);
+    }
+
+    /// <summary>
+    /// A torrent that is already whole when it is opened says so too.
+    /// </summary>
+    /// <remarks>
+    /// This is what a restart finds. The plugin re-adds every grab that is not
+    /// done, failed or lost — staged and dispatched ones included — and those
+    /// are complete on disk already, so no piece will ever verify again and the
+    /// event above can never fire for them. Without this, a download that
+    /// finished while the server was down would never be staged and the
+    /// episode would never arrive: the whole reason the sweep every minute
+    /// existed.
+    /// </remarks>
+    [Fact]
+    public void ASessionThatIsWholeBeforeItStartsSaysSoAsWell()
+    {
+        byte[] content = Fixture("ubuntu-desktop.torrent");
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768, secret: true);
+
+        using TorrentSession whole = Seeding(torrent, content);
+
+        int times = 0;
+
+        whole.Finished += () => Interlocked.Increment(ref times);
+
+        whole.AnnounceIfFinished();
+
+        Assert.True(whole.Complete);
+        Assert.Equal(1, times);
+
+        // And saying it twice is saying it once: a restart that opens the same
+        // torrent again must not stage what has already been staged.
+        whole.AnnounceIfFinished();
+
+        Assert.Equal(1, times);
+    }
 }

@@ -86,4 +86,70 @@ public class EveryPageIsTheSameShellTests
                 + "the width the dashboard is, or the tab bar moves under the owner's cursor.");
         }
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Every button on every page sits in a row, and this is why.</strong>
+    /// <c>PluginButton</c> is <c>inline-flex</c>: it asks to be exactly as wide
+    /// as its words. But a page's component column and a <c>PluginDetail</c>
+    /// body are both <c>flex-col</c>, and a flex column stretches its children
+    /// across the full width — so a button put straight into either draws as a
+    /// strip with its words at the far left, which reads as a section heading
+    /// rather than something to press.
+    /// </para>
+    /// <para>
+    /// Seen on the owner's server on 12 September 2026: Show advanced, Run now
+    /// and Stop were all bars across the settings page. The dashboard's Run,
+    /// the tab bar and the Skipped paging were already in rows and looked
+    /// right, which is what made the settings page look broken next to them.
+    /// </para>
+    /// <para>
+    /// The client is not at fault and cannot be: a plugin chooses the container
+    /// and the container decides the width. So this walks every route the
+    /// plugin serves rather than the page that happened to be wrong, because
+    /// the next one will be a different page.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task NoButtonOnAnyPageIsStretchedAcrossIt()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        plugin.Initialize(new FakePluginContext());
+
+        foreach (PluginRoute route in plugin.Routes.Routes)
+        {
+            PluginView page = await plugin.GetViewAsync(new() { Route = route.Path }, CancellationToken.None);
+
+            string[] inRows =
+            [
+                .. Walk(page.Components)
+                    .Where(one => one.Component == Ui.RowComponent)
+                    .SelectMany(row => Walk(row.Items))
+                    .Select(one => one.Id),
+            ];
+
+            foreach (PluginComponent button in Walk(page.Components)
+                         .Where(one => one.Component == Ui.ButtonComponent))
+            {
+                Assert.True(
+                    inRows.Contains(button.Id),
+                    $"'{button.Id}' on {route.Path} is not inside a row, so the flex column it sits "
+                    + "in will stretch it across the page and it will not read as a button.");
+            }
+        }
+    }
+
+    /// <summary>Every component of a page, however deeply it is nested.</summary>
+    private static IEnumerable<PluginComponent> Walk(IReadOnlyList<PluginComponent>? components)
+    {
+        foreach (PluginComponent component in components ?? [])
+        {
+            yield return component;
+
+            foreach (PluginComponent inner in Walk(component.Items))
+            {
+                yield return inner;
+            }
+        }
+    }
 }

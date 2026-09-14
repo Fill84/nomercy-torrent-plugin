@@ -1,5 +1,7 @@
-using NoMercy.Plugin.TorrentDownloader.Bittorrent;
+using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
@@ -40,37 +42,22 @@ public class SettingsViewTests
     }
 
     /// <remarks>
-    /// Not set is its own answer, and it is the one that explains why a private
-    /// tracker is refusing every request.
-    /// </remarks>
-    [Fact]
-    public void AnIndexerWithNoApiKeySaysNotSet()
-    {
-        Settings settings = new();
-        settings.Indexers.Add(new() { Id = "own-1", Name = "Mine", Address = "https://x/?q={query}" });
-
-        PluginView view = SettingsView.Render(settings, [], []);
-
-        Assert.Contains("not set", string.Join(" ", Rendered.Words(view)), StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <remarks>
     /// Every section of the page is something the owner can change. Until
     /// 21 August 2026 the whole page was text: it printed the settings and gave
     /// no way at all to set one, so a folder never chosen could never be
     /// chosen and the plugin had nowhere to download to.
     /// </remarks>
     [Theory]
-    [InlineData("folders", "incompleteFolder")]
-    [InlineData("folders", "intakeFolder")]
-    [InlineData("cadences", "cadences.search")]
-    [InlineData("quality", "profile.maximumResolution")]
-    [InlineData("client", "client.listenPort")]
-    public void EverySectionIsAFormTheOwnerCanChange(string section, string field)
+    [InlineData("incompleteFolder")]
+    [InlineData("intakeFolder")]
+    [InlineData("cadences.cycle")]
+    [InlineData("profile.maximumResolution")]
+    [InlineData("client.listenPort")]
+    public void EverySettingIsOnTheFormTheOwnerCanChange(string field)
     {
         PluginView view = SettingsView.Render(new(), [], []);
 
-        PluginComponent form = Rendered.ById(view, section);
+        PluginComponent form = Rendered.ById(view, SettingsView.FormId);
 
         Assert.Equal(Ui.FormComponent, form.Component);
 
@@ -102,10 +89,7 @@ public class SettingsViewTests
     {
         PluginView view = SettingsView.Render(new(), [], []);
 
-        PluginFormField[] fields = Assert.IsType<PluginFormField[]>(
-            Rendered.ById(view, "folders").Props["fields"]);
-
-        PluginFormField folder = Assert.Single(fields, one => one.Name == field);
+        PluginFormField folder = Assert.Single(Every(view), one => one.Name == field);
 
         Assert.Equal(PluginFormFieldType.Folder, folder.Type);
     }
@@ -127,15 +111,23 @@ public class SettingsViewTests
     }
 
     /// <remarks>
+    /// <para>
     /// Every field the page offers has somewhere to land, and every setting
     /// this plugin lets a page change is offered. A field the applier does not
     /// know is one the owner types into and saves and nothing happens; a
     /// setting the page never renders is one they cannot reach at all.
+    /// </para>
+    /// <para>
+    /// Rendered at its fullest - advanced open, one private tracker - because
+    /// that is what "reachable" means after <c>S12-07</c>: the expert fields
+    /// are behind a switch and seeding needs a tracker to mean anything. Every
+    /// one of them still has to be gettable to.
+    /// </para>
     /// </remarks>
     [Fact]
     public void ThePageOffersEveryFieldThatCanBeApplied()
     {
-        PluginView view = SettingsView.Render(new(), [], []);
+        PluginView view = SettingsView.Render(WithAPrivateTracker(), [], [], advanced: true);
 
         IReadOnlyList<string> rendered = [.. Rendered.EveryValue(view).OfType<string>()];
 
@@ -188,17 +180,28 @@ public class SettingsViewTests
     }
 
     /// <remarks>
-    /// Changing a cron changes nothing until the server restarts, because
-    /// cadences are registered once when the plugin loads. An owner not told
-    /// that watches the old schedule keep firing and concludes the setting is
-    /// broken.
+    /// <para>
+    /// <strong>And it no longer says a change needs a restart.</strong> Every
+    /// cadence label used to, and it was true: the host reads
+    /// <c>IScheduledTaskPlugin.Jobs</c> only when a plugin is installed or
+    /// enabled, so a saved cron did nothing until the server came up again.
+    /// </para>
+    /// <para>
+    /// <c>S12-05</c> gave the plugin its own clock for exactly that reason. A
+    /// saved cadence is now due by its new interval without a restart, which
+    /// makes the sentence false - and a page that tells an owner to restart for
+    /// nothing is a page that gets restarted for nothing.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void TheCadenceSectionSaysAChangeNeedsARestart()
+    public void NoCadenceClaimsAChangeNeedsARestart()
     {
-        PluginView view = SettingsView.Render(new(), [], []);
+        PluginView view = SettingsView.Render(new(), [], [], advanced: true);
 
-        Assert.Contains("restart", string.Join(" ", Rendered.Words(view)), StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain(
+            "restart",
+            string.Join(" ", Rendered.Words(view)),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     /// <remarks>
@@ -231,105 +234,475 @@ public class SettingsViewTests
 
     /// <remarks>
     /// <para>
-    /// The owner asked for exactly this: try UPnP, then NAT-PMP, and when both
-    /// fail say plainly that the port needs forwarding by hand. A client nobody
-    /// can dial downloads from the few peers it reaches out to and seeds to
-    /// nobody — and on this network neither protocol answers at all, so this is
-    /// the message that gets seen rather than an edge case.
+    /// <strong>And no page tells the owner to forward a port they forwarded
+    /// months ago.</strong> This is the sentence that was on the page: "the
+    /// router would not open port 51413 — forward TCP and UDP 51413 to this
+    /// machine by hand." On this network 51413 has been forwarded by hand since
+    /// August and neither UPnP nor NAT-PMP has ever answered, so the one notice
+    /// the Settings page carried was the one thing on it that was untrue.
     /// </para>
     /// <para>
-    /// The router's own words go underneath, because "port mapping failed" and
-    /// "your router has UPnP turned off" are different problems and only one is
-    /// worth walking to the cupboard for.
+    /// It cannot come back, whatever the port's state: the view is handed a
+    /// state and never a mapping result, so there is nothing left for it to
+    /// draw that sentence from. Asserted for all three states, because a
+    /// warning that returns for one of them is the same fault again.
     /// </para>
     /// </remarks>
-    [Fact]
-    public void APortThatCouldNotBeMappedTellsTheOwnerToForwardItByHand()
+    [Theory]
+    [InlineData(PortState.Open)]
+    [InlineData(PortState.Unknown)]
+    [InlineData(PortState.Shut)]
+    public void NoStateOfThePortTellsTheOwnerToForwardItByHand(PortState port)
     {
-        PluginView view = SettingsView.Render(
-            new(),
-            [],
-            [],
-            new(MappedBy.Nothing, 51413, "UPnP: no device answered the search; NAT-PMP: the gateway did not answer"));
+        PluginView view = SettingsView.Render(new(), [], [], port);
 
         string page = string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]);
 
-        Assert.Contains("51413", page, StringComparison.Ordinal);
-        Assert.Contains("by hand", page, StringComparison.Ordinal);
-        Assert.Contains("TCP and UDP", page, StringComparison.Ordinal);
-        Assert.Contains("no device answered the search", page, StringComparison.Ordinal);
+        Assert.DoesNotContain("by hand", page, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("would not open", page, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("could not be opened", page, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <remarks>
-    /// And nothing at all when the port is open, or when nothing has tried yet.
-    /// A page that said "the port is fine" on every load would be one more
-    /// thing to read past.
+    /// <para>
+    /// <strong>Three states, and only one of them is a warning.</strong> This
+    /// page reported every failed UPnP and NAT-PMP attempt. On the owner's
+    /// network neither protocol ever answers and the port is forwarded by hand,
+    /// so that line was wrong every time it appeared — and a line that is
+    /// always wrong teaches an owner to read past every line.
+    /// </para>
+    /// <para>
+    /// So a mapping refusal is not a state of the port at all. It says the
+    /// router would not open it <em>by itself</em>, which leaves the port
+    /// exactly as unproven as it was: <em>not known yet</em>. Only a live check
+    /// saying the port does not answer earns the warning — and until
+    /// media-server #52 lands nothing can say that, so this state is built and
+    /// nobody sets it.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData(PortState.Open, PluginBadgeVariant.Success, "open")]
+    [InlineData(PortState.Unknown, PluginBadgeVariant.Neutral, "not known yet")]
+    [InlineData(PortState.Shut, PluginBadgeVariant.Warning, "shut")]
+    public void ThePortSaysOpenShutOrNotKnownYet(PortState port, string variant, string says)
+    {
+        PluginView view = SettingsView.Render(new(), [], [], port);
+
+        PluginComponent badge = Rendered.ById(view, "port-state");
+
+        Assert.Equal(says, badge.Props["label"]);
+        Assert.Equal(variant, badge.Props["variant"]);
+
+        // Only shut warns. The other two are states rather than problems, and a
+        // page that warns about all three warns about nothing.
+        Assert.Equal(port is PortState.Shut, PluginBadgeVariant.Warning.Equals(badge.Props["variant"]));
+
+        // And the number is on the page whatever the state, because the owner
+        // forwarding it by hand is the one who needs it.
+        Assert.Contains(
+            new Settings().Client.ListenPort.ToString(CultureInfo.InvariantCulture),
+            string.Join(" ", Rendered.EveryValue(view)),
+            StringComparison.Ordinal);
+    }
+
+    /// <summary>The field names one section of the page posts.</summary>
+    private static IReadOnlyList<string> Fields(PluginView view, string section)
+    {
+        PluginComponent form = Rendered.ById(view, section);
+
+        return form.Props.GetValueOrDefault("fields") is IEnumerable<PluginFormField> fields
+            ? [.. fields.Select(field => field.Name)]
+            : throw new InvalidOperationException($"'{section}' is not a form with fields.");
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>One Save, for everything on the page.</strong> The owner asked
+    /// for it on 12 September 2026, having seen the page with four of them on
+    /// it: "ik wil ook een save knop hebben die alle instellingen doet
+    /// opslaan". That reverses the decision of the same week, which was a form
+    /// per section so that a bad value in one could not block another.
+    /// </para>
+    /// <para>
+    /// <strong>What it costs, and it is a real cost.</strong> A form posts the
+    /// fields it holds, so one Save means one post, and the applier refuses the
+    /// whole post when any field in it is refused — nothing is saved and the
+    /// page says which field it was. That is why it was split in the first
+    /// place. The owner weighed a page with four Save buttons against that and
+    /// chose the one button; the refusal naming its field is what makes it
+    /// bearable.
+    /// </para>
+    /// <para>
+    /// So this asserts one form and one button, and that every field the page
+    /// draws is inside it — a field outside the form is a control the Save
+    /// cannot reach, which is the fault this shape can have.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void APortThatIsOpenSaysNothingAboutItself()
+    public void OneSaveSavesEveryRenderedField()
     {
-        foreach (PortMapResult? mapping in new PortMapResult?[] { null, new(MappedBy.Upnp, 51413, null) })
-        {
-            PluginView view = SettingsView.Render(new(), [], [], mapping);
+        PluginView view = SettingsView.Render(WithAPrivateTracker(), [], [], advanced: true);
 
-            Assert.DoesNotContain(
-                "by hand",
-                string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]),
-                StringComparison.Ordinal);
+        PluginComponent[] forms =
+        [
+            .. Rendered.All(view).Where(one => one.Props.ContainsKey("fields")),
+        ];
+
+        PluginComponent form = Assert.Single(forms);
+
+        Assert.Equal(SettingsView.FormId, form.Id);
+        Assert.Equal("Save", form.Props.GetValueOrDefault("submitLabel"));
+        Assert.Equal(SettingsView.SaveAction, form.Action!.Payload["method"]);
+
+        // And it really holds the lot, from every group.
+        IReadOnlyList<string> held = Fields(view, SettingsView.FormId);
+
+        foreach (string field in new[]
+                 {
+                     "incompleteFolder",
+                     "profile.maximumResolution",
+                     "cadences.cycle",
+                     "client.maxConcurrentDownloads",
+                     "client.seedRatio",
+                     "client.stallMinutes",
+                     "client.resumeIntervalSeconds",
+                 })
+        {
+            Assert.Contains(field, held);
+        }
+    }
+
+    /// <remarks>
+    /// And saving one leaves the others alone. This is the applier's half of the
+    /// same promise: it is handed the keys of one form and must not touch a
+    /// setting no key named.
+    /// </remarks>
+    [Fact]
+    public void SavingOneSectionLeavesTheOthersAlone()
+    {
+        Settings settings = new();
+        settings.Profile.MaximumResolution = "2160p";
+        settings.Client.MaxConcurrentDownloads = 9;
+
+        IReadOnlyList<string> problems = SettingsEdit.Apply(
+            settings,
+            new Dictionary<string, string?> { ["incompleteFolder"] = Path.GetTempPath() });
+
+        Assert.Empty(problems);
+        Assert.Equal("2160p", settings.Profile.MaximumResolution);
+        Assert.Equal(9, settings.Client.MaxConcurrentDownloads);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Nothing public is ever uploaded</strong> — `docs/06-torrent-client.md`
+    /// § Uploading, the owner's rule of 22 August 2026 — so seed ratio, seed
+    /// hours and the upload limit decide nothing at all on an install with no
+    /// private tracker. Three boxes that cannot affect anything are three boxes
+    /// an owner reasonably expects to work.
+    /// </para>
+    /// <para>
+    /// So they are not drawn, and a line says why rather than leaving the
+    /// absence to be noticed. The design's section table lists "upload limit"
+    /// under the client; its seeding paragraph counts it as one of the three
+    /// that disappear. The paragraph is the one that agrees with the uploading
+    /// rule, and this is built to the paragraph.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void SeedingIsDrawnOnlyWhenAPrivateTrackerExists()
+    {
+        string[] seeding = ["client.seedRatio", "client.seedHours", "client.maxUploadRate"];
+
+        PluginView bare = SettingsView.Render(new(), [], [], advanced: true);
+
+        foreach (string field in seeding)
+        {
+            Assert.DoesNotContain(field, Fields(bare, SettingsView.FormId));
+        }
+
+        // And the absence is explained rather than left to be noticed.
+        Assert.Contains(
+            "private",
+            string.Join(" ", Rendered.Words(bare)),
+            StringComparison.OrdinalIgnoreCase);
+
+        PluginView with = SettingsView.Render(WithAPrivateTracker(), [], [], advanced: true);
+
+        foreach (string field in seeding)
+        {
+            Assert.Contains(field, Fields(with, SettingsView.FormId));
         }
     }
 
     /// <remarks>
     /// <para>
-    /// <strong>The owner had already forwarded it, and the page kept telling
-    /// them to.</strong> UPnP and NAT-PMP failing says one thing only: the
-    /// router would not open the port <em>by itself</em>. It says nothing about
-    /// whether the port is open, and on this network it is — forwarded by hand,
-    /// 51413 to beast-unit and 51414 to the owner's own machine.
+    /// The expert fields appear with the switch and not before it. An owner
+    /// changing a folder should not have to walk past a resume interval to
+    /// reach it; an owner who wants the resume interval should not have to
+    /// guess that there is one.
     /// </para>
     /// <para>
-    /// A peer arriving on the listening socket is proof, and it is the only
-    /// proof there is: nothing outside can reach a port that is shut. Once one
-    /// has, the page has nothing left to say, and saying it anyway is how a
-    /// notice teaches an owner to read past every notice.
+    /// Asserted on whether they are drawn rather than on which form holds
+    /// them: since the owner asked for one Save there is only one form, so
+    /// membership says nothing and presence says everything.
     /// </para>
     /// </remarks>
     [Fact]
-    public void APortSomebodyHasAlreadyReachedIsNotOneToForwardByHand()
+    public void AdvancedHoldsTheExpertFields()
     {
-        PluginView view = SettingsView.Render(
-            new(),
-            [],
-            [],
-            new(MappedBy.Nothing, 51413, "UPnP: no device answered the search"),
+        string[] expert =
+        [
+            "client.stallMinutes",
+            "client.metadataTimeoutMinutes",
+            "client.encryption",
+            "client.resumeIntervalSeconds",
+        ];
 
-            // Somebody dialled in and got through.
-            reached: true);
+        IReadOnlyList<string> open = Fields(
+            SettingsView.Render(new(), [], [], advanced: true),
+            SettingsView.FormId);
 
-        string page = string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]);
+        IReadOnlyList<string> shut = Fields(
+            SettingsView.Render(new(), [], [], advanced: false),
+            SettingsView.FormId);
 
-        Assert.DoesNotContain("by hand", page, StringComparison.Ordinal);
-        Assert.DoesNotContain("no peer will be able to reach it", page, StringComparison.Ordinal);
+        foreach (string field in expert)
+        {
+            Assert.Contains(field, open);
+            Assert.DoesNotContain(field, shut);
+        }
+
+        // And the ordinary settings are there either way.
+        foreach (string field in new[] { "incompleteFolder", "profile.maximumResolution", "client.maxConcurrentDownloads" })
+        {
+            Assert.Contains(field, open);
+            Assert.Contains(field, shut);
+        }
     }
 
     /// <remarks>
-    /// And where nobody has arrived, what is said is what is known: the mapping
-    /// failed. Not that the port is shut — the plugin cannot see that from
-    /// here, and the owner who has already forwarded it needs to be told there
-    /// is nothing to do rather than told to do it again.
+    /// <para>
+    /// <strong>Show advanced writes nothing.</strong> It is a display state: the
+    /// fields behind it still apply while it is closed, and turning it on saves
+    /// nothing to `config.json`. A switch that quietly changed behaviour would
+    /// be the worst kind of setting.
+    /// </para>
+    /// <para>
+    /// Closed, the block is not on the page at all — so a page rendered without
+    /// it has no advanced form to find, and every advanced field is absent from
+    /// every other section rather than having moved into one.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void APortNobodyHasReachedSaysTheMappingFailedRatherThanThatThePortIsShut()
+    public void ShowAdvancedOnlyDecidesWhatIsDrawn()
     {
-        PluginView view = SettingsView.Render(
-            new(),
-            [],
-            [],
-            new(MappedBy.Nothing, 51413, "UPnP: no device answered the search"));
+        PluginView closed = SettingsView.Render(new(), [], [], advanced: false);
 
-        string page = string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]);
+        // Closed, the expert fields are not on the page at all - not moved
+        // into another group, not drawn disabled. There is nothing to post.
+        Assert.DoesNotContain("client.stallMinutes", Fields(closed, SettingsView.FormId));
+        Assert.DoesNotContain("client.resumeIntervalSeconds", Fields(closed, SettingsView.FormId));
 
-        Assert.Contains("already forwarded", page, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("The router would not open port", page, StringComparison.Ordinal);
+        // The cadence stays: it is an ordinary setting drawn as an
+        // interval, and only their raw expressions are expert.
+        Assert.Contains("cadences.cycle", Fields(closed, SettingsView.FormId));
+
+        // And the switch itself is a button, not a field: a field would be
+        // posted and written down.
+        PluginComponent toggle = Rendered.ById(closed, "advanced-toggle");
+
+        Assert.NotNull(toggle.Action);
+        Assert.Equal(SettingsView.AdvancedAction, toggle.Action!.Payload["method"]);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A cadence is a choice, not a syntax.</strong> The four boxes held
+    /// raw cron expressions, which is a language the owner has no reason to
+    /// know and one this plugin refuses on a typo — the page's own
+    /// <c>AnInvalidCronIsRefusedWithTheReasonAndChangesNothing</c> exists
+    /// because that happened.
+    /// </para>
+    /// <para>
+    /// So the ordinary control is an interval from a list, whose values are the
+    /// cron expressions it stands for, and the raw box stays under advanced for
+    /// whoever wants it. An expression typed there is still refused with its
+    /// reason.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ACadenceIsChosenFromAList()
+    {
+        PluginView view = SettingsView.Render(new(), [], [], advanced: true);
+
+        IReadOnlyList<PluginFormField> fields = [.. Every(view).Where(field => field.Name.StartsWith("cadences.", StringComparison.Ordinal) && field.Type == PluginFormFieldType.Select)];
+
+        Assert.Single(fields);
+
+        foreach (PluginFormField field in fields)
+        {
+            Assert.Equal(PluginFormFieldType.Select, field.Type);
+            Assert.NotNull(field.Options);
+            Assert.NotEmpty(field.Options!);
+
+            // Every option is a cron expression, because that is what is stored
+            // and nothing in between translates.
+            foreach (PluginFormOption option in field.Options!)
+            {
+                Assert.Equal(5, option.Value?.ToString()?.Split(' ').Length);
+            }
+        }
+
+        // The raw box is advanced, and it is the same setting.
+        Assert.Equal(
+            1,
+            Every(view).Count(field =>
+                field.Name.StartsWith("cadences.", StringComparison.Ordinal)
+                && field.Type != PluginFormFieldType.Select));
+
+        // And a typed expression is still judged. By the store, which is where
+        // a cron is validated - the applier only puts the text where it goes.
+        Assert.Contains("cadences.cycle", Fields(view, SettingsView.FormId));
+    }
+
+    /// <summary>Settings with one private tracker, which is what makes seeding mean anything.</summary>
+    private static Settings WithAPrivateTracker()
+    {
+        Settings settings = new();
+
+        settings.PrivateTrackers.Add(new PrivateTracker
+        {
+            Id = "one",
+            Host = "tracker.example",
+            AnnounceTemplate = "https://tracker.example/{passkey}/announce",
+        });
+
+        return settings;
+    }
+
+    /// <summary>Every field the page draws, whatever group it sits in.</summary>
+    private static IReadOnlyList<PluginFormField> Every(PluginView view)
+    {
+        return
+        [
+            .. Rendered.All(view)
+                .Select(one => one.Props.GetValueOrDefault("fields"))
+                .OfType<IEnumerable<PluginFormField>>()
+                .SelectMany(fields => fields),
+        ];
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A list that cannot show what is stored shows nothing.</strong>
+    /// The owner's own server had Transfers on an expression none of the seven
+    /// intervals offers, and the page drew an empty "Select..." — so the page
+    /// said the cadence was unset when it was running perfectly well, and
+    /// saving from there would have written whatever the box fell back to.
+    /// </para>
+    /// <para>
+    /// Seen on the live server on 12 September 2026, the first time this page
+    /// was looked at with real settings behind it. So a stored value the list
+    /// does not offer is added to it, and stays selected.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ACadenceKeepsAStoredExpressionTheListDoesNotOffer()
+    {
+        Settings settings = new();
+        settings.Cadences.Cycle = "*/7 * * * *";
+
+        PluginView view = SettingsView.Render(settings, [], []);
+
+        PluginFormField chooser = Assert.Single(
+            Every(view),
+            field => field.Name == "cadences.cycle" && field.Type == PluginFormFieldType.Select);
+
+        Assert.Equal("*/7 * * * *", chooser.Value);
+        Assert.Contains("*/7 * * * *", chooser.Options.Select(option => option.Value?.ToString()));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A button is a button, not a bar across the page.</strong> Seen on
+    /// the owner's server on 12 September 2026: Show advanced, Run now and Stop
+    /// each drew as a full-width strip with the words at the far left, which
+    /// reads as a section heading rather than something to press.
+    /// </para>
+    /// <para>
+    /// The client is not at fault and the plugin cannot style anything.
+    /// <c>PluginButton</c> is <c>inline-flex</c> — it asks to be exactly as wide
+    /// as its words. What stretched it is the box it was put in: a page column
+    /// and a <c>PluginDetail</c> body are both <c>flex-col</c>, and a flex
+    /// column stretches its children across by default. A <c>PluginRow</c> is
+    /// <c>flex-row items-center</c> and stretches nothing.
+    /// </para>
+    /// <para>
+    /// So every button on this page goes in a row. That is the whole fix, and
+    /// it is the plugin's to make: it chose the container.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryButtonSitsInARowRatherThanStretchingAcrossThePage()
+    {
+        PluginView view = SettingsView.Render(new(), [], []);
+
+        string[] buttons = ["advanced-toggle", "run-run", "run-stop"];
+
+        foreach (string id in buttons)
+        {
+            Assert.True(
+                InARow(view, id),
+                $"'{id}' is not inside a row, so a flex column will stretch it across the page.");
+        }
+    }
+
+    /// <summary>Whether the component with this id is an item of a row.</summary>
+    private static bool InARow(PluginView view, string id)
+    {
+        return Rendered.All(view)
+            .Where(one => one.Component == Ui.RowComponent)
+            .Any(row => Flatten(row.Items).Any(item => item.Id == id));
+    }
+
+    private static IEnumerable<PluginComponent> Flatten(IReadOnlyList<PluginComponent>? items)
+    {
+        foreach (PluginComponent item in items ?? [])
+        {
+            yield return item;
+
+            foreach (PluginComponent inner in Flatten(item.Items))
+            {
+                yield return inner;
+            }
+        }
+    }
+
+    /// <remarks>
+    /// The list offers nothing the save would refuse. It was written for four
+    /// cadences, one of them transfers, and so began at every minute — which for
+    /// a whole cycle is every indexer searched every minute. It begins at every
+    /// hour now, and for anything sooner there is the Run button.
+    /// </remarks>
+    [Fact]
+    public void TheCycleIsOfferedNoMoreOftenThanHourly()
+    {
+        PluginView view = SettingsView.Render(new(), [], []);
+
+        PluginFormField chooser = Assert.Single(
+            Every(view),
+            field => field.Name == "cadences.cycle" && field.Type == PluginFormFieldType.Select);
+
+        Assert.NotEmpty(chooser.Options!);
+
+        foreach (PluginFormOption option in chooser.Options!)
+        {
+            string cron = option.Value?.ToString() ?? string.Empty;
+
+            Assert.True(Cron.AtMostHourly(cron, out string? reason), $"'{option.Label}' is offered and would be refused: {reason}");
+        }
+
+        Assert.Contains(chooser.Options!, option => option.Value?.ToString() == "0 * * * *");
     }
 }

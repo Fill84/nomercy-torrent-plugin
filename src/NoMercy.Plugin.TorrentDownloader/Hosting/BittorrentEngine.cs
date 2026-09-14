@@ -104,14 +104,16 @@ public sealed class BittorrentEngine(
     /// What became of the attempt to have the router open the port.
     /// </summary>
     /// <remarks>
-    /// Null when the owner turned port mapping off. Said on the Settings page
-    /// either way: a router that refuses is not a fault — the client still
-    /// dials out — but it is the difference between meeting half a swarm and
-    /// meeting all of it, and the owner can forward the port by hand.
+    /// Null until the router has answered. <strong>Not drawn on any page and
+    /// not consulted by <see cref="PortCondition"/>:</strong> a router that
+    /// refuses says it would not open the port by itself, which on a
+    /// hand-forwarded port means nothing. Kept for the log, where S12-06 put
+    /// it, because "UPnP found no device" and "the gateway refused" are
+    /// different problems when one is being chased.
     /// </remarks>
     public PortMapResult? Mapped { get; private set; }
 
-    /// <summary>Whether any peer has ever arrived on the listening socket.</summary>
+    /// <summary>Whether any peer has ever arrived from outside this network.</summary>
     /// <remarks>
     /// Proof that the port is open, and the only proof there is: a mapping
     /// protocol refusing says the router would not open the port by itself and
@@ -119,6 +121,16 @@ public sealed class BittorrentEngine(
     /// forward once somebody has come through it.
     /// </remarks>
     public bool Reached { get; private set; }
+
+    /// <summary>What is known about the listening port.</summary>
+    /// <remarks>
+    /// Derived from <see cref="Reached"/> and from nothing else. <see cref="Mapped"/>
+    /// is deliberately not consulted: the router refusing to map a port says
+    /// only that it would not do it by itself, and answering "shut" from that
+    /// is the fault this replaced. <see cref="PortState.Shut"/> waits on a live
+    /// check the host cannot yet make — media-server #52.
+    /// </remarks>
+    public PortState PortCondition => Reached ? PortState.Open : PortState.Unknown;
 
     /// <summary>Why it is not listening, when it is not.</summary>
     /// <remarks>
@@ -366,9 +378,43 @@ public sealed class BittorrentEngine(
                 // test cannot hold a real one open for long enough to tell.
                 verify);
 
+            // Before it is held, so a torrent that is whole on disk already —
+            // which is every staged and dispatched grab after a restart — is
+            // not announced to nobody. The run opens its session on its first
+            // announcing pass, which the loop below starts.
+            run.Finished += () => Whole(infoHash);
+            run.Progressed += () => Moved(infoHash);
+            run.Opened += () => Knows(infoHash);
+
             Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time));
 
             _torrents[infoHash] = held;
+
+            // What only an opened session can decide: whether there is a video
+            // file in this torrent at all — a fake release has perfectly good
+            // metadata — and whether the disk has room for the files that will
+            // actually be fetched. Both used to be reached from Expire on every
+            // tick, so a fake release was refused whenever something next asked
+            // the client a question.
+
+            // The stall clock starts when the torrent is taken on, not when
+            // its first deadline comes round. StallWatch judges progress
+            // between two readings, so without a reading here the first one
+            // would be taken half an hour in and the second half an hour after
+            // that - an hour to notice a torrent that never had a peer.
+            RunProgress opening = held.Run.Progress();
+
+            held.Stall.Observe(opening.BytesDone, opening.Peers);
+
+            // A new torrent may be one too many. This ran on every status call
+            // and nowhere else, so the concurrency limit was whatever the last
+            // page to be drawn had left it at.
+            Queue();
+
+            // And the deadline it is owed from this moment: the owner's
+            // metadata limit for a magnet, the stall limit for a torrent that
+            // knows what it is.
+            Rearm(infoHash, held);
 
             // Discarded on purpose: the loop stops on the token and cannot
             // fault, because everything inside it is caught. Holding the task
@@ -397,28 +443,309 @@ public sealed class BittorrentEngine(
         }
     }
 
+    /// <summary>What this client is holding, and nothing else.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This used to be the client's entire housekeeping.</strong> It ran
+    /// <see cref="Expire"/>, <see cref="Stalled"/>, <see cref="Seeded"/>,
+    /// <see cref="Queue"/> and the resume write on every call, and nothing else
+    /// called any of them — so drawing a page did the client's work, and not
+    /// drawing one meant none was done. A magnet past its limit failed on
+    /// whichever page happened to be opened next, and a finished download was
+    /// found by whatever asked first.
+    /// </para>
+    /// <para>
+    /// That is the real reason the transfers cadence was <c>* * * * *</c>: not
+    /// transfers, but that without a tick a minute this client stopped doing
+    /// any of it. Each of the five now runs when its own moment comes — see
+    /// <see cref="Rearm"/> for the three that are deadlines and the events for
+    /// the rest — and asking what the client holds changes nothing about what
+    /// it holds.
+    /// </para>
+    /// </remarks>
     public Task<IReadOnlyList<TorrentStatus>> StatusAsync(CancellationToken ct)
     {
         lock (_lock)
         {
-            DateTimeOffset now = _time.GetUtcNow();
+            return Task.FromResult<IReadOnlyList<TorrentStatus>>([.. _torrents.Select(one => Status(one.Key, one.Value))]);
+        }
+    }
 
-            foreach (Held held in _torrents.Values)
+    /// <summary>
+    /// Sets this torrent's one deadline, or takes it away where none is owed.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Three things in this client cannot be told by an event, because
+    /// they are about something not happening.</strong> Nobody sends a message
+    /// saying they will not serve a magnet's metadata, and nothing announces
+    /// that no byte has arrived for twenty minutes. The owner's
+    /// <c>MetadataTimeoutMinutes</c> and <c>StallMinutes</c> are durations, and
+    /// a duration can only be measured by asking over and over — which is the
+    /// poll this work exists to remove — or by waking once at the end of it.
+    /// This wakes once at the end of it.
+    /// </para>
+    /// <para>
+    /// <strong>On a download that is running it never goes off.</strong>
+    /// <see cref="Moved"/> cancels and sets it again every time a piece really
+    /// verifies, so it can only reach its end when the torrent has genuinely
+    /// stopped. A client holding nothing has no timer at all.
+    /// </para>
+    /// <para>
+    /// Why this client gives up when no ordinary one does: there is nobody
+    /// watching it. qBittorrent leaves a magnet on "fetching metadata" for ever
+    /// and calls a dead torrent "stalled" in a list, because a person decides
+    /// what to do about it. Here the failure is what frees the episode to be
+    /// searched for again, and without it the episode is never looked for.
+    /// </para>
+    /// </remarks>
+    private void Rearm(string infoHash, Held held)
+    {
+        held.Wake?.Dispose();
+        held.Wake = null;
+
+        DateTimeOffset now = _time.GetUtcNow();
+
+        if (Owed(held, now) is not TimeSpan wait)
+        {
+            return;
+        }
+
+        held.Armed = now;
+        held.Wake = _time.CreateTimer(_ => Woke(infoHash), null, wait, Timeout.InfiniteTimeSpan);
+    }
+
+    /// <summary>How long until this torrent owes an answer, or null where it owes none.</summary>
+    private TimeSpan? Owed(Held held, DateTimeOffset now)
+    {
+        // Already given up on, or stopped by the owner. Neither is waiting for
+        // anything, and a paused torrent must never be failed for having sat
+        // there while it was stopped.
+        if (held.Error is not null || held.Run.Paused)
+        {
+            return null;
+        }
+
+        if (held.Finished is not null)
+        {
+            // Seeding, and nothing else is owed: it cannot stall, and it knows
+            // what it is. A public torrent is stopped the moment it completes
+            // and never reaches here; a private one with no hours set seeds
+            // until its ratio is met, which the session says without being
+            // asked.
+            return seeding.For > TimeSpan.Zero
+                ? From(held.Finished.Value + seeding.For - now)
+                : null;
+        }
+
+        // The earliest of what is owed, never the first of them. A magnet is
+        // waiting on two at once — somebody to serve its metadata, and anything
+        // at all to happen — and taking only the metadata limit left a magnet
+        // with no peer at all sitting there until that limit passed, however
+        // much sooner the owner's stall limit came round.
+        DateTimeOffset stall = (held.Stall.StuckSince ?? now) + stallLimit;
+
+        DateTimeOffset first = held.Run.Torrent is null
+            ? Earlier(held.Since + metadataTimeout, stall)
+            : stall;
+
+        return From(first - now);
+    }
+
+    /// <summary>Whichever of two moments comes first.</summary>
+    private static DateTimeOffset Earlier(DateTimeOffset one, DateTimeOffset other) =>
+        one < other ? one : other;
+
+    /// <summary>A wait that is never negative, because a deadline already past is due now.</summary>
+    private static TimeSpan From(TimeSpan wait) => wait > TimeSpan.Zero ? wait : TimeSpan.Zero;
+
+    /// <summary>The deadline came, so the answer it was waiting on is given.</summary>
+    private void Woke(string infoHash)
+    {
+        lock (_lock)
+        {
+            if (!_torrents.TryGetValue(infoHash, out Held? held))
             {
-                Expire(held, now);
-                Stalled(held);
-                Seeded(held, now);
+                // Removed while its timer was running. Nothing to decide.
+                return;
             }
 
+            DateTimeOffset now = _time.GetUtcNow();
+
+            Expire(held, now);
+            Stalled(held);
+            Seeded(held, now);
             Queue();
+            Rearm(infoHash, held);
+        }
 
-            // Written down at the owner's own interval, which ResumeKeeper
-            // decides for itself. Nothing called this at all, so no resume file
-            // ever existed and every restart re-downloaded every torrent from
-            // nothing — see docs/06-torrent-client.md § Resume.
-            resume?.Tick(_torrents.Values.Select(one => one.Run.Resuming()).OfType<ResumeData>());
+        Stir();
+    }
 
-            return Task.FromResult<IReadOnlyList<TorrentStatus>>([.. _torrents.Select(one => Status(one.Key, one.Value))]);
+    /// <summary>A piece of this torrent verified, so it is alive.</summary>
+    /// <remarks>
+    /// <para>
+    /// The stall deadline is pushed back rather than reached, which is why a
+    /// running download never has a timer go off. Pushed back at most four
+    /// times in a stall limit, because a torrent taking ten megabytes a second
+    /// verifies several pieces a second and remaking a timer that often would
+    /// cost more than the deadline saves.
+    /// </para>
+    /// <para>
+    /// And the resume files, which were written by whoever happened to ask this
+    /// client for its status. <c>ResumeKeeper</c> keeps the owner's own
+    /// interval and answers at once when it has not passed, so there is nothing
+    /// to write when nothing has arrived — which is exactly when a resume file
+    /// has nothing new to say.
+    /// </para>
+    /// </remarks>
+    private void Moved(string infoHash)
+    {
+        bool stirred;
+
+        lock (_lock)
+        {
+            if (!_torrents.TryGetValue(infoHash, out Held? held))
+            {
+                return;
+            }
+
+            stirred = _time.GetUtcNow() - held.Armed >= stallLimit / 4;
+
+            if (stirred)
+            {
+                Rearm(infoHash, held);
+            }
+
+            Remember();
+        }
+
+        if (stirred)
+        {
+            Stir();
+        }
+    }
+
+    /// <summary>Writes the resume files, if the owner's interval has passed.</summary>
+    /// <remarks>
+    /// <para>
+    /// Called where something worth writing down has happened and nowhere else:
+    /// a piece verified, a run settled what it is holding, a torrent finished,
+    /// the owner stopped one. <c>ResumeKeeper</c> keeps its own interval and
+    /// answers at once when it has not passed, so this costs a comparison on
+    /// the ones that are too soon.
+    /// </para>
+    /// <para>
+    /// <strong>A verified piece is not enough on its own.</strong> A torrent
+    /// that is already whole on disk — which is every staged and dispatched
+    /// grab after a restart, and every download the moment it finishes — never
+    /// verifies another piece as long as it lives, so a resume file hung on
+    /// progress alone would never be written for exactly the torrents whose
+    /// resume file matters most. Settling and finishing are where the verified
+    /// bitfield becomes worth keeping, and they are where this is called.
+    /// </para>
+    /// </remarks>
+    private void Remember()
+    {
+        resume?.Tick(_torrents.Values.Select(one => one.Run.Resuming()).OfType<ResumeData>());
+    }
+
+    /// <summary>The metadata arrived, so what only it can decide is decided.</summary>
+    /// <remarks>
+    /// <see cref="Refuse"/> and <see cref="Cramped"/> both need the file list
+    /// and the size, and both used to be reached from <see cref="Expire"/> on
+    /// every tick — so a fake release was found, and a torrent too big for the
+    /// disk was stopped, only when something happened to ask. This is the
+    /// moment they can be answered, and it is the moment they are.
+    /// </remarks>
+    private void Knows(string infoHash)
+    {
+        lock (_lock)
+        {
+            // Already given up on: refusing it a second time would write a
+            // second line into the journal for one torrent, which is the fault
+            // TheFailureIsSaidOnceAndNotOnceATick exists to stop.
+            if (!_torrents.TryGetValue(infoHash, out Held? held) || held.Error is not null)
+            {
+                return;
+            }
+
+            Refuse(held);
+            Cramped(held);
+            Queue();
+            Rearm(infoHash, held);
+
+            // What the disk pass just found, written down. This is the first
+            // moment the verified bitfield exists, and for a torrent already
+            // whole on disk it is the only one.
+            Remember();
+        }
+
+        Stir();
+    }
+
+    /// <summary>This torrent is whole, so the seeding policy is applied to it.</summary>
+    private void Whole(string infoHash)
+    {
+        lock (_lock)
+        {
+            if (_torrents.TryGetValue(infoHash, out Held? held))
+            {
+                Seeded(held, _time.GetUtcNow());
+
+                // A slot has come free: a seeding torrent is not downloading,
+                // and the next in the queue has been waiting for this.
+                Queue();
+
+                GiveBack(infoHash, held);
+                Rearm(infoHash, held);
+
+                // Whole, and worth writing down before anything can go wrong.
+                Remember();
+            }
+        }
+
+        // Outside the lock. A handler stages a file and asks the server for an
+        // encode, and neither has any business waiting on this client's lock.
+        Finished(infoHash);
+        Stir();
+    }
+
+    /// <summary>
+    /// Asks the session to say when the owner's ratio has been given back.
+    /// </summary>
+    /// <remarks>
+    /// A ratio is a count of bytes once the download has stopped moving, so the
+    /// session can say when they have gone out instead of this client asking
+    /// what the ratio is. Only a private torrent ever gives anything back.
+    /// </remarks>
+    private void GiveBack(string infoHash, Held held)
+    {
+        if (seeding.Ratio <= 0 || held.Run.Torrent is not { Private: true })
+        {
+            return;
+        }
+
+        RunProgress progress = held.Run.Progress();
+
+        if (progress.Downloaded <= 0)
+        {
+            return;
+        }
+
+        held.Run.TellMeWhenGivenBack((long)(progress.Downloaded * seeding.Ratio), () => Repaid(infoHash));
+    }
+
+    /// <summary>The owner's ratio has been met, so this stops seeding.</summary>
+    private void Repaid(string infoHash)
+    {
+        lock (_lock)
+        {
+            if (_torrents.TryGetValue(infoHash, out Held? held))
+            {
+                Seeded(held, _time.GetUtcNow());
+                Rearm(infoHash, held);
+            }
         }
     }
 
@@ -437,6 +764,15 @@ public sealed class BittorrentEngine(
                 // The owner's decision, not the queue's. Left marked as queued
                 // it would be started again the moment a slot came free.
                 held.Queued = false;
+
+                // A paused torrent owes no answer: it is not failing to fetch
+                // its metadata and it is not stalled, it is stopped. Its
+                // deadline goes with it, and a slot has come free.
+                Queue();
+                Rearm(infoHash, held);
+
+                // Stopping is a good moment to write down where it got to.
+                Remember();
             }
 
             return Task.CompletedTask;
@@ -453,10 +789,13 @@ public sealed class BittorrentEngine(
                 held.Queued = false;
 
                 // The clock starts again with it. A torrent resumed after the
-                // limit had passed would otherwise fail on the very next tick
+                // limit had passed would otherwise fail the moment it started,
                 // without a single peer having been asked.
                 held.Since = _time.GetUtcNow();
                 held.Error = null;
+
+                Queue();
+                Rearm(infoHash, held);
             }
 
             return Task.CompletedTask;
@@ -470,6 +809,19 @@ public sealed class BittorrentEngine(
         lock (_lock)
         {
             _torrents.Remove(infoHash, out held);
+
+            // Its deadline goes with it. A timer left behind would wake for a
+            // torrent this client no longer holds, which Woke would find
+            // nothing for — and holding a disposed run's timer alive is a
+            // leak per removed torrent.
+            held?.Wake?.Dispose();
+
+            if (held is not null)
+            {
+                // A slot has come free for whatever the concurrency limit was
+                // keeping back.
+                Queue();
+            }
         }
 
         if (held is null)
@@ -605,6 +957,15 @@ public sealed class BittorrentEngine(
             _disposed = true;
             holding = [.. _torrents.Values];
 
+            // Every deadline goes here, and under the lock: a timer that fires
+            // during a shutdown finds Woke looking in a dictionary that is
+            // being emptied.
+            foreach (Held one in holding)
+            {
+                one.Wake?.Dispose();
+                one.Wake = null;
+            }
+
             _torrents.Clear();
         }
 
@@ -669,9 +1030,9 @@ public sealed class BittorrentEngine(
     /// </summary>
     /// <remarks>
     /// docs/06-torrent-client.md: announce at the tracker's own interval. It
-    /// runs for the client's life rather than for a cadence tick, because a
-    /// swarm changes between ticks and a client that only asked once would be
-    /// left with the peers of five minutes ago.
+    /// runs for the client's life rather than once, because a swarm changes and a
+    /// client that only asked once would be left with the peers of five minutes
+    /// ago.
     /// </remarks>
     private async Task AnnouncingAsync(Held held, CancellationToken ct)
     {
@@ -913,10 +1274,16 @@ public sealed class BittorrentEngine(
                 return;
             }
 
-            // A peer got through the door, so the port is reachable from
-            // outside whatever UPnP and NAT-PMP had to say about it. It is the
-            // only evidence there is either way.
-            Reached = true;
+            // A peer got through the door — but only one that crossed the
+            // router proves anything. This client announces itself on the local
+            // network, so a neighbour found by local service discovery reaches
+            // this socket without the forwarded port being involved at all, and
+            // drawing "open" from that would be a page confidently wrong about
+            // the one thing the owner would act on.
+            if (arrived.RemoteEndPoint is IPEndPoint from && DialIn.ProvesThePortIsOpen(from.Address))
+            {
+                Reached = true;
+            }
 
             _ = WelcomeAsync(arrived, ct);
         }
@@ -992,9 +1359,9 @@ public sealed class BittorrentEngine(
     /// never looked for again — which is what 0.3.4 did.
     /// </para>
     /// <para>
-    /// Said once, not once a tick: transfers ticks every minute, and the error
-    /// it records is the thing that stops it being said again. A paused torrent
-    /// is not failed for having sat there while it was stopped.
+    /// Said once: it runs when the torrent's deadline comes, and the error it
+    /// records is what takes the deadline away. A paused torrent owes no
+    /// deadline, so it is never failed for having sat there while it was stopped.
     /// </para>
     /// </remarks>
     private void Expire(Held held, DateTimeOffset now)
@@ -1073,6 +1440,75 @@ public sealed class BittorrentEngine(
             }
 
             return said.ToString();
+        }
+    }
+
+    /// <summary>Says which torrent has finished, once per torrent.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is what replaced the sweep.</strong> A completion was
+    /// noticed by <see cref="Seeded"/>, which is reached from
+    /// <see cref="StatusAsync"/> and from nowhere else — so nothing was staged
+    /// and no encode was asked for until something happened to ask, and the
+    /// transfers cadence was <c>* * * * *</c> to make that happen often enough
+    /// for the owner not to see it.
+    /// </para>
+    /// <para>
+    /// The info hash, because that is what the run is held under and what every
+    /// grab in the store is keyed by. The handler is a plugin's, doing real
+    /// work — staging a file, asking the server for an encode — so it is raised
+    /// outside this client's lock, which is where the session raises it too.
+    /// </para>
+    /// </remarks>
+    public event Action<string>? Completed;
+
+    /// <summary>Raised when the client does something a page would show.</summary>
+    /// <remarks>
+    /// <para>
+    /// Settling what a torrent holds, a torrent finishing, the owner pausing or
+    /// resuming one, a deadline deciding something, and pieces arriving — the
+    /// last of those at most a few times a stall limit, on the same debounce as
+    /// the stall deadline, because a torrent at ten megabytes a second verifies
+    /// several pieces a second.
+    /// </para>
+    /// <para>
+    /// What it is for: a page that has been open with nothing changing goes to
+    /// rest, and nothing samples the client for it. A stalled torrent starting
+    /// again is exactly the one somebody was staring at, and this is what wakes
+    /// the watch. `S11-29`.
+    /// </para>
+    /// </remarks>
+    public event Action? Stirred;
+
+    /// <summary>Raises <see cref="Stirred"/>, and never lets a handler take the client down.</summary>
+    private void Stir()
+    {
+        try
+        {
+            Stirred?.Invoke();
+        }
+        catch (Exception wrong)
+        {
+            logger.LogWarning(wrong, "Telling the pages the client moved went wrong: {Reason}", wrong.Message);
+        }
+    }
+
+    /// <summary>Raises <see cref="Completed"/> without letting a handler take the client down.</summary>
+    /// <remarks>
+    /// This is reached from a peer's own loop, which has no caller to throw to:
+    /// an escaping exception here would be an unobserved task exception and
+    /// would take the media server with it rather than the download.
+    /// </remarks>
+    private void Finished(string infoHash)
+    {
+        try
+        {
+            Completed?.Invoke(infoHash);
+        }
+        catch (Exception wrong)
+        {
+            logger.LogWarning(
+                wrong, "{Hash} finished and something went wrong acting on it: {Reason}", infoHash, wrong.Message);
         }
     }
 
@@ -1708,5 +2144,17 @@ public sealed class BittorrentEngine(
 
         /// <summary>When it finished downloading, which is when seeding started.</summary>
         public DateTimeOffset? Finished { get; set; }
+
+        /// <summary>The one decision this torrent has outstanding, and when it falls due.</summary>
+        /// <remarks>
+        /// One at a time, because only one can ever be next: a torrent is
+        /// waiting for metadata, or downloading, or seeding out the owner's
+        /// hours. Cancelled and set again whenever anything really happens, so
+        /// on a download that is running it never goes off at all.
+        /// </remarks>
+        public ITimer? Wake { get; set; }
+
+        /// <summary>When <see cref="Wake"/> was last set, so it is not reset per piece.</summary>
+        public DateTimeOffset Armed { get; set; }
     }
 }

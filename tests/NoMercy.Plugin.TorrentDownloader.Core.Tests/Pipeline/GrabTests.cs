@@ -16,7 +16,7 @@ public class GrabTests
 
     /// <remarks>
     /// The client takes it and answers what it will be known by. That hash is
-    /// what everything afterwards — the transfers tick, staging, recovery —
+    /// what everything afterwards — a transfers pass, staging, recovery —
     /// finds it again from.
     /// </remarks>
     [Fact]

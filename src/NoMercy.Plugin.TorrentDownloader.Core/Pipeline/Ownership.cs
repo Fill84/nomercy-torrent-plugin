@@ -8,7 +8,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// <remarks>
 /// <para>
 /// It is here, alone, because two halves of the plugin ask it: the refresh
-/// decides which shows are searched for, and the transfers tick decides which
+/// decides which shows are searched for, and a transfers pass decides which
 /// grabs are cancelled for belonging to a show the owner does not have. While
 /// the expression was written out in both, they could drift apart — and a
 /// disagreement means the plugin grabs a show and cancels it on the next tick,

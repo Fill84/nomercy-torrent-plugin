@@ -34,44 +34,66 @@ keeps the same data folder, the same grants and the same settings location.
 Plus its own REST endpoints through `NoMercy.Plugins.Mvc`, and live pushes through
 `IPluginHubContext`.
 
-## The four cadences, and the plugin's own clock
+## One cycle, driven by events
 
-| Cadence | Default cron | Does |
-| --- | --- | --- |
-| `transfers` | `* * * * *` | watch what is downloading; stage and dispatch what finished |
-| `feed` | `*/15 * * * *` | read every feed into the name pool |
-| `search` | `0 */6 * * *` | resolve names for missing episodes, find copies, grab |
-| `maintenance` | `0 4 * * *` | re-derive the missing list, prune old refusals, clear duplicate grab rows |
+Decided with the owner on 13 September 2026. The full design and the evidence for every decision in it
+is `docs/plan/DESIGN-2026-09-13-one-cycle-driven-by-events.md`.
 
-**Only one job is registered with the host: `transfers`, every minute (S12-05).** The host reads
-`IScheduledTaskPlugin.Jobs` only when the plugin is installed, hot-swapped or enabled —
-`PluginCronRegistrar.RegisterPlugin` re-reads it, but only those three call it, and there is no
-capability for a plugin to ask for its own re-registration (media-server #53). A saved cadence
-therefore cannot take effect by changing a registration: it takes effect because `Hosting/Clock.cs`
-is asked, fresh, on every transfers tick, which of `feed`, `search` and `maintenance` are due —
-judged by the owner's saved interval and a `cadences` table holding when each last finished. A
-cadence with no row has never run and is due at once, which is the right answer on a fresh install.
-When #53 is closed, the plugin can hand the timing back to the host and this clock goes.
+There are no cadences for the work. There is **one cycle**, and each step is started by the last one
+finishing:
 
-**A tick under one of the three retired job names is still accepted.** A host that has not yet
-re-read `Jobs` after this upgrade is still holding its previous four-job registration, each still
-firing on its own old cadence, and `ExecuteAsync` still runs that one pass for that one name — it is
-only the tick under `transfers` that also asks the clock.
+```
+feed → search → the torrent client → a download finishes → staged → encode dispatched
+     → the server says the encode ended → nothing left in hand → maintenance
+```
 
-**Every piece of periodic housekeeping is in `maintenance`.** Not because it is tidy, but because
-housekeeping spread across the cadence that happened to be running when somebody needed it is
-housekeeping nobody can find. `search` re-derives the missing list of its own accord as well — a
-cycle needs a fresh one and must not wait for four in the morning — and that is the only overlap.
+**Three things start a cycle**, all through one door (`Trigger`):
 
-**A start settles once, whichever cadence ticks first.** What the library holds is derived rather
-than stored, so a plugin that only re-derived it on its six-hourly cycle carried whatever the last
-run left behind. On 24 August 2026 that was shows a broken build had put there that the owner does
-not have. A restart settles within the minute instead. It runs the maintenance work, so no cadence
-has a first tick unlike its others.
+| Trigger | |
+| --- | --- |
+| The **Run** button | the owner |
+| `LibraryScanCompletedEvent` | the server finished a library scan — not `FileCreatedEvent`, which an encode this plugin asked for raises, so a cycle hung on it would start itself for ever |
+| The owner's cadence | one setting, **hourly** by default, and **never more often than once an hour** |
 
-**A saved cadence takes effect on the very next tick, not on the next restart.** That is the whole
-point of the clock above: `feed`, `search` and `maintenance` are judged against the owner's current
-setting every single time, never against a schedule fixed when the server started.
+**A trigger during an open cycle is added to it**, never run beside it and never dropped. What the
+open cycle has already taken is written down as it takes it, so the feed and search it runs again
+exclude those by themselves.
+
+**A cycle is open until nothing is left in hand** — nothing the torrent client holds, nothing staged,
+nothing waiting on an encode — and then maintenance runs and the cycle closes. Maintenance last,
+because it sweeps download folders no grab answers for. A grab written down but never started does
+not hold a cycle open.
+
+**Nothing in the chain is a timer.** A finished download is `BittorrentEngine.Completed`, raised where
+the last piece verifies. An ended encode is `EncodingCompletedEvent` or `EncodingFailedEvent`, matched
+on the media id the plugin named when it asked. A transfers pass runs on either, and every pass asks
+whether the cycle can close.
+
+**The library decides when an encode has arrived; no clock decides it is lost.** The server says
+nothing about a job the owner takes out of the queue by hand, or one that ends with nothing to encode,
+so a grab waiting on one of those waits until a pass finds its episode in the library — and
+`LibraryScanCompletedEvent` starts a transfers pass as well as a cycle, for exactly that. Or until the
+owner cancels it on the Downloads page. An encode is never asked for a second time, a restart
+included: the server's queue outlives a restart and the job says what became of it when it runs. The
+owner's ruling of 14 September 2026; it replaced a six-hour give-up that put the episode back to
+missing and downloaded it again.
+
+**The owner's cadence is kept by the plugin's own clock**, set to the moment the next cycle is due
+rather than woken to ask whether one is, and wound again when a cycle closes. A saved cadence takes
+effect at once: the host reads `IScheduledTaskPlugin.Jobs` only when a plugin is installed, hot-swapped
+or enabled, so a schedule declared to it could never follow a change.
+
+**The host is still told to tick this plugin, hourly, and that tick starts nothing.** The contract has
+no way to decline a schedule — a plugin whose `Jobs` is empty is registered under its single
+`CronExpression` instead — so one job, `cycle`, is declared, and all it does is make sure the clock is
+wound. The four retired names — `transfers`, `feed`, `search`, `maintenance` — are still answered to
+and start nothing, because the host removes a plugin's jobs by the names the loaded instance declares
+and an upgrade can leave the old four registered.
+
+**A start settles once, whichever asks first.** What the library holds is derived rather than stored,
+so a plugin that only re-derived it on a schedule carried whatever the last run left behind — on
+24 August 2026, shows a broken build had put there that the owner does not have. The first thing that
+asks anything of a started plugin runs the maintenance work once.
 
 ## What the server gives it
 

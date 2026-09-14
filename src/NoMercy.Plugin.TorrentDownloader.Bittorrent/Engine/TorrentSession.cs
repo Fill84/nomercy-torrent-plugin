@@ -174,6 +174,85 @@ public sealed class TorrentSession(
     /// </remarks>
     public bool Complete => _picker.Missing(verified) == 0;
 
+    /// <summary>Raised once, when the last wanted piece has verified.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This is where a download becomes news.</strong> Until it existed
+    /// a completion was only ever <em>noticed</em> — <c>Complete</c> is derived
+    /// on demand and <c>BittorrentEngine.Seeded</c> is reached from
+    /// <c>StatusAsync</c> and nowhere else — so nothing was staged, no encode
+    /// was asked for and no page moved until something happened to ask. The
+    /// transfers cadence was set to every minute to hide that.
+    /// </para>
+    /// <para>
+    /// <strong>Raised outside every lock, and that is not a detail.</strong>
+    /// `S11-37` was a wait taken under this class's lock that only something
+    /// holding the same lock could satisfy, and it stopped the client dead. A
+    /// handler here does real work — staging a file, asking the server for an
+    /// encode — so raising it under the lock would hand that fault to every
+    /// completion.
+    /// </para>
+    /// <para>
+    /// Once. Both ends go on seeding after they are complete, so anything
+    /// raised per verified piece would be raised for as long as the session
+    /// ran.
+    /// </para>
+    /// </remarks>
+    public event Action? Finished;
+
+    /// <summary>Nought until it has been said, one afterwards.</summary>
+    private int _said;
+
+    /// <summary>Raised when a piece has verified, so something really arrived.</summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>What this is for is the stall watch.</strong> There is no event
+    /// for "nothing is happening", so a torrent that has died can only be found
+    /// by a deadline — and a deadline that a live torrent keeps resetting never
+    /// fires at all. This is what resets it, so the client's one timer goes off
+    /// only when a download has genuinely stopped.
+    /// </para>
+    /// <para>
+    /// Per verified piece and not per block. A block is sixteen kilobytes and
+    /// they arrive in their thousands a second; a piece is the unit this
+    /// client's own progress is counted in, and it is what <c>StallWatch</c>
+    /// measures. Raised outside the lock, like everything else here.
+    /// </para>
+    /// </remarks>
+    public event Action? Progressed;
+
+    /// <summary>How much given back before the owner's ratio is met, or nought for no limit.</summary>
+    private long _enough;
+
+    /// <summary>Told once, when that much has gone out.</summary>
+    private Action? _repaid;
+
+    /// <summary>
+    /// Says when this torrent has given back what the owner asked of it.
+    /// </summary>
+    /// <remarks>
+    /// A ratio is a number of bytes, and the divisor stops moving the moment a
+    /// download is complete — so the moment it finishes, "ratio 1.0" is a known
+    /// count of uploaded bytes and nothing has to watch for it. Without this,
+    /// the only way to obey a seeding ratio was to keep asking what the ratio
+    /// was.
+    /// </remarks>
+    /// <param name="bytes">How many uploaded bytes meet it.</param>
+    /// <param name="said">Told once, outside the lock, when they have gone.</param>
+    public void TellMeWhenGivenBack(long bytes, Action said)
+    {
+        lock (_lock)
+        {
+            _enough = bytes;
+            _repaid = said;
+        }
+
+        // A torrent whose ratio was already met before this was asked - one
+        // that seeded through a restart - is told at once rather than waiting
+        // for an upload that may never come.
+        Repaid();
+    }
+
     /// <summary>How many bytes this session is downloading.</summary>
     public long WantedBytes
     {
@@ -591,6 +670,11 @@ public sealed class TorrentSession(
         PieceOutcome outcome;
         PieceAssembly? assembly;
 
+        // Read under the lock and acted on outside it. Asking Complete again
+        // afterwards would be asking about a session another peer may have
+        // moved on in between.
+        bool whole = false;
+
         lock (_lock)
         {
             if (!Ledger(peer).Accept(piece, offset, data.Length))
@@ -629,6 +713,8 @@ public sealed class TorrentSession(
                 _building.Remove(piece);
                 _claimedFor.Remove(piece);
                 _asked.Remove(piece);
+
+                whole = Complete;
             }
             else if (outcome == PieceOutcome.Failed)
             {
@@ -650,7 +736,74 @@ public sealed class TorrentSession(
         if (outcome == PieceOutcome.Verified)
         {
             await Told(piece, ct).ConfigureAwait(false);
+
+            // Both outside the lock this method released above. Progressed
+            // first: it is what keeps the stall deadline from ever firing on a
+            // torrent that is alive, and a completion is the most alive a
+            // torrent ever is.
+            Progressed?.Invoke();
+
+            Announce(whole);
         }
+    }
+
+    /// <summary>Tells whoever asked, once, that the ratio has been met.</summary>
+    private void Repaid()
+    {
+        Action? said;
+
+        lock (_lock)
+        {
+            if (_repaid is null || _enough <= 0 || _uploaded < _enough)
+            {
+                return;
+            }
+
+            // Taken rather than read, so it is said once however many peers
+            // are being served at the moment it is met.
+            said = _repaid;
+            _repaid = null;
+        }
+
+        said();
+    }
+
+    /// <summary>
+    /// Says it has finished, for a torrent that was already whole when it was
+    /// opened.
+    /// </summary>
+    /// <remarks>
+    /// This is what a restart finds. The plugin re-adds every grab that is not
+    /// done, failed or lost — staged and dispatched included — and their files
+    /// are on disk already, so no piece will ever verify again and the event
+    /// above can never fire for them. Without this a download that finished
+    /// while the server was down would sit in the incomplete folder for ever,
+    /// which is the gap the sweep every minute was filling.
+    /// </remarks>
+    public void AnnounceIfFinished()
+    {
+        bool whole;
+
+        lock (_lock)
+        {
+            whole = Complete;
+        }
+
+        Announce(whole);
+    }
+
+    /// <summary>Raises <see cref="Finished"/>, at most once, and never under the lock.</summary>
+    private void Announce(bool whole)
+    {
+        // Interlocked rather than the lock: this is reached from several peers'
+        // loops at once, and taking the lock to decide whether to raise an
+        // event that must not be raised under it would be an odd way to start.
+        if (!whole || Interlocked.Exchange(ref _said, 1) != 0)
+        {
+            return;
+        }
+
+        Finished?.Invoke();
     }
 
     /// <summary>Everybody hears about a piece that is now here.</summary>
@@ -707,6 +860,10 @@ public sealed class TorrentSession(
             block = disk.Read((piece * torrent.PieceLength) + offset, length);
             _uploaded += block.Length;
         }
+
+        // Outside the lock, and it costs one comparison for a block that is
+        // going out anyway. Nothing has to ask what the ratio is.
+        Repaid();
 
         if (limits is not null)
         {

@@ -4,6 +4,9 @@ Sixteen entries ship in `src/.../sources.json`: five name sources and eleven ind
 copied beside the assembly, and on top of them the owner may add their own indexers and their own
 private trackers.
 
+**Two ship switched off**: YTS, which is films and out of scope, and EZTV latest, whose API takes a
+search parameter and ignores it. Fourteen are asked.
+
 **The two are not the same thing and this document does not use one word for both.** A name source
 answers what a release is called; an indexer answers who is serving it. `SourceRole` decides which
 from the kind and the presence of a search address, and known failure **A2** is what happened when
@@ -25,6 +28,11 @@ episode with the same hundred newest torrents of every show, so it counted as ha
 was asked the same thing over and over. The owner's decision; the EZTV site, which searches, stays. All of them were measured
 working end to end on 13 August 2026 — each answered a real release name and produced a route to a
 torrent. The traps below are what that took.
+
+**Every source is on unless the owner switches it off.** The Sources page draws a switch for each
+under Show advanced, and `DisabledDefaultSources` records the ones that are off — see
+`docs/08-ui.md` § Sources. A shipped source is never editable: its address and reader are this
+plugin's, tested against a capture.
 
 ## Roles
 

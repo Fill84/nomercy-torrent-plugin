@@ -335,7 +335,6 @@ public class GrabRepositoryTests : IDisposable
             CancellationToken.None);
 
         await grabs.StagedAsync(Hash, [@"D:\intake\Silo.S03E01.1080p.mkv"], CancellationToken.None);
-        await grabs.EncodeJobAsync(Hash, Episode(1), "job-1", CancellationToken.None);
         await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
 
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
@@ -355,10 +354,9 @@ public class GrabRepositoryTests : IDisposable
 
         StoredDownload again = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
 
-        // A new download, not the old one's leftovers: nothing staged yet and
-        // no encode asked for, or the next tick would skip straight past both.
+        // A new download, not the old one's leftovers: nothing staged yet,
+        // or the next tick would skip straight past staging it.
         Assert.Empty(again.StagedPaths);
-        Assert.Null(again.EncodeJobId);
     }
 
     /// <remarks>

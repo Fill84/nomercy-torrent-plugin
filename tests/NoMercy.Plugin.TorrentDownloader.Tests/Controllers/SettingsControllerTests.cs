@@ -21,7 +21,7 @@ public class SettingsControllerTests
         SettingsController controller = For(Initialised());
 
         Settings settings = Writable();
-        settings.Cadences.Feed = "nonsense";
+        settings.Cadences.Cycle = "nonsense";
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Save(settings, CancellationToken.None));
@@ -30,7 +30,7 @@ public class SettingsControllerTests
 
         Assert.Equal("refused", response.Status);
         Assert.False(response.Data?.Saved);
-        Assert.Contains("feed", response.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cycle", response.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <remarks>
@@ -199,14 +199,14 @@ public class SettingsControllerTests
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(
             await controller.Edit(
-                new Dictionary<string, object?> { ["cadences.feed"] = "nonsense" },
+                new Dictionary<string, object?> { ["cadences.cycle"] = "nonsense" },
                 CancellationToken.None));
 
         PluginStatusResponse<SaveResult> response =
             Assert.IsType<PluginStatusResponse<SaveResult>>(result.Value);
 
         Assert.Equal("refused", response.Status);
-        Assert.Contains("feed", response.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("cycle", response.Message ?? string.Empty, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <remarks>

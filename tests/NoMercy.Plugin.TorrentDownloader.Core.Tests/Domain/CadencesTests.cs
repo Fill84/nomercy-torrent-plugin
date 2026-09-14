@@ -5,15 +5,20 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Domain;
 
 public class CadencesTests
 {
+    /// <remarks>
+    /// <strong>One, where there were four.</strong> Transfers every minute,
+    /// feed every fifteen, search every six hours and maintenance at four in
+    /// the morning were never four schedules: they are the steps of one cycle,
+    /// each started by the last one finishing. What is left to ask is how often
+    /// to start one when nobody has, and the owner said hourly.
+    /// </remarks>
     [Fact]
-    public void TheFourCadencesCarryTheirDocumentedDefaults()
+    public void TheOneCadenceCarriesItsDocumentedDefault()
     {
         Cadences cadences = new();
 
-        Assert.Equal("* * * * *", cadences.Transfers);
-        Assert.Equal("*/15 * * * *", cadences.Feed);
-        Assert.Equal("0 */6 * * *", cadences.Search);
-        Assert.Equal("0 4 * * *", cadences.Maintenance);
+        Assert.Equal("0 * * * *", cadences.Cycle);
+        Assert.Equal(("cycle", "0 * * * *"), Assert.Single(cadences.All()));
     }
 
     /// <remarks>
@@ -70,5 +75,46 @@ public class CadencesTests
         Assert.NotNull(reason);
         Assert.Contains("hour", reason, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("24", reason, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Never more often than once an hour.</strong> Every cycle reads
+    /// every feed and searches every indexer, and a trigger during an open cycle
+    /// adds another search to it — so a cycle every minute is every indexer asked
+    /// again and again for as long as anything downloads. The owner's ruling of
+    /// 13 September 2026: nothing shorter than an hour, typed by hand or not.
+    /// </para>
+    /// <para>
+    /// <strong>Exact, not sampled.</strong> A cron fires at most once an hour
+    /// precisely when its minute field is one number: one minute per matching
+    /// hour. A list, a range, a step or a star in that field fires more than once
+    /// in any hour it matches, and every expression matches at least one hour.
+    /// So nothing here counts occurrences over a window that a weekly pattern
+    /// could slip through.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("0 * * * *")]
+    [InlineData("15 */6 * * *")]
+    [InlineData("0 4 * * *")]
+    [InlineData("59 23 * * 0")]
+    public void ACycleAtMostOnceAnHourIsAccepted(string expression)
+    {
+        Assert.True(Cron.AtMostHourly(expression, out string? reason), reason);
+        Assert.Null(reason);
+    }
+
+    [Theory]
+    [InlineData("* * * * *")]
+    [InlineData("*/5 * * * *")]
+    [InlineData("0,30 * * * *")]
+    [InlineData("0-10 4 * * *")]
+    [InlineData("0,30 8 1 * *")]
+    public void ACycleMoreOftenThanHourlyIsRefusedWithTheReason(string expression)
+    {
+        Assert.False(Cron.AtMostHourly(expression, out string? reason));
+        Assert.NotNull(reason);
+        Assert.Contains("once an hour", reason, StringComparison.Ordinal);
     }
 }

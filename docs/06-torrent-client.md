@@ -28,7 +28,7 @@ seeding policy, port mapping, choking, rarest-first or endgame. 0.4.0 has all of
 | Local peer discovery | BEP 14 |
 | Private torrents | BEP 27 |
 | Message stream encryption | MSE/PE |
-| Port mapping | UPnP IGD, NAT-PMP |
+| Port mapping | UPnP IGD, NAT-PMP — always asked, never drawn |
 | Fast resume | own format |
 
 ## The port
@@ -273,10 +273,31 @@ No progress **and** no peers for `StallMinutes`: the torrent is stopped, the rea
 against the grab and the episode returns to missing. Progress with no peers is not a stall; peers with no
 progress for a minute is not either.
 
+## Nothing is done on asking
+
+`StatusAsync` reads and changes nothing. It used to be the client's whole housekeeping — expiring a
+magnet, noticing a stall, noticing a completion, the concurrency limit and the resume write all ran
+inside it and nowhere else — so a page being drawn did the client's work, and the transfers job ran
+every minute to make sure something drew. Each now runs when its own moment comes:
+
+| Work | When |
+| --- | --- |
+| No video file in it, not enough disk | the run settles what it holds (`TorrentRun.Opened`) |
+| Completion and the seeding policy | the last piece verifies (`Finished`), and the session saying the ratio has been given back |
+| The concurrency limit | add, settle, finish, pause, resume, remove |
+| Resume files | a piece verifies, a run settles, a torrent finishes, the owner pauses one |
+| Metadata timeout, stall, seed hours | the torrent's one deadline |
+
+**One deadline per torrent, and on a download that is running it never goes off.** Three things
+cannot be told by an event, because they are about something not happening: nobody serves a
+magnet's metadata, nothing arrives for `StallMinutes`, and `SeedHours` passes. Each torrent holds one
+timer set to the earliest of what it owes, and a verified piece pushes it back. A client holding
+nothing has no timer at all.
+
 ## The client always answers
 
-Everything the pages and the transfers tick ask the client — status, what the pages draw, whether
-anything is moving — is answered under the client's own lock, and so is everything a run is asked.
+Everything the pages and a transfers pass ask the client — status, what the pages draw — is
+answered under the client's own lock, and so is everything a run is asked.
 **Nothing that reads the disk runs under either lock.** Opening a session reads and hashes every
 byte already on disk, minutes for a season pack: it runs on the run's own thread, started by its
 announce loop after that loop has left the client's lock, and a run decides "nothing in it is
@@ -296,9 +317,38 @@ log said so.
 
 ## Ports
 
-`ListenPort` from settings, TCP and UDP. Mapped with **UPnP IGD**, falling back to **NAT-PMP**. A
-mapping that cannot be made is reported on the Settings page with the reason and the client carries
-on — a server behind a router that refuses both still downloads from peers it dials out to.
+`ListenPort` from settings, TCP and UDP. **6881 by default** — 6881 to 6889 is the BitTorrent
+default; 51413 is Transmission's and is only what this plugin happened to ship with. A settings file
+that names a port keeps it, so no existing install moves.
+
+The router is asked to open that port with **UPnP IGD**, falling back to **NAT-PMP**, on every
+start. There is no setting for it any more and its answer is never drawn: it is logged at debug and
+nothing else.
+
+**Because a mapping refusal says nothing about whether the port is open.** It says the router would
+not open it *by itself*. On the owner's network neither protocol has ever answered while 51413 has
+been forwarded by hand since August — so the Settings page's one notice, "the router would not open
+port 51413, forward TCP and UDP 51413 by hand", was the only thing on that page that was untrue.
+A notice that is always wrong is how an owner learns to read past every notice.
+
+So the page says one of three things, and only one of them is a warning:
+
+| State | Shown | When |
+| --- | --- | --- |
+| Open | the port, plainly | something outside has got through |
+| Not known yet | the port, plainly | nothing has proved it either way |
+| Shut | the port, with a warning | a live check asked and it did not answer |
+
+`PortState` holds those three and `BittorrentEngine.PortCondition` derives them from one fact:
+whether any peer has ever arrived on the listening socket. Nothing else may set `Open`, and
+`Mapped` is deliberately not consulted.
+
+**An idle server reads *not known yet*, and that is the honest answer.** `Shut` is built and set by
+nobody: `INetworkDiscovery.IsPortOpenAsync()` exists on the host but is wired to the server's own
+external web port. **media-server #52** asks for an overload taking a port and **#53** for the seam
+a plugin reaches it through. When #52 lands the plugin resolves `INetworkDiscovery` through
+`IPluginContext.Services` — the path `Hosting/ShowImport.cs` already uses — checks the real port,
+and the warning starts appearing when it is earned.
 
 ## Private torrents
 
@@ -358,7 +408,7 @@ for files that were already complete on disk.
 | in the store, in the engine | carry on |
 | in the store, not in the engine | re-added from its magnet, resume intact |
 | in the engine, not in the store | stopped, files kept, logged |
-| finished while the server was down | staged and dispatched on the first transfers tick |
+| finished while the server was down | whole on disk when it is re-added, so `Completed` is raised as it opens, and it is staged and dispatched from there |
 
 ## What is visible
 

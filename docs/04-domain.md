@@ -136,10 +136,7 @@ the same cycle is not asked about again.
 
 | Setting | Default | Note |
 | --- | --- | --- |
-| `TransfersCron` | `* * * * *` | |
-| `FeedCron` | `*/15 * * * *` | |
-| `SearchCron` | `0 */6 * * *` | |
-| `MaintenanceCron` | `0 4 * * *` | |
+| `Cadences.Cycle` | `0 * * * *` | how often a cycle starts when nothing else starts one; never more often than hourly |
 | `IncompleteFolder` | — | where downloads land |
 | `IntakeFolder` | — | where finished video is staged for the encoder |
 | `IncludeSpecials` | false | season 0 |
@@ -153,8 +150,7 @@ the same cycle is not asked about again.
 | `Indexers` | empty | the owner's own — see `docs/05-sources.md` |
 | `PrivateTrackers` | empty | the owner's own |
 | `DisabledDefaultSources` | empty | shipped sources the owner switched off |
-| `ListenPort` | 51413 | TCP and UDP |
-| `PortMapping` | on | UPnP IGD, then NAT-PMP |
+| `ListenPort` | 6881 | TCP and UDP. 6881-6889 is the BitTorrent default; a file that names a port keeps it |
 | `MaxDownloadRate` | 0 | bytes/s, 0 is unlimited |
 | `MaxUploadRate` | 0 | |
 | `SeedRatio` | 1.0 | |

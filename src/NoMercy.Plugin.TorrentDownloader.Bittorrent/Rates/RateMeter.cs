@@ -12,8 +12,11 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 /// </para>
 /// <para>
 /// It measures between two readings, so what it answers depends on how often it
-/// is read — which is what "measured" means. The transfers cadence reads it
-/// once a minute and gets the rate over that minute.
+/// is read — which is what "measured" means. With a page open the heartbeat reads
+/// it every second. With nobody looking it can go unread for hours, and the first
+/// reading after that is the rate over those hours; that is why the heartbeat
+/// compares with what a page was drawn with rather than with its own first beat,
+/// so a page drawn with such an average is put right a second later.
 /// </para>
 /// </remarks>
 public sealed class RateMeter(TimeProvider time)

@@ -1,5 +1,7 @@
 using System.Globalization;
 using System.Text.Json;
+using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Abstractions;
@@ -132,4 +134,140 @@ public class SourcesViewTests
     }
 
     private static DateTimeOffset Now => new(2026, 8, 19, 12, 0, 0, TimeSpan.Zero);
+
+    /// <summary>The shipped catalogue, as far as this page is concerned.</summary>
+    private static readonly SourceDefinition[] Shipped =
+    [
+        new("PreDB", "rss", "https://predb.me/?rss=1"),
+        new("The Pirate Bay", "apibay", "https://apibay.org/q.php?q={query}&cat="),
+        new("Nyaa", "torrent-rss", "https://nyaa.si/?page=rss&q={query}"),
+    ];
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Every source is on until the owner says otherwise</strong>, and
+    /// every one of them can be switched off. Until now nothing on any page
+    /// wrote <c>DisabledDefaultSources</c> at all: the setting existed, the
+    /// chain read it, and there was no way to put a name into it.
+    /// </para>
+    /// <para>
+    /// Under advanced, because an owner who came to change a folder should not
+    /// have to walk past a switch for every site the plugin ships with.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EverySourceHasASwitchAndTheyAreAllOnByDefault()
+    {
+        PluginView closed = SourcesView.Render([], Now, Shipped, new Settings());
+
+        Assert.DoesNotContain("source-switches", Rendered.All(closed).Select(one => one.Id));
+
+        PluginView view = SourcesView.Render([], Now, Shipped, new Settings(), advanced: true);
+
+        PluginComponent form = Rendered.ById(view, "source-switches");
+
+        IReadOnlyList<PluginFormField> fields =
+            form.Props.GetValueOrDefault("fields") is IEnumerable<PluginFormField> found
+                ? [.. found]
+                : throw new InvalidOperationException("'source-switches' is not a form with fields.");
+
+        Assert.Equal(Shipped.Length, fields.Count);
+
+        foreach (PluginFormField field in fields)
+        {
+            Assert.Equal(PluginFormFieldType.Toggle, field.Type);
+            Assert.Equal(true, field.Value);
+        }
+
+        Assert.Contains("source.PreDB", fields.Select(field => field.Name));
+    }
+
+    /// <remarks>
+    /// And the switch reaches the setting. A control that renders and writes
+    /// nowhere is the fault this page had: the owner flicks it, watches it
+    /// save, and the source keeps being asked.
+    /// </remarks>
+    [Fact]
+    public void ASourceSwitchedOffIsWrittenToDisabledDefaultSources()
+    {
+        Settings settings = new();
+
+        Assert.Empty(SettingsEdit.Apply(
+            settings,
+            new Dictionary<string, string?> { ["source.PreDB"] = "false" }));
+
+        Assert.Contains("PreDB", settings.DisabledDefaultSources);
+
+        // And back on again, which is the half that gets forgotten.
+        Assert.Empty(SettingsEdit.Apply(
+            settings,
+            new Dictionary<string, string?> { ["source.PreDB"] = "true" }));
+
+        Assert.DoesNotContain("PreDB", settings.DisabledDefaultSources);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// A shipped source is not the owner's to edit: its address, its reader and
+    /// its pacing are this plugin's, measured against a real capture, and a
+    /// page that let them be typed over would be a page that breaks a reader.
+    /// </para>
+    /// <para>
+    /// So no address is drawn and no editor is offered. Asserted on the
+    /// addresses themselves rather than on the absence of a component, because
+    /// what matters is that the string is not on the page however it got there.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ASourceInUseIsNotEditableAndItsAddressIsNotShown()
+    {
+        PluginView view = SourcesView.Render(
+            [new SourceReport("PreDB", Now, 21, null, TimeSpan.FromSeconds(1), null)],
+            Now,
+            Shipped,
+            new Settings(),
+            advanced: true);
+
+        string page = string.Join(
+            " ",
+            [.. Rendered.Words(view), .. Rendered.EveryValue(view).Select(value => value?.ToString())]);
+
+        foreach (SourceDefinition source in Shipped)
+        {
+            Assert.DoesNotContain(source.Url, page, StringComparison.Ordinal);
+        }
+
+        // The switch is the only control a shipped source gets.
+        IReadOnlyList<PluginFormField> fields =
+            Rendered.ById(view, "source-switches").Props.GetValueOrDefault("fields")
+                    is IEnumerable<PluginFormField> found
+                ? [.. found]
+                : [];
+
+        Assert.All(fields, field => Assert.Equal(PluginFormFieldType.Toggle, field.Type));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// Not set is its own answer, and it is the one that explains why an
+    /// indexer is refusing every request. Moved here with the block by
+    /// <c>S12-08</c>: it guarded the settings page, and the guarantee is the
+    /// same wherever the block is drawn.
+    /// </para>
+    /// <para>
+    /// The key is write-only. The page is handed only the names of the secrets
+    /// that exist, so it can say one is set and has no value it could render
+    /// even by accident.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AnIndexerWithNoApiKeySaysNotSet()
+    {
+        Settings settings = new();
+        settings.Indexers.Add(new() { Id = "own-1", Name = "Mine", Address = "https://x/?q={query}" });
+
+        PluginView view = SourcesView.Render([], Now, Shipped, settings);
+
+        Assert.Contains("not set", string.Join(" ", Rendered.Words(view)), StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -42,7 +42,7 @@ answer carries the other gaps of the same programme, which are then had for no f
 
 | # | What happened | Why it was invisible | Test |
 | --- | --- | --- | --- |
-| B1 | **`Unavailable` was permanent.** The query filtered it out and the refresh preserved it. | The queue just got shorter. | A maintenance pass re-derives state from the library; an unavailable episode with a new release becomes missing again. |
+| B1 | **`Unavailable` was permanent.** The query filtered it out and the refresh preserved it. | The queue just got shorter. | ~~A maintenance pass re-derives state from the library; an unavailable episode with a new release becomes missing again.~~ **Superseded 12 September 2026 — `S12-01`.** The re-derivation was the fault, not the fix: every maintenance pass rebuilt the list from the library and put the episode back to `Missing` while counting another attempt, so the state never held and the count ran to 67–69 against a setting of 3. The owner's decision was to drop the state and the limit outright — every gap is searched on every run, for ever. There is no `Unavailable` to test, and `EpisodeStates.FromStored` throws on a row that still carries it; migration `009` rewrites those rows. See `docs/04-domain.md` § Episode states. |
 | B2 | **A failed download burned a search attempt.** Three failed grabs exhausted the episode. | Attempts went up, which looked like work. | A grab that fails does not count as a search attempt. |
 | B3 | **A permission refusal counted as the site failing.** Three attempts parked the source fifteen minutes, and it stayed parked after the owner approved the host. | The message said "parked after repeated failures". | A refusal naming the host gate earns no failure, no backoff, no parking; a site that genuinely keeps failing still parks. |
 | B4 | **Ranking was inverted** — `.ThenBy` on indexer priority picked the worst-rated site, and a test enshrined it. | It always returned something. | Between two acceptable copies the higher-priority indexer wins, asserted with distinct priorities. |
@@ -98,7 +98,7 @@ all.
 | F1 | **The Run button awaited the cycle inside the HTTP request**, so it held the caller's cancellation token. Twenty-nine minutes of work thrown away. | A run started with an already-cancelled token still runs; the endpoint answers before the work is done. |
 | F2 | **The run lock was taken with the caller's token.** A zero wait cannot block, so it bought nothing and killed the run on the way in. | Covered by F1's test, which fails at exactly this line without the fix. |
 | F3 | **No overlap protection.** A thirty-minute cycle against a five-minute cron is six concurrent searches. | A tick arriving while its own cadence runs is dropped and logged. |
-| F4 | **A download that finished while the server was down was never noticed.** Completion was only seen while watching. | A torrent finished before start-up is staged and dispatched on the first transfers tick. |
+| F4 | **A download that finished while the server was down was never noticed.** Completion was only seen while watching. | A torrent whole on disk when it is re-added says so as it opens (`TorrentSession.AnnounceIfFinished`), and is staged and dispatched from that — no sweep, no tick. |
 
 ## G. Reporting that was wrong about itself
 

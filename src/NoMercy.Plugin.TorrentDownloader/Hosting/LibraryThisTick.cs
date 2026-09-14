@@ -9,8 +9,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The transfers cadence runs every minute and asks the same things several
-/// times inside it: the shows once per staged file and once per dispatch, a
+/// A transfers pass asks the same things several times inside it: the shows once per staged file and once per dispatch, a
 /// show's files once per dispatch, and a show's episodes from two places that
 /// each kept a cache of their own. A tick staging four episodes made eight
 /// round trips for a list that cannot change while the tick is running.

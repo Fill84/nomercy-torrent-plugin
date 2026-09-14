@@ -25,9 +25,9 @@ public sealed class SettingsStore
     /// </summary>
     /// <remarks>
     /// The host's read is a file check, a full file read and a deserialise,
-    /// behind a lock it shares with every other plugin on the server — and the
-    /// transfers cadence asks for the settings every minute, as does every page
-    /// the owner opens.
+    /// behind a lock it shares with every other plugin on the server — and every
+    /// transfers pass, every cycle and every page the owner opens asks for the
+    /// settings.
     /// </remarks>
     private string? _asRead;
 
@@ -146,6 +146,12 @@ public sealed class SettingsStore
             if (!Cron.IsValid(expression, out string? reason))
             {
                 errors.Add($"The {name} cadence '{expression}' is not a cron. {reason}");
+            }
+            else if (!Cron.AtMostHourly(expression, out string? tooOften))
+            {
+                // The raw box under Show advanced saves through here as well,
+                // so typing an expression by hand is no way round the floor.
+                errors.Add($"The {name} cadence is refused: {tooOften}");
             }
         }
 

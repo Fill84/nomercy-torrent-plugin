@@ -2456,8 +2456,14 @@ with). An existing install keeps what it has.
    only *shut* carries a warning. A mapping refusal renders *not known yet*.
 2. `PortState` is `Open`, `Shut` or `Unknown`, decided from one fact: a peer has dialled in from
    outside. `BittorrentEngine` already knows it (`Reached`); nothing else may set `Open`.
-3. Test (red): `BittorrentEngineTests.APeerDiallingInProvesThePortIsOpen` — a peer accepted on the
-   listening socket moves the state from `Unknown` to `Open`, and a mapping failure never moves it.
+3. Test (red): `PortStateTests.ADialInFromOutsideProvesThePortIsOpen` and
+   `BittorrentEngineTests.APeerDiallingInFromThisMachineProvesNothing`. **Corrected 12 September
+   2026:** this step said "a peer accepted on the listening socket moves the state to `Open`" and
+   that `Reached` already meant "from outside". It did not — any accepted socket set it, and this
+   client announces itself on the local network, so an LSD neighbour would prove a forwarded port
+   that may be shut. `DialIn.ProvesThePortIsOpen` decides it and the engine consults it; a mapping
+   failure never moves the state either way. A loopback dial-in is the only kind a test can make,
+   so the engine test is the negative one and the positive case is the pure function's.
 4. Remove `ClientLimits.PortMapping`, its editor and its field; the router is always asked for the
    configured port, and a refusal is logged at debug rather than drawn.
 5. Default `ListenPort` becomes 6881 for a settings file that names none; a file that names one is
@@ -2527,9 +2533,150 @@ indexer in use is not editable and its address is not shown.
 **Done when** those tests pass, the suite is green, and `PagesReachableTests` still answers for
 every page. Read first: `docs/plan/DESIGN-2026-09-12-settings-and-pages.md`, `docs/05-sources.md`.
 
+## S12-09 · One Save, and a list that keeps what is stored
+
+The owner looked at the page `S12-07` built and asked for two things: one Save button for every
+setting, and a page that is easier to read. The first reverses their own decision of the same week —
+`docs/plan/DESIGN-2026-09-12-settings-and-pages.md` is corrected rather than contradicted.
+
+Found in the same screenshot, on the live server: **Transfers drew an empty "Select..."**. The
+stored expression was not one of the seven intervals the list offered, so the list had nothing to
+select — the page said a cadence was unset while it was running perfectly well, and saving from
+there would have written whatever the empty box fell back to.
+
+**Files:** `Views/SettingsView.cs`, `tests/…/Views/SettingsViewTests.cs`,
+`docs/plan/DESIGN-2026-09-12-settings-and-pages.md`, `docs/08-ui.md` § Settings.
+
+**Steps**
+
+1. Test (red): `SettingsViewTests.OneSaveSavesEveryRenderedField` — one form on the page, one Save,
+   and every field the page draws inside it. A field outside it is a control the Save cannot reach.
+2. Test (red): `SettingsViewTests.ACadenceKeepsAStoredExpressionTheListDoesNotOffer` — a stored cron
+   the list does not offer is added to it and stays selected.
+3. The five section forms become one, assembled in reading order: folders, quality, the cadences,
+   the client, seeding where a private tracker exists, and the advanced block where it is open.
+   `EverySectionSavesOnItsOwn` and `EverySectionIsAFormTheOwnerCanChange` are replaced;
+   `AdvancedHoldsTheExpertFields` asserts presence rather than which form holds a field, because
+   with one form membership says nothing.
+
+**Done when** those tests pass, the suite is green, and the owner sees one Save and a Transfers
+cadence that shows what it is set to. Read first: `docs/plan/PROGRESS.md` § Log `S12-07`.
+
+## S12-10 · A finished download says so, instead of being found by a sweep
+
+> **Superseded on 13 September 2026, and kept for its reasoning.** The steps below were written
+> before the owner described what should replace the polling, and two of them are wrong: step 2
+> hangs the completion on `Seeded`, which is where a completion is *noticed*, not where it happens;
+> and step 5 keeps a transfers cadence as a backstop, which the owner ruled out. The heartbeat half
+> (steps 6 and 7) was done as written. What was built instead is `S12-11` to `S12-17` below, and the
+> design behind them is `DESIGN-2026-09-13-one-cycle-driven-by-events.md`.
+
+The owner, 13 September 2026, looking at Transfers set to every minute: "why such stupid pulling —
+download finished, move to finish, dispatch encode job". They are right, and the cause is not the
+cadence.
+
+**`Seeded` is called from `StatusAsync` and from nowhere else.** That is the only place a run is
+judged complete and `Held.Finished` is set. So the client does not notice a finished download at
+all; it notices when somebody asks. The transfers tick is what asks, and the cadence had to be
+`* * * * *` — `JobNames.TransfersCron` — to make "finished" become "staged" feel prompt. The poll is
+compensating for a missing event.
+
+**And nothing records the finish either.** The engine journals five failures and no success, so a
+completed download is not on the History page as an event at all; the only line is the one staging
+writes later.
+
+**The sweep still has a job.** Known failure **F4** — a download that finished while the server was
+down was never noticed — is why a sweep exists, and it stays. It becomes the backstop it was meant
+to be rather than the only mechanism, and can then run far less often.
+
+**And the page heartbeat runs for ever, for nobody.** `Heartbeat` samples
+`BittorrentEngine.Drawn` every second from the moment the client starts, on every server, whether
+anything is downloading or not and whether or not a page is open. `Drawn` takes the client's lock
+and builds a string over every torrent each time. **`BittorrentEngine.Watching` was written to gate
+exactly this** — "whether there is any torrent at all to draw", with a remark explaining the
+stalled-download case it has to allow — **and it is wired to nothing.** It is dead code, and the
+work it was meant to stop has been running since it was written.
+
+**Everything else that waits was looked at on 13 September 2026 and is not this fault.** Written
+down so it is not removed by somebody reading "no timers" too literally:
+
+| Waits | Verdict |
+| --- | --- |
+| `LiveSnapshot`'s timer | **Already an event.** It is a debounce: armed only by `Changed()`, one-shot, quiet afterwards. A quiet plugin sends nothing. |
+| `PuppeteerTabs`' idle timer | **Keep.** Nothing calls in while a browser is idle, so being woken is the only way to notice — which is the case it documents: ten Chrome processes at midnight after searching stopped at nine. |
+| `TorrentRun` announce waits, `TorrentSession` heartbeat, DHT refresh, LSD multicast, UDP announce backoff | **Keep.** These are the BitTorrent protocol's own intervals. A client that stops announcing stops being found. |
+| `HostGate` | **Keep.** Deliberate pacing per host. It is what stops an indexer banning this plugin. |
+| `BrowserSolver`'s poll | **Keep.** It waits for a challenge page to clear and there is no event to subscribe to; the page navigates when it is satisfied. |
+| Feed, search and maintenance cadences | **Keep.** Genuinely scheduled work: nothing on the internet raises an event when a release is posted. |
+
+Only transfers and the heartbeat are polls standing in for something that could say so itself.
+
+**Files:** `Hosting/BittorrentEngine.cs`, `Hosting/Heartbeat.cs`, `TorrentDownloaderPlugin.cs`,
+`JobNames.cs`, `docs/06-torrent-client.md` § Seeding, `docs/03-architecture.md`,
+`docs/10-known-failures.md` § F4.
+
+**Steps**
+
+1. Test (red): `BittorrentEngineTests.AFinishedDownloadSaysSoWithoutBeingAsked` — a torrent whose
+   `verify` reports every piece present raises the completion once and journals a finished Download,
+   without `StatusAsync` being called by the test. The engine's own once-a-second pass is what
+   notices it.
+2. `Seeded` raises the completion where `Finished` is first set — **and the event is raised outside
+   `_lock`**. `S11-37` was a deadlock built exactly this way: a wait taken inside the run's lock that
+   only something holding the same lock could satisfy. Collect what fired, let the lock go, then
+   raise.
+3. Test (red): `TorrentDownloaderPluginTests.AFinishedDownloadIsStagedWithoutWaitingForATick` — the
+   completion drives a transfers pass through the same `TransfersAsync` the cadence uses, so there
+   is one path and not two.
+4. The pass is guarded by `OneAtATime`: a completion arriving while a pass runs is **dropped, not
+   queued**, and the sweep catches it. Two passes at once would dispatch one encode twice.
+5. `JobNames.TransfersCron` becomes `*/15 * * * *`. It is a backstop now, and a settings page the
+   owner can change it on.
+6. Test (red): `HeartbeatTests.NothingIsSampledWhileThereIsNothingToWatch` — with no torrent held,
+   a tick asks the client nothing at all. The gate is `BittorrentEngine.Watching`, which already
+   exists and already says what it has to: a torrent standing still with the same peers is still
+   watched, because nought bytes a second is news about a stalled download.
+7. Wire `Watching` to the heartbeat and delete nothing else: the sampling itself is right, it is
+   the sampling of an empty client for ever that is not.
+
+**Done when** those tests pass, the suite is green, a download on the owner's server is staged and
+dispatched within seconds of finishing rather than within a minute of it, and an idle server with no
+torrents is asking its client nothing at all. Read first:
+`docs/plan/PROGRESS.md` § Log `S11-37` — the deadlock step 2 must not repeat.
+
+## S12-11 to S12-17 · One cycle, driven by events
+
+The design, every ruling the owner made and the evidence for each is
+`DESIGN-2026-09-13-one-cycle-driven-by-events.md`; what each slice found is in `PROGRESS.md`. These
+entries say what each is and what proves it, so the next reader can find the test.
+
+| Slice | What | Proved by |
+| --- | --- | --- |
+| `S12-11` | `TorrentSession.Finished`, raised once where the last wanted piece verifies, **outside every lock**; `AnnounceIfFinished` for a torrent whole on disk when it is opened | `TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified` (fails with the raise moved inside the lock), `ASessionThatIsWholeBeforeItStartsSaysSoAsWell` |
+| `S12-12` | `TorrentRun.Finished`, `BittorrentEngine.Completed(infoHash)` | `BittorrentEngineTests.TheClientSaysWhichTorrentFinishedWithoutBeingAsked` — it never calls `StatusAsync` |
+| `S12-13` | `StatusAsync` is a read; the five pieces of housekeeping it hid run at their own moments; one deadline per torrent that a running download never lets go off | `AskingWhatTheClientHoldsChangesNothing`, `AMagnetNobodyServesIsGivenUpOnWithoutAnythingAsking`, `AStalledTorrentIsGivenUpOnWithoutAnythingAsking`, `AFinishedTorrentStopsSeedingWithoutAnythingAsking`, `ClientAcceptanceTests.WhatIsAlreadyOnDiskIsFoundWithoutAResumeFile` |
+| `S12-14` | The encoder is heard: `EncoderSays`, on the media id, listening from load. `IEncodeJobs`, the stored job id and its column (migration 011) removed | `EncoderSaysTests`, `TorrentDownloaderPluginTests.TheServerSayingAnEncodeIsDoneReachesThePlugin` |
+| `S12-15` | One cycle: Run, `LibraryScanCompletedEvent` and the owner's cadence through one door; an addition, not a second cycle; maintenance when nothing is in hand; four cadences become one (migration 012); the host's tick only winds the clock; the four retired job names answered to | `OneCycleRunsEveryStepAndSaysWhenItFinished`, `TheServerFinishingALibraryScanStartsACycle`, `ACycleStaysOpenWhileAnEncodeItAskedForIsStillGoing`, `ATickUnderAnOldJobNameIsStillAccepted`, `ClockTests` |
+| `S12-16` | The pages are told only while somebody is looking: `Onlookers`, a heartbeat that exists only while it is, and compared with what the page was drawn with | `OnlookersTests`, `HeartbeatTests.AHeartbeatBeatsOnlyBetweenStartAndStop`, `APageDrawnWithAStaleRateIsPutRightByTheFirstBeat`, `TorrentDownloaderPluginTests.APageBeingFetchedIsWhatSaysSomebodyIsLooking` |
+| `S12-17` | One cadence field, never more often than hourly, typed or chosen; the owner's settings saved with four cadences load as one hourly cycle; every living document says one cycle. **And the chain joined**: `Completed` had no listener, nothing restarted the client after a restart, a pass requested during a pass was dropped, a held guard was let go twice, and a stale rate was never corrected | `CadencesTests.ACycleMoreOftenThanHourlyIsRefusedWithTheReason`, `SettingsStoreTests.SettingsSavedWithFourCadencesLoadAsOneHourlyCycle`, `SettingsViewTests.TheCycleIsOfferedNoMoreOftenThanHourly`, `TheChainIsJoinedTests` (six, each seen to fail with its join removed), `HeartbeatTests.APageDrawnWithAStaleRateIsPutRightByTheFirstBeat` |
+
+**Done when** all of it is seen working on beast-unit, which none of it has been yet: a download
+staged within seconds of finishing, an encode that ends closing its grab, a library scan starting a
+cycle, the Settings page showing one hourly cadence over the owner's saved four, and no push arriving
+at a Downloads page nobody has open.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.
+
+- **A toggle's label is drawn twice** on every plugin form, in `nomercy-app-web`. `PluginForm.vue`
+  passes `:label-text="field.label"` to `NMToggle` and then draws `<span>{{ field.label }}</span>`
+  after it, so "Refuse a release that does not say which codec it is" appears twice on the settings
+  page, once bold and once grey. Seen on the owner's server on 12 September 2026. It is one line too
+  many in that component and it affects every plugin that draws a form, not only this one. The
+  owner's decision that day: the plugin side first, this written down.
+- **A plugin form's fields waterfall across the full width** of the page in the same component, so a
+  long form reads as an uneven grid rather than a column. Same file, same repository, same decision.
 
 - **South Park S15E12 is attached to the wrong episode.** Filed as **media-server #38**, and written
   up in full as `docs/issues/media-server-post-encode-registration.md`: the two lines that cause it,

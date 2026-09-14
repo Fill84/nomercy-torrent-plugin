@@ -15,12 +15,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// <para>
 /// Sprint 6 built the grab, the staging and the encode dispatch, and no slice
 /// ever called any of them: a download that finished sat in the incomplete
-/// folder for ever while its episode showed as unavailable. This is the loop
-/// that joins them, and it runs on the fastest cadence because a completion
-/// nobody notices is an episode nobody gets.
+/// folder for ever while its episode showed as unavailable. This is the pass
+/// that joins them, and it runs when a download finishes, when the server says
+/// something about an encode and when it says a library scan finished — on no
+/// clock at all, because a completion nobody notices is an episode nobody gets.
 /// </para>
 /// <para>
-/// Nothing here throws. It once unwound the whole cadence, so one type mismatch
+/// Nothing here throws. It once unwound the whole pass, so one type mismatch
 /// in the encoder stopped every download in flight from being looked at — every
 /// torrent is dealt with on its own and a failure costs that one.
 /// </para>
@@ -34,28 +35,9 @@ public sealed class Transfers(
     IActivityJournal journal,
     ILogger logger,
     TimeProvider? time = null,
-    IEncodeJobs? jobs = null,
+    IEncoderSays? says = null,
     IShowImport? imports = null)
 {
-    /// <summary>
-    /// How long an encode is given before it is given up on.
-    /// </summary>
-    /// <remarks>
-    /// The library having the episode is the only proof it finished, and a job
-    /// that failed looks exactly like one still running. Six hours is longer
-    /// than any episode takes and short enough that an owner is not left
-    /// waiting on something that will never arrive.
-    /// </remarks>
-    public static TimeSpan Patience { get; } = TimeSpan.FromHours(6);
-
-    /// <summary>Since when each dispatched grab has been waited on.</summary>
-    /// <remarks>
-    /// Held rather than written down: a restart is a good enough reason to
-    /// start the clock again, and it saves a column for something the plugin
-    /// only needs while it is running.
-    /// </remarks>
-    private readonly Dictionary<string, DateTimeOffset> _waiting = new(StringComparer.OrdinalIgnoreCase);
-
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
     /// <param name="trackers">
@@ -92,7 +74,7 @@ public sealed class Transfers(
 
         // Failures first, and out of the way: a torrent the client has given up
         // on is neither something to carry nor something to stage, and leaving
-        // it in either pile would have recovery re-add it every minute.
+        // it in either pile would have recovery re-add it on every pass.
         IReadOnlyList<string> failed = await FailedAsync(running, stored, ct);
 
         // Before the plan, and counted with the failures: a grab cancelled here
@@ -623,17 +605,6 @@ public sealed class Transfers(
             ct);
 
         await grabs.StateAsync(infoHash, GrabState.Dispatched, ct);
-
-        // The job it queued, where the server named one, so a restart does not
-        // lose which encode this grab is waiting on. media-server #31.
-        if (asked.JobId is string job)
-        {
-            await grabs.EncodeJobAsync(infoHash, episode, job, ct);
-        }
-
-        // The clock starts here, not on the tick that next looks at it: an
-        // encode is waited on from the moment it was asked for.
-        _waiting[infoHash] = (time ?? TimeProvider.System).GetUtcNow();
     }
 
     /// <summary>
@@ -850,7 +821,7 @@ public sealed class Transfers(
                 one.StagedPaths.Contains(entry, StringComparer.OrdinalIgnoreCase));
 
             if (reading is not null
-                && await StandingAsync(reading, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
+                && await StandingAsync(reading, thisTick, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
             {
                 continue;
             }
@@ -1002,7 +973,7 @@ public sealed class Transfers(
             // once and used twice: to read a file the encoder wrote but filed
             // against the wrong row, and to keep from deleting a download a job
             // is still reading.
-            EncodeJob? standing = await StandingAsync(sent, ct);
+            EncodeJob? standing = await StandingAsync(sent, thisTick, ct);
 
             if (!landed && standing is { State: EncodeJobState.Finished })
             {
@@ -1213,8 +1184,8 @@ public sealed class Transfers(
     /// the file's own spelling where it does not.
     /// </para>
     /// <para>
-    /// <strong>The providers are asked once.</strong> This runs on every tick
-    /// for as long as the torrent sits there, which is once a minute, and the
+    /// <strong>The providers are asked once.</strong> This runs on every pass
+    /// for as long as the torrent sits there, and the
     /// answer cannot change without the show being added — at which point this
     /// is never reached again. The words are kept with the torrent and said
     /// again from memory.
@@ -1309,202 +1280,147 @@ public sealed class Transfers(
     private readonly Dictionary<string, string> _unplaceable = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Gives up on an encode the library never received.
+    /// Waits on a dispatched grab whose episodes the library does not have yet,
+    /// and acts only on an encode the server has said failed.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Not dispatched a second time. A second job for a file the encoder may
-    /// still be working on is the one thing worse than waiting, and nothing
-    /// here can tell a job that failed from one still running — the plugin
-    /// cannot see the queue.
+    /// <strong>Never asked for a second time, and never given up on by a
+    /// clock.</strong> The server's queue outlives a restart and the job it holds
+    /// says what became of it when it runs, so asking again after a restart put a
+    /// second job in the queue for every grab that was waiting. And six hours of
+    /// silence failed the grab, which put the episode back to missing to be
+    /// downloaded again — while the silence was a job the owner had taken out of
+    /// the queue by hand, or one that ended with nothing to encode, neither of
+    /// which the server says anything about.
     /// </para>
     /// <para>
-    /// The episode goes back to missing so it can be found again, and the
-    /// staged file is left where it is: if the encode does land later, the
-    /// refresh sees the file and the episode stops being missing on its own.
+    /// The owner's ruling of 14 September 2026 is that the library decides. A
+    /// grab waits here until a pass finds its episodes in the library — a pass
+    /// runs when the server says an encode ended and when it says a scan
+    /// finished — or until the owner removes it from the Downloads page.
     /// </para>
     /// </remarks>
     private async Task StillWaitingAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
     {
         DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();
 
-        // Whether the server says the job it queued is still going. Where it
-        // does, the file is not staged for a second time whatever the clock
-        // below decides.
-        bool alive = false;
+        // Episode by episode, because a pack is nine encodes and one of them
+        // failing says nothing about the other eight. It used to fail the whole
+        // grab: on 1 September 2026 episode one's encode died, the grab went
+        // with it, and a minute later the sweep took the staged files of all
+        // nine — including episode five's, which was between its first and
+        // second bundle and had been encoding happily.
+        List<EpisodeKey> lost = [];
 
-        // Asked rather than inferred, where there is a job to ask about and a
-        // server that answers. Everything below this sees one thing only —
-        // whether the library has the episode yet — so an encode that died in
-        // its first minute and one still running look the same, and both are
-        // waited out for six hours before the episode goes back to missing and
-        // the same gigabytes are downloaded again. media-server #31, which this
-        // plugin opened, is what makes the difference sayable.
+        foreach (EpisodeKey episode in sent.Covers)
         {
-            // Episode by episode, because a pack is nine encodes and one of them
-            // failing says nothing about the other eight. It used to fail the
-            // whole grab: on 1 September 2026 episode one's encode died, the
-            // grab went with it, and a minute later the sweep took the staged
-            // files of all nine — including episode five's, which was between
-            // its first and second bundle and had been encoding happily.
-            List<EpisodeKey> lost = [];
-
-            foreach (EpisodeKey episode in sent.Covers)
+            if (await StandingAsync(sent, episode, thisTick, ct) is not { State: EncodeJobState.Failed } dead)
             {
-                if (await StandingAsync(sent, episode, ct) is not { State: EncodeJobState.Failed } dead)
-                {
-                    continue;
-                }
-
-                string why = dead.Failure ?? "the server gave up on the encode and said no more than that";
-
-                lost.Add(episode);
-
-                await grabs.UncoverAsync(sent.InfoHash, episode, ct);
-
-                logger.LogWarning("{Release} {Episode}: {Reason}", sent.ReleaseTitle, episode, why);
-                journal.Failed(ActivityStage.Dispatch, $"{sent.ReleaseTitle} {episode}", why);
+                continue;
             }
 
-            if (lost.Count > 0 && lost.Count == sent.Covers.Count)
-            {
-                // Every one of them, so the release itself is the fault and is
-                // refused for a while. One episode of nine is not.
-                _waiting.Remove(sent.InfoHash);
+            string why = dead.Failure ?? "the server gave up on the encode and said no more than that";
 
-                string said = $"every encode this release was asked for failed, the last of them for {lost.Count} episodes";
+            lost.Add(episode);
 
-                await grabs.FailedAsync(sent.InfoHash, said, now, now + RefusedFor, ct);
+            await grabs.UncoverAsync(sent.InfoHash, episode, ct);
 
-                logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, said);
-                journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, said);
-
-                return;
-            }
-
-            if (lost.Count > 0)
-            {
-                // The rest of the pack carries on, and the tick that follows
-                // reads the covers without the episodes that died.
-                return;
-            }
-
-            EncodeJob? standing = await StandingAsync(sent, ct);
-
-            if (standing is { State: EncodeJobState.Queued or EncodeJobState.Running })
-            {
-                // Alive, so it is not asked for a second time — and that is
-                // the whole of what this branch does. The clock is started if
-                // it is not running and never restarted, and then the six hours
-                // below are left to run: an encoder that hangs reports Running
-                // for ever, so a branch that returned here, or wrote the clock
-                // on every tick, would leave a grab waiting for ever on a job
-                // nothing was doing. That is the one thing the six hours are
-                // there to stop.
-                alive = true;
-
-                _waiting.TryAdd(sent.InfoHash, now);
-            }
+            logger.LogWarning("{Release} {Episode}: {Reason}", sent.ReleaseTitle, episode, why);
+            journal.Failed(ActivityStage.Dispatch, $"{sent.ReleaseTitle} {episode}", why);
         }
 
-        if (!_waiting.TryGetValue(sent.InfoHash, out DateTimeOffset since) && !alive)
+        if (lost.Count == 0 || lost.Count < sent.Covers.Count)
         {
-            // Dispatched by a run of the plugin that is over. Its job is very
-            // likely over with it: the owner's queue was empty while eleven
-            // grabs waited on jobs the encoder had already thrown away, and
-            // nothing here can see the queue to tell one that died from one
-            // still running.
-            //
-            // So it is asked for once more and then waited on properly. The
-            // file is already staged, so it costs one dispatch; the other way
-            // round is six hours of waiting, the episode back to missing, and
-            // the same gigabytes downloaded a second time.
-            //
-            // If the old job did survive the restart this makes a second one.
-            // That is the lesser fault, and the one the plugin can undo — the
-            // library having the episode ends both.
-            _waiting[sent.InfoHash] = now;
-
-            foreach (EpisodeKey episode in sent.Covers)
-            {
-                if (Staged(sent, episode) is string staged && File.Exists(staged))
-                {
-                    await DispatchAsync(sent.InfoHash, episode, staged, thisTick, ct);
-                }
-            }
-
+            // Nothing failed, so it goes on waiting; or some did, and the rest of
+            // the pack carries on with the covers of the episodes that died
+            // taken off it.
             return;
         }
 
-        if (now - since < Patience)
-        {
-            return;
-        }
+        // Every one of them, so the release itself is the fault and is refused
+        // for a while. One episode of nine is not.
+        string said = $"every encode this release was asked for failed, the last of them for {lost.Count} episodes";
 
-        _waiting.Remove(sent.InfoHash);
+        await grabs.FailedAsync(sent.InfoHash, said, now, now + RefusedFor, ct);
 
-        string reason =
-            $"the encode was asked for {Patience.TotalHours:0} hours ago and the library still does not have it";
-
-        await grabs.FailedAsync(sent.InfoHash, reason, now, now + RefusedFor, ct);
-
-        logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, reason);
-        journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, reason);
+        logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, said);
+        journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, said);
     }
 
     /// <summary>
-    /// What the server says about every encode a grab is waiting on, as one
+    /// What the server has said about every encode a grab is waiting on, as one
     /// answer.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// One for a grab the plugin named an episode for, and one per file for a
-    /// pack handed over to be identified — nine of them for a season. They are
-    /// held in the one column space-separated, which a job id never contains,
-    /// so a row written when a grab could only have one still reads as itself.
+    /// <strong>Nothing is asked here any more.</strong> This called
+    /// <c>IEncodeJobs.StatusAsync</c> once per job, per grab, on every transfers
+    /// tick — nine questions a minute for one season pack, for as long as its
+    /// encodes took, and the cadence was a minute so that a finished encode was
+    /// not noticed much later than it happened. The server says what it is doing
+    /// and <see cref="EncoderSays"/> listens.
+    /// </para>
+    /// <para>
+    /// <strong>Looked up by the media row, not by a job id.</strong> The job id
+    /// the plugin got back when it asked for the encode is a hash of the job's
+    /// payload, and the server's events carry the row the encode registers
+    /// against — the same episode id this plugin named when it asked. That is
+    /// the only thing the two ends have in common, so the stored job id is not
+    /// read at all now, and is not written either.
     /// </para>
     /// <para>
     /// Failed if any failed, because one dead encode is the answer whatever the
     /// others are doing; otherwise still going if any is; finished only when
-    /// every one of them is. Null where nothing can be said — no server to ask,
-    /// no job named, or a job the server no longer knows — and null is never
-    /// "finished": a pack is deleted on that answer.
+    /// every one of them is. Null where nothing can be said — no server to
+    /// listen to, no row for the episode, or nothing said about it yet — and
+    /// null is never "finished": a pack is deleted on that answer.
     /// </para>
     /// </remarks>
-    private Task<EncodeJob?> StandingAsync(StoredDownload sent, CancellationToken ct)
+    private Task<EncodeJob?> StandingAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
     {
-        return StandingAsync(sent, episode: null, ct);
+        return StandingAsync(sent, episode: null, thisTick, ct);
     }
 
     /// <summary>
     /// The same, about one episode of a pack.
     /// </summary>
     /// <remarks>
-    /// Each dispatch writes its job down against the episode it was for, so a
-    /// failure can be laid at that episode and the other eight can carry on.
-    /// A row written before the tags carries a bare job id and answers for the
-    /// whole grab, which is what it always meant.
+    /// A failure is laid at the episode it was for, so the other eight of a
+    /// season pack can carry on. On 1 September 2026 episode one's encode died,
+    /// the whole grab went with it, and the sweep a minute later took the staged
+    /// files of all nine — including episode five's, which was encoding happily.
     /// </remarks>
-    private async Task<EncodeJob?> StandingAsync(StoredDownload sent, EpisodeKey? episode, CancellationToken ct)
+    private async Task<EncodeJob?> StandingAsync(
+        StoredDownload sent,
+        EpisodeKey? episode,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
     {
-        if (jobs is null || sent.EncodeJobId is not string named)
+        if (says is null)
         {
             return null;
         }
 
+        IReadOnlyList<EpisodeKey> these = episode is EpisodeKey only ? [only] : sent.Covers;
+
         EncodeJob? going = null;
-        bool asked = false;
+        bool any = false;
 
-        foreach (string job in Named(named, episode))
+        foreach (EpisodeKey one in these)
         {
-            asked = true;
-
-            EncodeJob? standing = await jobs.StatusAsync(job, ct);
-
-            if (standing is null)
+            if (await MediaAsync(one, thisTick, ct) is not int media)
             {
-                // A job this server does not know. It cannot be called finished
-                // and it cannot be called failed, so the whole grab is unknown.
+                // The server lists no row for it, so there is nothing an encode
+                // could have registered against and nothing to be said.
+                return null;
+            }
+
+            any = true;
+
+            if (says.About(media) is not EncodeJob standing)
+            {
+                // Nothing said about this one. Unknown, never finished.
                 return null;
             }
 
@@ -1519,7 +1435,24 @@ public sealed class Transfers(
             }
         }
 
-        return asked ? going ?? new EncodeJob(EncodeJobState.Finished, null) : null;
+        return any ? going ?? new EncodeJob(EncodeJobState.Finished, null) : null;
+    }
+
+    /// <summary>The server's own id for one episode, or null where it names none.</summary>
+    /// <remarks>
+    /// Read off the rows this tick already has rather than asked for: the
+    /// library is asked once a pass and every step reads that one answer, which
+    /// is what <see cref="LibraryThisTick"/> is for.
+    /// </remarks>
+    private static async Task<int?> MediaAsync(
+        EpisodeKey episode,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        Episode? row = (await thisTick.GetEpisodesAsync(episode.ShowId, ct))
+            .FirstOrDefault(one => one.Season == episode.Season && one.Number == episode.Number);
+
+        return row is null || row.ServerId == 0 ? null : row.ServerId;
     }
 
     /// <summary>Takes a file away, and never takes the caller down with it.</summary>

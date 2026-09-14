@@ -25,41 +25,6 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </remarks>
 public sealed class Clock(CadenceRepository cadences, TimeProvider time)
 {
-    /// <summary>
-    /// Which of <paramref name="expressions"/> are due at <paramref name="now"/>:
-    /// one with no row at all — it has never run — or one whose next scheduled
-    /// occurrence after it last finished has already arrived.
-    /// </summary>
-    /// <remarks>
-    /// An expression <see cref="Cron.NextAfter"/> cannot parse answers null and
-    /// is never due, never by default. The settings page already refuses one on
-    /// save; this is the second line of defence for a file edited by hand that
-    /// never passed through that page — treating null as due would run every
-    /// cadence every minute from the moment somebody saved a bad cron, which is
-    /// the opposite of what a refused expression should cost.
-    /// </remarks>
-    public async Task<IReadOnlyList<string>> DueAsync(
-        IReadOnlyDictionary<string, string> expressions,
-        DateTimeOffset now,
-        CancellationToken ct)
-    {
-        IReadOnlyDictionary<string, DateTimeOffset> finished = await cadences.LastFinishedAsync(ct);
-
-        List<string> due = [];
-
-        foreach ((string name, string expression) in expressions)
-        {
-            DateTimeOffset since = finished.TryGetValue(name, out DateTimeOffset when) ? when : DateTimeOffset.MinValue;
-
-            if (Cron.NextAfter(expression, since) is DateTimeOffset next && next <= now)
-            {
-                due.Add(name);
-            }
-        }
-
-        return due;
-    }
-
     /// <summary>Records that the cadence named <paramref name="name"/> finished, now.</summary>
     /// <remarks>
     /// After it finishes, never when it starts: recording a start would make a
@@ -72,7 +37,21 @@ public sealed class Clock(CadenceRepository cadences, TimeProvider time)
     }
 
     /// <summary>When the cadence named <paramref name="name"/> is next due, for the dashboard.</summary>
-    /// <remarks>Null when its expression cannot be scheduled at all — see <see cref="DueAsync"/>.</remarks>
+    /// <remarks>
+    /// <para>
+    /// <strong>Null when the expression cannot be scheduled at all</strong>, and
+    /// that is the safe answer rather than "now". The settings page refuses a
+    /// cron on save; this is the second line of defence for a file edited by
+    /// hand that never passed through it. Read as due, a bad expression would
+    /// start a cycle every time anything looked, for ever.
+    /// </para>
+    /// <para>
+    /// <strong>This replaced a DueAsync that asked "is anything due yet?".</strong>
+    /// Nothing asks now: the plugin sets one timer for the moment this returns
+    /// and is woken because a cycle is due rather than to find out whether one
+    /// is.
+    /// </para>
+    /// </remarks>
     public async Task<DateTimeOffset?> NextAsync(string name, string expression, CancellationToken ct)
     {
         IReadOnlyDictionary<string, DateTimeOffset> finished = await cadences.LastFinishedAsync(ct);

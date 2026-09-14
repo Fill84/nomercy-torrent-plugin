@@ -1,0 +1,17 @@
+-- The encode job id is not read any more, so it is not kept any more.
+--
+-- It held what the server called the job it queued, and the plugin asked about
+-- each of them once a tick to find out whether an encode had finished. The
+-- server publishes EncodingCompletedEvent and EncodingFailedEvent and always
+-- did, so nothing is asked now and nothing needs the id.
+--
+-- It could not have been used for this even if it were kept. The id the server
+-- hands back is QueuePayloadHash.For(payload) - a hash of the job, chosen
+-- because a queue row id is not stable: a finished job is deleted and a failed
+-- one is rewritten under a new identity. What the events carry is the media row
+-- the encode registers against, which is the episode id this plugin named when
+-- it asked. The two never matched and never could.
+--
+-- Dropped rather than left empty, because a column that looks like the one to
+-- match an event on is a trap for whoever reads this next.
+ALTER TABLE grabs DROP COLUMN encode_job;

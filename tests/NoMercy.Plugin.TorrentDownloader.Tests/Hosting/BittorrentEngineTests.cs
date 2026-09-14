@@ -1,3 +1,5 @@
+using System.Net;
+using System.Net.Sockets;
 using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
@@ -542,7 +544,7 @@ public class BittorrentEngineTests : IDisposable
 
         clock.Advance(TimeSpan.FromSeconds(1));
 
-        TorrentStatus failed = (await engine.StatusAsync(CancellationToken.None))[0];
+        TorrentStatus failed = await Decided(engine, one => one.State == TorrentState.Error);
 
         Assert.Equal(TorrentState.Error, failed.State);
         Assert.Contains("5 minutes", failed.Error!, StringComparison.Ordinal);
@@ -571,6 +573,8 @@ public class BittorrentEngineTests : IDisposable
             await engine.StatusAsync(CancellationToken.None);
         }
 
+        await Said(journal, entry => entry.Outcome == ActivityOutcome.Failed);
+
         Assert.Single(
             journal.Snapshot().History,
             entry => entry.Outcome == ActivityOutcome.Failed);
@@ -594,7 +598,7 @@ public class BittorrentEngineTests : IDisposable
 
         clock.Advance(TimeSpan.FromMinutes(6));
 
-        Assert.Equal(TorrentState.Error, (await engine.StatusAsync(CancellationToken.None))[0].State);
+        Assert.Equal(TorrentState.Error, (await Decided(engine, one => one.State == TorrentState.Error)).State);
 
         await engine.ResumeAsync(handle.InfoHash, CancellationToken.None);
 
@@ -652,7 +656,7 @@ public class BittorrentEngineTests : IDisposable
 
         clock.Advance(TimeSpan.FromMinutes(2));
 
-        TorrentStatus given = (await engine.StatusAsync(CancellationToken.None))[0];
+        TorrentStatus given = await Decided(engine, one => one.State == TorrentState.Error);
 
         Assert.Equal(TorrentState.Error, given.State);
         Assert.Contains("30", given.Error!, StringComparison.Ordinal);
@@ -1322,7 +1326,12 @@ public class BittorrentEngineTests : IDisposable
                 new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder),
                 CancellationToken.None);
 
-            string holding = engine.Drawn;
+            // Once the client has settled what it is holding. Taking on a
+            // torrent opens its session on another thread, and until that has
+            // happened the size of the download is not known — so a reading
+            // taken in that moment is a reading of something still arriving,
+            // and this test is about what happens when nothing is.
+            string holding = await Settled(engine, CancellationToken.None);
 
             Assert.NotEqual(empty, holding);
 
@@ -1404,7 +1413,13 @@ public class BittorrentEngineTests : IDisposable
                 new($"magnet:?xt=urn:btih:{torrent.InfoHash}&dn=whatever", [], folder),
                 CancellationToken.None);
 
-            TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))[0];
+            // Decided when the run settles what it is holding, which it does on
+            // its own announce thread rather than under the client's lock. Only
+            // the files that will really be fetched count towards the size, and
+            // that is not known until the session has been opened - so the
+            // refusal is a moment behind the add, exactly as it is for a
+            // torrent with no video file in it.
+            TorrentStatus status = await Settles(engine, CancellationToken.None);
 
             Assert.Equal(TorrentState.Error, status.State);
 
@@ -1547,5 +1562,410 @@ public class BittorrentEngineTests : IDisposable
             new("announce"u8.ToArray(), new BencodeBytes("http://tracker.invalid/announce"u8.ToArray())),
             new("info"u8.ToArray(), info),
         ]));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A peer getting through the door is the only proof the port is
+    /// open, and the router refusing to map it is no proof that it is shut.</strong>
+    /// On the owner's network neither UPnP nor NAT-PMP ever answers while 51413
+    /// has been forwarded by hand for months, so a refusal says one thing only:
+    /// the router would not open the port by itself.
+    /// </para>
+    /// <para>
+    /// This engine is built with no mapper at all, so nothing has asked the
+    /// router and nothing has come through: the state is what is known, which
+    /// is nothing. One dial-in settles it and nothing else can.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APeerDiallingInFromThisMachineProvesNothing()
+    {
+        using CancellationTokenSource giveUp = new(TimeSpan.FromSeconds(10));
+        using BittorrentEngine engine = Started();
+
+        Assert.Equal(PortState.Unknown, engine.PortCondition);
+
+        int port = engine.Port ?? throw new InvalidOperationException("the client is not listening.");
+
+        using TcpClient dialling = new();
+
+        await dialling.ConnectAsync(IPAddress.Loopback, port, giveUp.Token);
+
+        // Accepted, and it still proves nothing: this connection never left the
+        // machine. Watched for two seconds rather than asserted on the next
+        // line — the accept loop runs on its own and the connect returns before
+        // it has, so an assertion here would pass whether the rule held or not.
+        // Without the rule the flag is set within milliseconds of the accept,
+        // which is what makes this able to fail.
+        DateTimeOffset watchUntil = DateTimeOffset.UtcNow.AddSeconds(2);
+
+        while (DateTimeOffset.UtcNow < watchUntil)
+        {
+            Assert.Equal(PortState.Unknown, engine.PortCondition);
+
+            await Task.Delay(TimeSpan.FromMilliseconds(20), giveUp.Token);
+        }
+    }
+
+    /// <summary>
+    /// The client says which torrent has finished, and nothing had to ask.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>What this test does not do is the point of it.</strong> It never
+    /// calls <c>StatusAsync</c> and never renders a page. Until now that was
+    /// the only way a completion could be known at all: <c>Seeded</c> is
+    /// reached from <c>StatusAsync</c> and from nowhere else, so a download
+    /// that finished sat there until something happened to ask — and the
+    /// transfers cadence was set to <c>* * * * *</c> to make that "something"
+    /// come round often enough to hide it.
+    /// </para>
+    /// <para>
+    /// The torrent here is whole on disk when it is added, which is what a
+    /// restart finds: the plugin re-adds every grab that is not done, failed or
+    /// lost, and a staged or dispatched one has its files already. No piece
+    /// will ever verify again for such a torrent, so it is the case that proves
+    /// the client announces what it has rather than only what it has just been
+    /// handed.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheClientSaysWhichTorrentFinishedWithoutBeingAsked()
+    {
+        TaskCompletionSource<string> said = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using BittorrentEngine engine = new(
+            0,
+            Timeout,
+            Stall,
+            Together,
+            Seeding,
+            0,
+            0,
+            null,
+            new ActivityJournal(),
+            new CapturingLogger(),
+            new SilentTrackers(),
+            new NoPeers(),
+
+            // Every piece already on disk. This is the disk pass the client
+            // runs before it asks anybody for a byte, and saying "it is all
+            // here" is exactly what it answers for a download that finished
+            // before the last restart.
+            verify: (torrent, _) => Whole(torrent.PieceCount));
+
+        engine.Completed += hash => said.TrySetResult(hash);
+
+        engine.Start();
+
+        Directory.CreateDirectory(_folder);
+
+        string file = Path.Combine(_folder, "episode.torrent");
+        File.WriteAllBytes(file, Episode(8L * 1024 * 1024));
+
+        TorrentHandle handle = await engine.AddAsync(
+            Request with { Source = file, DownloadFolder = _folder },
+            CancellationToken.None);
+
+        Assert.Same(said.Task, await Task.WhenAny(said.Task, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Equal(handle.InfoHash, await said.Task);
+    }
+
+    /// <summary>A bitfield with every piece of a torrent in it.</summary>
+    private static Bitfield Whole(int pieces)
+    {
+        Bitfield everything = new(pieces);
+
+        for (int piece = 0; piece < pieces; piece++)
+        {
+            everything.Set(piece);
+        }
+
+        return everything;
+    }
+
+    /// <summary>
+    /// A magnet nobody will serve is given up on, and nothing asked.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>This never calls <c>StatusAsync</c> until the very end, and then
+    /// only to read the answer.</strong> The client's whole housekeeping —
+    /// expiring a magnet, noticing a stall, noticing a completion, obeying the
+    /// concurrency limit, writing the resume files — used to run inside
+    /// <c>StatusAsync</c> and nowhere else, so all of it happened only when a
+    /// page was drawn or a cadence ticked. That is the real reason the transfers
+    /// cadence was <c>* * * * *</c>.
+    /// </para>
+    /// <para>
+    /// A timeout is a deadline, so it is one: a single timer set to the moment
+    /// the answer is due, and no timer at all on a client holding nothing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AMagnetNobodyServesIsGivenUpOnWithoutAnythingAsking()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
+        ActivityJournal journal = new(clock);
+
+        using BittorrentEngine engine = new(
+            0, TimeSpan.FromMinutes(5), Stall, Together, Seeding, 0, 0, null,
+            journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+
+        engine.Start();
+
+        await engine.AddAsync(Request, CancellationToken.None);
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+
+        await Said(journal, one => one.Stage == ActivityStage.Download);
+
+        // The journal, not the status: a record is written where the failure
+        // happens, so finding it here proves the failure happened before
+        // anything was asked.
+        Assert.Contains(
+            journal.Snapshot().History,
+            one => one.Stage == ActivityStage.Download && one.Detail is not null
+                && one.Detail.Contains("5 minutes", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A torrent that stops getting anywhere is given up on, and nothing asked.
+    /// </summary>
+    /// <remarks>
+    /// `StallWatch` decides this, and it needs a reading to decide on. There is
+    /// no event for "nothing happened", so the reading is taken at the deadline
+    /// it is measuring and at no other time — once every stall limit for a
+    /// torrent that is running, and never for a client that holds none. That is
+    /// a watchdog and not a poll: it wakes when an answer is due rather than
+    /// often enough to seem live.
+    /// </remarks>
+    [Fact]
+    public async Task AStalledTorrentIsGivenUpOnWithoutAnythingAsking()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
+        ActivityJournal journal = new(clock);
+
+        using BittorrentEngine engine = new(
+            0, TimeSpan.FromHours(12), TimeSpan.FromMinutes(20), Together, Seeding, 0, 0, null,
+            journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+
+        engine.Start();
+
+        Directory.CreateDirectory(_folder);
+
+        string file = Path.Combine(_folder, "episode.torrent");
+        File.WriteAllBytes(file, Episode(8L * 1024 * 1024));
+
+        await engine.AddAsync(
+            Request with { Source = file, DownloadFolder = _folder },
+            CancellationToken.None);
+
+        // The first reading starts its clock, the second one twenty minutes
+        // later finds nothing has moved and no peer has ever connected.
+        clock.Advance(TimeSpan.FromMinutes(20));
+        clock.Advance(TimeSpan.FromMinutes(20));
+
+        await Said(journal, one => one.Stage == ActivityStage.Download);
+
+        Assert.Contains(
+            journal.Snapshot().History,
+            one => one.Stage == ActivityStage.Download && one.Detail is not null
+                && one.Detail.Contains("20 minutes", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// A finished public torrent stops seeding at once, and nothing asked.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// This client never uploads on a public swarm, so a public torrent is
+    /// finished the moment it is complete and staying in the swarm costs a
+    /// connection for nothing. <c>Seeded</c> is what stops it, and it was
+    /// reached from <c>StatusAsync</c> and from nowhere else.
+    /// </para>
+    /// <para>
+    /// The torrent here is whole on disk when it is added, so the completion
+    /// arrives on the client's own event rather than from a verified piece —
+    /// which is the case a restart finds.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFinishedTorrentStopsSeedingWithoutAnythingAsking()
+    {
+        TaskCompletionSource stopped = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        using BittorrentEngine engine = new(
+            0, Timeout, Stall, Together, Seeding, 0, 0, null,
+            new ActivityJournal(), new CapturingLogger(), new SilentTrackers(), new NoPeers(),
+            verify: (torrent, _) => Whole(torrent.PieceCount));
+
+        engine.Completed += _ => stopped.TrySetResult();
+
+        engine.Start();
+
+        Directory.CreateDirectory(_folder);
+
+        string file = Path.Combine(_folder, "episode.torrent");
+        File.WriteAllBytes(file, Episode(8L * 1024 * 1024));
+
+        TorrentHandle handle = await engine.AddAsync(
+            Request with { Source = file, DownloadFolder = _folder },
+            CancellationToken.None);
+
+        Assert.Same(stopped.Task, await Task.WhenAny(stopped.Task, Task.Delay(TimeSpan.FromSeconds(10))));
+
+        // Read only after the fact, and it must already be true: the seeding
+        // policy was applied when the torrent finished, not when this asked.
+        TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))
+            .Single(one => string.Equals(one.InfoHash, handle.InfoHash, StringComparison.OrdinalIgnoreCase));
+
+        Assert.Equal(TorrentState.Finished, status.State);
+    }
+
+    /// <summary>
+    /// Asking the client what it holds changes nothing about what it holds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>The whole of `S12-13` in one sentence.</strong> <c>StatusAsync</c>
+    /// ran <c>Expire</c>, <c>Stalled</c>, <c>Seeded</c>, <c>Queue</c> and the
+    /// resume write on every call — so drawing a page did the client's
+    /// housekeeping, and not drawing one meant none was done. A magnet that had
+    /// sat past its limit failed on whichever page happened to be opened next.
+    /// </para>
+    /// <para>
+    /// Here the clock never moves, so nothing is due, and asking twenty times
+    /// must leave the torrent exactly as it was.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AskingWhatTheClientHoldsChangesNothing()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 9, 13, 12, 0, 0, TimeSpan.Zero));
+        ActivityJournal journal = new(clock);
+
+        using BittorrentEngine engine = new(
+            0, TimeSpan.FromMinutes(5), TimeSpan.FromMinutes(5), Together, Seeding, 0, 0, null,
+            journal, new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+
+        engine.Start();
+
+        await engine.AddAsync(Request, CancellationToken.None);
+
+        // Past both limits, and never given the chance to act on it: the clock
+        // is what is due, and it has not moved.
+        for (int asked = 0; asked < 20; asked++)
+        {
+            IReadOnlyList<TorrentStatus> held = await engine.StatusAsync(CancellationToken.None);
+
+            Assert.Equal(TorrentState.FetchingMetadata, held[0].State);
+            Assert.Null(held[0].Error);
+        }
+
+        Assert.Empty(journal.Snapshot().History);
+    }
+
+    /// <summary>
+    /// The client's answer once it has settled what it is holding, or its last
+    /// answer if it never does.
+    /// </summary>
+    /// <remarks>
+    /// A run opens its session on its own announce thread, so what only an
+    /// opened session can say — how big the download really is, whether there
+    /// is anything in it worth a byte — arrives a moment after the add. This
+    /// waits for that moment rather than for a length of time.
+    /// </remarks>
+    private static async Task<TorrentStatus> Settles(BittorrentEngine engine, CancellationToken ct)
+    {
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        TorrentStatus status = (await engine.StatusAsync(ct))[0];
+
+        while (status.State != TorrentState.Error && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(25), ct);
+
+            status = (await engine.StatusAsync(ct))[0];
+        }
+
+        return status;
+    }
+
+    /// <summary>What the pages draw, once it has stopped changing on its own.</summary>
+    /// <remarks>
+    /// The same moment as <see cref="Settles"/>, for a torrent that is not
+    /// going to fail: the reading is taken when two of them in a row agree, so
+    /// what follows is measuring a client that is standing still rather than
+    /// one still taking a torrent on.
+    /// </remarks>
+    private static async Task<string> Settled(BittorrentEngine engine, CancellationToken ct)
+    {
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        string before = engine.Drawn;
+
+        while (DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100), ct);
+
+            string now = engine.Drawn;
+
+            if (string.Equals(now, before, StringComparison.Ordinal))
+            {
+                return now;
+            }
+
+            before = now;
+        }
+
+        return before;
+    }
+
+    /// <summary>
+    /// What the client holds once a deadline has decided, or its last answer if
+    /// it never does.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>A deadline can be decided on another thread, even with a fake
+    /// clock.</strong> <c>FakeTimeProvider.Advance</c> fires due timers on the
+    /// thread that calls it — unless another thread is already waking timers on
+    /// the same clock, and here one is: the announce loop sets its own on it. Then
+    /// <c>Advance</c> returns without firing, and the other thread runs the
+    /// deadline. A test that read the answer straight after advancing saw it
+    /// about six times in seven and failed in four milliseconds the seventh.
+    /// </para>
+    /// <para>
+    /// This used not to matter because the deadline was not a timer: expiry ran
+    /// inside <c>StatusAsync</c>, on the test's own thread. `S12-13` made it a
+    /// deadline, which is right, and made these tests wait for it, which is what
+    /// waiting on something that happens elsewhere takes. Bounded, so a deadline
+    /// that never fires still fails the test.
+    /// </para>
+    /// </remarks>
+    private static async Task<TorrentStatus> Decided(BittorrentEngine engine, Func<TorrentStatus, bool> done)
+    {
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))[0];
+
+        while (!done(status) && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(10));
+
+            status = (await engine.StatusAsync(CancellationToken.None))[0];
+        }
+
+        return status;
+    }
+
+    /// <summary>Waits until the journal has said something, for the same reason as <see cref="Decided"/>.</summary>
+    private static async Task Said(ActivityJournal journal, Func<ActivityEvent, bool> said)
+    {
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+
+        while (!journal.Snapshot().History.Any(said) && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(10));
+        }
     }
 }
