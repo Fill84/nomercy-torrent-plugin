@@ -11,7 +11,16 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 /// <param name="Grab">What this plugin grabbed.</param>
 /// <param name="Transfer">What the client says, or null when it has not said anything yet.</param>
 /// <param name="Destination">Where the bytes are landing.</param>
-public sealed record DownloadRow(StoredDownload Grab, TorrentStatus? Transfer, string Destination);
+public sealed record DownloadRow(StoredDownload Grab, TorrentStatus? Transfer, string Destination)
+{
+    /// <summary>What the server last said went wrong with this grab's encode, or null.</summary>
+    /// <remarks>
+    /// Drawn beside the state rather than as it: the grab is still waiting — the
+    /// server tries a failed encode again — so "encoding" stays true, and the
+    /// dashboard, which counts downloads by their state, keeps counting it there.
+    /// </remarks>
+    public string? EncodeFailure { get; init; }
+}
 
 /// <summary>
 /// What is transferring, and what was grabbed and is not yet.
@@ -172,7 +181,7 @@ public static class DownloadsView
                     new Dictionary<string, object?>
                     {
                         ["release"] = row.Grab.ReleaseTitle,
-                        ["state"] = State(row),
+                        ["state"] = row.EncodeFailure is string failure ? $"{State(row)} — {failure}" : State(row),
                         ["progress"] = Progress(row.Transfer),
                         ["rate"] = Rate(row.Transfer),
 

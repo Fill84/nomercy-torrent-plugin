@@ -4,11 +4,23 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: a server stop is not a failed encode.** Stopping the server during encodes made it publish
-`EncodingFailedEvent` for each one (`ActivityLogs`, 14 September 2026, 12:36:00–12:36:05 UTC); after
-the restart the queued jobs failed with "Input file not found" in the intake folder. Find out what the
-plugin did with those reports — failed the grab, swept the staged file, put the episode back to
-missing — and what it should do. Then look on beast-unit whether a cycle closes and maintenance runs.
+**Next: look on beast-unit whether a cycle closes and maintenance runs** (deploy what follows first,
+when the owner stops the server).
+
+**Done and green, not yet on beast-unit: a failed encode report closes nothing.** Measured first:
+on 14 September 2026 the plugin did not fail anything at the 12:36 UTC stop — it was shutting down
+itself — and the "Input file not found" at 12:49 followed the owner cancelling those grabs by hand.
+But the rule it would have applied was wrong. `VideoEncodeJob` publishes `EncodingFailedEvent` from
+every catch, a shutdown's cancellation included, and `JobQueue.FailJob` retries up to three attempts
+(a stop releases without counting one); the last attempt goes to `FailedJobs` with no event. The
+plugin took the episode off the grab on the first report, failed the grab when all had failed, and
+so let the sweep take the staged file the next attempt needed. The owner's ruling: say it and close
+nothing. `Transfers.StillWaitingAsync` now says the reason once (log, journal, History) and keeps it
+for the Downloads row (`Transfers.FailureOf`, `DownloadRow.EncodeFailure`); `GrabRepository.UncoverAsync`
+went with the rule. Tests, each red first: `AnEncodeTheServerSaysFailedIsWaitedOnAndItsReasonSaidOnce`
+(the say-once rule sabotaged: *2 matching items*), `AFailedEncodeInAPackTakesNothingOffIt`,
+`AnEncodeTheServerSaidFailedCarriesItsReasonOnTheRow`. `01-plugin.md`, `09-host-contract.md` and the
+0.5.0 notes say so.
 
 **`S12-10` to `S12-17` and the fix below are seen working on beast-unit and committed** — the owner's
 word on 14 September 2026, "alles klaar van S12". **The version is 0.5.0**, with

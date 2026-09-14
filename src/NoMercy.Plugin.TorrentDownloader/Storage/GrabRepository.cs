@@ -259,45 +259,6 @@ public sealed class GrabRepository(Store database)
             $"{episode.ShowId}x{episode.Season}x{episode.Number}");
     }
 
-    /// <summary>Takes one episode off a grab, leaving the rest of them alone.</summary>
-    /// <remarks>
-    /// For an encode that failed. The episode goes back to missing so it can be
-    /// looked for again, and every other episode of the pack carries on — one
-    /// bad episode used to fail the whole grab, which then counted as nothing
-    /// waiting on the staged files and took eight good ones down with it.
-    /// </remarks>
-    public async Task UncoverAsync(string infoHash, EpisodeKey episode, CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand read = connection.CreateCommand();
-
-        read.CommandText = "SELECT covers FROM grabs WHERE info_hash = $hash;";
-        read.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
-
-        if (await read.ExecuteScalarAsync(ct) is not string covers)
-        {
-            return;
-        }
-
-        EpisodeKey[] left =
-        [
-            .. Covered(covers).Where(one =>
-                one.ShowId != episode.ShowId || one.Season != episode.Season || one.Number != episode.Number),
-        ];
-
-        await using SqliteCommand write = connection.CreateCommand();
-
-        write.CommandText = "UPDATE grabs SET covers = $covers WHERE info_hash = $hash;";
-
-        write.Parameters.AddWithValue(
-            "$covers",
-            JsonSerializer.Serialize(left.Select(one => new[] { one.ShowId, one.Season, one.Number })));
-
-        write.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
-
-        await write.ExecuteNonQueryAsync(ct);
-    }
-
     /// <summary>Writes one line into the history and touches nothing else.</summary>
     /// <remarks>
     /// For something the owner has to be told and the plugin must not act on:

@@ -151,6 +151,12 @@ nothing, so it is not kept. `IPluginJobs.StatusAsync` (media-server #31) is no l
 that — and a job that ends with nothing to encode: the library folder not found, no preset, or every
 preset already encoded. `VideoEncodeJob` returns from those without a completed or a failed event.
 
+**And a failed event is not the end of the job.** `VideoEncodeJob` publishes `EncodingFailedEvent`
+from every catch, a shutdown's cancellation included. `JobQueue.FailJob` then puts the job back with a
+back-off while `Attempts < maxAttempts` (three), and a stop releases the reservation without counting
+an attempt; only the last attempt moves it to `FailedJobs`, and that says nothing on the bus. The
+plugin therefore says the reason and closes nothing on it.
+
 So the library decides. A grab waiting on an encode is closed by the pass that finds its episode in the
 library; a pass runs on every encoding event, on `LibraryScanCompletedEvent` and on start. It is never
 given up on by a clock and never asked for a second time — the owner's ruling of 14 September 2026,

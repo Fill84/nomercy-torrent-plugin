@@ -2134,7 +2134,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             .. grabbed.Select(one => new DownloadRow(
                 one,
                 byHash.GetValueOrDefault(one.InfoHash),
-                settings.IncompleteFolder)),
+                settings.IncompleteFolder)
+            {
+                EncodeFailure = _transfers?.FailureOf(one.InfoHash),
+            }),
         ];
     }
 

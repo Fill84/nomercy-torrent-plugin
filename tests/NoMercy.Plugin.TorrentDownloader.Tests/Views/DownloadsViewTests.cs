@@ -191,6 +191,29 @@ public class DownloadsViewTests
     }
 
     /// <remarks>
+    /// A grab waiting on an encode the server said failed says so on its row, in
+    /// the server's words. It is not closed on that — the server's queue tries a
+    /// failed encode again — so the row is the one place the owner sees why an
+    /// episode has been "encoding" for a while, and can decide to cancel it.
+    /// </remarks>
+    [Fact]
+    public void AnEncodeTheServerSaidFailedCarriesItsReasonOnTheRow()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(Grab() with { State = GrabState.Dispatched }, null, "D:\\incomplete")
+            {
+                EncodeFailure = "the server's last attempt failed: the source has no audio stream",
+            },
+        ]);
+
+        string page = string.Join(" ", Rendered.EveryValue(view));
+
+        Assert.Contains("encoding", page, StringComparison.Ordinal);
+        Assert.Contains("the source has no audio stream", page, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
     /// Nothing grabbed is a page that says so, rather than an empty table with
     /// no explanation.
     /// </remarks>

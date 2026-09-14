@@ -1,5 +1,4 @@
 using Microsoft.Extensions.Time.Testing;
-using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
@@ -613,20 +612,22 @@ public class TransfersTests : IDisposable
 
     /// <remarks>
     /// <para>
-    /// <strong>An encode that never arrives is said, not waited on.</strong>
-    /// The library having the episode is the only proof the encode finished,
-    /// and a job that failed looks exactly like one still running: both are
-    /// "the library does not have it yet", for ever.
+    /// <strong>An encode the server says failed is said, and waited on.</strong>
+    /// <c>VideoEncodeJob</c> publishes <c>EncodingFailedEvent</c> for every
+    /// exception it meets, a server stop included, and the queue then tries the
+    /// job again — up to three attempts, and a stop does not count as one. So a
+    /// failure is not the end of the job. Treating it as the end put the episode
+    /// back to missing, failed the grab, and let the sweep take the staged file,
+    /// after which the server's next attempt failed with "input file not found".
     /// </para>
     /// <para>
-    /// So after long enough it is given up on and the episode goes back to
-    /// missing, with the reason on the History page. It is not dispatched a
-    /// second time: a second job for a file the encoder may still be working on
-    /// is the one thing worse than waiting.
+    /// The owner's ruling of 14 September 2026: nothing is closed on it. The
+    /// reason goes to the History page once, in the server's own words, and the
+    /// grab waits until the library has the episode or the owner cancels it.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AnEncodeTheServerSaysFailedIsGivenUpOnAtOnceAndForItsOwnReason()
+    public async Task AnEncodeTheServerSaysFailedIsWaitedOnAndItsReasonSaidOnce()
     {
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 24, 12, 0, 0, TimeSpan.Zero));
 
@@ -667,19 +668,26 @@ public class TransfersTests : IDisposable
             GrabState.Dispatched,
             Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
 
-        // A minute later, not six hours: the plugin asked rather than waited.
+        // The server says the attempt failed, and two passes follow.
         clock.Advance(TimeSpan.FromMinutes(1));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+        // Still waiting, still covering its episode, its staged file still
+        // there for the server's next attempt, and nothing asked for twice.
+        StoredDownload waiting = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
 
-        // In the server's own words, which is the whole point of asking: "it
-        // was given up on" tells the owner nothing they can act on.
-        Assert.Contains(
-            server.Journal.Snapshot().History,
-            one => one.Outcome == ActivityOutcome.Failed
-                   && (one.Detail ?? string.Empty).Contains("no audio stream", StringComparison.Ordinal));
+        Assert.Equal(GrabState.Dispatched, waiting.State);
+        Assert.Equal([Episode], waiting.Covers);
+        Assert.True(File.Exists(Staged), "the staged file the server will try again was taken away");
+        Assert.Single(encoder.Asked);
+
+        // In the server's own words, once, on the History page and on the row.
+        Assert.Single(
+            await grabs.HistoryAsync(CancellationToken.None),
+            one => (one.Detail ?? string.Empty).Contains("no audio stream", StringComparison.Ordinal));
+        Assert.Contains("no audio stream", transfers.FailureOf(Hash) ?? string.Empty, StringComparison.Ordinal);
     }
 
     /// <remarks>
@@ -1231,15 +1239,15 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
-    /// <strong>One episode's encode failing costs that episode and no other.</strong>
-    /// It used to fail the whole grab: on 1 September 2026 episode one's encode
-    /// died, the grab went with it, and the sweep then took the staged files of
-    /// all nine because a failed grab is waiting on nothing. The episode that
-    /// failed goes back to missing so it can be looked for again; the rest of
-    /// the pack is still being encoded and is left alone.
+    /// <strong>One episode's encode failing costs a pack nothing.</strong> It used
+    /// to fail the whole grab — on 1 September 2026 episode one's encode died,
+    /// the grab went with it, and the sweep took the staged files of all nine —
+    /// and then it took the failed episode off the grab and put it back to
+    /// missing. Neither is right while the server's queue is about to try that
+    /// encode again: the pack keeps every episode and every file.
     /// </remarks>
     [Fact]
-    public async Task AFailedEncodeCostsItsOwnEpisodeAndNoOther()
+    public async Task AFailedEncodeInAPackTakesNothingOffIt()
     {
         GrabRepository grabs = await Grabs();
         await ByHand(grabs);
@@ -1285,10 +1293,9 @@ public class TransfersTests : IDisposable
 
         StoredDownload after = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
 
-        // The one that died is off the grab and back to missing; the one still
-        // encoding is untouched, and so is the grab.
-        Assert.Equal([new EpisodeKey(41, 3, 7)], after.Covers);
-        Assert.NotEqual(GrabState.Failed, after.State);
+        // Both episodes still on the grab, and the grab still waiting.
+        Assert.Equal([new EpisodeKey(41, 3, 6), new EpisodeKey(41, 3, 7)], after.Covers);
+        Assert.Equal(GrabState.Dispatched, after.State);
 
         // And neither file was taken away, because one of them is still being
         // read and the other has only just stopped being.

@@ -78,6 +78,12 @@ included: the server's queue outlives a restart and the job says what became of 
 owner's ruling of 14 September 2026; it replaced a six-hour give-up that put the episode back to
 missing and downloaded it again.
 
+**A failed attempt closes nothing either.** `EncodingFailedEvent` is published for every exception
+an encode meets, a server stop included, and the server's queue then tries the job again — up to
+three attempts, a stop not counted. So the reason is said once, on the History page and beside
+"encoding" on the Downloads row, and the grab keeps its episodes and its staged file for the next
+attempt. The same ruling, the same day.
+
 **The owner's cadence is kept by the plugin's own clock**, set to the moment the next cycle is due
 rather than woken to ask whether one is, and wound again when a cycle closes. A saved cadence takes
 effect at once: the host reads `IScheduledTaskPlugin.Jobs` only when a plugin is installed, hot-swapped

@@ -38,6 +38,28 @@ public sealed class Transfers(
     IEncoderSays? says = null,
     IShowImport? imports = null)
 {
+    /// <summary>What the server last said went wrong with a grab's encode, or null.</summary>
+    /// <remarks>
+    /// For the Downloads page, which draws it beside "encoding". The grab is not
+    /// closed on it, so the row is where the owner sees why an episode has been
+    /// encoding for a while and decides whether to cancel it.
+    /// </remarks>
+    public string? FailureOf(string infoHash)
+    {
+        lock (_failures)
+        {
+            return _failures.GetValueOrDefault(infoHash);
+        }
+    }
+
+    /// <summary>What was last said about each grab's failed encode, so it is said once.</summary>
+    /// <remarks>
+    /// Held rather than written down, like everything the server says about an
+    /// encode: a restart forgets what the server said, and what it says next is
+    /// what counts.
+    /// </remarks>
+    private readonly Dictionary<string, string> _failures = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
     /// <param name="trackers">
@@ -1014,6 +1036,11 @@ public sealed class Transfers(
             ClearOwnFolder(sent);
             await grabs.StateAsync(sent.InfoHash, GrabState.Done, ct);
 
+            lock (_failures)
+            {
+                _failures.Remove(sent.InfoHash);
+            }
+
             journal.Finished(ActivityStage.Dispatch, sent.ReleaseTitle, "encoded into the library, and the copies deleted");
         }
     }
@@ -1281,7 +1308,7 @@ public sealed class Transfers(
 
     /// <summary>
     /// Waits on a dispatched grab whose episodes the library does not have yet,
-    /// and acts only on an encode the server has said failed.
+    /// and says so when the server reports an attempt at its encode failed.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -1300,52 +1327,65 @@ public sealed class Transfers(
     /// runs when the server says an encode ended and when it says a scan
     /// finished — or until the owner removes it from the Downloads page.
     /// </para>
+    /// <para>
+    /// <strong>A failed attempt closes nothing either.</strong>
+    /// <c>VideoEncodeJob</c> publishes <c>EncodingFailedEvent</c> for every
+    /// exception it meets, a server stop included, and the queue then tries the
+    /// job again: up to three attempts, and a stop does not count as one. This
+    /// used to take the failed episode off the grab, fail the grab when every
+    /// episode had failed, and so let the sweep take the staged file — after
+    /// which the server's next attempt failed with "input file not found", and
+    /// the episode was downloaded a second time. The owner's ruling of
+    /// 14 September 2026: the reason is said, once, and nothing is closed on it.
+    /// </para>
     /// </remarks>
     private async Task StillWaitingAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
     {
-        DateTimeOffset now = (time ?? TimeProvider.System).GetUtcNow();
-
-        // Episode by episode, because a pack is nine encodes and one of them
-        // failing says nothing about the other eight. It used to fail the whole
-        // grab: on 1 September 2026 episode one's encode died, the grab went
-        // with it, and a minute later the sweep took the staged files of all
-        // nine — including episode five's, which was between its first and
-        // second bundle and had been encoding happily.
-        List<EpisodeKey> lost = [];
+        // Episode by episode, so a pack names the episodes whose attempt failed
+        // rather than blaming all nine for one.
+        List<string> failed = [];
 
         foreach (EpisodeKey episode in sent.Covers)
         {
-            if (await StandingAsync(sent, episode, thisTick, ct) is not { State: EncodeJobState.Failed } dead)
+            if (await StandingAsync(sent, episode, thisTick, ct) is { State: EncodeJobState.Failed } dead)
             {
-                continue;
+                failed.Add($"{episode}: {dead.Failure ?? "the server said no more than that"}");
             }
-
-            string why = dead.Failure ?? "the server gave up on the encode and said no more than that";
-
-            lost.Add(episode);
-
-            await grabs.UncoverAsync(sent.InfoHash, episode, ct);
-
-            logger.LogWarning("{Release} {Episode}: {Reason}", sent.ReleaseTitle, episode, why);
-            journal.Failed(ActivityStage.Dispatch, $"{sent.ReleaseTitle} {episode}", why);
         }
 
-        if (lost.Count == 0 || lost.Count < sent.Covers.Count)
+        if (failed.Count == 0)
         {
-            // Nothing failed, so it goes on waiting; or some did, and the rest of
-            // the pack carries on with the covers of the episodes that died
-            // taken off it.
+            // Nothing failing now: a new attempt has started, or nothing has
+            // been said. The row stops carrying an old reason.
+            lock (_failures)
+            {
+                _failures.Remove(sent.InfoHash);
+            }
+
             return;
         }
 
-        // Every one of them, so the release itself is the fault and is refused
-        // for a while. One episode of nine is not.
-        string said = $"every encode this release was asked for failed, the last of them for {lost.Count} episodes";
+        string said =
+            $"the server's last attempt at the encode failed ({string.Join("; ", failed)}); "
+            + "it is waited on, because the server tries a failed encode again";
 
-        await grabs.FailedAsync(sent.InfoHash, said, now, now + RefusedFor, ct);
+        lock (_failures)
+        {
+            if (_failures.TryGetValue(sent.InfoHash, out string? before) && before == said)
+            {
+                // Said already. A pass runs on every event the server publishes,
+                // and the same reason on every one of them is noise on a page
+                // the owner reads for what changed.
+                return;
+            }
+
+            _failures[sent.InfoHash] = said;
+        }
 
         logger.LogWarning("{Release}: {Reason}", sent.ReleaseTitle, said);
         journal.Failed(ActivityStage.Dispatch, sent.ReleaseTitle, said);
+
+        await grabs.NotedAsync(sent.ReleaseTitle, said, (time ?? TimeProvider.System).GetUtcNow(), ct);
     }
 
     /// <summary>
