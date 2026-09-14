@@ -1966,6 +1966,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 // sat in the incomplete folder for ever.
                 _engine.Completed += _ => StartTransfers();
 
+                // And the client giving one up. The pass is what fails the grab,
+                // blacklists the release and takes the torrent out of the
+                // client; without it a dropped torrent is held for ever, and the
+                // cycle with it.
+                _engine.GaveUp += _ => StartTransfers();
+
                 // And a page already open when the client was built is watched
                 // from now, rather than from the next time it is fetched.
                 if (_onlookers.Present)

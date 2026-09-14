@@ -65,7 +65,10 @@ because it sweeps download folders no grab answers for. A grab written down but 
 not hold a cycle open.
 
 **Nothing in the chain is a timer.** A finished download is `BittorrentEngine.Completed`, raised where
-the last piece verifies. An ended encode is `EncodingCompletedEvent` or `EncodingFailedEvent`, matched
+the last piece verifies. A torrent the client gives up on — its metadata never came, it stalled, it
+holds no video, it will not fit — is `BittorrentEngine.GaveUp`, and the pass it starts is what fails
+the grab and takes the torrent out of the client; without it a dropped torrent was held for ever and
+the cycle with it. An ended encode is `EncodingCompletedEvent` or `EncodingFailedEvent`, matched
 on the media id the plugin named when it asked. A transfers pass runs on either, and every pass asks
 whether the cycle can close.
 

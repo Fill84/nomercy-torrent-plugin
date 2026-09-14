@@ -1733,6 +1733,45 @@ public class BittorrentEngineTests : IDisposable
     }
 
     /// <summary>
+    /// The client says which torrent it gave up on, and nobody asked.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Giving up is half of it. A torrent the client has given up on is still held
+    /// until a transfers pass fails its grab, blacklists the release and takes it
+    /// out — and a pass ran every minute until the cycle became events. After
+    /// that, nothing started one: on 14 September 2026 an American Dad pack was
+    /// dropped for its metadata at 17:23, its grab still read "grabbed" forty
+    /// minutes later, and the cycle stayed open because the client was still
+    /// holding what it had dropped.
+    /// </para>
+    /// <para>
+    /// So giving up is said, with the hash, the way finishing is.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheClientSaysWhichTorrentItGaveUpOnWithoutBeingAsked()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 9, 14, 17, 0, 0, TimeSpan.Zero));
+
+        using BittorrentEngine engine = new(
+            0, TimeSpan.FromMinutes(5), Stall, Together, Seeding, 0, 0, null,
+            new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+
+        TaskCompletionSource<string> gaveUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        engine.GaveUp += hash => gaveUp.TrySetResult(hash);
+
+        engine.Start();
+
+        await engine.AddAsync(Request, CancellationToken.None);
+
+        clock.Advance(TimeSpan.FromMinutes(5));
+
+        Assert.Same(gaveUp.Task, await Task.WhenAny(gaveUp.Task, Task.Delay(TimeSpan.FromSeconds(30))));
+        Assert.Equal("92D8A3F6864911EF292B4BE0DD5286406396D2B3", await gaveUp.Task, ignoreCase: true);
+    }
+
+    /// <summary>
     /// A torrent that stops getting anywhere is given up on, and nothing asked.
     /// </summary>
     /// <remarks>

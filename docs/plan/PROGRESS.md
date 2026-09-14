@@ -4,10 +4,24 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: look on beast-unit whether a cycle closes and maintenance runs** (deploy what follows first,
-when the owner stops the server).
+**Seen on beast-unit on 15 September 2026: a cycle closes and maintenance runs.** The American Dad
+grab failed at 23:09:05 UTC, the moment its metadata deadline dropped it; the server then updated
+itself to 0.1.501 through the launcher, and the cycle of the run after closed at 23:28:36 UTC with no
+maintenance warning. Nothing of `S12` is left open on the plugin's side.
 
-**Done and green, not yet on beast-unit: a failed encode report closes nothing.** Measured first:
+**Found by looking for exactly that, and fixed: a torrent the client gave up on was never failed.** On 14 September 2026 the cycle started 17:14 UTC had not closed at 17:59: an
+American Dad pack was dropped for its metadata at 17:23 and its grab still read `grabbed`. The client's
+deadlines (`Woke` → `Expire`, `Stalled`) and its refusals on opening (`Knows` → `Refuse`, `Cramped`)
+set the error and raised only `Stirred`, which wakes pages. Failing the grab, blacklisting and removing
+the torrent is `Transfers.FailedAsync`, reached only by a pass — and nothing started one, so the client
+went on holding the torrent, `Watching` stayed true and the cycle never closed. The transfers tick every
+minute had hidden it. `BittorrentEngine.GaveUp(infoHash)` is raised outside the lock where an error is
+first set, and the plugin starts a pass on it as it does on `Completed`. Tests, red first:
+`BittorrentEngineTests.TheClientSaysWhichTorrentItGaveUpOnWithoutBeingAsked` and
+`TheChainIsJoinedTests.ATorrentTheClientGivesUpOnIsFailedWithoutAnythingAsking` (the plugin's wiring
+removed: *Expected Failed, Actual Grabbed*).
+
+**Committed as `ce7164a`, seen on beast-unit: a failed encode report closes nothing.** Measured first:
 on 14 September 2026 the plugin did not fail anything at the 12:36 UTC stop — it was shutting down
 itself — and the "Input file not found" at 12:49 followed the owner cancelling those grabs by hand.
 But the rule it would have applied was wrong. `VideoEncodeJob` publishes `EncodingFailedEvent` from

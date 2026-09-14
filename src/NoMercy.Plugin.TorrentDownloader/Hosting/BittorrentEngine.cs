@@ -562,6 +562,8 @@ public sealed class BittorrentEngine(
     /// <summary>The deadline came, so the answer it was waiting on is given.</summary>
     private void Woke(string infoHash)
     {
+        bool gaveUp;
+
         lock (_lock)
         {
             if (!_torrents.TryGetValue(infoHash, out Held? held))
@@ -571,12 +573,20 @@ public sealed class BittorrentEngine(
             }
 
             DateTimeOffset now = _time.GetUtcNow();
+            bool failing = held.Error is not null;
 
             Expire(held, now);
             Stalled(held);
             Seeded(held, now);
             Queue();
             Rearm(infoHash, held);
+
+            gaveUp = !failing && held.Error is not null;
+        }
+
+        if (gaveUp)
+        {
+            GiveUp(infoHash);
         }
 
         Stir();
@@ -660,6 +670,8 @@ public sealed class BittorrentEngine(
     /// </remarks>
     private void Knows(string infoHash)
     {
+        bool gaveUp;
+
         lock (_lock)
         {
             // Already given up on: refusing it a second time would write a
@@ -679,6 +691,13 @@ public sealed class BittorrentEngine(
             // moment the verified bitfield exists, and for a torrent already
             // whole on disk it is the only one.
             Remember();
+
+            gaveUp = held.Error is not null;
+        }
+
+        if (gaveUp)
+        {
+            GiveUp(infoHash);
         }
 
         Stir();
@@ -1461,6 +1480,39 @@ public sealed class BittorrentEngine(
     /// </para>
     /// </remarks>
     public event Action<string>? Completed;
+
+    /// <summary>Says which torrent the client has given up on, once per failure.</summary>
+    /// <remarks>
+    /// <para>
+    /// A deadline passing or a refusal on opening stops the torrent, and that is
+    /// half of it: the grab is failed, the release blacklisted and the torrent
+    /// taken out only by a transfers pass, and until then the client goes on
+    /// holding it — which holds the cycle open. A pass ran every minute until the
+    /// cycle became events, and then nothing started one. On 14 September 2026 an
+    /// American Dad pack was dropped for its metadata at 17:23 and its grab still
+    /// read "grabbed" forty minutes later.
+    /// </para>
+    /// <para>
+    /// Raised outside this client's lock, for the same reason as
+    /// <see cref="Completed"/>: the handler runs a pass that asks this client for
+    /// its status and removes torrents from it.
+    /// </para>
+    /// </remarks>
+    public event Action<string>? GaveUp;
+
+    /// <summary>Raises <see cref="GaveUp"/> without letting a handler take the client down.</summary>
+    private void GiveUp(string infoHash)
+    {
+        try
+        {
+            GaveUp?.Invoke(infoHash);
+        }
+        catch (Exception wrong)
+        {
+            logger.LogWarning(
+                wrong, "{Hash} was given up on and something went wrong acting on it: {Reason}", infoHash, wrong.Message);
+        }
+    }
 
     /// <summary>Raised when the client does something a page would show.</summary>
     /// <remarks>

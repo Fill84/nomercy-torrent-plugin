@@ -409,6 +409,7 @@ for files that were already complete on disk.
 | in the store, not in the engine | re-added from its magnet, resume intact |
 | in the engine, not in the store | stopped, files kept, logged |
 | finished while the server was down | whole on disk when it is re-added, so `Completed` is raised as it opens, and it is staged and dispatched from there |
+| given up on by the client | `GaveUp` is raised where the deadline or the refusal decides it, and the pass it starts fails the grab and removes the torrent |
 
 ## What is visible
 

@@ -100,6 +100,72 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>A torrent the client gives up on is failed without anything
+    /// asking.</strong> The client refuses a torrent with no video file in it the
+    /// moment it opens, and until the grab is failed the client goes on holding
+    /// it — which holds the cycle open, so maintenance never runs. A transfers
+    /// pass ticking every minute used to do the failing; with the cycle driven by
+    /// events, nothing did.
+    /// </para>
+    /// <para>
+    /// A book, whole on disk, so nothing is waited for but the refusal itself.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentTheClientGivesUpOnIsFailedWithoutAnythingAsking()
+    {
+        string incomplete = Path.Combine(_folder, "incomplete");
+        string intake = Path.Combine(_folder, "intake");
+
+        Directory.CreateDirectory(incomplete);
+        Directory.CreateDirectory(intake);
+
+        const string name = "Silo.2023.S03E06.1080p.WEB.H264-CAKES.pdf";
+
+        byte[] content = RandomNumberGenerator.GetBytes(64 * 1024);
+        await File.WriteAllBytesAsync(Path.Combine(incomplete, name), content);
+
+        string torrent = Path.Combine(_folder, "not-a-video.torrent");
+        await File.WriteAllBytesAsync(torrent, Torrent(name, content, pieceLength: 16 * 1024));
+
+        using TorrentDownloaderPlugin plugin = new();
+
+        plugin.Initialize(new FakePluginContext
+        {
+            DataFolderPath = _folder,
+            Shelves = new FakeLibraryQuery(),
+            Permits = new FakeGrants(),
+            Container = new FakeProvider(),
+        });
+
+        Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
+        settings.Client.ListenPort = 0;
+
+        SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+        Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+
+        (string? hash, string? refusal) = await plugin.AddTorrentAsync(torrent, CancellationToken.None);
+        Assert.True(hash is not null, refusal);
+
+        GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
+
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        GrabState state = GrabState.Grabbed;
+
+        while (state != GrabState.Failed && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+
+            state = (await grabs.EveryAsync(CancellationToken.None))
+                .Single(one => string.Equals(one.InfoHash, hash, StringComparison.OrdinalIgnoreCase))
+                .State;
+        }
+
+        Assert.Equal(GrabState.Failed, state);
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>A download that finished while the server was down is staged on
     /// start.</strong> The torrent client is built on first use, and the
     /// transfers job ticking every minute was what used it first — so it was also
