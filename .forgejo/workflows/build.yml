@@ -140,7 +140,7 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      # The three gates from CLAUDE.md, in its own words and its own order.
+      # The three gates of the working agreement, in its own words and its own order.
       - name: Build
         run: dotnet build -c Release -warnaserror --no-restore
 

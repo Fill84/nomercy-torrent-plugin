@@ -21,3 +21,6 @@ health/
 # release nobody can trace to a commit.
 *.zip
 .env
+
+# The working agreement is local to this machine, not part of the published repository.
+/CLAUDE.md

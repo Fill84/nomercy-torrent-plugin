@@ -1,58 +1,132 @@
 # NoMercy Torrent Downloader
 
-A NoMercy media-server plugin. Every episode that is missing from a TV or anime library and has
-already aired gets downloaded and handed to the encoder, without anybody at the keyboard — and the
-owner can see it happening.
+A plugin for the [NoMercy](https://github.com/NoMercy-Entertainment) media server. Every episode
+that is missing from a TV or anime library and has already aired gets downloaded and handed to the
+server's encoder — without anybody at the keyboard, and with every step visible while it happens.
 
-A rewrite of 0.3.4, keeping the same plugin id so it upgrades in place. The old plugin at
-`../nomercy-torrent-plugin` is reference for what each site does and for what went wrong; no code is
-carried over.
+It carries the same plugin id as 0.3.4, so it upgrades that plugin in place.
 
-**It needs a media server carrying plugin contract `0.1.479` or newer.** That is the release where
-`IPluginEncoder` and `PluginLibraryEpisode.Id` landed, and this plugin asks for an encode through
-them and no other way. On an older server it loads, downloads and stages, and every staged episode
-waits in the intake folder for an encode that cannot be asked for — so it says so in the log and the
-journal instead, once, rather than leaving the owner to find out from an empty library.
-
-The version this repository is on is in `Directory.Build.props`, `plugin.json` and `PluginIdentity`,
-and a test holds all three together. It is not written here, because a number in prose is one that
-goes stale — this heading said 0.3.9 for three releases.
-
-## Start here
-
-| Document | Answers |
-| --- | --- |
-| [CLAUDE.md](CLAUDE.md) | the working agreement, and what "ga door" means |
-| [docs/plan/PROGRESS.md](docs/plan/PROGRESS.md) | where the work is right now |
-| [docs/plan/SPRINTS.md](docs/plan/SPRINTS.md) | all 64 slices, fully specified |
-| [docs/00-goal.md](docs/00-goal.md) | the goal, the chain, the two rules that shape everything |
-| [docs/01-plugin.md](docs/01-plugin.md) | what makes this a NoMercy plugin: identity, ABI, cadences, manifest, deploy |
-| [docs/02-library.md](docs/02-library.md) | where the show and episode information comes from, and how "missing" is derived |
-| [docs/03-architecture.md](docs/03-architecture.md) | the parallel pipeline |
-| [docs/04-domain.md](docs/04-domain.md) | release names, the profile, settings, the schema |
-| [docs/05-sources.md](docs/05-sources.md) | the fifteen shipped sources, the owner's own, and every trap |
-| [docs/06-torrent-client.md](docs/06-torrent-client.md) | the BitTorrent protocol, written here |
-| [docs/07-solver.md](docs/07-solver.md) | the challenge solver, on a hidden desktop |
-| [docs/08-ui.md](docs/08-ui.md) | the live dashboard, the pages and every action |
-| [docs/09-host-contract.md](docs/09-host-contract.md) | grants, secrets, and the encode dispatch |
-| [docs/10-known-failures.md](docs/10-known-failures.md) | every fault 0.3.x shipped, and its test |
-
-## The chain
+## What it does
 
 ```
 libraries → every show in every tv and anime library
           → missing   no video file, air date in the past — backwards as well as forwards
-          → names     read every feed and scene database, pick the release name that already
-                      meets the profile
-          → find      search that full name on every indexer, merge the matches by info hash
+          → names     ask the scene databases what the episode was released as
+          → find      put that full release name to every indexer, merge the matches by info hash
           → download  the plugin's own BitTorrent client
-          → encode    dispatch the job; the server does the rest
+          → staged    the finished episode, copied out for the encoder
+          → encode    queue an encode job; the server does the rest
 ```
+
+**One cycle, and each step starts the next.** A cycle is started by the Run button, by the server
+finishing a library scan, or by the owner's interval — hourly by default, never more often. A
+download is staged the moment it finishes, the encode is asked for straight after, and the server's
+own encoding events close it. The library having the episode is what says an encode arrived; nothing
+is asked for twice and no clock gives up on it. Maintenance runs once nothing is left in hand. A
+trigger during a cycle is added to it, never run beside it. Nothing in the chain polls.
+
+**Missing means missing.** Nothing is followed or subscribed to. An episode that aired two years ago
+and was never downloaded is missing in exactly the same way as one that aired last night, and a show
+that has ended is precisely the kind with gaps to fill.
+
+**A release name first, a torrent second.** The scene databases — PreDB, srrDB, SceneSource and
+PreDB.net — are asked about every missing episode on every run, with the owner's resolution and then
+without it. They answer what a release is called, never who has it. Every name that meets the owner's
+quality profile is what the indexers are asked for first, letter for letter:
+`Silo.S03E06.1080p.WEB.H264-CAKES`, dots and dash as the source wrote it.
+
+**Each indexer climbs its own ladder.** Every name letter for letter; then the same name without its
+punctuation; then the episode with the resolution, the episode without it, the season with it, and the
+season without it. An indexer stops at the first step where it answers, and one that has nothing is
+never allowed to hold the others back.
+
+**TorrentBay leads for television, Nyaa for anime.** Where two copies are level the leading site's is
+taken, and its magnet is the one a torrent is built on. Every other indexer is still asked.
+
+**One torrent, every tracker.** Everything the indexers return with the same info hash is one torrent.
+Every indexer's magnet or torrent for it is read, and the client is handed all of their trackers
+together — nothing unannounceable, and nothing belonging to the owner's own private trackers.
+
+**A decided episode downloads at once.** The moment an episode (or a season pack) has been found, it
+goes to the client and the run carries on with the next one.
+
+**One release under two hashes: both start, the first to finish is kept.** The other is stopped and
+its files deleted.
+
+**Private trackers are respected.** A private torrent looks for peers on its own tracker and nowhere
+else (BEP 27), and seeds to the owner's ratio or hours. A public torrent never uploads. A passkey or
+an API key never appears in a page, a log or an error.
+
+## Sites behind a challenge
+
+Some indexers sit behind Cloudflare. When a run starts, every site that really challenges is solved at
+once in a single Chrome on a hidden desktop, the cookies are kept, and the browser is closed; the run
+then asks everything over plain HTTP. A challenge that turns up halfway through a run opens the browser,
+is solved, and the browser closes again. No window ever opens on anybody's desktop.
+
+## The pages
+
+| Page | Shows |
+| --- | --- |
+| Dashboard | whether it is running and on what, each stage's progress, what every episode in flight is waiting on, the sources' health, and the downloads |
+| Shows | every show in the tv and anime libraries and what is missing from it |
+| Queue | what is being looked for, in order, and what is still waiting to air |
+| Downloads | progress, rate, peers, seeds, ratio and destination |
+| History | what was grabbed, skipped or failed, and why |
+| Skipped | releases the profile refused, with the reason and a way to allow one anyway |
+| Sources | per site: what it last answered, how long it took, its refusal in its own words, when it is next asked; a switch per shipped site and your own indexers |
+| Settings | folders, quality, how often a cycle starts, the torrent client and its port, private trackers and seeding |
+
+An open page updates live, and only when something changed; nothing is pushed while no page is open.
+Times are shown as clock times. A number that is not known says what is missing rather than showing
+nought.
+
+## Settings
+
+Everything has a working default, and the page has one Save; expert fields sit behind **Show
+advanced**. The shipped sites are not editable, only switchable, on the Sources page, where you can
+also add your own indexers. Private trackers are added on the Settings page, and the seeding settings
+appear only once one exists. An API key or a passkey is write-only and never shown again.
+
+## Requirements
+
+- A NoMercy media server carrying plugin contract **`0.1.479` or newer**. That is the release where
+  `IPluginEncoder` and `PluginLibraryEpisode.Id` landed, and an encode is asked for through them and no
+  other way. On an older server the plugin loads, downloads and stages, and says once — in the log and
+  on the History page — that the server cannot be asked for an encode.
+- A forwarded port for the torrent client, if you want peers to be able to reach you.
+
+## Installing
+
+Every release is on the [releases page](https://github.com/Fill84/nomercy-torrent-plugin/releases)
+as `NoMercy.Plugin.TorrentDownloader-<version>.zip`. The plugin's own index, which a server's plugin
+catalogue reads, is [`repository.json`](repository.json): every version, its download and its checksum.
+
+By hand: stop the server, unpack the zip into the server's plugins folder (on Windows
+`%LOCALAPPDATA%\NoMercy\plugins`), and start it again. A loaded plugin's files are held open, so a copy
+made while the server runs does not take.
+
+## Documentation
+
+| Document | Answers |
+| --- | --- |
+| [docs/00-goal.md](docs/00-goal.md) | the goal, the chain, the two rules that shape everything |
+| [docs/01-plugin.md](docs/01-plugin.md) | identity, contract, the cycle and what starts it, manifest, deploy |
+| [docs/02-library.md](docs/02-library.md) | where the show and episode information comes from, and how "missing" is worked out |
+| [docs/03-architecture.md](docs/03-architecture.md) | the pipeline |
+| [docs/04-domain.md](docs/04-domain.md) | release names, the profile, settings, the schema |
+| [docs/05-sources.md](docs/05-sources.md) | every shipped source and indexer, and every trap |
+| [docs/06-torrent-client.md](docs/06-torrent-client.md) | the BitTorrent client |
+| [docs/07-solver.md](docs/07-solver.md) | the challenge solver on a hidden desktop |
+| [docs/08-ui.md](docs/08-ui.md) | the dashboard, the pages and every action |
+| [docs/09-host-contract.md](docs/09-host-contract.md) | grants, secrets and the encode dispatch |
+| [docs/10-known-failures.md](docs/10-known-failures.md) | every fault 0.3.x shipped, and the test that holds it |
+| [docs/releases/](docs/releases/) | what each release changed |
+| [docs/plan/PROGRESS.md](docs/plan/PROGRESS.md) | where the work is right now |
 
 ## Building
 
-Requires the **.NET 10 SDK**. On this machine the SDK is user-local — use `~/.dotnet/dotnet.exe`,
-not the `dotnet` on `PATH`, which is 8.0.
+Requires the **.NET 10 SDK**.
 
 ```
 scripts/fetch-abstractions.ps1              # packs the plugin contract from the media server
@@ -62,37 +136,35 @@ dotnet format --verify-no-changes
 ```
 
 `fetch-abstractions` clones the media server into `_server/` — shallow, sparse, branch **`master`** —
-and packs four projects into `_nupkgs/`: `NoMercy.Plugins.Abstractions`, `NoMercy.Plugins.Mvc`, and
-the `NoMercy.Design` and `NoMercy.Events` that the first of those depends on. It clears their entries
-in the global NuGet cache first, because a repack of the same version number is otherwise ignored and
-nothing says so.
+and packs four projects into `_nupkgs/`: `NoMercy.Plugins.Abstractions`, `NoMercy.Plugins.Mvc`, and the
+`NoMercy.Design` and `NoMercy.Events` the first of those depends on. It clears their entries in the
+global NuGet cache first, because a repack of the same version number is otherwise ignored and nothing
+says so.
 
 **`master`, never `dev`.** `dev`'s version is pinned at `0.1.404` and never moves, so packing from it
 gives a contract older than released servers carry, and the build fails with a `CS0246` naming a type
 — which reads like a missing `using` and is really a server too old.
 
-**All four, not the two this repository names.** `NoMercy.Plugins.Abstractions` declares the other two
-as dependencies. Packing two worked on a machine whose `_nupkgs` was already warm and failed the
-first build on a clean one, complaining about packages nothing here mentions. Run it again after the media server's contract moves; it prints the version it
-packed and warns if `NoMercyContractVersion` in `Directory.Build.props` still asks for another one.
+Run it again after the media server's contract moves; it prints the version it packed and warns if
+`NoMercyContractVersion` in `Directory.Build.props` still asks for another one.
 
-### The test filter
+The version lives in `Directory.Build.props`, `plugin.json` and `PluginIdentity`, and a test holds the
+three together.
 
-Anything that talks to the real internet belongs in `tests/…Integration`, and is left out by naming
-it:
+### Tests
+
+Anything that talks to the real internet belongs in `tests/…Integration` and is left out by naming it:
 
 ```
 dotnet test --filter "FullyQualifiedName!~Integration"
 ```
 
-The filter matches the fully qualified test name — namespace, class, method — not the project, so
-every test in that project lives under a namespace containing `Integration`, and a test in that
-assembly asserts they all do.
+The filter matches the fully qualified test name, so every test in that project lives under a namespace
+containing `Integration`, and a test in that assembly asserts they all do. Plain `dotnet test` runs that
+project too, which is safe only while nothing in it needs a network.
 
-**Plain `dotnet test` runs that project as well**, and both the gate in `CLAUDE.md` and CI use the
-plain form. That is safe only for as long as nothing in there needs a network — today the project
-holds the namespace check and local discovery, which use no internet. **A test that does needs the
-filter, and the run that omits it will fail on a machine with no route out.**
+Parsers are tested against real captured pages in `tests/fixtures/`, and protocol code against captured
+wire bytes — never hand-written samples.
 
 ## Checking the sources
 
@@ -101,61 +173,29 @@ dotnet run --project tools/SourceHealth
 ```
 
 Walks every source through the real chain and writes `health/report.md` plus the page each source
-returned.
+returned. It exits non-zero when anything is flagged, including a source that answers with fewer rows
+than last time (`health/baseline.json`). **Hand the report and the page over together**: a reader is
+repaired from the page it failed on, and fetching the address again later usually gets one that works.
 
-**It exits non-zero when anything is flagged**, so it can be wired into whatever runs it. A check
-that cannot fail is a check nobody acts on.
+## Deploying to a server
 
-**Hand the report and the page over together when something is flagged.** A reader is repaired from
-the page it failed on, and fetching the address again later gets a different page — usually one that
-works, which is how a fault of this kind survives being reported. The page is written beside the
-report for exactly that reason: it is the evidence, and it has a shelf life of about a day.
-
-It also writes `health/baseline.json`, which is what each source answered with last time. A source
-that answers with **fewer rows than last time** is flagged even though it answered: nought rows off a
-page covered in releases is a broken reader and says so loudly, and three rows where there were forty
-is the same fault with the volume turned down. Judged against the last run rather than a number
-written down here, because what a search returns depends on the term and the day.
-
-A source flagged this way once and never again was a real change and the new count is now the
-baseline. One flagged every run is a reader that needs looking at — with its page.
-
-## Deploying
-
-**Stop the server first.** A loaded plugin's assembly is held open, so the copy fails and the old
-build stays — which looks exactly like a deploy that worked and changed nothing.
+**Stop the server first.** A loaded plugin's assembly is held open, so the copy fails and the old build
+stays — which looks exactly like a deploy that worked and changed nothing.
 
 ```
 scripts/deploy-to-server.ps1 -Build
 ```
 
-The script refuses to copy anything while the server is still running, rather than leaving the hash
-check at the end to explain it one file at a time. Files travel as base64 over ssh, and every one has
-its hash compared afterwards — that comparison is the only thing that can tell a deploy that worked
-from a deploy that quietly did nothing.
-
-It ships **every file the build produced** bar symbols and documentation, plus the native code for
-the platform the server runs on, which it asks that machine for. Nothing is listed by hand.
-
-A hand-kept list is what this replaced, and it drifted three times: it missed the protocol assembly,
-it missed `sources.json` — the catalogue, read from beside the assembly, so fifteen sources read as
-none — and it named six files where the plugin needs every one of its dependencies. That last one reached a server and
-the plugin simply did not appear in its list, because the host resolves a plugin's dependencies from
-beside the plugin, found none, and reported nothing. Tests hold the built output against what the
-dependency file names and against what the solution really builds.
-
-Afterwards, the version is what the log line says when the plugin wakes: the manifest, the code and
-the compiled file all carry it and a test holds the three together.
+It refuses to copy while the server runs, ships every file the build produced bar symbols and
+documentation plus the native code for the server's platform, and compares every file's hash afterwards.
 
 ## Releasing
 
-Nothing is released by hand. Push a `v*` tag to forgejo and `.forgejo/workflows/build.yml` runs every
-gate above, packages the plugin, checks the package, and publishes the release — **to forgejo and to
-GitHub, from that one build**, so the two forges carry the same bytes. The notes come from
-`docs/releases/<version>.md`, which is written and reviewed here rather than generated from a tag.
-
-Forgejo leads. GitHub runs no workflow of its own.
+Nothing is released by hand. Pushing a `v*` tag to Forgejo runs `.forgejo/workflows/build.yml`: every
+gate above, the package, a check of the package, and the release — **to Forgejo and to GitHub from that
+one build**, so both carry the same bytes — and then `repository.json` is brought up to date. The notes
+come from `docs/releases/<version>.md`, written and reviewed here rather than generated from a tag.
 
 ## Licence
 
-MIT.
+[MIT](LICENSE) © 2026 Phillippe Pelzer.
