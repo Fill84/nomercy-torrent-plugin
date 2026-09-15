@@ -26,7 +26,7 @@ public class DecisionsTests
     public void APackIsTakenForASeasonWithOneGap()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "1080p", EnglishOnly = false },
+            AtQuality("1080p"),
             [Gap(1)],
             Blacklist.None);
 
@@ -43,7 +43,7 @@ public class DecisionsTests
     public void APackThatIsTakenSettlesEveryGapInItsSeason()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "1080p", EnglishOnly = false },
+            AtQuality("1080p"),
             [Gap(1), Gap(2), Gap(3)],
             Blacklist.None);
 
@@ -70,7 +70,7 @@ public class DecisionsTests
     public void ASingleEpisodeSettlesOnlyItself()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "720p" },
+            AtQuality("720p"),
             [Silo(6), Silo(7)],
             Blacklist.None);
 
@@ -91,7 +91,7 @@ public class DecisionsTests
     public void ABlacklistedTitleOrHashIsNeverChosen()
     {
         Decisions byTitle = new(
-            new() { MaximumResolution = "720p" },
+            AtQuality("720p"),
             [Silo(6)],
             Blacklist.Of(Blacklist.KeyOf(Single.Original)));
 
@@ -99,7 +99,7 @@ public class DecisionsTests
         Assert.Null(byTitle.Rank(Silo(6), [Copy(Single.Original, seeders: 40)]).Chosen);
 
         Decisions byHash = new(
-            new() { MaximumResolution = "720p" },
+            AtQuality("720p"),
             [Silo(6)],
             Blacklist.Of(Hash));
 
@@ -117,7 +117,7 @@ public class DecisionsTests
     public void ARefusedReleaseIsRecordedWithItsReason()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "720p" },
+            AtQuality("720p"),
             [Silo(6)],
             Blacklist.Of(Blacklist.KeyOf(Single.Original)));
 
@@ -140,7 +140,7 @@ public class DecisionsTests
     public void ANameTheProfileRefusesIsRecordedWithNoSiteAgainstIt()
     {
         Decisions decisions = new(
-            new() { MaximumResolution = "2160p" },
+            AtQuality("2160p"),
             [Silo(6)],
             Blacklist.None);
 
@@ -212,5 +212,11 @@ public class DecisionsTests
         Assert.Contains(name, Capture.Rows(fixture, reader));
 
         return name;
+    }
+
+    /// <summary>Every show at this quality, with codec any and no tags.</summary>
+    private static SettingsByShow AtQuality(string quality)
+    {
+        return SettingsByShow.Every(new() { Quality = quality, Searched = true });
     }
 }

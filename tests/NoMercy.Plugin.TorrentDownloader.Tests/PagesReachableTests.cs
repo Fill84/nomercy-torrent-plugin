@@ -100,9 +100,9 @@ public class PagesReachableTests
     }
 
     /// <remarks>
-    /// The reason is the whole page. A refusal listed without one leaves the
-    /// owner with no way to tell "widen the profile" from "leave it alone",
-    /// which is the judgement this page exists to let them make.
+    /// The reason is the whole page, with the show and episode it was refused
+    /// for, read back from the store. And nothing to press: a refused release
+    /// name offers no button to download it anyway (docs/specs/pages.md).
     /// </remarks>
     [Fact]
     public async Task TheSkippedRouteCarriesEveryRefusalWithItsReason()
@@ -129,18 +129,13 @@ public class PagesReachableTests
         Assert.Contains("Silo.S03E06.720p.WEB.H264-CAKES", page, StringComparison.Ordinal);
         Assert.Contains("720p is below the 1080p rung", page, StringComparison.Ordinal);
 
-        // The one control on the page, past the plugin's own navigation: every
-        // page carries a way to every other, and those are navigations rather
-        // than calls into the plugin.
-        PluginActionIntent allow = Assert.Single(
+        Assert.Equal("Silo", Rendered.ById(view, SkippedView.TableId + "-0").Props["show"]);
+
+        // Past the plugin's own navigation, nothing on the page calls into the
+        // plugin.
+        Assert.DoesNotContain(
             Rendered.All(view).Select(component => component.Action).OfType<PluginActionIntent>(),
             action => action.Type == PluginActionType.CallPlugin);
-
-        Assert.Equal("skipped/allow", allow.Payload["method"]);
-
-        // The transport is how the action reaches the plugin, and this one has
-        // an answer, so it goes over REST.
-        Assert.Equal(PluginActionTransport.Rest, allow.Payload["transport"]);
     }
 
     /// <remarks>

@@ -14,7 +14,11 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// would be telling the owner something untrue.
 /// </param>
 /// <param name="Reason">What to tell the owner, in words they can act on.</param>
-public sealed record SkippedRelease(EpisodeKey Episode, string Title, string? Source, string Reason);
+public sealed record SkippedRelease(EpisodeKey Episode, string Title, string? Source, string Reason)
+{
+    /// <summary>The show it was refused for, which the Skipped page names beside the episode.</summary>
+    public string? ShowTitle { get; init; }
+}
 
 /// <summary>
 /// What one cycle has decided so far.
@@ -27,24 +31,23 @@ public sealed record SkippedRelease(EpisodeKey Episode, string Title, string? So
 /// answers change as the cycle takes things.
 /// </para>
 /// <para>
-/// It holds the real profile and the real filter. <strong>H1:</strong> every
-/// test covering 0.3.4's seeder fault stubbed the profile out with a fake
+/// It holds the real settings of every show and the real judge. <strong>H1:</strong>
+/// every test covering 0.3.4's seeder fault stubbed the profile out with a fake
 /// chooser and passed while the plugin took nothing at all.
 /// </para>
 /// </remarks>
 public sealed class Decisions
 {
-    private readonly ReleaseFilter _filter;
-    private readonly ReleaseDecider _decider;
+    private readonly SettingsByShow _settings;
+    private readonly ReleaseDecider _decider = new();
     private readonly IReadOnlySet<string> _blacklisted;
     private readonly Dictionary<(int ShowId, int Season), List<EpisodeKey>> _gaps = [];
     private readonly HashSet<EpisodeKey> _settled = [];
     private readonly List<SkippedRelease> _skipped = [];
 
-    public Decisions(Profile profile, IReadOnlyList<TrackedEpisode> missing, IReadOnlySet<string> blacklisted)
+    public Decisions(SettingsByShow settings, IReadOnlyList<TrackedEpisode> missing, IReadOnlySet<string> blacklisted)
     {
-        _filter = new(profile);
-        _decider = new(profile);
+        _settings = settings;
         _blacklisted = blacklisted;
 
         // The gaps by season, kept as the keys themselves rather than a count:
@@ -89,15 +92,25 @@ public sealed class Decisions
     /// Whether this name is worth searching for, for this episode.
     /// </summary>
     /// <remarks>
-    /// The profile's own rules, and nothing more: a pack is an ordinary copy,
-    /// judged the same as a single episode. Every refusal is recorded on the
-    /// way out.
+    /// The settings of its show, and nothing more. Every refusal is recorded on
+    /// the way out.
     /// </remarks>
     public Verdict JudgeName(ReleaseName name, TrackedEpisode episode)
     {
-        Verdict verdict = _filter.JudgeName(name, episode, _blacklisted);
+        Verdict verdict = Judge(episode).JudgeName(name, episode, _blacklisted);
 
-        return verdict.Accepted ? verdict : Refuse(episode.Key, name.Original, null, verdict);
+        return verdict.Accepted ? verdict : Refuse(episode, name.Original, null, verdict);
+    }
+
+    /// <summary>The settings of this episode's show, as a judge.</summary>
+    public EffectiveSettings SettingsFor(TrackedEpisode episode)
+    {
+        return _settings.For(episode.Key.ShowId);
+    }
+
+    private NameJudge Judge(TrackedEpisode episode)
+    {
+        return new(SettingsFor(episode));
     }
 
     /// <summary>
@@ -130,14 +143,17 @@ public sealed class Decisions
         {
             ReleaseName parsed = ReleaseName.Parse(copy.Title);
 
-            if (!ReleaseFilter.IsFor(parsed, episode))
+            if (!NameJudge.IsFor(parsed, episode))
             {
                 // Another episode's row, or another programme's. It was never
                 // offered for this one.
                 continue;
             }
 
-            Verdict verdict = _filter.JudgeName(parsed, episode, _blacklisted);
+            // Rows are still judged against the show's settings until S13-07, which
+            // stops judging rows at all (indexer-search.md): until then a row and
+            // the name it was asked for are held to the same settings.
+            Verdict verdict = Judge(episode).JudgeName(parsed, episode, _blacklisted);
 
             if (verdict.Accepted)
             {
@@ -145,7 +161,7 @@ public sealed class Decisions
             }
             else
             {
-                _skipped.Add(new(episode.Key, copy.Title, copy.Source, verdict.Reason));
+                _skipped.Add(new(episode.Key, copy.Title, copy.Source, verdict.Reason) { ShowTitle = episode.ShowTitle });
             }
         }
 
@@ -157,7 +173,7 @@ public sealed class Decisions
 
         foreach ((ReleaseCopy copy, string reason) in decision.Refused)
         {
-            _skipped.Add(new(episode.Key, copy.Title, copy.Source, reason));
+            _skipped.Add(new(episode.Key, copy.Title, copy.Source, reason) { ShowTitle = episode.ShowTitle });
         }
 
         return decision;
@@ -214,13 +230,13 @@ public sealed class Decisions
 
     /// <summary>Records a copy that was reached for and could not be had.</summary>
     /// <remarks>
-    /// Not a refusal by the profile and it must not read like one, but it does
+    /// Not a refusal by the settings and it must not read like one, but it does
     /// belong on the Skipped page: a site that answers with rows nobody can
     /// download from is a site the owner wants to know about.
     /// </remarks>
     public void Unreachable(TrackedEpisode episode, ReleaseCopy copy, string reason)
     {
-        _skipped.Add(new(episode.Key, copy.Title, copy.Source, reason));
+        _skipped.Add(new(episode.Key, copy.Title, copy.Source, reason) { ShowTitle = episode.ShowTitle });
     }
 
     /// <summary>
@@ -246,9 +262,9 @@ public sealed class Decisions
         return covered;
     }
 
-    private Verdict Refuse(EpisodeKey episode, string title, string? source, Verdict verdict)
+    private Verdict Refuse(TrackedEpisode episode, string title, string? source, Verdict verdict)
     {
-        _skipped.Add(new(episode, title, source, verdict.Reason));
+        _skipped.Add(new(episode.Key, title, source, verdict.Reason) { ShowTitle = episode.ShowTitle });
 
         return verdict;
     }

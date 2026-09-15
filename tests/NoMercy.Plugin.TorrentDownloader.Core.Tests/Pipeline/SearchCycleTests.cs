@@ -13,7 +13,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 /// The whole chain, over a library and sources that answer with real pages.
 /// </summary>
 /// <remarks>
-/// <strong>H1.</strong> The real profile, the real filter, the real decider and
+/// <strong>H1.</strong> Real show settings, the real judge, the real decider and
 /// the real readers throughout. The only things stood in for are the wire and
 /// the torrent client, and neither of those decides anything.
 /// </remarks>
@@ -201,8 +201,8 @@ public class SearchCycleTests
 
     /// <remarks>
     /// An episode has many spellings of its release in the pool, and every one
-    /// of them is searched — but no more than that: the one name the profile
-    /// accepts and the four rungs below it, a fixed set rather than an
+    /// of them is searched — but no more than that: the one name the show's
+    /// settings accept and the four rungs below it, a fixed set rather than an
     /// unbounded search of the pool. Asking for ever more spellings is a cycle
     /// that gets the plugin banned from every site it asks, so a fixed set is
     /// what bounds the cost; nothing is taken until the names within it have
@@ -218,12 +218,14 @@ public class SearchCycleTests
         // them produces a copy.
         fetch.FailsHost("www.limetorrents.lol", FetchOutcome.Unreachable, "nothing answered");
 
+        // The capture carries four 1080p names; the show's forbidden tags leave one of them, as English
+        // only used to (a language is a tag now, docs/specs/show-list.md).
         CycleReport report = await Cycle(fetch, new()).RunAsync(
             [Silo(6)],
-            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, Folder),
+            new(AtQuality("1080p", forbidden: ["GERMAN", "MULTI"]), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
-        // The one name the profile accepts, letter for letter and then without
+        // The one name the settings accept, letter for letter and then without
         // its punctuation, then the four rungs below it: the episode with the
         // owner's quality and without, then the season with it and without. The
         // programme's own name used to be a question here and is gone — asked
@@ -253,7 +255,7 @@ public class SearchCycleTests
 
         CycleReport report = await Cycle(fetch, engine, sources: WithNyaa).RunAsync(
             [Pokemon(1), Pokemon(2), Pokemon(3)],
-            new(new() { MaximumResolution = "1080p", EnglishOnly = false }, Blacklist.None, DryRun: false, Folder),
+            new(AtQuality("1080p"), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         TorrentRequest taken = Assert.Single(engine.Taken);
@@ -275,7 +277,7 @@ public class SearchCycleTests
         CycleReport report = await Cycle(Answering(), new()).RunAsync(
             [Silo(6)],
             // Wanting 2160p refuses every name the capture carries for it.
-            new(new() { MaximumResolution = "2160p" }, Blacklist.None, DryRun: false, Folder),
+            new(AtQuality("2160p"), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         Assert.NotEmpty(report.Skipped);
@@ -297,7 +299,7 @@ public class SearchCycleTests
 
         CycleReport report = await Cycle(fetch, new(), sources: WithNyaa).RunAsync(
             [Pokemon(1), Pokemon(2), Pokemon(3)],
-            new(new() { MaximumResolution = "1080p", EnglishOnly = false }, Blacklist.None, DryRun: false, Folder),
+            new(AtQuality("1080p"), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         EpisodeOutcome taken = Assert.Single(report.Outcomes, outcome => outcome.HandedOver);
@@ -337,7 +339,7 @@ public class SearchCycleTests
 
         CycleReport report = await Cycle(fetch, engine, sources: WithPirateBay).RunAsync(
             [Sugar(1)],
-            new(new() { MaximumResolution = "720p" }, Blacklist.None, DryRun: false, Folder),
+            new(AtQuality("720p"), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         EpisodeOutcome taken = Assert.Single(report.Outcomes);
@@ -393,7 +395,7 @@ public class SearchCycleTests
     /// <em>No results returned</em>; the same site answers
     /// <c>Silo S03E08</c> with twelve rows, the first of them seeded by six
     /// thousand. Both captures are in tests/fixtures. A search engine is asked
-    /// what it can answer, and what comes back is judged by the profile — which
+    /// what it can answer, and what comes back is judged by the show's settings — which
     /// is the protection A3 was really asking for and which 0.3.4 did not have.
     /// </remarks>
     [Fact]
@@ -687,7 +689,7 @@ public class SearchCycleTests
 
     /// <remarks>
     /// <para>
-    /// <strong>Stage 3 of docs/03-architecture.md: the profile applied to
+    /// <strong>Stage 3 of docs/03-architecture.md: the settings applied to
     /// names.</strong> It was never built. Every name the sources gave was put
     /// to every indexer and only the rows that came back were judged, so a name
     /// the owner could never accept cost a request at every site that carries
@@ -696,12 +698,12 @@ public class SearchCycleTests
     /// <para>
     /// The name here is the owner's own, off their own dashboard on 2 September
     /// 2026, and PreDB really does publish it — their pool held 2,238 names in
-    /// other languages. It is a correct scene release and it is not one they
-    /// will ever take, and no indexer should be asked about it.
+    /// other languages. It is a correct scene release, the show here forbids
+    /// the tag German, and no indexer should be asked about it.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task ANameTheProfileRefusesIsNeverPutToAnIndexer()
+    public async Task ANameTheShowsSettingsRefuseIsNeverPutToAnIndexer()
     {
         FixedNames pool = new(
             ("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB"),
@@ -711,7 +713,7 @@ public class SearchCycleTests
 
         await Cycle(fetch, new(), names: pool).RunAsync(
             [Silo(6)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            new(AtQuality("1080p", forbidden: ["German"]), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         // Not one request anywhere carries it — not to an indexer, not to
@@ -761,7 +763,7 @@ public class SearchCycleTests
 
     /// <remarks>
     /// And they are asked when the sources leave nothing to ask for. Every name
-    /// here is one the profile refuses, so there is no release name to put to
+    /// here is one the show's settings refuse, so there is no release name to put to
     /// an indexer — and an episode nobody pre'd in a language the owner reads
     /// must still be looked for.
     /// </remarks>
@@ -779,7 +781,7 @@ public class SearchCycleTests
 
         await Cycle(fetch, new(), names: pool).RunAsync(
             [Silo(6)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            new(AtQuality("1080p", forbidden: ["German"]), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         Assert.Contains(
@@ -978,7 +980,13 @@ public class SearchCycleTests
     private const string Folder = @"C:\downloads";
 
     /// <summary>What the owner wants, at its documented defaults.</summary>
-    private static Profile Wanted => new() { MaximumResolution = "1080p" };
+    private static SettingsByShow Wanted => AtQuality("1080p");
+
+    /// <summary>Every show at this quality, with codec any and no tags.</summary>
+    private static SettingsByShow AtQuality(string quality, IReadOnlyList<string>? forbidden = null)
+    {
+        return SettingsByShow.Every(new() { Quality = quality, Forbidden = forbidden ?? [], Searched = true });
+    }
 
     /// <summary>
     /// The name databases answer with a real srrDB search, and the one indexer

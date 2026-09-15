@@ -772,66 +772,6 @@ public sealed class GrabRepository(Store database)
         return true;
     }
 
-    /// <summary>Why one release was refused for one episode, or null when none was.</summary>
-    /// <remarks>
-    /// The newest refusal, because the profile can change between cycles and
-    /// what the owner is overruling is the reason they were shown.
-    /// </remarks>
-    public async Task<string?> RefusalAsync(EpisodeKey episode, string title, CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
-            """
-            SELECT detail FROM history
-            WHERE event = 'skipped' AND show_id = $show AND season = $season AND episode = $episode
-              AND release_title = $title
-            ORDER BY id DESC LIMIT 1;
-            """;
-
-        command.Parameters.AddWithValue("$show", episode.ShowId);
-        command.Parameters.AddWithValue("$season", episode.Season);
-        command.Parameters.AddWithValue("$episode", episode.Number);
-        command.Parameters.AddWithValue("$title", title);
-
-        object? detail = await command.ExecuteScalarAsync(ct);
-
-        return detail is string reason ? reason : null;
-    }
-
-    /// <summary>Records that the owner overruled a refusal, and what it had been.</summary>
-    /// <remarks>
-    /// Naming the original reason is the whole of it. A line saying only
-    /// "allowed" has the History page contradicting the Skipped page it came
-    /// from, with nothing to say which of the two is right.
-    /// </remarks>
-    public async Task AllowedAsync(
-        EpisodeKey episode,
-        string releaseTitle,
-        string refusedFor,
-        DateTimeOffset at,
-        CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
-            """
-            INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
-            VALUES ($at, 'allowed', $show, $season, $episode, NULL, $release, NULL, $detail);
-            """;
-
-        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$show", episode.ShowId);
-        command.Parameters.AddWithValue("$season", episode.Season);
-        command.Parameters.AddWithValue("$episode", episode.Number);
-        command.Parameters.AddWithValue("$release", releaseTitle);
-        command.Parameters.AddWithValue("$detail", $"allowed by hand, having been refused: {refusedFor}");
-
-        await command.ExecuteNonQueryAsync(ct);
-    }
-
     /// <summary>
     /// One page of refusals, newest first, and how many there are in all.
     /// </summary>
@@ -868,7 +808,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT show_id, season, episode, release_title, source, detail FROM history
+            SELECT show_id, season, episode, release_title, source, detail, show_title FROM history
             WHERE event = 'skipped' ORDER BY id DESC LIMIT $take OFFSET $skip;
             """;
 
@@ -889,7 +829,10 @@ public sealed class GrabRepository(Store database)
                 // Never blank. A refusal with no reason is the one thing the
                 // owner opened the page to read, and an empty string there
                 // would render as a row that refuses to say why.
-                reader.IsDBNull(5) ? "no reason was recorded" : reader.GetString(5)));
+                reader.IsDBNull(5) ? "no reason was recorded" : reader.GetString(5))
+            {
+                ShowTitle = reader.IsDBNull(6) ? null : reader.GetString(6),
+            });
         }
 
         return new(refused, total, wanted, rows);

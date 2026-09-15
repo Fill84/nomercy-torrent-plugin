@@ -62,7 +62,7 @@ public class AnimeEndToEndTests
 
         CycleReport report = await Cycle(fetch, pool).RunAsync(
             derived,
-            new(new() { MaximumResolution = "1080p", EnglishOnly = false }, Blacklist.None, DryRun: true, Folder),
+            new(AtQuality("1080p"), Blacklist.None, DryRun: true, Folder),
             CancellationToken.None);
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes, one => one.Episode == missing.Key);
@@ -125,4 +125,10 @@ public class AnimeEndToEndTests
             Libraries = [LibraryKinds.Anime],
         },
     ];
+
+    /// <summary>Every show at this quality, with codec any and no tags.</summary>
+    private static SettingsByShow AtQuality(string quality)
+    {
+        return SettingsByShow.Every(new() { Quality = quality, Searched = true });
+    }
 }

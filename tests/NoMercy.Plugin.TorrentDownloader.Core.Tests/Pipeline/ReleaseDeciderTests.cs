@@ -21,7 +21,7 @@ public class ReleaseDeciderTests
     [Fact]
     public void TheCopyWithTheMostSeedersIsTaken()
     {
-        Decision decision = new ReleaseDecider(new()).Decide(
+        Decision decision = new ReleaseDecider().Decide(
             [Copy("LimeTorrents", priority: 35, seeders: 4), Copy("The Pirate Bay", priority: 45, seeders: 40)],
             Blacklist.None);
 
@@ -36,7 +36,7 @@ public class ReleaseDeciderTests
     [Fact]
     public void LevelOnSeedersTheHigherRatedSiteWins()
     {
-        Decision decision = new ReleaseDecider(new()).Decide(
+        Decision decision = new ReleaseDecider().Decide(
             [Copy("LimeTorrents", priority: 35, seeders: 40), Copy("The Pirate Bay", priority: 45, seeders: 40)],
             Blacklist.None);
 
@@ -59,7 +59,7 @@ public class ReleaseDeciderTests
         const string hash = "92D8A3F6864911EF292B4BE0DD5286406396D2B3";
         ReleaseCopy blacklisted = Copy("LimeTorrents", priority: 35, seeders: 1) with { InfoHash = hash };
 
-        Decision decision = new ReleaseDecider(new()).Decide(
+        Decision decision = new ReleaseDecider().Decide(
             [blacklisted, Copy("The Pirate Bay", priority: 45, seeders: 40)],
             Blacklist.Of(hash));
 
@@ -79,7 +79,7 @@ public class ReleaseDeciderTests
     [Fact]
     public void WhenNoCopyIsAcceptableNoneIsChosenAndEveryReasonIsKept()
     {
-        Decision decision = new ReleaseDecider(new()).Decide(
+        Decision decision = new ReleaseDecider().Decide(
             [Copy("LimeTorrents", priority: 35, seeders: 1), Copy("The Pirate Bay", priority: 45, seeders: 2)],
             Blacklist.Of(Blacklist.KeyOf("Silo.S03E06.1080p.WEB.H264-CAKES")));
 
@@ -95,7 +95,7 @@ public class ReleaseDeciderTests
     [Fact]
     public void NoCopiesAtAllIsNotTheSameAsEveryCopyRefused()
     {
-        Decision decision = new ReleaseDecider(new()).Decide([], Blacklist.None);
+        Decision decision = new ReleaseDecider().Decide([], Blacklist.None);
 
         Assert.Null(decision.Chosen);
         Assert.Empty(decision.Refused);

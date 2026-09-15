@@ -30,15 +30,13 @@ public sealed record Decision(
 /// Chooses one copy from what the indexers answered, or none.
 /// </summary>
 /// <remarks>
-/// The real profile does the judging, here as everywhere. <strong>H1:</strong>
-/// every test covering 0.3.4's seeder fault stubbed the profile out with a fake
-/// chooser and passed while the plugin took nothing at all, so a fake chooser
-/// is only ever for a test about plumbing and never for one about a decision.
+/// The blacklist is all it judges a copy by: whether a name is wanted is the
+/// show's settings, applied to names by <see cref="NameJudge"/>. <strong>H1:</strong>
+/// a fake chooser is only ever for a test about plumbing, never for one about a
+/// decision.
 /// </remarks>
-public sealed class ReleaseDecider(Profile profile)
+public sealed class ReleaseDecider
 {
-    private readonly ReleaseFilter _filter = new(profile);
-
     /// <summary>
     /// Judges every copy and ranks the survivors, best first.
     /// </summary>
@@ -73,7 +71,7 @@ public sealed class ReleaseDecider(Profile profile)
 
         foreach (ReleaseCopy copy in copies)
         {
-            Verdict verdict = _filter.JudgeCopy(copy, blacklisted);
+            Verdict verdict = NameJudge.JudgeCopy(copy, blacklisted);
 
             if (verdict.Accepted)
             {

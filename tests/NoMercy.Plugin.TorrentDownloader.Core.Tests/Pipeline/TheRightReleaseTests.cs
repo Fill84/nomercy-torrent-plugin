@@ -52,7 +52,7 @@ public class TheRightReleaseTests
 
         CycleReport report = await Cycle(engine, Answering(number)).RunAsync(
             [Gap(number)],
-            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            new(AtQuality("1080p"), Blacklist.None, DryRun: false, @"C:\downloads"),
             CancellationToken.None);
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
@@ -109,7 +109,7 @@ public class TheRightReleaseTests
                     new DateOnly(2026, 7, 7),
                     EpisodeState.Missing),
             ],
-            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            new(AtQuality("1080p"), Blacklist.None, DryRun: false, @"C:\downloads"),
             CancellationToken.None);
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
@@ -149,7 +149,7 @@ public class TheRightReleaseTests
     {
         CycleReport report = await Cycle(new(), Answering(8)).RunAsync(
             [Gap(8)],
-            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            new(AtQuality("1080p"), Blacklist.None, DryRun: false, @"C:\downloads"),
             CancellationToken.None);
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
@@ -194,7 +194,7 @@ public class TheRightReleaseTests
 
         CycleReport report = await Cycle(engine, AnsweringSilo(), pool).RunAsync(
             [SiloGap(4)],
-            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            new(AtQuality("1080p"), Blacklist.None, DryRun: false, @"C:\downloads"),
             CancellationToken.None);
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes);
@@ -250,7 +250,7 @@ public class TheRightReleaseTests
 
         await Cycle(new(), fetch).RunAsync(
             [Gap(8)],
-            new(new() { MaximumResolution = "1080p" }, Blacklist.None, DryRun: false, @"C:\downloads"),
+            new(AtQuality("1080p"), Blacklist.None, DryRun: false, @"C:\downloads"),
             CancellationToken.None);
 
         Assert.Contains(
@@ -360,5 +360,11 @@ public class TheRightReleaseTests
         {
             return long.MaxValue;
         }
+    }
+
+    /// <summary>Every show at this quality, with codec any and no tags.</summary>
+    private static SettingsByShow AtQuality(string quality)
+    {
+        return SettingsByShow.Every(new() { Quality = quality, Searched = true });
     }
 }

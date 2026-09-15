@@ -1,4 +1,3 @@
-using System.Text.Json;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
@@ -45,30 +44,27 @@ public class SkippedViewTests
     }
 
     /// <remarks>
-    /// Every row carries the control to overrule it, naming the episode as well
-    /// as the title: a release is allowed <em>for</em> an episode, and the same
-    /// file can be refused for one and be exactly right for another.
+    /// <c>docs/specs/pages.md</c> § Skipped: the page lists the release names a show's settings refused,
+    /// each with its show, episode and reason, and a refused release name offers no button to download it
+    /// anyway. The control to allow one used to sit on every row.
     /// </remarks>
     [Fact]
-    public void EveryRowCarriesTheControlToAllowThatOneRelease()
+    public void ARefusedNameIsListedWithShowEpisodeAndReasonAndNoAllowButton()
     {
         PluginView view = SkippedView.Render(Page(
-            new SkippedRelease(Episode(6), "Silo S03E06 720p WEB", "LimeTorrents", "720p is below the profile's floor")));
+            new SkippedRelease(Episode(6), "Silo.S03E06.720p.WEB.H264-SYLiX", null, "720p is not 1080p.") { ShowTitle = "Silo" }));
 
-        // The one row, by its id: the heading and the column headers share the
-        // page's prefix, and only the row itself carries an action.
         PluginComponent row = Rendered.ById(view, "skipped-0");
 
-        Assert.NotNull(row.Action);
-        Assert.Single(Rendered.All(view), one => one.Action is not null);
+        Assert.Equal("Silo", row.Props["show"]);
+        Assert.Equal("S03E06", row.Props["episode"]);
+        Assert.Equal("720p is not 1080p.", row.Props["reason"]);
 
-        // The intent as it really travels, rather than as the page draws it:
-        // the action's name and everything it needs to act on this one release.
-        string intent = JsonSerializer.Serialize(row.Action);
-
-        Assert.Contains("skipped/allow", intent, StringComparison.Ordinal);
-        Assert.Contains("Silo S03E06 720p WEB", intent, StringComparison.Ordinal);
-        Assert.Contains("42", intent, StringComparison.Ordinal);
+        Assert.Null(row.Action);
+        Assert.DoesNotContain(Rendered.All(view), component => component.Action is not null);
+        Assert.DoesNotContain(
+            Rendered.All(view).SelectMany(component => component.Props.Values).OfType<IReadOnlyList<PluginTableAction>>(),
+            buttons => buttons.Count > 0);
     }
 
     /// <remarks>

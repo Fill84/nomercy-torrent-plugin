@@ -4,10 +4,29 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-06` · Judging the names.** Sprint 13 is the owner's
+**Next: `S13-07` · The indexer round and the winner.** Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-06` is done and green: a release name is judged by its show's settings, and the global profile
+decides nothing any more.** `NameJudge` (in place of `ReleaseFilter`) takes a name when its resolution is
+the show's quality, its codec is the show's codec (any asks nothing; a name that does not say is
+refused for not saying), it carries every must and no forbidden tag; a show with no quality refuses
+with that reason. A tag is a word of the name (`NameJudge.Carries`): `WEB` is in `ATVP.WEB-DL` and not in
+`WEBRip`, `HDR` not in `HDR10Plus`. `WishGroups` orders what passed by wishes carried, most first, and a
+wish nobody carries leaves the rest in one group. `CycleOptions` carries `SettingsByShow`, which the
+plugin builds once per run through `AppliedSettings.ForShowsAsync`; `Decisions` judges names — and,
+until `S13-07`, rows — by the episode's own show. English only, the codec-tag switch and the excluded
+terms are gone with their tests, and so is allow-anyway: the Skipped page names show, episode and
+reason and offers nothing to press, and the `skipped/allow` endpoint, `AllowReleaseAsync` and their
+queries went with the controller tests pinning them. Tests, each red against a stub and each rule broken
+on purpose (twelve sabotages; the untagged-codec one first slipped through, because the codec
+comparison refused it anyway, so the test now asserts the reason): `NameJudgeTests` (five new, the
+filter's still-true rules ported beside them), `WishGroupsTests` (three),
+`SkippedViewTests.ARefusedNameIsListedWithShowEpisodeAndReasonAndNoAllowButton`,
+`AppliedSettingsTests`, and `PagesReachableTests.TheSkippedRouteCarriesEveryRefusalWithItsReason` reading
+the show back. Two cycle tests that leaned on English only now forbid `German`/`MULTI` as tags.
 
 **`S13-05` is done and green: a run's release names come from the four name sources, and nothing is
 kept between runs.** `NameSources` reads the feeds of PreDB, srrDB, PreDB.net and SceneSource at once

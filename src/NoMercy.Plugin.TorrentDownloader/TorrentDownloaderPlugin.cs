@@ -1126,7 +1126,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     () => DateTimeOffset.UtcNow)).RunAsync(
                 tracked,
                 new(
-                    settings.Profile,
+                    // What applies to each show, read once for the run: the
+                    // names are judged against it (docs/specs/release-names.md).
+                    await SettingsByShowAsync(tracked, ct),
 
                     // The hashes a download has already failed on. Without it
                     // the next cycle chooses the same release and fails the
@@ -1498,35 +1500,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             return (null, refused.Message);
         }
-    }
-
-    /// <summary>
-    /// Grabs a release the profile or the blacklist had refused.
-    /// </summary>
-    /// <remarks>
-    /// Only one that really was refused. Allowing something nothing ever
-    /// refused would write a history line saying a decision was overruled that
-    /// was never made.
-    /// </remarks>
-    public async Task<bool> AllowReleaseAsync(EpisodeKey episode, string title, CancellationToken ct)
-    {
-        GrabRepository grabs = await GrabsAsync(ct);
-
-        if (await grabs.RefusalAsync(episode, title, ct) is not string refusedFor)
-        {
-            return false;
-        }
-
-        await grabs.AllowedAsync(episode, title, refusedFor, DateTimeOffset.UtcNow, ct);
-
-        // Looked for by name on the next cycle rather than grabbed from here:
-        // what was refused was a name, and the copy of it worth taking is
-        // whatever the indexers are serving now.
-        await (await EpisodesAsync(ct)).RecordSearchAsync(episode, DateTimeOffset.MinValue, ct);
-
-        _journal.Finished(ActivityStage.Decide, title, $"allowed by hand, having been refused: {refusedFor}");
-
-        return true;
     }
 
     /// <summary>The torrent client, when there is one to reach.</summary>
@@ -2074,6 +2047,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
                 return await OverviewAsync(null, 1, ct);
         }
+    }
+
+    /// <summary>What applies to every show a run has an episode of, read once for the run.</summary>
+    private async Task<SettingsByShow> SettingsByShowAsync(IReadOnlyList<TrackedEpisode> tracked, CancellationToken ct)
+    {
+        HashSet<int> wanted = [.. tracked.Select(episode => episode.Key.ShowId)];
+
+        return await (await AppliedAsync(ct)).ForShowsAsync(
+            (await new HostLibrary(Context.Library).GetShowsAsync(ct)).Where(show => wanted.Contains(show.Id)),
+            ct);
     }
 
     /// <summary>What applies to each show, read from the saved settings on every call.</summary>

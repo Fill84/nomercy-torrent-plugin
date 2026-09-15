@@ -2800,8 +2800,13 @@ catalogue already made the four the feeds and name databases, and Nyaa an indexe
 
 ## S13-06 · Judging the names
 
-**Files:** `Core/Pipeline/ReleaseFilter.cs` (rebuilt as a judge of names against `EffectiveSettings`),
-`Core/Naming/ReleaseName.cs`, `Views/SkippedView.cs`, `Storage/GrabRepository.cs` (skipped history).
+**Files:** `Core/Pipeline/NameJudge.cs` (in place of `ReleaseFilter.cs`, a judge of names against
+`EffectiveSettings`), `Core/Pipeline/WishGroups.cs`, `Core/Domain/SettingsByShow.cs`,
+`Core/Pipeline/Decisions.cs`, `Core/Pipeline/ReleaseDecider.cs`, `Core/Pipeline/SearchCycle.cs`
+(`CycleOptions` carries the settings of every show of the run instead of the profile),
+`Storage/AppliedSettings.cs` (`ForShowsAsync`), `Views/SkippedView.cs`, `Storage/GrabRepository.cs`
+(skipped history reads the show back; the allow-anyway queries go), `Controllers/DownloadsController.cs`
+and `TorrentDownloaderPlugin.cs` (the allow endpoint goes). `ReleaseName.cs` needed no change.
 
 **Steps**
 
@@ -2813,7 +2818,11 @@ catalogue already made the four the feeds and name databases, and Nyaa an indexe
 4. Test (red): `WishGroupsTests.NamesAreGroupedByHowManyWishesTheyCarryMostFirst`, and
    `AWishNoNameCarriesLeavesTheShowDownloadable`.
 5. Test (red): `SkippedViewTests.ARefusedNameIsListedWithShowEpisodeAndReasonAndNoAllowButton`.
-6. The English-only list, `RequireCodecTag` and `ExcludeTerms` go with their tests.
+6. The English-only list, `RequireCodecTag` and `ExcludeTerms` go with their tests; the stored `Profile`
+   itself stays until `S13-09`, read by nothing in the pipeline any more.
+7. Until `S13-07` the indexers are asked down the names in wish-group order, and rows are held to the
+   same show settings as the names they were asked for, so a 720p show does not have its 720p rows
+   refused by a global 1080p. Test: `AppliedSettingsTests.EveryShowOfARunGetsItsOwnSettingsWithItsLibrarysCountedIn`.
 
 **Done when** those tests pass and the suite is green. Specs: `show-list.md`, `release-names.md`.
 

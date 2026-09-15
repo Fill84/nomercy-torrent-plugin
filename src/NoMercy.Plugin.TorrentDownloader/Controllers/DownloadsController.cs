@@ -15,24 +15,14 @@ public sealed record AddTorrentRequest(string Source);
 /// <param name="Episode">Which episode.</param>
 public sealed record SearchNowRequest(int ShowId, int Season, int Episode);
 
-/// <summary>One release the owner is overruling a refusal for.</summary>
-/// <param name="ShowId">Which show.</param>
-/// <param name="Season">Which season.</param>
-/// <param name="Episode">Which episode.</param>
-/// <param name="Title">
-/// The release, by the name it was refused under. A release is allowed
-/// <em>for</em> an episode: the same file can be wrong for one and right for
-/// another.
-/// </param>
-public sealed record AllowReleaseRequest(int ShowId, int Season, int Episode, string Title);
-
 /// <summary>
-/// The controls on the Downloads and Skipped pages.
+/// The controls on the Downloads and Queue pages.
 /// </summary>
 /// <remarks>
 /// Every one of these is a button an owner presses when something has gone
-/// wrong: a download that will not finish, a release the profile refused that
-/// they can see is the right one, a torrent they found themselves. None of them
+/// wrong: a download that will not finish, an episode that has just aired, a
+/// torrent they found themselves. The Skipped page has none: a refused release
+/// name offers no button to download it anyway (docs/specs/pages.md). None of them
 /// answers "ok" to having done nothing — an endpoint that did would leave the
 /// owner pressing it again and the page showing something that never happened.
 /// </remarks>
@@ -164,33 +154,6 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
         return added.InfoHash is string hash
             ? Status<string?>(hash, "added")
             : Status<string?>(null, "refused", added.Refusal);
-    }
-
-    /// <summary>
-    /// Grabs a release the profile or the blacklist had refused.
-    /// </summary>
-    /// <remarks>
-    /// The history line names what it had been refused for, so a page never
-    /// silently contradicts an earlier decision: without it the owner reads
-    /// "allowed" beside a Skipped page that still says no, with nothing to say
-    /// which is right.
-    /// </remarks>
-    [HttpPost("skipped/allow")]
-    public async Task<IActionResult> Allow([FromBody] AllowReleaseRequest request, CancellationToken ct)
-    {
-
-        if (Live is not TorrentDownloaderPlugin plugin)
-        {
-            return NotFound(Unreachable);
-        }
-        bool allowed = await plugin.AllowReleaseAsync(
-            new EpisodeKey(request.ShowId, request.Season, request.Episode),
-            request.Title,
-            ct);
-
-        return allowed
-            ? Status(true, "allowed")
-            : Status(false, "unknown", $"Nothing refused '{request.Title}' for that episode.");
     }
 
     /// <summary>A hash this client is not holding, named so the owner can see which.</summary>

@@ -97,7 +97,7 @@ public sealed record EpisodeOutcome(
 /// <summary>
 /// What one cycle is allowed to do, and with what.
 /// </summary>
-/// <param name="Profile">What the owner will accept.</param>
+/// <param name="Settings">What applies to each show of the run, with its library's counted in.</param>
 /// <param name="Blacklisted">Keys already refused, read once for the cycle.</param>
 /// <param name="DryRun">
 /// Decide everything and hand nothing over. It says what to do with a decision
@@ -106,7 +106,7 @@ public sealed record EpisodeOutcome(
 /// </param>
 /// <param name="IncompleteFolder">Where a download lands while it runs.</param>
 public sealed record CycleOptions(
-    Profile Profile,
+    SettingsByShow Settings,
     IReadOnlySet<string> Blacklisted,
     bool DryRun,
     string IncompleteFolder)
@@ -186,7 +186,7 @@ public sealed class SearchCycle(
 
         journal.Counted(RunCounter.Episodes, queue.Length);
 
-        Decisions decisions = new(options.Profile, queue, options.Blacklisted);
+        Decisions decisions = new(options.Settings, queue, options.Blacklisted);
 
         // Every name source's feed, read at once before any episode is worked
         // on (docs/specs/run.md). An episode no feed named is looked up inside
@@ -349,7 +349,7 @@ public sealed class SearchCycle(
             // than one per rung.
             IReadOnlyList<SearchTerm> ladder = SearchTerm.Ladder(
                 wanted,
-                Rungs(episode, options.Profile).Select(rung => rung.Term));
+                Rungs(episode, decisions.SettingsFor(episode)).Select(rung => rung.Term));
 
             await AskAsync(ladder, episode, gathered, answered, asked, trackers, ct);
 
@@ -624,7 +624,7 @@ public sealed class SearchCycle(
     /// <para>
     /// <strong>The profile applied to names, which is stage 3 of
     /// docs/03-architecture.md.</strong> It is the same rule that judges a copy
-    /// — <see cref="ReleaseFilter.JudgeName"/> — and it needs no network to say
+    /// — <see cref="NameJudge.JudgeName"/> — and it needs no network to say
     /// that a German release is not wanted where English only is on, that a
     /// 720p one is not 1080p, or that h265 is not h264.
     /// </para>
@@ -673,7 +673,11 @@ public sealed class SearchCycle(
             journal.Noted(ActivityStage.Decide, subject, $"refused {candidate}: {verdict.Reason}");
         }
 
-        return worth;
+        // The names carrying the most of the show's wishes first
+        // (release-names.md): the indexers are asked down this list, so the ones
+        // the owner wishes for most are asked about first. A wish nobody's name
+        // carries leaves the rest in one group, still asked.
+        return [.. WishGroups.Of(worth, decisions.SettingsFor(episode).Wishes).SelectMany(group => group)];
     }
 
     /// <summary>
@@ -710,11 +714,11 @@ public sealed class SearchCycle(
     /// and it is asked once a cycle however many gaps share it.
     /// </para>
     /// </remarks>
-    private static IEnumerable<(string Term, bool Shelf)> Rungs(TrackedEpisode episode, Profile profile)
+    private static IEnumerable<(string Term, bool Shelf)> Rungs(TrackedEpisode episode, EffectiveSettings settings)
     {
-        // Nothing appended when the owner has set no ceiling: an empty quality
+        // Nothing appended when the show has no quality: an empty quality
         // would put a trailing space into every query and narrow nothing.
-        string quality = profile.MaximumResolution.Trim();
+        string quality = settings.Quality?.Trim() ?? string.Empty;
         string wanted = quality.Length > 0 ? $" {quality}" : string.Empty;
 
         // The episode with the owner's quality, then without it. Narrowest

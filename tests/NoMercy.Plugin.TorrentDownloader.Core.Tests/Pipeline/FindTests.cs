@@ -304,7 +304,7 @@ public class FindTests
                 .Select(copy => copy with { Seeders = 10, Source = "LimeTorrents", Priority = 35 }),
         ];
 
-        Decision decision = new ReleaseDecider(new()).Decide(level, Blacklist.None);
+        Decision decision = new ReleaseDecider().Decide(level, Blacklist.None);
 
         Assert.Equal("LimeTorrents", decision.Chosen!.Source);
     }
