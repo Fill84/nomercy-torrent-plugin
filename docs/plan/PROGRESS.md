@@ -4,10 +4,21 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-10` · The library's quality from its encoding profile.** Sprint 13 is the owner's
+**Next: `S13-11` · Seen working on beast-unit.** Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-10` is done: the library's quality from its encoding profile is asked of the server as media-server
+[#56](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/56)**
+(`docs/issues/media-server-library-encoding-resolution.md`). `PluginLibrary` carries only id, title and
+type. On the server a folder can link several encoding presets, `Library.EncodePresetId` narrows
+auto-encode to one, and the default preset is an auto ladder from 144p to 2160p that never upscales, so a
+preset's resolution before a file is seen is its ceiling. The issue asks for each preset that would
+auto-encode the library with its tallest output, as an `init` member so older plugins still load, and
+leaves the choice to the plugin. Until it lands the owner sets a library's quality. **A decision for the
+owner once it lands:** which preset a library's quality follows when several disagree, and whether a
+ladder's 2160p ceiling makes the library 2160p.
 
 **`S13-09` is done and green: what the owner's requirements replaced is gone from `src/`.** The global
 `Profile`, ranking on seeders and priority (`ReleaseDecider`), the search ladder and the merge by name

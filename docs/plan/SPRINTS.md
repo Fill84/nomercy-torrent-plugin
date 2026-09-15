@@ -2942,6 +2942,18 @@ pack; the suite is green; and `docs/` agrees with `docs/specs/`.
 
 **Done when** the issue is filed and linked from `PROGRESS.md`.
 
+**As done.** Filed as media-server
+[#56](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/56), written up in
+`docs/issues/media-server-library-encoding-resolution.md`. Step 1 found that "the resolution of the
+encoding profile" is not one number on the server: a folder can link several presets and encodes to all of
+them, `Library.EncodePresetId` narrows auto-encode to one, and the default preset
+(`H.264 Streaming (Universal)`) is an auto ladder from 144p to 2160p that never upscales — so what a preset
+says before a file is seen is its ceiling. The issue asks for facts, not a choice: each preset that would
+auto-encode the library, with its tallest output (`MaxHeight`, null for the source's own size), as an
+`init` member on `PluginLibrary` so older plugins still load. Step 3 waits on it, and when it lands the
+owner decides how presets become a quality — which preset when several disagree, and whether a ladder's
+2160p ceiling makes the library 2160p — and the answer goes into `docs/specs/show-list.md`.
+
 ## S13-11 · Seen working on beast-unit
 
 **Steps**
