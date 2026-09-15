@@ -18,6 +18,9 @@ public sealed class FakeHttp : HttpMessageHandler
     /// <summary>Every request that reached the wire, in order.</summary>
     public List<HttpRequestMessage> Attempts { get; } = [];
 
+    /// <summary>What each request carried, read as it was sent: a request is disposed by whoever sent it.</summary>
+    public List<string?> Bodies { get; } = [];
+
     public FakeHttp Answers(HttpStatusCode status, string body = "", params (string Name, string Value)[] headers)
     {
         _answers.Enqueue(_ =>
@@ -50,6 +53,7 @@ public sealed class FakeHttp : HttpMessageHandler
     protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
     {
         Attempts.Add(request);
+        Bodies.Add(request.Content?.ReadAsStringAsync(ct).GetAwaiter().GetResult());
 
         if (_answers.Count == 0)
         {

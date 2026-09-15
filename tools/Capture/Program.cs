@@ -211,7 +211,7 @@ internal static class Program
         // signed request the plugin now makes for it. Asked here, in the
         // session that just loaded the page, because that is the only session
         // the token belongs to.
-        await ProveTheClaimAsync(source, result.Body!, address, solver, logger);
+        await ProveTheClaimAsync(source, result.Body!, address, fetch, logger);
 
         browser.Dispose();
 
@@ -231,7 +231,7 @@ internal static class Program
         SourceDefinition source,
         string body,
         Uri address,
-        IInPagePost post,
+        ISessionPost post,
         ILogger logger)
     {
         if (Readers.Shipped().For(source) is not ISourceReader reader)

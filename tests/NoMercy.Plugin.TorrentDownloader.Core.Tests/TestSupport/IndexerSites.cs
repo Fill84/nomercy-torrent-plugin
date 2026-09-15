@@ -16,8 +16,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
 /// <c>Solo.Leveling.S02E01.1080p.WEB.H264-SKYANiME</c> of the three first-choice indexers for anime. The
 /// release was posted twice: once through TGx (hash 87D8…), which six indexers list with a readable
 /// torrent, and once through EZTV (41B0…), which three do. Torrentz2 also lists two more uploads of the
-/// name, each on it alone. EZTV's own page for its row answered 451, and TorrentBay names its torrents
-/// only to a browser session — so neither is readable here, exactly as on the day.
+/// name, each on it alone. EZTV's own page for its row answered 451, and TorrentBay names its torrents only
+/// to a signed request that no test here answers — so neither is readable here.
 /// </para>
 /// <para>
 /// TorrentBay is declared with one page here where it ships with three: the captures are its first page,
@@ -169,9 +169,9 @@ public static class IndexerSites
             .Answers(Words(LimeTorrents, SoloLeveling), Capture.Fixture("round-solo-limetorrents-words.html"));
     }
 
-    public static Find Finding(FakeFetch fetch, IEnumerable<SourceDefinition>? sources = null, IActivityJournal? journal = null)
+    public static Find Finding(FakeFetch fetch, IEnumerable<SourceDefinition>? sources = null, IActivityJournal? journal = null, RecordingLedger? ledger = null)
     {
-        return new(SourceCatalogue.Build(sources ?? Shipped, [], []), fetch, Readers.Shipped(), journal ?? new ActivityJournal());
+        return new(SourceCatalogue.Build(sources ?? Shipped, [], []), fetch, Readers.Shipped(), journal ?? new ActivityJournal(), ledger);
     }
 
     public static IndexerRound Round(FakeFetch fetch, IEnumerable<SourceDefinition>? sources = null, IActivityJournal? journal = null)

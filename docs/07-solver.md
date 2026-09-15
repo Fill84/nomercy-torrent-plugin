@@ -7,7 +7,7 @@ The plugin has its own. It downloads a Chrome, drives it, and keeps it for the l
 1. Fetch a page from a host that answers every plain request with a managed challenge.
 2. Wait for the challenge to clear, and give up honestly if it does not.
 3. Hand back the **body**, not a rendering of it.
-4. Make a signed form POST from inside the session that loaded the page.
+4. Earn the clearance a signed form POST is sent with — the POST itself goes over HTTP (below).
 5. Never put a window on anybody's screen.
 
 ## No window, on any platform
@@ -50,7 +50,9 @@ The body is re-fetched **inside the page** with `fetch()` and the text returned.
   it is supposed to do — catch it and carry on polling. 0.3.4 logged it four times in one run as a
   source failure.
 - One reload if it has not cleared, then give up with a sentence naming the host.
-- A second challenge after a fresh solve is a site this plugin cannot read.
+- A challenge still there after a solve is solved again and the question asked again — twice at most,
+  `docs/specs/run.md`. Still there after the second solve, the site cannot be read this run, and the
+  indexer round leaves it out of the rest of the run.
 
 ## Clearance
 
@@ -65,12 +67,19 @@ afterwards.
 ## The signed POST
 
 TorrentBay answers a signed request to its own endpoint, built from two values off the row and two
-off the search page. Sent from this process it arrives without the session that earned the right to
-ask and is refused, so it runs in the tab that already has the site open.
+off the search page. **It is posted over plain HTTP, by `ChallengeAwareFetch`, in the session its
+listing was read in** — through the host's gate, with the clearance cookie and the user agent it was
+issued to. `ISessionPost.PostAsync(url, formBody, ct)` answers the body, or null for no grant, a
+challenge, a refusal or a host that did not answer.
 
-`IInPagePost.PostAsync(url, formBody, ct)` returns null when there is no solver that can — a post
-certain to be refused is not worth making, and the caller can say "this site needs a browser"
-instead of "this site refused us".
+**It used to run in a browser tab, and that stopped working on 30 August 2026 without anybody seeing.**
+The tabs were changed that day to open fresh for each task and close after it; the post was never
+changed with them, so it ran `fetch` from a tab on no page of the site — another origin, none of its
+cookies — and every TorrentBay row came back `Failed to fetch`. Found on 15 September 2026 by the
+capture tool and confirmed live three ways: the fresh tab failed, a tab reloading the listing got no
+rows, and the same request over HTTP in the listing's session named the torrent. The listing is read
+over HTTP since the solver hands over a clearance, so its tokens belong to that session and not to any
+browser's.
 
 ## The port
 
@@ -85,7 +94,7 @@ public interface IPageSource
     Task<string?> GetPageAsync(Uri url, CancellationToken ct);
 }
 
-public interface IInPagePost
+public interface ISessionPost // implemented by ChallengeAwareFetch, not the solver
 {
     Task<string?> PostAsync(Uri url, string formBody, CancellationToken ct);
 }

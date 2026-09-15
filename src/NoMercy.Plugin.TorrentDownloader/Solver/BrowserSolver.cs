@@ -19,7 +19,7 @@ public sealed class BrowserSolver(
     ILogger logger,
     TimeProvider? time = null,
     TimeSpan? solveTimeout = null,
-    TimeSpan? pollInterval = null) : IChallengeSolver, IPageSource, IInPagePost
+    TimeSpan? pollInterval = null) : IChallengeSolver, IPageSource
 {
     /// <summary>How long a challenge is given to clear.</summary>
     public static readonly TimeSpan DefaultSolveTimeout = TimeSpan.FromSeconds(45);
@@ -197,42 +197,6 @@ public sealed class BrowserSolver(
         return IsHtml(contentType)
             ? await tab.ContentAsync(ct)
             : await tab.FetchInPageAsync(url, ct);
-    }
-
-    public async Task<string?> PostAsync(Uri url, string formBody, CancellationToken ct)
-    {
-        SemaphoreSlim turn = TurnOn(url.Host);
-
-        await turn.WaitAsync(ct);
-
-        try
-        {
-            return await PostingAsync(url, formBody, ct);
-        }
-        finally
-        {
-            turn.Release();
-        }
-    }
-
-    private async Task<string?> PostingAsync(Uri url, string formBody, CancellationToken ct)
-    {
-        // And here: this is how a magnet is asked for on a site that publishes
-        // none, which is once per release taken.
-        await using IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
-
-        if (tab is null)
-        {
-            // Null, not an attempt. A post sent from this process arrives
-            // without the session that earned the right to ask and is refused,
-            // and "this site needs a browser" is something the owner can act on
-            // where "this site refused us" is not even true.
-            logger.LogWarning("No browser, so nothing was posted to {Host}.", url.Host);
-
-            return null;
-        }
-
-        return await tab.PostInPageAsync(url, formBody, ct);
     }
 
     /// <summary>This host's turn-taking, made once and kept.</summary>

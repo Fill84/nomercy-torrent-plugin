@@ -573,14 +573,42 @@ public class SearchCycleTests
             entry => entry.Stage == ActivityStage.Decide && entry.Detail == "no indexer listed a torrent for any of its release names");
     }
 
+    /// <remarks>
+    /// <c>docs/specs/run.md</c>: a site that still gives no answer after its second attempt is left out of the
+    /// rest of that run, and the Sources page shows why. Torrentz2 does not answer Silo's name; the round
+    /// carries on without it, and it is asked nothing more — not the name as words, not the other name.
+    /// </remarks>
+    [Fact]
+    public async Task ASiteThatFailsTwiceSitsOutTheRestOfTheRun()
+    {
+        const string multi = "Silo.S02E01.MULTI.1080p.WEB.H264-HiggsBoson";
+
+        FakeFetch fetch = new FakeFetch()
+            .AnsweringSilo()
+            .AnswersAnything(Capture.Fixture("round-solo-nyaa-exact.xml"))
+            .Fails(IndexerSites.Exact(IndexerSites.Torrentz2, IndexerSites.Silo), FetchOutcome.Unreachable, "torrentz2.nz did not answer");
+        RecordingLedger ledger = new();
+
+        CycleReport report = await Round(fetch, new(), names: new FixedNames((IndexerSites.Silo, "PreDB"), (multi, "PreDB")), ledger: ledger).RunAsync(
+            [IndexerSites.SiloEpisode],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        Assert.Equal(1, fetch.Asked.Count(address => address.Host == "torrentz2.nz"));
+        Assert.True(Assert.Single(report.Outcomes).HandedOver);
+
+        SourceAnswer said = Assert.Single(ledger.Answers, answer => answer.Name == "Torrentz2");
+        Assert.Contains("left out of the rest of this run", said.Refusal!, StringComparison.Ordinal);
+    }
+
     /// <summary>A cycle over every shipped indexer, with Silo's name handed over as a name source gave it.</summary>
-    private static SearchCycle Round(FakeFetch fetch, FakeTorrentEngine engine, ActivityJournal? journal = null, IReleaseNames? names = null)
+    private static SearchCycle Round(FakeFetch fetch, FakeTorrentEngine engine, ActivityJournal? journal = null, IReleaseNames? names = null, RecordingLedger? ledger = null)
     {
         ActivityJournal writing = journal ?? new ActivityJournal();
 
         return new(
             names ?? new FixedNames((IndexerSites.Silo, "PreDB")),
-            IndexerSites.Finding(fetch, journal: writing),
+            IndexerSites.Finding(fetch, journal: writing, ledger: ledger),
             writing,
             new Grab(engine, new EndlessDisk(null), writing));
     }

@@ -21,8 +21,73 @@ public sealed class ChallengeAwareFetch(
     IPluginGrants grants,
     ClearanceStore clearances,
     IChallengeSolver? solver = null,
-    IPageSource? pages = null) : IFetch
+    IPageSource? pages = null) : IFetch, ISessionPost
 {
+    /// <summary>
+    /// A form posted the way a page is read: granted, through the host's gate, with the clearance.
+    /// </summary>
+    /// <remarks>
+    /// The signed request TorrentBay names its torrents to — see <see cref="ISessionPost"/> for why it goes
+    /// over HTTP. Sent as the page's own script sends it, and in the same client the listing was read with,
+    /// so the session the page's tokens belong to travels with it. Null for anything that is not an answer:
+    /// no grant, a challenge, a refusal, a host that did not answer.
+    /// </remarks>
+    public async Task<string?> PostAsync(Uri url, string formBody, CancellationToken ct)
+    {
+        string host = url.Host;
+
+        if (!await grants.HasAsync(PluginGrantKind.NetworkHost, host, ct))
+        {
+            gate.NotPermitted(host);
+
+            return null;
+        }
+
+        return await gate.RunAsync(host, async token => await Posting(url, host, formBody, token), ct);
+    }
+
+    private async Task<string?> Posting(Uri url, string host, string formBody, CancellationToken ct)
+    {
+        try
+        {
+            using HttpRequestMessage request = new(HttpMethod.Post, url)
+            {
+                Content = new StringContent(formBody, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded"),
+            };
+
+            request.Headers.TryAddWithoutValidation("X-Requested-With", "XMLHttpRequest");
+
+            if (clearances.For(host) is Clearance clearance)
+            {
+                request.Headers.TryAddWithoutValidation("Cookie", $"cf_clearance={clearance.Cookie}");
+                request.Headers.TryAddWithoutValidation("User-Agent", clearance.UserAgent);
+            }
+
+            using HttpResponseMessage response = await http.SendAsync(request, ct);
+            string body = await response.Content.ReadAsStringAsync(ct);
+
+            if (CloudflareChallenge.IsChallenge(response, body))
+            {
+                clearances.Spend(host);
+
+                return null;
+            }
+
+            if (IsRateLimited(response.StatusCode))
+            {
+                gate.Refused(host);
+
+                return null;
+            }
+
+            return response.IsSuccessStatusCode ? body : null;
+        }
+        catch (Exception exception) when (exception is HttpRequestException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            return null;
+        }
+    }
+
     /// <summary>
     /// The body of the last fetch, whatever came of it.
     /// </summary>
@@ -55,49 +120,81 @@ public sealed class ChallengeAwareFetch(
             return await Gated(address, host, ct);
         }
 
-        FetchResult first = await Plain(address, host, ct);
+        FetchResult first = await Twice(address, host, ct);
 
         if (first.Failure?.Outcome != FetchOutcome.Challenged)
         {
             return first;
         }
 
-        // A challenge on an address nobody marked. Solve it once, then try
-        // again — and if a challenge is still there after a fresh solve, this
-        // is a site the plugin cannot read, which is a different sentence from
-        // the site refusing us.
+        // A challenge on an address nobody marked, solved and tried again.
         if (solver is null)
         {
             return first;
         }
 
-        Clearance? clearance = await solver.SolveAsync(address, ct);
+        return await SolvedAndTried(address, host, ct);
+    }
 
-        if (clearance is null)
+    /// <summary>How many times a challenge is solved again for one question.</summary>
+    /// <remarks>
+    /// <c>docs/specs/run.md</c>, the owner's rule of 15 September 2026: a question to a site that stays
+    /// behind a challenge is asked at most twice, each time after the challenge is solved again. It was once,
+    /// and a site whose clearance simply took a second go was left unread.
+    /// </remarks>
+    public const int Solves = 2;
+
+    /// <summary>
+    /// The challenge solved and the question asked again — twice at most — or the reason it could not be.
+    /// </summary>
+    private async Task<FetchResult> SolvedAndTried(Uri address, string host, CancellationToken ct)
+    {
+        for (int solve = 0; solve < Solves; solve++)
         {
-            return FetchResult.Failed(FetchFailure.For(
-                FetchOutcome.Challenged,
-                address,
-                $"The challenge on {host} did not clear."));
+            Clearance? clearance = await solver!.SolveAsync(address, ct);
+
+            if (clearance is null)
+            {
+                return FetchResult.Failed(FetchFailure.For(
+                    FetchOutcome.Challenged,
+                    address,
+                    $"The challenge on {host} did not clear."));
+            }
+
+            clearances.Keep(host, clearance);
+
+            FetchResult tried = await Twice(address, host, ct);
+
+            if (tried.Failure?.Outcome != FetchOutcome.Challenged)
+            {
+                return tried;
+            }
         }
 
-        clearances.Keep(host, clearance);
-
-        FetchResult second = await Plain(address, host, ct);
-
-        if (second.Failure?.Outcome != FetchOutcome.Challenged)
-        {
-            return second;
-        }
-
-        // Deliberately not a third go. A second challenge immediately after a
-        // fresh solve is not bad luck to retry through.
+        // Not a third go. A challenge still there after it was solved twice is a site this plugin cannot read
+        // this run, which is a different sentence from the site refusing us.
         clearances.Spend(host);
 
         return FetchResult.Failed(FetchFailure.For(
             FetchOutcome.Challenged,
             address,
-            $"{host} put up a second challenge straight after one was cleared, so this plugin cannot read it."));
+            $"{host} was still behind a challenge after it was solved twice, so this plugin could not read it."));
+    }
+
+    /// <summary>
+    /// A plain request, and a second one when the host did not answer the first.
+    /// </summary>
+    /// <remarks>
+    /// <c>run.md</c>: a question to a site that does not answer is asked at most twice. A host that answers
+    /// — even with a refusal or a challenge — has answered, and is not asked again here.
+    /// </remarks>
+    private async Task<FetchResult> Twice(Uri address, string host, CancellationToken ct)
+    {
+        FetchResult first = await Plain(address, host, ct);
+
+        return first.Failure?.Outcome == FetchOutcome.Unreachable
+            ? await Plain(address, host, ct)
+            : first;
     }
 
     /// <summary>
@@ -127,7 +224,7 @@ public sealed class ChallengeAwareFetch(
     {
         if (clearances.For(host) is not null)
         {
-            FetchResult kept = await Plain(address, host, ct);
+            FetchResult kept = await Twice(address, host, ct);
 
             if (kept.Failure?.Outcome != FetchOutcome.Challenged)
             {
@@ -142,19 +239,32 @@ public sealed class ChallengeAwareFetch(
 
         if (solver is not null)
         {
-            Clearance? earned = await solver.SolveAsync(address, ct);
-
-            if (earned is not null)
+            for (int solve = 0; solve < Solves; solve++)
             {
+                Clearance? earned = await solver.SolveAsync(address, ct);
+
+                if (earned is null)
+                {
+                    // Cleared without a cookie to replay: the page can only come from the tab that cleared it.
+                    return await ThroughBrowser(address, ct, "This address is behind a challenge");
+                }
+
                 clearances.Keep(host, earned);
 
-                FetchResult after = await Plain(address, host, ct);
+                FetchResult after = await Twice(address, host, ct);
 
                 if (after.Failure?.Outcome != FetchOutcome.Challenged)
                 {
                     return after;
                 }
             }
+
+            clearances.Spend(host);
+
+            return FetchResult.Failed(FetchFailure.For(
+                FetchOutcome.Challenged,
+                address,
+                $"{host} was still behind a challenge after it was solved twice, so this plugin could not read it."));
         }
 
         return await ThroughBrowser(address, ct, "This address is behind a challenge");

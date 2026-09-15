@@ -739,7 +739,7 @@ public class FindTests
         ActivityJournal? journal = null,
         ISourceLedger? ledger = null,
         IReadOnlyList<SourceDefinition>? sources = null,
-        IInPagePost? post = null)
+        ISessionPost? post = null)
     {
         _ = clock;
 

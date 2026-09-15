@@ -12,7 +12,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
 /// offer — so the test reads the body that went out rather than only what came
 /// back.
 /// </remarks>
-public sealed class RecordingPost(string? answers) : IInPagePost
+public sealed class RecordingPost(string? answers) : ISessionPost
 {
     /// <summary>Where it was asked to post, or null if it never was.</summary>
     public Uri? Url { get; private set; }

@@ -38,9 +38,37 @@ public sealed class NameSourcesTests
     }
 
     /// <remarks>
+    /// <c>run.md</c>: a site that still gives no answer after its second attempt is left out of the rest of the
+    /// run. srrDB's search does not answer about Silo S02E01, so it is not asked about Silo S02E02 either;
+    /// the other three are.
+    /// </remarks>
+    [Fact]
+    public async Task ASearchThatDoesNotAnswerIsNotAskedAgainThisRun()
+    {
+        FakeFetch fetch = new FakeFetch()
+            .AnsweringFeeds()
+            .AnswersAnything(Capture.Fixture("names-srrdb-search-silo-s02e01.json"))
+            .Fails(SrrDbSearch, FetchOutcome.Unreachable, "api.srrdb.com did not answer");
+
+        NameSources sources = Over(fetch);
+        TrackedEpisode first = Episode(41, "Silo", 2, 1, year: 2023);
+        TrackedEpisode second = Episode(41, "Silo", 2, 2, year: 2023);
+
+        FeedNamesTaken taken = await sources.ReadFeedsAsync([first, second], CancellationToken.None);
+
+        await sources.NamesForAsync(first, taken, CancellationToken.None);
+        await sources.NamesForAsync(second, taken, CancellationToken.None);
+
+        Assert.Equal(1, fetch.Asked.Count(address => address.Host == "api.srrdb.com"));
+        // PreDB.net's feed and both its searches share a host: three.
+        Assert.Equal(3, fetch.Asked.Count(address => address.Host == "api.predb.net"));
+    }
+
+    /// <remarks>
     /// <c>run.md</c>: a name source whose feed or search fails gives no release names in that run, and the
-    /// run carries on. One feed refuses and another throws something nobody planned for; the two left
-    /// still give their names. The same for the searches.
+    /// run carries on. One feed refuses and another throws something nobody planned for; the two left still
+    /// give their names. Those two sources are then not searched at all, and the two whose searches fail
+    /// give nothing either — the run carries on with no names for the episode and no exception.
     /// </remarks>
     [Fact]
     public async Task ASourceWhoseFeedFailsGivesNothingAndTheRunCarriesOn()
@@ -65,7 +93,8 @@ public sealed class NameSourcesTests
 
         IReadOnlyList<SourceName> names = await sources.NamesForAsync(silo, taken, CancellationToken.None);
 
-        Assert.Equal(["PreDB", "PreDB.net"], names.Select(name => name.Source).Distinct().Order(StringComparer.Ordinal));
+        Assert.Empty(names);
+        Assert.DoesNotContain(fetch.Asked, address => address.ToString() is PreDbSearch or PreDbNetSearch);
 
         Assert.Contains(
             journal.Snapshot().History,

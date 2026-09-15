@@ -22,7 +22,7 @@ public sealed class Find(
     IActivityJournal journal,
     ISourceLedger? ledger = null,
     TimeProvider? time = null,
-    IInPagePost? post = null)
+    ISessionPost? post = null)
 {
     private readonly TimeProvider _time = time ?? TimeProvider.System;
 
@@ -589,7 +589,12 @@ public sealed class Find(
     }
 
     /// <summary>One question to one indexer, every page it declares, and the rows it answered.</summary>
-    public async Task<ReleaseCopy[]> AskAsync(SourceDefinition indexer, SearchTerm term, string? about, CancellationToken ct)
+    public async Task<ReleaseCopy[]> AskAsync(
+        SourceDefinition indexer,
+        SearchTerm term,
+        string? about,
+        CancellationToken ct,
+        AskedThisCycle? asked = null)
     {
         // As it went out, so the page shows the question the site was really
         // put: the name with its dots, or the words it was given instead.
@@ -609,9 +614,19 @@ public sealed class Find(
 
             if (result.Failure is FetchFailure failure)
             {
-                journal.Failed(ActivityStage.Find, subject, failure.ToString());
-                Said(about, indexer, term, failure.ToString());
-                await WroteAsync(indexer, started, 0, failure.ToString(), ct);
+                string said = failure.ToString();
+
+                // A site that did not answer, or stayed behind its challenge, after the fetch's second attempt
+                // sits out the rest of the run (run.md), and the Sources page says so beside its refusal.
+                if (asked is not null && failure.Outcome is FetchOutcome.Unreachable or FetchOutcome.Challenged)
+                {
+                    asked.SitOut(indexer.Name);
+                    said = $"{said} It is left out of the rest of this run.";
+                }
+
+                journal.Failed(ActivityStage.Find, subject, said);
+                Said(about, indexer, term, said);
+                await WroteAsync(indexer, started, 0, said, ct);
 
                 return [];
             }

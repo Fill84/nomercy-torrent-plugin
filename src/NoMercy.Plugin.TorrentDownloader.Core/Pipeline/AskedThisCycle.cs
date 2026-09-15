@@ -27,7 +27,31 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 public sealed class AskedThisCycle
 {
     private readonly Dictionary<(string Source, SearchTerm Term), ReleaseCopy[]> _answers = [];
+    private readonly HashSet<string> _sittingOut = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _lock = new();
+
+    /// <summary>Whether this site is left out of the rest of the run.</summary>
+    public bool SitsOut(string source)
+    {
+        lock (_lock)
+        {
+            return _sittingOut.Contains(source);
+        }
+    }
+
+    /// <summary>Leaves a site out of the rest of the run.</summary>
+    /// <remarks>
+    /// <c>docs/specs/run.md</c>: a site that still gives no answer after its second attempt — the fetch made
+    /// both — is left out of the rest of that run. Asked again for the next name or the next episode it would
+    /// cost two more attempts each time, and a run over thirty episodes would wait out a dead site sixty times.
+    /// </remarks>
+    public void SitOut(string source)
+    {
+        lock (_lock)
+        {
+            _sittingOut.Add(source);
+        }
+    }
 
     /// <summary>What that site said to that question, or null where it was never asked.</summary>
     public ReleaseCopy[]? Recall(string source, SearchTerm term)

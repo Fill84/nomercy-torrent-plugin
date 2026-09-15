@@ -52,9 +52,6 @@ public interface IBrowserTab : IAsyncDisposable
     /// </remarks>
     Task<string> FetchInPageAsync(Uri url, CancellationToken ct);
 
-    /// <summary>Posts a form from inside the page and answers the text.</summary>
-    Task<string> PostInPageAsync(Uri url, string formBody, CancellationToken ct);
-
     /// <summary>A cookie by name, or null.</summary>
     Task<string?> CookieAsync(string name, CancellationToken ct);
 

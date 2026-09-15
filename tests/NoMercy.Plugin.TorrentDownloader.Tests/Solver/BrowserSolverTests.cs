@@ -157,26 +157,6 @@ public class BrowserSolverTests
     }
 
     /// <remarks>
-    /// The same for a POST, which is how a torrent's magnet is asked for on a
-    /// site that publishes none: once per release taken, and a leak there is
-    /// one tab per download.
-    /// </remarks>
-    [Fact]
-    public async Task TheTabIsClosedWhenAFormHasBeenPosted()
-    {
-        FakeTimeProvider clock = new();
-        FakeTabs tabs = new();
-        tabs.Tab("extranet.torrentbay.st").Shows("<html>a magnet</html>");
-
-        await Solver(tabs, clock).PostAsync(
-            new("https://extranet.torrentbay.st/ajax/getSearchMagnet.php"),
-            "id=1",
-            CancellationToken.None);
-
-        Assert.Equal(1, tabs.Tab("extranet.torrentbay.st").Closed);
-    }
-
-    /// <remarks>
     /// A challenge that never cleared still leaves no tab behind. This is the
     /// path that leaked most: a site that keeps refusing is asked again every
     /// cycle, so a tab left open by a failure is a tab left open for ever.
@@ -350,42 +330,6 @@ public class BrowserSolverTests
 
         Assert.Equal("a cookie", clearance?.Cookie);
         Assert.Equal("Mozilla/5.0 (the one it was issued to)", clearance?.UserAgent);
-    }
-
-    /// <remarks>
-    /// <strong>Step 6.</strong> Null, not an attempt. A post sent from this
-    /// process arrives without the session that earned the right to ask and is
-    /// refused, so the caller can say "this site needs a browser" — which is
-    /// actionable — instead of "this site refused us", which is not even true.
-    /// </remarks>
-    [Fact]
-    public async Task PostingWithNoBrowserAnswersNullRatherThanTrying()
-    {
-        FakeTabs tabs = new() { HasBrowser = false };
-        CapturingLogger log = new();
-
-        string? posted = await new BrowserSolver(tabs, log)
-            .PostAsync(new("https://torrentbay.st/sign"), "a=1&b=2", CancellationToken.None);
-
-        Assert.Null(posted);
-        Assert.Contains(log.Lines, line => line.Contains("browser", StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <remarks>
-    /// And with one, the post goes from inside the page that already has the
-    /// site open.
-    /// </remarks>
-    [Fact]
-    public async Task PostingGoesFromInsideThePage()
-    {
-        FakeTabs tabs = new();
-        tabs.Tab("torrentbay.st").PostedBody = "magnet:?xt=urn:btih:abc";
-
-        string? posted = await Solver(tabs)
-            .PostAsync(new("https://torrentbay.st/sign"), "id=7&token=x", CancellationToken.None);
-
-        Assert.Equal("magnet:?xt=urn:btih:abc", posted);
-        Assert.Equal(["id=7&token=x"], tabs.Tab("torrentbay.st").Posted);
     }
 
     /// <remarks>

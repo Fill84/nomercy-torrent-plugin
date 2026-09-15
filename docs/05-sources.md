@@ -164,7 +164,8 @@ more.
 
 **TorrentBay** (gated) — publishes **neither a magnet nor a hash**, on the listing or on a row's own
 page. Both carry a button and an id, and nothing else. The magnet comes from a **signed POST** to
-`/ajax/getSearchMagnet.php`, sent from inside the browser session:
+`/ajax/getSearchMagnet.php`, sent over plain HTTP in the session the listing was read in — never from
+a browser tab, see `docs/07-solver.md` § The signed POST:
 
 ```
 torrent_id  the row's data-id, off .search-magnet-btn
@@ -255,7 +256,10 @@ whole season, 1080p, in English.
 
 1. A **gated** host goes straight to the browser.
 2. Everything else tries plain HTTP first, through the host gate.
-3. A challenge falls through to the browser, once. A second challenge after a fresh solve gives up.
+3. A challenge is solved and the question asked again — twice at most, each after a fresh solve. A
+   host that does not answer is asked a second time. Still nothing, and the site is left out of the rest
+   of the run: the indexer round asks it nothing more, a name source gives no names in it, and the
+   Sources page carries the reason (`docs/specs/run.md`).
 4. A JSON or XML endpoint fetched through the browser is re-fetched **inside the page** so the body
    is the body, not Chrome's viewer for it.
 5. Gating is a property of an **address**, not a site: PreDB answers its feed over plain HTTP and

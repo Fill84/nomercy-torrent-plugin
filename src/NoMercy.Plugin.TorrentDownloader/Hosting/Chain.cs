@@ -334,11 +334,7 @@ public sealed class Chain : IAsyncDisposable
             // The four name sources: their feeds read at the start of the run,
             // and their searches for an episode no feed named.
             new NameSources(catalogue, fetch, _readers, _journal, TimeProvider.System, _ledger),
-            // The solver again, as the thing that can post from inside the
-            // session that loaded the page. TorrentBay names its torrents to
-            // nothing else, and while nobody passed this its every row was a
-            // dead end - the best-seeded dead end on the page.
-            new Find(catalogue, fetch, _readers, _journal, _ledger, TimeProvider.System, _solver),
+            Find(settings),
             _journal,
 
             // Through the grab, which checks there is room before anything is
@@ -347,6 +343,19 @@ public sealed class Chain : IAsyncDisposable
             // server with it.
             _engine is null ? null : new Grab(_engine, new DiskSpace(), _journal),
             written);
+    }
+
+    /// <summary>Who is serving a release, asked of this catalogue's indexers.</summary>
+    /// <remarks>
+    /// The fetch is also what posts TorrentBay's signed request: in the session its listing was read in.
+    /// It was the browser, from a fresh tab on no page of the site, and every TorrentBay row came back with
+    /// no torrent from 30 August until that was found on 15 September 2026.
+    /// </remarks>
+    public Find Find(Settings settings)
+    {
+        ChallengeAwareFetch fetch = Fetch();
+
+        return new(Catalogue(settings), fetch, _readers, _journal, _ledger, TimeProvider.System, fetch);
     }
 
     /// <summary>

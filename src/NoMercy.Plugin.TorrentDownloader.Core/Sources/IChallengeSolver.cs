@@ -43,23 +43,25 @@ public interface IPageSource
     Task<string?> GetPageAsync(Uri url, CancellationToken ct);
 }
 
-/// <summary>Posting a form from inside the session that loaded the page.</summary>
+/// <summary>Posting a form in the session the page was read in.</summary>
 /// <remarks>
-/// TorrentBay answers a signed request to its own endpoint, built from two
-/// values off the row and two off the search page. Sent from this process it
-/// arrives without the session that earned the right to ask, and is refused.
+/// <para>
+/// TorrentBay answers a signed request to its own endpoint, built from two values off the row and two off
+/// the search page. It is answered in the session that read that page: over plain HTTP, with the clearance
+/// the page was read with.
+/// </para>
+/// <para>
+/// <strong>Not from a browser tab.</strong> It was, and on 15 September 2026 that was found failing for
+/// every TorrentBay row since 30 August: a tab has been opened fresh for each task since then, on no page of
+/// the site, so the request went from another origin with none of the site's cookies and came back
+/// <c>Failed to fetch</c>. Sent over HTTP in the listing's session it answered the magnet.
+/// </para>
 /// </remarks>
-public interface IInPagePost
+public interface ISessionPost
 {
     /// <summary>
-    /// Posts <paramref name="formBody"/> to <paramref name="url"/> from inside
-    /// the page, or answers null when nothing here can.
+    /// Posts <paramref name="formBody"/> to <paramref name="url"/>, and answers what came back, or null when
+    /// it could not be posted or the site refused it.
     /// </summary>
-    /// <remarks>
-    /// Null rather than an attempt. A post certain to be refused is not worth
-    /// making, and the difference matters to whoever reads the result: the
-    /// caller can say "this site needs a browser", which is actionable, instead
-    /// of "this site refused us", which is not true.
-    /// </remarks>
     Task<string?> PostAsync(Uri url, string formBody, CancellationToken ct);
 }

@@ -32,6 +32,9 @@ public class SourceHealthTests
     {
         FakeHttp http = new FakeHttp()
             .Answers(HttpStatusCode.OK, Fixture("limetorrents.html"))
+
+            // Twice: a host that does not answer is asked a second time (run.md).
+            .Throws(new HttpRequestException("no route to host"))
             .Throws(new HttpRequestException("no route to host"));
 
         SourceCheck check = Checking(http);
@@ -328,6 +331,9 @@ public class SourceHealthTests
     {
         FakeHttp http = new FakeHttp()
             .Answers(HttpStatusCode.OK, Fixture("limetorrents.html"))
+
+            // Twice: a host that does not answer is asked a second time (run.md).
+            .Throws(new HttpRequestException("no route to host"))
             .Throws(new HttpRequestException("no route to host"));
 
         SourceCheck check = Checking(http);

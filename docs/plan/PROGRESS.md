@@ -4,10 +4,29 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-08` · A challenge is solved again, twice at most.** Sprint 13 is the owner's
+**Next: `S13-09` · What goes, goes.** Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-08` is done and green, and it found TorrentBay naming no torrent since 30 August.** Step 0,
+root cause first: the signed request ran `fetch` from a browser tab opened fresh for it — on no page of
+the site, so another origin with none of its cookies — ever since `e64eb1d` made tabs open and close per
+task; the post was never moved with it. Confirmed live on 15 September 2026 three ways (fresh tab
+`Failed to fetch`; a tab reloading the listing got no rows; HTTP in the listing's session named
+`87D8…`, the same TGx hash the round merges). The fix: `ChallengeAwareFetch` posts it over HTTP through
+the host's gate with the clearance and user agent, the chain hands the fetch to `Find`, and the browser
+no longer posts at all (`ISessionPost` in place of `IInPagePost`); the capture tool, now posting the
+same way, had TorrentBay name `C7A18784…` for Solo Leveling. Then the slice: a challenge still there
+after a solve is solved again and asked again, twice at most; a host that does not answer is asked a
+second time; a site still failing after that sits out the rest of the run — the indexer round asks it
+nothing more and the Sources page's refusal says so — and a name source whose feed or search fails
+gives no names for the rest of the run, as `run.md` says, which corrected an `S13-05` test that let a
+failed feed's source still be searched. Tests, each red first and each rule broken on purpose (ten
+sabotages): `ChallengeAwareFetchTests` (six new or rewritten), `TheSignedRequestTests`,
+`SearchCycleTests.ASiteThatFailsTwiceSitsOutTheRestOfTheRun`,
+`NameSourcesTests.ASearchThatDoesNotAnswerIsNotAskedAgainThisRun`. Three browser post tests went with the
+browser post. Two health tests and one fetch test script a silent host twice now.
 
 **`S13-07` is done and green: one round per wish group, merged by hash, and only the winner offered.**
 `IndexerRound` asks the first-choice indexers one after another (`firstChoice` in `sources.json`: Nyaa 1,

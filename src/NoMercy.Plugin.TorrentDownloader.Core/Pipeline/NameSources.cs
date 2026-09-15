@@ -12,10 +12,27 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// <param name="Source">The catalogue entry that gave it, for the Activity page.</param>
 public sealed record SourceName(string Title, string Source);
 
-/// <summary>The feed release names a run took, per episode.</summary>
+/// <summary>The feed release names a run took, per episode, and the name sources that failed in it.</summary>
 public sealed class FeedNamesTaken(IReadOnlyDictionary<EpisodeKey, IReadOnlyList<SourceName>> byEpisode)
 {
-    public static FeedNamesTaken None { get; } = new(new Dictionary<EpisodeKey, IReadOnlyList<SourceName>>());
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _failed = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>No names, and nothing failed: a fresh one each time, because a run writes into it.</summary>
+    public static FeedNamesTaken None => new(new Dictionary<EpisodeKey, IReadOnlyList<SourceName>>());
+
+    /// <summary>Whether this name source failed earlier in the run, and so gives no names in it.</summary>
+    public bool Failed(string source)
+    {
+        return _failed.ContainsKey(source);
+    }
+
+    /// <summary>
+    /// A name source failed: <c>run.md</c> — it gives no release names in that run, so it is asked nothing more.
+    /// </summary>
+    public void Fail(string source)
+    {
+        _failed[source] = true;
+    }
 
     /// <summary>Every name taken, for every episode.</summary>
     public IEnumerable<SourceName> All => byEpisode.Values.SelectMany(names => names);
@@ -74,9 +91,19 @@ public sealed class NameSources(
 
         // Every feed at once. Read one after another a run costs the sum of the slowest sites; the gate
         // is the only thing that slows anything, and it does that per host.
-        SourceName[][] read = await Task.WhenAll(feeds.Select(feed => ReadFeedAsync(feed, ct)));
+        (SourceName[] Names, bool Failed)[] read = await Task.WhenAll(feeds.Select(feed => ReadFeedAsync(feed, ct)));
 
-        return new(Take([.. read.SelectMany(names => names)], episodes));
+        FeedNamesTaken taken = new(Take([.. read.SelectMany(one => one.Names)], episodes));
+
+        for (int at = 0; at < feeds.Length; at++)
+        {
+            if (read[at].Failed)
+            {
+                taken.Fail(feeds[at].Name);
+            }
+        }
+
+        return taken;
     }
 
     public async Task<IReadOnlyList<SourceName>> NamesForAsync(TrackedEpisode episode, FeedNamesTaken taken, CancellationToken ct)
@@ -89,7 +116,7 @@ public sealed class NameSources(
             return fed;
         }
 
-        return await LookUpAsync(episode, ct);
+        return await LookUpAsync(episode, taken, ct);
     }
 
     /// <summary>
@@ -120,7 +147,7 @@ public sealed class NameSources(
         return taken;
     }
 
-    private async Task<SourceName[]> ReadFeedAsync(SourceDefinition feed, CancellationToken ct)
+    private async Task<(SourceName[] Names, bool Failed)> ReadFeedAsync(SourceDefinition feed, CancellationToken ct)
     {
         long started = time.GetTimestamp();
 
@@ -136,7 +163,7 @@ public sealed class NameSources(
                 journal.Failed(ActivityStage.Harvest, feed.Name, failure.ToString());
                 await WroteAsync(feed, started, 0, failure.ToString(), ct);
 
-                return [];
+                return ([], true);
             }
 
             if (readers.For(feed) is not ISourceReader reader)
@@ -146,7 +173,7 @@ public sealed class NameSources(
                 journal.Failed(ActivityStage.Harvest, feed.Name, unread);
                 await WroteAsync(feed, started, 0, unread, ct);
 
-                return [];
+                return ([], true);
             }
 
             SourceName[] names = [.. reader.Read(result.Body!, new(feed.Url)).Select(row => new SourceName(row.Title, feed.Name))];
@@ -154,7 +181,7 @@ public sealed class NameSources(
             journal.Finished(ActivityStage.Harvest, feed.Name, $"{names.Length} names");
             await WroteAsync(feed, started, names.Length, null, ct);
 
-            return names;
+            return (names, false);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -163,7 +190,7 @@ public sealed class NameSources(
             journal.Failed(ActivityStage.Harvest, feed.Name, exception.Message);
             await WroteAsync(feed, started, 0, exception.Message, ct);
 
-            return [];
+            return ([], true);
         }
     }
 
@@ -175,15 +202,16 @@ public sealed class NameSources(
     /// of its own). No quality, which is judged on the names that come back; no year and no absolute
     /// number, which the earlier ladder added and the owner's requirements do not.
     /// </remarks>
-    private async Task<IReadOnlyList<SourceName>> LookUpAsync(TrackedEpisode episode, CancellationToken ct)
+    private async Task<IReadOnlyList<SourceName>> LookUpAsync(TrackedEpisode episode, FeedNamesTaken taken, CancellationToken ct)
     {
-        SourceDefinition[] searches = [.. catalogue.For(SourceRole.Names)];
+        // Not a source that failed earlier in the run, feed or search: it gives no names in it (run.md).
+        SourceDefinition[] searches = [.. catalogue.For(SourceRole.Names).Where(search => !taken.Failed(search.Name))];
         string subject = $"{episode.ShowTitle} {episode.Key}";
         string term = subject;
 
         journal.Started(ActivityStage.Names, subject, $"asking {searches.Length} sources what it is called");
 
-        SourceName[][] answers = await Task.WhenAll(searches.Select(search => AskAsync(search, episode, term, subject, ct)));
+        SourceName[][] answers = await Task.WhenAll(searches.Select(search => AskAsync(search, episode, term, subject, taken, ct)));
         SourceName[] names = [.. answers.SelectMany(answer => answer).Distinct()];
 
         journal.Counted(RunCounter.EpisodesAsked);
@@ -198,6 +226,7 @@ public sealed class NameSources(
         TrackedEpisode episode,
         string term,
         string subject,
+        FeedNamesTaken taken,
         CancellationToken ct)
     {
         Uri address = new(Query.Write(search.SearchAddress!, term, search.Query));
@@ -208,7 +237,8 @@ public sealed class NameSources(
 
             if (result.Failure is FetchFailure failure)
             {
-                journal.Failed(ActivityStage.Names, $"{subject} · {search.Name}", failure.ToString());
+                taken.Fail(search.Name);
+                journal.Failed(ActivityStage.Names, $"{subject} · {search.Name}", $"{failure} It gives no names for the rest of this run.");
                 journal.Noted(ActivityStage.Names, subject, $"{search.Name} · {term} · {failure}");
 
                 return [];
@@ -241,6 +271,7 @@ public sealed class NameSources(
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             // A search that fails gives nothing this run, and the other sources are still asked (run.md).
+            taken.Fail(search.Name);
             journal.Failed(ActivityStage.Names, $"{subject} · {search.Name}", exception.Message);
             journal.Noted(ActivityStage.Names, subject, $"{search.Name} · {term} · {exception.Message}");
 

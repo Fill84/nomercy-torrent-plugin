@@ -355,24 +355,6 @@ internal sealed class PuppeteerTab(IPage page, Action closed) : IBrowserTab
             url.ToString());
     }
 
-    public Task<string> PostInPageAsync(Uri url, string formBody, CancellationToken ct)
-    {
-        return page.EvaluateFunctionAsync<string>(
-            """
-            async (address, body) => {
-                const answer = await fetch(address, {
-                    method: 'POST',
-                    credentials: 'include',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body,
-                });
-                return await answer.text();
-            }
-            """,
-            url.ToString(),
-            formBody);
-    }
-
     public async Task<string?> CookieAsync(string name, CancellationToken ct)
     {
         CookieParam[] cookies = await page.GetCookiesAsync();

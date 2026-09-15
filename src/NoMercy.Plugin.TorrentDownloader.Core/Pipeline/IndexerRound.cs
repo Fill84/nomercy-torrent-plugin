@@ -198,6 +198,12 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         {
             foreach (SearchTerm term in (SearchTerm[])[new(name, true), new(name, false)])
             {
+                if (asked.SitsOut(indexer.Name))
+                {
+                    // Left out of the rest of the run after it gave no answer twice.
+                    return [.. counted];
+                }
+
                 ReleaseCopy[] rows = asked.Recall(indexer.Name, term) ?? await AskAsync(indexer, term, name, about, asked, ct);
                 ReleaseCopy[] named = [.. rows.Where(row => IsTheName(row.Title, name))];
 
@@ -222,7 +228,7 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         AskedThisCycle asked,
         CancellationToken ct)
     {
-        ReleaseCopy[] rows = await find.AskAsync(indexer, term, about, ct);
+        ReleaseCopy[] rows = await find.AskAsync(indexer, term, about, ct, asked);
 
         for (int at = 0; at < rows.Length; at++)
         {

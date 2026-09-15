@@ -102,14 +102,37 @@ public class ChallengeAwareFetchTests
     }
 
     /// <remarks>
-    /// A second challenge straight after a fresh solve is not bad luck to retry
-    /// through. It is a site this plugin cannot read, and it says so in a
-    /// sentence that is not "the site refused us".
+    /// <c>docs/specs/run.md</c> § When a site or a source fails, the owner's rule of 15 September 2026: a
+    /// question to a site that stays behind a challenge is asked at most twice, each time after the challenge
+    /// is solved again. Here the challenge is still there after the first solve, is solved again, and the
+    /// second try is answered.
     /// </remarks>
     [Fact]
-    public async Task ASecondChallengeAfterAFreshSolveGivesUpAndSaysWhy()
+    public async Task AChallengeStillThereAfterASolveIsSolvedAgainOnce()
     {
         FakeHttp http = new FakeHttp()
+            .Answers(HttpStatusCode.Forbidden, "<html>Just a moment...</html>")
+            .Answers(HttpStatusCode.Forbidden, "<html>Just a moment...</html>")
+            .Answers(HttpStatusCode.OK, "the real body");
+        FakeSolver solver = new(new("cookie", "a user agent"));
+
+        FetchResult result = await Fetch(http, solver)
+            .GetAsync(new("https://predb.me/?search=Silo&rss=1"), gated: false, CancellationToken.None);
+
+        Assert.Equal("the real body", result.Body);
+        Assert.Equal(2, solver.Solves);
+        Assert.Equal(3, http.Attempts.Count);
+    }
+
+    /// <remarks>
+    /// Two tries after a solve and no third: a challenge still there after the second solve is a site this
+    /// plugin cannot read this run, and it says so in a sentence that is not "the site refused us".
+    /// </remarks>
+    [Fact]
+    public async Task AChallengeStillThereAfterTwoSolvesGivesUpAndSaysWhy()
+    {
+        FakeHttp http = new FakeHttp()
+            .Answers(HttpStatusCode.Forbidden, "<html>Just a moment...</html>")
             .Answers(HttpStatusCode.Forbidden, "<html>Just a moment...</html>")
             .Answers(HttpStatusCode.Forbidden, "<html>Just a moment...</html>");
         FakeSolver solver = new(new("cookie", "a user agent"));
@@ -119,13 +142,56 @@ public class ChallengeAwareFetchTests
             .GetAsync(new("https://predb.me/?search=Silo"), gated: false, CancellationToken.None);
 
         Assert.Equal(FetchOutcome.Challenged, result.Failure?.Outcome);
-        Assert.Contains("second challenge", result.Failure?.Reason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("cannot read", result.Failure?.Reason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
-
-        // Solved once, not twice, and only two attempts were made.
-        Assert.Equal(1, solver.Solves);
-        Assert.Equal(2, http.Attempts.Count);
+        Assert.Contains("solved twice", result.Failure?.Reason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(2, solver.Solves);
+        Assert.Equal(3, http.Attempts.Count);
         Assert.Null(clearances.For("predb.me"));
+    }
+
+    /// <remarks>
+    /// And a gated host the same: solved and read, and when the challenge is still there it is solved a second
+    /// time and read again — never a third.
+    /// </remarks>
+    [Fact]
+    public async Task AGatedHostStillBehindAChallengeIsSolvedAgainOnce()
+    {
+        FakeHttp http = new FakeHttp()
+            .Answers(HttpStatusCode.Forbidden, "<html>Just a moment...</html>")
+            .Answers(HttpStatusCode.OK, "<html>the real page</html>");
+        FakeSolver solver = new(new("cookie", "a user agent"));
+        FakePages pages = new("<html>through the browser</html>");
+
+        FetchResult result = await Fetch(http, solver, pages)
+            .GetAsync(new("https://www.1337x.to/search/Silo/"), gated: true, CancellationToken.None);
+
+        Assert.Equal("<html>the real page</html>", result.Body);
+        Assert.Equal(2, solver.Solves);
+        Assert.Empty(pages.Asked);
+    }
+
+    /// <remarks>
+    /// <c>run.md</c>: a question to a site that does not answer is asked a second time — and only a second.
+    /// </remarks>
+    [Fact]
+    public async Task ASiteThatDoesNotAnswerIsAskedASecondTime()
+    {
+        FakeHttp answersLate = new FakeHttp()
+            .Throws(new HttpRequestException("no answer"))
+            .Answers(HttpStatusCode.OK, "the real body");
+
+        FetchResult second = await Fetch(answersLate).GetAsync(new("https://mine.example/x"), gated: false, CancellationToken.None);
+
+        Assert.Equal("the real body", second.Body);
+        Assert.Equal(2, answersLate.Attempts.Count);
+
+        FakeHttp neverAnswers = new FakeHttp()
+            .Throws(new HttpRequestException("no answer"))
+            .Throws(new HttpRequestException("no answer"));
+
+        FetchResult gone = await Fetch(neverAnswers).GetAsync(new("https://mine.example/x"), gated: false, CancellationToken.None);
+
+        Assert.Equal(FetchOutcome.Unreachable, gone.Failure?.Outcome);
+        Assert.Equal(2, neverAnswers.Attempts.Count);
     }
 
     /// <remarks>
@@ -204,7 +270,9 @@ public class ChallengeAwareFetchTests
     [Fact]
     public async Task AHostThatDoesNotAnswerIsUnreachable()
     {
-        FakeHttp http = new FakeHttp().Throws(new HttpRequestException("no such host"));
+        FakeHttp http = new FakeHttp()
+            .Throws(new HttpRequestException("no such host"))
+            .Throws(new HttpRequestException("no such host"));
 
         FetchResult result = await Fetch(http).GetAsync(WithKey, gated: false, CancellationToken.None);
 
@@ -234,7 +302,7 @@ public class ChallengeAwareFetchTests
     }
 
     /// <summary>The hosts these tests use, all granted.</summary>
-    private static readonly string[] Hosts = ["mine.example", "predb.me", "www.1337x.to"];
+    private static readonly string[] Hosts = ["mine.example", "predb.me", "www.1337x.to", "extranet.torrentbay.st"];
 
     /// <remarks>
     /// <para>
@@ -290,6 +358,59 @@ public class ChallengeAwareFetchTests
         Assert.Empty(pages.Asked);
         Assert.Equal("<html>the real page</html>", result.Body);
         Assert.NotNull(clearances.For("www.1337x.to"));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>TorrentBay names its torrent over plain HTTP, in the session its page was read in.</strong>
+    /// Measured on 15 September 2026: the signed request sent from a fresh browser tab, which is what the
+    /// plugin did since 30 August, failed with <c>Failed to fetch</c> — the tab was on no page of the site,
+    /// so it was another origin with none of its cookies. The same request sent over HTTP with the
+    /// clearance and session the listing was read with answered the magnet.
+    /// </para>
+    /// <para>
+    /// So it goes out like a page does: through the host's gate, with the clearance cookie and the user
+    /// agent it was issued to, as the form the page's own script sends.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASignedRequestIsPostedOverHttpWithTheClearanceThePageWasReadWith()
+    {
+        FakeHttp http = new();
+        http.Answers(System.Net.HttpStatusCode.OK, "{\"success\":true,\"url\":\"magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567\"}");
+
+        ClearanceStore clearances = new();
+        clearances.Keep("extranet.torrentbay.st", new("the clearance", "the agent it was issued to"));
+
+        string? answered = await Fetch(http, clearances: clearances).PostAsync(
+            new("https://extranet.torrentbay.st/ajax/getSearchMagnet.php"),
+            "torrent_id=15272923&hash=&name=&timestamp=1&hmac=ab&sessid=cd",
+            CancellationToken.None);
+
+        Assert.Contains("0123456789ABCDEF0123456789ABCDEF01234567", answered!, StringComparison.Ordinal);
+
+        HttpRequestMessage sent = Assert.Single(http.Attempts);
+
+        Assert.Equal(HttpMethod.Post, sent.Method);
+        Assert.Equal("https://extranet.torrentbay.st/ajax/getSearchMagnet.php", sent.RequestUri!.ToString());
+        Assert.Equal("application/x-www-form-urlencoded", sent.Content!.Headers.ContentType!.MediaType);
+        Assert.Equal("torrent_id=15272923&hash=&name=&timestamp=1&hmac=ab&sessid=cd", Assert.Single(http.Bodies));
+        Assert.Contains("cf_clearance=the clearance", sent.Headers.GetValues("Cookie"));
+        Assert.Contains("the agent it was issued to", string.Join(" ", sent.Headers.GetValues("User-Agent")), StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// A post the site refuses, or a host that is not granted, answers nothing: the caller says the site would
+    /// not name the torrent, and the row takes no part.
+    /// </remarks>
+    [Fact]
+    public async Task APostTheSiteRefusesOrAHostNotGrantedAnswersNothing()
+    {
+        FakeHttp http = new();
+        http.Answers(System.Net.HttpStatusCode.Forbidden, "no");
+
+        Assert.Null(await Fetch(http).PostAsync(new("https://extranet.torrentbay.st/ajax/getSearchMagnet.php"), "a=1", CancellationToken.None));
+        Assert.Null(await Fetch(new FakeHttp()).PostAsync(new("https://not.granted.test/ajax/getSearchMagnet.php"), "a=1", CancellationToken.None));
     }
 
     private static ChallengeAwareFetch Fetch(

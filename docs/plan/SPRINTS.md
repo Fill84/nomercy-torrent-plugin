@@ -2863,8 +2863,12 @@ them went here, with `TheRightReleaseTests`.
 
 ## S13-08 · A challenge is solved again, twice at most
 
-**Files:** `Hosting/ChallengeAwareFetch.cs`, `Hosting/Chain.cs`, `Views/SourcesView.cs`,
-`docs/07-solver.md`.
+**Files:** `Hosting/ChallengeAwareFetch.cs` (the retries, and the signed POST over HTTP),
+`Hosting/Chain.cs`, `Core/Sources/IChallengeSolver.cs` (`ISessionPost` in place of `IInPagePost`),
+`Solver/BrowserSolver.cs`, `Solver/IBrowserTab.cs`, `Solver/PuppeteerTabs.cs` (the browser no longer
+posts), `Core/Pipeline/AskedThisCycle.cs`, `Core/Pipeline/Find.cs`, `Core/Pipeline/IndexerRound.cs`,
+`Core/Pipeline/NameSources.cs` (sitting out), `docs/05-sources.md`, `docs/07-solver.md`. `SourcesView.cs`
+needed no change: the refusal it shows carries the reason.
 
 **Steps**
 
@@ -2876,6 +2880,13 @@ them went here, with `TheRightReleaseTests`.
 2. Test (red): `ChallengeAwareFetchTests.ASiteThatDoesNotAnswerIsAskedASecondTime`.
 3. Test (red): `SearchCycleTests.ASiteThatFailsTwiceSitsOutTheRestOfTheRun` — and the Sources page says
    why.
+4. Step 0's answer: the browser posted from a fresh tab since 30 August; the signed request goes over
+   HTTP in the listing's session. Tests: `ChallengeAwareFetchTests.ASignedRequestIsPostedOverHttpWithTheClearanceThePageWasReadWith`,
+   `APostTheSiteRefusesOrAHostNotGrantedAnswersNothing`, `TheSignedRequestTests.TorrentBayIsAskedForItsTorrentOverHttpWithNoBrowser`.
+5. A name source that fails, feed or search, gives no names for the rest of the run (`run.md`):
+   `NameSourcesTests.ASearchThatDoesNotAnswerIsNotAskedAgainThisRun`, and
+   `ASourceWhoseFeedFailsGivesNothingAndTheRunCarriesOn` now holds that a failed feed's source is not
+   searched either.
 
 **Done when** those tests pass and the suite is green. Spec: `run.md`.
 
