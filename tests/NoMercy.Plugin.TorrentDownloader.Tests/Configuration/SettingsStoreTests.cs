@@ -92,13 +92,6 @@ public class SettingsStoreTests : IDisposable
 
         Assert.Equal("0 * * * *", settings.Cadences.Cycle);
 
-        Assert.False(settings.Profile.IncludeSpecials);
-        Assert.Equal("1080p", settings.Profile.MaximumResolution);
-        Assert.Equal("any", settings.Profile.Codec);
-        Assert.True(settings.Profile.RequireCodecTag);
-        Assert.True(settings.Profile.EnglishOnly);
-        Assert.Empty(settings.Profile.ExcludeTerms);
-
         Assert.Equal(5, settings.Client.MaxConcurrentDownloads);
         Assert.Empty(settings.Client.DefaultTrackers);
         Assert.Equal(6881, settings.Client.ListenPort);
@@ -168,9 +161,7 @@ public class SettingsStoreTests : IDisposable
 
         Assert.Equal(incomplete, settings.IncompleteFolder);
         Assert.Equal(intake, settings.IntakeFolder);
-        Assert.Equal("1080p", settings.Profile.MaximumResolution);
         Assert.Equal(51413, settings.Client.ListenPort);
-
 
         SaveResult saved = await store.SaveAsync(settings, CancellationToken.None);
         Assert.True(saved.Saved, string.Join("; ", saved.Errors));
@@ -186,6 +177,49 @@ public class SettingsStoreTests : IDisposable
         // past it rather than refuse the file, and the save must not write it
         // back and make it look like a setting that still does something.
         Assert.DoesNotContain("PortMapping", context.Config.Written, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <c>S13-09</c>: the global profile is gone — quality, codec, tags and language are set per show and per
+    /// library (<c>docs/specs/show-list.md</c>). The owner's own file still carries it, written by every earlier
+    /// version, so it has to load with the profile walked past, and the next save must not write it back and
+    /// make it look like a setting that still does something.
+    /// </remarks>
+    [Fact]
+    public async Task SettingsSavedWithAProfileLoadWithoutIt()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        string incomplete = Folder();
+        string intake = Folder();
+
+        context.Config.SaveConfiguration(new
+        {
+            IncompleteFolder = incomplete,
+            IntakeFolder = intake,
+            Profile = new
+            {
+                MaximumResolution = "2160p",
+                Codec = "h265",
+                RequireCodecTag = true,
+                EnglishOnly = true,
+                IncludeSpecials = true,
+                ExcludeTerms = new[] { "HDCAM" },
+            },
+        });
+
+        Settings settings = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(incomplete, settings.IncompleteFolder);
+
+        SaveResult saved = await store.SaveAsync(settings, CancellationToken.None);
+        Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+
+        foreach (string gone in (string[])["Profile", "MaximumResolution", "EnglishOnly", "RequireCodecTag", "ExcludeTerms", "IncludeSpecials"])
+        {
+            Assert.DoesNotContain(gone, context.Config.Written, StringComparison.Ordinal);
+        }
     }
 
     /// <remarks>

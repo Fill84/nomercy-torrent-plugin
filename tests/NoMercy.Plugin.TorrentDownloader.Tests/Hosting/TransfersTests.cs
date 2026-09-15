@@ -476,80 +476,34 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
-    /// <para>
-    /// <strong>One release under two hashes: both start, the first to finish is
-    /// kept.</strong> The owner's decision of 11 September 2026. Two torrents of
-    /// one release are the same file cut twice, and which swarm delivers first
-    /// cannot be told from a listing.
-    /// </para>
-    /// <para>
-    /// The other one is stopped and its files deleted — not failed, and not
-    /// refused: nothing is wrong with it, it was only slower, and blacklisting
-    /// it would refuse a good copy the next time the episode is wanted.
-    /// </para>
+    /// A grab an earlier version started in a folder of its own finishes there, so it is staged from there and
+    /// not from the folder every other torrent uses — or the finished file is never found and the episode never
+    /// reaches the library. <c>grabs.folder</c> stays read for as long as such a grab can be open.
     /// </remarks>
     [Fact]
-    public async Task OfTwoCopiesOfOneReleaseTheFirstToFinishIsKeptAndTheOtherStoppedWithItsFiles()
+    public async Task AGrabWithAFolderOfItsOwnIsStagedFromIt()
     {
         GrabRepository grabs = await Grabs();
-        await Grabbed(grabs);
-        await Racing(grabs);
-
-        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
-        Directory.CreateDirectory(RivalFolder);
-
-        StandingEngine engine = new StandingEngine()
-            .Holding(Finished(), new TorrentFile(Path.GetFileName(episode), 900_000_000))
-            .Holding(Downloading() with { InfoHash = Rival });
-
-        await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
-
-        Assert.True(File.Exists(Staged), "The copy that finished was never staged.");
-        Assert.Contains((Rival, true), engine.Removed);
-        Assert.DoesNotContain(engine.Removed, one => one.InfoHash == Hash);
-
-        // Over, and not refused.
-        Assert.DoesNotContain(await grabs.OpenAsync(CancellationToken.None), one => one.InfoHash == Rival);
-        Assert.DoesNotContain(Rival, await grabs.BlacklistedAsync(CancellationToken.None));
-        Assert.Contains(await grabs.HistoryAsync(CancellationToken.None), row => row.Event == "lost");
-
-        // And the folder it had to itself goes with it.
-        Assert.False(Directory.Exists(RivalFolder), "The loser's own folder was left behind.");
-    }
-
-    /// <remarks>
-    /// Either can win. The second copy downloads into a folder of its own,
-    /// because two torrents of one release carry one name and would otherwise
-    /// write into one path — so when it is the one that finishes, it is staged
-    /// from there and not from the folder every other torrent uses.
-    /// </remarks>
-    [Fact]
-    public async Task ASecondCopyThatFinishesFirstIsStagedFromItsOwnFolder()
-    {
-        GrabRepository grabs = await Grabs();
-        await Grabbed(grabs);
         await Racing(grabs);
 
         string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000, RivalFolder);
 
         StandingEngine engine = new StandingEngine()
-            .Holding(Downloading())
             .Holding(Finished() with { InfoHash = Rival }, new TorrentFile(Path.GetFileName(episode), 900_000_000));
 
         await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.True(File.Exists(Staged), "The copy that finished first was never staged.");
-        Assert.Contains((Hash, true), engine.Removed);
-        Assert.DoesNotContain(await grabs.OpenAsync(CancellationToken.None), one => one.InfoHash == Hash);
+        Assert.True(File.Exists(Staged), "A download in a folder of its own was never staged.");
     }
 
     /// <remarks>
-    /// And after a restart it goes back into the same folder. Put into the one
-    /// every torrent uses, it would write over the other copy's file of the
-    /// same name.
+    /// Until 15 September 2026 a second torrent of one release was started beside the first, in a folder of
+    /// its own. Nothing starts one any more, but a grab an earlier version wrote that way can still be open:
+    /// after a restart it goes back into the same folder, where its data is. Put into the one every torrent
+    /// uses, it would start again from nothing.
     /// </remarks>
     [Fact]
-    public async Task ASecondCopyTheClientHasLostIsAddedBackIntoItsOwnFolder()
+    public async Task AGrabWithAFolderOfItsOwnIsAddedBackIntoThatFolder()
     {
         GrabRepository grabs = await Grabs();
         await Racing(grabs);
@@ -1570,14 +1524,14 @@ public class TransfersTests : IDisposable
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
-    /// <summary>Another torrent of the same release, for the same episode.</summary>
+    /// <summary>A torrent an earlier version started beside another of the same release.</summary>
     private const string Rival = "FEDCBA9876543210FEDCBA9876543210FEDCBA98";
 
     private static EpisodeKey Episode => new(41, 3, 6);
 
     private string Incomplete => Path.Combine(_root, "incomplete");
 
-    /// <summary>Where the second copy downloads, which is a folder of its own.</summary>
+    /// <summary>Where that torrent downloads, which is a folder of its own.</summary>
     private string RivalFolder => Path.Combine(Incomplete, Rival);
 
     private string Intake => Path.Combine(_root, "intake");
@@ -1641,7 +1595,7 @@ public class TransfersTests : IDisposable
             CancellationToken.None);
     }
 
-    /// <summary>The second copy of the same release, as the cycle records it.</summary>
+    /// <summary>The second torrent of the same release, as an earlier version recorded it.</summary>
     private async Task Racing(GrabRepository grabs)
     {
         await grabs.RecordAsync(

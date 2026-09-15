@@ -249,23 +249,28 @@ where they are and staging takes them from there.
 
 ## One release under two hashes
 
-The same release name under two info hashes is one file cut into two torrents, and which swarm
-delivers first cannot be told from a listing. The owner's decision of 11 September 2026: **both start
-together, and the first to finish is kept.**
+The same release name under two info hashes is one file cut into two torrents. **Only the winning
+torrent is offered to the client, and no other hash of the same release is started**
+(`docs/specs/indexer-search.md`): results of one hash are merged into one torrent, and of two hashes
+the one the most indexers list wins.
 
-- The cycle takes the best copy as always, then every other copy with the same release name and an
-  info hash of its own, for the same episodes. Only a copy whose row names its hash is taken this
-  way; a row without one cannot be told from the copy already taken.
-- A second copy downloads into `<incomplete folder>/<INFO HASH>`, written down with its grab. Two
+From the owner's decision of 11 September 2026 until 15 September 2026, **both started together, and
+the first to finish was kept**, because which swarm delivers first cannot be told from a listing:
+
+- The cycle took the best copy, then every other copy with the same release name and an info hash
+  of its own, for the same episodes. Only a copy whose row named its hash was taken this way.
+- A second copy downloaded into `<incomplete folder>/<INFO HASH>`, written down with its grab. Two
   torrents of one release carry one name, and a torrent writes under its own name in the folder it
-  is given, so in one folder they would write one path. It is staged from that folder and added back
-  into it after a restart.
-- The first copy to finish is staged and dispatched. Every other copy of that release for those
-  episodes is stopped, its files are deleted, and its grab is written **lost**, with a line in the
-  history. Lost is not failed: the copy is not refused, and its episodes are not put back to missing,
-  because the winner is delivering them.
-- A copy is never left to finish and seed. Nothing is uploaded on a public swarm (see **Uploading**),
-  so a loser left running gives nothing to anybody and costs the disk the same gigabytes twice.
+  is given, so in one folder they would write one path.
+- The first copy to finish was staged and dispatched. Every other copy of that release for those
+  episodes was stopped, its files deleted, and its grab written **lost**, with a line in the
+  history. Lost is not failed: the copy was not refused, and its episodes were not put back to
+  missing, because the winner was delivering them.
+- A copy was never left to finish and seed. Nothing is uploaded on a public swarm (see
+  **Uploading**), so a loser left running gave nothing to anybody and cost the disk twice.
+
+No new grab is given a folder of its own. `grabs.folder` is still read: a download an earlier version
+put in a folder of its own is staged from that folder and added back into it after a restart.
 
 ## Stalls
 

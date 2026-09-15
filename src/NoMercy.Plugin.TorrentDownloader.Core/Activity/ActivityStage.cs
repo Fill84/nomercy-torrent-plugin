@@ -21,7 +21,7 @@ public enum ActivityStage
     /// </remarks>
     Clearance,
 
-    /// <summary>Reading every feed into the name pool.</summary>
+    /// <summary>Reading the feed of every name source, at the start of a run.</summary>
     Harvest,
 
     /// <summary>Resolving the release name to look for, per show and season.</summary>

@@ -66,8 +66,6 @@ public sealed class Settings
 
     public Cadences Cadences { get; set; } = new();
 
-    public Profile Profile { get; set; } = new();
-
     public ClientLimits Client { get; set; } = new();
 
     public List<OwnIndexer> Indexers { get; set; } = [];

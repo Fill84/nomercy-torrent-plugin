@@ -128,8 +128,11 @@ public class ActivityJournalTests
     /// stopped or failed — none of it is still running.
     /// </para>
     /// <para>
-    /// Only the run's own stages. The feeds are read on a cadence of their
-    /// own, and a feed being read is not something stopping a search stops.
+    /// Only the run's own stages. A feed is one of them since 15 September 2026:
+    /// a run reads the feeds of every name source before it works on an episode
+    /// (<c>docs/specs/run.md</c>), where they used to be read on a cadence of
+    /// their own. A download and a dispatch outlive the run on purpose — Stop
+    /// leaves what was offered to the client carrying on.
     /// </para>
     /// </remarks>
     [Fact]
@@ -139,15 +142,16 @@ public class ActivityJournalTests
 
         journal.RunStarted();
         journal.Started(ActivityStage.Clearance, "extranet.torrentbay.st");
+        journal.Started(ActivityStage.Harvest, "PreDB");
         journal.Started(ActivityStage.Names, "Silo S03E06");
         journal.Started(ActivityStage.Find, "Silo S03E06 1080p · 1337x");
         journal.Started(ActivityStage.Decide, "Silo S03E06");
         journal.Started(ActivityStage.Grab, "Silo S03E06");
-        journal.Started(ActivityStage.Harvest, "PreDB");
+        journal.Started(ActivityStage.Download, "Silo.S03E05.1080p.WEB.H264-CAKES");
 
         journal.RunEnded();
 
-        Assert.Equal(["PreDB"], journal.Snapshot().InFlight.Select(work => work.Subject));
+        Assert.Equal(["Silo.S03E05.1080p.WEB.H264-CAKES"], journal.Snapshot().InFlight.Select(work => work.Subject));
     }
 
     /// <remarks>

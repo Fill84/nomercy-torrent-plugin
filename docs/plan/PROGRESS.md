@@ -4,10 +4,26 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-09` · What goes, goes.** Sprint 13 is the owner's
+**Next: `S13-10` · The library's quality from its encoding profile.** Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-09` is done and green: what the owner's requirements replaced is gone from `src/`.** The global
+`Profile`, ranking on seeders and priority (`ReleaseDecider`), the search ladder and the merge by name
+(`Find.SearchAsync`, `ClimbAsync`, `Merge`, `SearchTerm.Ladder`), a season settled by a pack, judging a
+copy (`NameJudge.JudgeCopy`) and the two-hash race (`EpisodeOutcome.Racing`, `Transfers`' beaten grab,
+`GrabRepository.LostAsync`) went with the tests that pinned them; tests whose rule only changed shape were
+rewritten, among them `AnimeEndToEndTests`, which now holds that a post under its absolute number alone is
+refused. An owner's `config.json` still carrying the profile loads, and the next save drops it.
+`grabs.folder` stays read: a download an earlier version put in a folder of its own is staged from it and
+added back into it — the staging test had gone with the race tests and was written again. Two faults
+fixed on the way, each red first: Skipped paged by `?page=`, which the web app never sends, so it pages by
+route now (`/skipped/2`, with the prefetch address answered); and a feed read is part of the run since
+`S13-05`, so it ends with it (`ActivityStage.Harvest` is a run stage). The nine living documents now say
+what `docs/specs/` says, history kept with dated notes, and stale comments in `src/` were corrected —
+among them the journal line that still said TorrentBay names its torrents only to a browser. Seven rules
+broken on purpose, each caught.
 
 **`S13-08` is done and green, and it found TorrentBay naming no torrent since 30 August.** Step 0,
 root cause first: the signed request ran `fetch` from a browser tab opened fresh for it — on no page of

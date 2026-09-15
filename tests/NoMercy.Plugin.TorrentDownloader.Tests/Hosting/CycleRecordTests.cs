@@ -43,32 +43,6 @@ public class CycleRecordTests : IDisposable
     }
 
     /// <remarks>
-    /// One release under two hashes is taken under both, and the second is a
-    /// grab like the first: the tick decides which one finishes first, and it
-    /// can only do that for a torrent the store knows — with the folder of its
-    /// own it downloads into, or staging looks for it where it is not.
-    /// </remarks>
-    [Fact]
-    public async Task ASecondCopyOfTheSameReleaseIsRecordedWithItsOwnFolder()
-    {
-        GrabRepository grabs = await Repository();
-        string own = Path.Combine(_folder, "downloads", Rival);
-
-        await CycleRecord.WriteAsync(
-            new([Taken with { Racing = [Taken with { InfoHash = Rival, Folder = own }] }], []),
-            [Tracked],
-            grabs,
-            When,
-            CancellationToken.None);
-
-        IReadOnlyList<StoredDownload> open = await grabs.OpenAsync(CancellationToken.None);
-
-        Assert.Equal(2, open.Count);
-        Assert.Null(Assert.Single(open, one => one.InfoHash == Hash).Folder);
-        Assert.Equal(own, Assert.Single(open, one => one.InfoHash == Rival).Folder);
-    }
-
-    /// <remarks>
     /// A decision the client was never handed is not a fact about an episode.
     /// Recording one would have the Downloads page show a row for a torrent
     /// nothing is downloading, which is the page saying something untrue.
@@ -111,7 +85,6 @@ public class CycleRecordTests : IDisposable
         Assert.Equal("1337x", refused.Source);
         Assert.Contains("1080p rung", refused.Reason, StringComparison.Ordinal);
     }
-
 
     /// <remarks>
     /// <strong>Nothing counted a search at all.</strong> On the owner's own
@@ -279,9 +252,6 @@ public class CycleRecordTests : IDisposable
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
-
-    /// <summary>Another torrent of the same release.</summary>
-    private const string Rival = "FEDCBA9876543210FEDCBA9876543210FEDCBA98";
 
     private static readonly DateTimeOffset When = new(2026, 8, 19, 9, 30, 0, TimeSpan.Zero);
 

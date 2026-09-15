@@ -31,8 +31,9 @@ public sealed record SignedClaim(string TorrentId, string PageToken, string Sess
 /// One row a source answered with.
 /// </summary>
 /// <remarks>
-/// A row is a <em>candidate</em>, not a decision. Nothing here is judged
-/// against the profile; that happens later and against the copy, not the page.
+/// A row is a <em>candidate</em>, not a decision. Nothing here is judged: a
+/// release name is judged against its show's settings before any indexer is
+/// asked, and an indexer's row only counts when its title is that name.
 /// </remarks>
 /// <param name="Title">The release name as the site printed it, tidied of markup and nothing else.</param>
 /// <param name="DetailUrl">

@@ -44,7 +44,7 @@ public static class EpisodeName
     /// <param name="showTitle">The show as the library has it.</param>
     /// <param name="year">The year the show began, when it is known.</param>
     /// <param name="episode">Which episode.</param>
-    /// <param name="resolution">As the ladder writes it: <c>1080p</c>.</param>
+    /// <param name="resolution">As a show's quality is written: <c>1080p</c>.</param>
     /// <param name="extension">Taken from the file, with its dot.</param>
     public static string For(
         string showTitle,

@@ -53,7 +53,7 @@ feed → search → the torrent client → a download finishes → staged → en
 | --- | --- |
 | The **Run** button | the owner |
 | `LibraryScanCompletedEvent` | the server finished a library scan — not `FileCreatedEvent`, which an encode this plugin asked for raises, so a cycle hung on it would start itself for ever |
-| The owner's cadence | one setting, **hourly** by default, and **never more often than once an hour** |
+| The owner's cadence | one setting, **hourly** by default, and **never more often than every 15 minutes** (`docs/specs/release-names.md`) |
 
 **A trigger during an open cycle is added to it**, never run beside it and never dropped. What the
 open cycle has already taken is written down as it takes it, so the feed and search it runs again

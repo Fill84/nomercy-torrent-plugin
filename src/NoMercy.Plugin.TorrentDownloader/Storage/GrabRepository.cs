@@ -264,11 +264,9 @@ public sealed class GrabRepository(Store database)
     /// For something the owner has to be told and the plugin must not act on:
     /// a torrent added by hand that names no show they have. Failing the grab
     /// would throw the download away, and the answer changes the day the show
-    /// is added; the Skipped page is wrong for it too, because that page is
-    /// releases the profile refused and every row on it carries a control that
-    /// grabs the release anyway. This one cannot be allowed — there is no
-    /// episode to allow it for — and offering the control writes a search
-    /// against episode nought of show nought.
+    /// is added; the Skipped page is wrong for it too, because that page is the
+    /// release names a show's settings refused, each for an episode, and this one
+    /// has no episode to be refused for.
     /// </remarks>
     public async Task NotedAsync(string releaseTitle, string reason, DateTimeOffset at, CancellationToken ct)
     {
@@ -349,50 +347,6 @@ public sealed class GrabRepository(Store database)
         command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
 
         await command.ExecuteNonQueryAsync(ct);
-    }
-
-    /// <summary>
-    /// A torrent another copy of the same release beat to the finish.
-    /// </summary>
-    /// <remarks>
-    /// Over, and said in the history, so the owner can see why a download left
-    /// the page. Not refused and its episodes not put back to missing, which is
-    /// everything <see cref="FailedAsync"/> does: nothing is wrong with this
-    /// copy, it was only slower, and the one that won is delivering them.
-    /// </remarks>
-    public async Task LostAsync(string infoHash, string reason, DateTimeOffset at, CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
-
-        string hash = infoHash.ToUpperInvariant();
-
-        await using (SqliteCommand marking = connection.CreateCommand())
-        {
-            marking.Transaction = transaction;
-            marking.CommandText = "UPDATE grabs SET state = 'lost' WHERE info_hash = $hash AND state <> 'done';";
-            marking.Parameters.AddWithValue("$hash", hash);
-
-            await marking.ExecuteNonQueryAsync(ct);
-        }
-
-        await using (SqliteCommand writing = connection.CreateCommand())
-        {
-            writing.Transaction = transaction;
-            writing.CommandText =
-                """
-                INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
-                SELECT $at, 'lost', show_id, season, episode, NULL, release_title, source, $detail
-                FROM grabs WHERE info_hash = $hash LIMIT 1;
-                """;
-            writing.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-            writing.Parameters.AddWithValue("$detail", reason);
-            writing.Parameters.AddWithValue("$hash", hash);
-
-            await writing.ExecuteNonQueryAsync(ct);
-        }
-
-        await transaction.CommitAsync(ct);
     }
 
     /// <summary>
@@ -585,7 +539,7 @@ public sealed class GrabRepository(Store database)
     }
 
     /// <summary>
-    /// Records a release the profile or the blacklist refused, and why.
+    /// Records a release name a show's settings or the blacklist refused, and why.
     /// </summary>
     /// <remarks>
     /// In the history rather than in a list held for the cycle, because the
@@ -914,7 +868,7 @@ public sealed class GrabRepository(Store database)
         return lines;
     }
 
-    /// <summary>Every key the profile should refuse, for the decide stage.</summary>
+    /// <summary>Every blacklisted key, read once for a run: a name or a hash carrying one is refused.</summary>
     public async Task<IReadOnlySet<string>> BlacklistedAsync(CancellationToken ct)
     {
         await using SqliteConnection connection = await database.OpenAsync(ct);

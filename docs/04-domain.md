@@ -46,7 +46,11 @@ Show.Title.S02E13.1080p.WEB.x264-GROUP         ← scene-styled anime, also vali
 | Codec | `H264`, `x264`, `H.264`, `AVC` | same | accept `264`/`265` without a prefix; `H.265` has a dot inside |
 | Group | after the last `-` | inside the leading `[...]` | a scene title is full of dashes; the group is after the *last* one and contains no dots |
 | Language | `MULTi`, `VOSTFR`, `Dual.Audio`, and the languages the captures name outright — `GERMAN`, `ITA`, `TRUEFRENCH`, `SPANISH`, `RUS`, `POLISH`, `SWESUB`, `JAP`, `ENG` | `[Multiple Subtitle]`, `Dual Audio` | never `Greek`, which is a programme; and never a three-letter abbreviation out of a subtitle list, which is short enough to be something else |
-| Pack | `S01` with no `E` | `01~12`, `Batch`, `Complete` | a pack answers for every gap in the season it covers |
+| Pack | `S01` with no `E` | `01~12`, `Batch`, `Complete` | a pack names no episode, so it is not searched for |
+
+**A release name names one episode of one show by its season and episode number**
+(`docs/specs/release-names.md`). A season pack, a run of episodes and an absolute-numbered anime post
+name no episode, and a run does not search for them.
 
 `TitleMatcher.Matches`: normalise both sides (lowercase, **accents folded**, punctuation to spaces,
 collapse), then the release title must **begin with** the show title and the slot must match.
@@ -79,20 +83,26 @@ passkey lives and no public tracker needs either. So is anything on a host the o
 private tracker, whatever the address looks like: their tracker belongs to the torrents it issued and
 to nothing else.
 
-## The profile: where each rule applies
+## A show's settings: where each rule applies
 
-| Rule | On the **name** | On the **copy** |
+There is no global profile. Since 15 September 2026 quality, codec, specials, wishes, musts and
+forbidden are set per show and per library on the overview (`docs/specs/show-list.md`), and no show
+setting is applied anywhere except to release names (`docs/specs/release-names.md`).
+
+| Rule | On the **name** | On the **indexer row** |
 | --- | --- | --- |
 | Title matches the show | ✅ | |
-| Season and episode match | ✅ | |
-| Resolution on the ladder | ✅ | |
-| Codec, and codec tag required | ✅ | |
-| Language | ✅ | |
-| Blocked group | ✅ | *no list of its own — see below* |
-| Forbidden terms | ✅ | |
-| Season pack allowed | ✅ | |
-| Blacklisted title or hash | ✅ | ✅ |
+| Season and episode match — one episode | ✅ | |
+| Resolution is the show's quality | ✅ | |
+| Codec is the show's codec | ✅ | |
+| Every must tag | ✅ | |
+| No forbidden tag | ✅ | |
+| Wishes carried — which group it is searched in | ✅ | |
+| Title is the release name searched for | | ✅ |
+| Release or hash still refused | ✅ | ✅ |
 | **Size within bounds** | | ✅ |
+
+An indexer row is not judged against the show's settings (`docs/specs/indexer-search.md`).
 
 **There is no seeder gate.** The owner's decision, 12 September 2026: there is no threshold, download
 what is found — an episode taken the moment it airs has no crowd behind it yet, and refusing it for
@@ -100,16 +110,17 @@ that would refuse the exact case worth downloading for. The count is still read 
 shown, and still decides which of two copies wins when `ReleaseDecider` ranks them, but it never
 refuses one outright. A copy nobody is seeding still starts; the stall rule ends it after
 `StallMinutes` with no progress **and** no peers, which is the rule that already existed for it.
+Since 15 September 2026 the seeder count decides nothing at all: `ReleaseDecider` is gone, and the
+winner is the torrent the most indexers list (`docs/specs/indexer-search.md`).
 
-**Two rows in that table have no data behind them anywhere in these documents.** *Blocked group* has
-no list of groups in the settings, and it is `ExcludeTerms` doing the work: a forbidden term is
-looked for in the whole name, and a release group is part of the name it appears in. *Size within
-bounds* has no bounds — no setting names a minimum or a maximum — so nothing is checked and nothing
-is invented. Both are recorded rather than guessed at.
+**A blocked group has no list of its own.** A group is a tag like any other word a release name
+carries, so a group put in a show's or a library's forbidden list refuses every name carrying it.
+*Size within bounds* has no bounds — no setting names a minimum or a maximum — so nothing is checked
+and nothing is invented. Both are recorded rather than guessed at.
 
-A release that does not say what resolution it is is refused, and the reason says so rather than
-naming a resolution it never claimed. The same choice as the codec tag, for the same reason: what a
-release does not say is where the thing you did not want hides.
+A release name that does not say what resolution it is is refused, and the reason says so rather than
+naming a resolution it never claimed: what a release does not say is where the thing you did not want
+hides.
 
 **English only means English only, and `MULTi` is not English.** Corrected 22 August 2026, from the
 owner's own working tool. Any foreign-audio marker on the name refuses it — **even beside an English
@@ -122,29 +133,29 @@ The markers are read off the name as written rather than off a parsed field, who
 the list is that tool's — fifty of them, and deliberately without `IT`, `ES` or `DE`, which are
 ordinary English words or common substrings. Subtitles are not audio and never refuse anything.
 
-Quality is one rung, not a ceiling. `1080p` means 1080p — a ceiling reads as generous and behaves as
-a downgrade, because the 720p copy is usually posted first.
+Since 15 September 2026 there is no English-only setting. A language is a tag: `DUAL`, `VOSTFR` or
+any other language tag goes into a show's or a library's wishes, musts or forbidden
+(`docs/specs/show-list.md`).
+
+Quality is one resolution, not a ceiling. `1080p` means 1080p — a ceiling reads as generous and
+behaves as a downgrade, because the 720p copy is usually posted first.
 
 ## Season packs
 
-A pack is an ordinary copy: judged by the same rules as a single episode, with no threshold and no
-switch to refuse it outright. The owner's rule of 12 September 2026 is to take what is found. A pack
-that is taken answers for every gap in the season it covers; an episode settled by a pack earlier in
-the same cycle is not asked about again.
+A release name without an episode number, such as a season pack, is not searched for
+(`docs/specs/release-names.md`).
+
+From the owner's rule of 12 September 2026 until 15 September 2026, a pack was an ordinary copy:
+judged by the same rules as a single episode, with no threshold and no switch to refuse it outright,
+and a pack that was taken answered for every gap in the season it covered.
 
 ## Settings
 
 | Setting | Default | Note |
 | --- | --- | --- |
-| `Cadences.Cycle` | `0 * * * *` | how often a cycle starts when nothing else starts one; never more often than hourly |
+| `Cadences.Cycle` | `0 * * * *` | how often a cycle starts when nothing else starts one; never more often than every 15 minutes |
 | `IncompleteFolder` | — | where downloads land |
 | `IntakeFolder` | — | where finished video is staged for the encoder |
-| `IncludeSpecials` | false | season 0 |
-| `MaximumResolution` | `1080p` | one rung, not a ceiling |
-| `Codec` | `any` | |
-| `RequireCodecTag` | true when a codec is named | an untagged release is where the unwanted codec hides |
-| `EnglishOnly` | true | |
-| `ExcludeTerms` | empty | |
 | `MaxConcurrentDownloads` | 5 | |
 | `DefaultTrackers` | **empty, then learned** | every tracker the plugin comes across, no duplicates, attached to every grab |
 | `Indexers` | empty | the owner's own — see `docs/05-sources.md` |
@@ -159,6 +170,13 @@ the same cycle is not asked about again.
 | `MetadataTimeoutMinutes` | 5 | |
 | `ResumeIntervalSeconds` | 60 | named as `ResumeInterval` in `docs/06`; the number is `S5-12`'s |
 | `Encryption` | allowed | not required |
+
+**Quality, codec, specials and tags are not settings of the plugin.** The global profile —
+`IncludeSpecials`, `MaximumResolution`, `Codec`, `RequireCodecTag`, `EnglishOnly`, `ExcludeTerms` —
+is gone since 15 September 2026, dropped from `config.json` on the first start without being carried
+over. They are set per show and per library on the overview (`docs/specs/show-list.md`) and stored in
+`show_settings` and `library_preferences` (migration `013`). A show nobody has switched on and saved
+is off; a library's codec is `any` and its specials off until the owner chooses otherwise.
 
 This table said `DefaultTrackers` was "a shipped list" and no document anywhere said which trackers
 were in it. It ships empty until the owner chooses: announcing what is being downloaded to hosts
@@ -240,4 +258,11 @@ CREATE INDEX history_at ON history (at DESC);
 
 -- name_pool is created by 001 and dropped by 014 (S13-05): a run reads the name sources' feeds and
 -- asks their searches directly, so no release name is kept between runs (docs/specs/release-names.md).
+
+-- show_settings and library_preferences are created by 013: one row per show and one per library,
+-- replacing the global profile (docs/specs/show-list.md).
+
+-- grabs.folder is added by 008 for the second copy of a release under two hashes. No new grab gets a
+-- folder of its own since 15 September 2026 (only the winner is offered); the column is still read
+-- for downloads an earlier version put in one.
 ```

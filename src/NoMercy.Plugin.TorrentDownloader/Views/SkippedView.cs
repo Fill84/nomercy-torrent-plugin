@@ -1,3 +1,4 @@
+using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugins.Abstractions;
@@ -24,15 +25,6 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 public static class SkippedView
 {
     public const string TableId = "skipped";
-
-    /// <summary>Where a page of refusals is asked for.</summary>
-    /// <remarks>
-    /// The page number rides in the address so that a page can be linked to,
-    /// reloaded and gone back to. A page held in memory instead would put the
-    /// owner back at the top every time the view refreshed, and this view
-    /// refreshes whenever the journal moves.
-    /// </remarks>
-    public const string PageQuery = "page";
 
     /// <summary>How many refusals one page holds.</summary>
     /// <remarks>
@@ -135,9 +127,18 @@ public static class SkippedView
     }
 
     /// <summary>This page's own address, which is what makes it linkable.</summary>
+    /// <remarks>
+    /// The page number rides in the path so that a page can be linked to, reloaded and gone back to. A page
+    /// held in memory instead would put the owner back at the top every time the view refreshed, and this
+    /// view refreshes whenever the journal moves.
+    /// </remarks>
     private static string Address(int page)
     {
-        return page <= 1 ? Pages.SkippedRoute : $"{Pages.SkippedRoute}?{PageQuery}={page}";
+        return page <= 1
+            ? Pages.SkippedRoute
+            : Pages.Routes.PathTo(
+                Pages.SkippedPageName,
+                new Dictionary<string, string> { ["page"] = page.ToString(CultureInfo.InvariantCulture) });
     }
 
     /// <summary>Which episode it was refused for, as a person writes it.</summary>

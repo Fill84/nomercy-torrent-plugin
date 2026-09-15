@@ -4,9 +4,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Activity;
 /// Where every stage says what it is doing.
 /// </summary>
 /// <remarks>
-/// Called from whatever thread a stage happens to be on — harvest fans out over
-/// every feed, find over every indexer, and stages two to six run per episode
-/// at once — so every implementation has to be safe under all of them at once.
+/// Called from whatever thread a stage happens to be on — the feeds are read all
+/// at once, and so are the indexers after the first-choice ones — so every
+/// implementation has to be safe under all of them at once.
 /// </remarks>
 public interface IActivityJournal
 {

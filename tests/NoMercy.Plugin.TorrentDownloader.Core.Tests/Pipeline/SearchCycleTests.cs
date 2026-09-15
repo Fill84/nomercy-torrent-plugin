@@ -61,7 +61,6 @@ public class SearchCycleTests
 
         // And only the winner: this page carries the release under a second
         // hash, and no other hash of it is started (indexer-search.md).
-        Assert.Empty(taken.Racing);
         Assert.Single(engine.Taken);
 
         // And the episode nobody is serving says exactly that, rather than
@@ -474,7 +473,6 @@ public class SearchCycleTests
         Assert.Equal(IndexerSites.TgxHash, outcome.InfoHash);
         Assert.Equal(IndexerSites.Silo, outcome.Release);
         Assert.Equal([IndexerSites.SiloEpisode.Key], outcome.Covers);
-        Assert.Empty(outcome.Racing);
         Assert.Contains($"{IndexerSites.EztvHash} (3 indexers)", outcome.Considered!, StringComparison.Ordinal);
     }
 

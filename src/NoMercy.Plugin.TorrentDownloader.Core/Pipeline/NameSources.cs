@@ -200,7 +200,7 @@ public sealed class NameSources(
     /// <remarks>
     /// Asked <c>Show SxxEyy</c> and nothing else (<c>release-names.md</c>: the plugin builds no search term
     /// of its own). No quality, which is judged on the names that come back; no year and no absolute
-    /// number, which the earlier ladder added and the owner's requirements do not.
+    /// number, which the search ladder added until 15 September 2026 and the owner's requirements do not.
     /// </remarks>
     private async Task<IReadOnlyList<SourceName>> LookUpAsync(TrackedEpisode episode, FeedNamesTaken taken, CancellationToken ct)
     {

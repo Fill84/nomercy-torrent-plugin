@@ -111,14 +111,14 @@ and skipping it is the opposite of what backfill means.
 ### What `GetShowFilesAsync` is for
 
 It gives the path and quality of every video file a show already has. Used for one thing: an episode
-that is present but at a lower quality than the profile allows is **not** re-downloaded in 0.4.0.
+that is present but at a lower quality than its show's quality is **not** re-downloaded.
 The call is available and the upgrade decision is deliberately out of scope — noted here so nobody
 wonders whether it was forgotten.
 
 ## Anime numbering
 
 Anime releases are usually numbered from the start of the series, not the season: episode 13 of
-season 2 is `- 137`. The library numbers by season. Both must be searchable.
+season 2 is `- 137`. The library numbers by season, and the plugin works the absolute number out.
 
 ```
 absolute(show, season, episode) = episode + Σ episodeCount(show, s) for s in 1..season-1
@@ -133,18 +133,21 @@ company exactly when episodes are absent — which is the case this plugin exist
 already on disk still counts towards the offset, or a show would renumber itself every time
 something downloaded.
 
-A show in an `anime` library is therefore searched under both forms, pooled and judged together:
-
-- `Show Title S02E13`
-- `Show Title - 137`
-- `Show Title 137`
+Until 15 September 2026 a show in an `anime` library was searched under both forms — `Show Title
+S02E13`, `Show Title - 137` and `Show Title 137` — pooled and judged together. Since then the plugin
+builds no search term of its own, and a release name names one episode by its season and episode
+number: an absolute-numbered anime post names no episode and is not searched for
+(`docs/specs/release-names.md`).
 
 ## Show titles
 
-The library's title and a scene title are not always the same string. Where a show's title is a
-common word, it is searched under both its bare title and its title with year — `Sugar` and
-`Sugar 2024` — pooled and judged together. Four shows in a real library need this: Lucky (2026),
-Sugar (2024), Lioness (2023), Silo (2023).
+The library's title and a scene title are not always the same string. Until 15 September 2026, where
+a show's title was a common word, it was searched under both its bare title and its title with year —
+`Sugar` and `Sugar 2024` — pooled and judged together. Four shows in a real library needed this: Lucky
+(2026), Sugar (2024), Lioness (2023), Silo (2023). Since then a name source's name is taken for a show
+when it carries the show's title with its words run together, or leading the name with only a year
+or a country after it, and the name sources' search is asked `Show SxxEyy` with no year — see
+`docs/05-sources.md` § How a run uses the name sources.
 
 ## What is stored
 

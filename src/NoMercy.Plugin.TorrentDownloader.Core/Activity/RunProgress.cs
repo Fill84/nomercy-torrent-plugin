@@ -24,7 +24,7 @@ public enum RunCounter
     /// <summary>Release names the sources answered with.</summary>
     NamesFound,
 
-    /// <summary>Release names the profile refused before any indexer saw them.</summary>
+    /// <summary>Release names a show's settings refused before any indexer saw them.</summary>
     NamesRefused,
 
     /// <summary>Questions put to an indexer.</summary>

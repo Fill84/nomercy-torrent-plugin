@@ -80,14 +80,18 @@ names, srrDB 21, PreDB.net 20 and SceneSource 1, every one of them for that epis
 | EZTV latest | `eztv-api` | — | words | no | 30 | 60s | indexer — **switched off** |
 | The Pirate Bay | `apibay` | — | words | no | 45 | 5s | indexer |
 | 1337x | `site` | `1337x` | words | **yes** | 40 | 15s | indexer |
-| LimeTorrents | `site` | generic | words | no | 35 | 15s | indexer |
-| TorrentBay | `site` | `torrentbay` | words | **yes** | 60 | 15s | indexer (leading) |
+| LimeTorrents | `site` | generic | words | no | 35 | 15s | indexer, first choice 3 |
+| TorrentBay | `site` | `torrentbay` | words | **yes** | 60 | 15s | indexer, first choice 2 |
 | EZTV | `site` | `eztv` | words | **yes** | 30 | 15s | indexer |
 | TorrentGalaxy | `site` | `torrentgalaxy` | **spaced** | no | 30 | 15s | indexer |
 | Torrentz2 | `site` | `torrentz2` | words | no | 25 | 15s | indexer |
 | TorrentDownloads | `site` | `torrentdownloads` | words | no | 25 | 15s | indexer |
-| Nyaa | `torrent-rss` | — | words | no | **70** | 15s | indexer, **anime libraries only** (leading for anime) |
+| Nyaa | `torrent-rss` | — | words | no | **70** | 15s | indexer, **anime libraries only**, first choice 1 |
 | YTS | `yts` | — | words | no | 20 | 15s | films — **off** |
+
+*Prio* is the `priority` each entry still carries in `sources.json`. Since 15 September 2026 it
+decides no winner: seeders and a site's rating decide nothing, and the first-choice order is
+`firstChoice` (§ How a run asks the indexers, `docs/specs/indexer-search.md`).
 
 ```
 PreDB            https://predb.me/?rss=1
@@ -183,8 +187,10 @@ travel with the row and a token from another page is refused. The answer is
 hands the client something that is not a torrent.
 
 This is the reason the source could not simply be dropped. It sorts by seeders and publishes honest
-counts, so its rows outrank every other site's: while the request was unwritten its copy was chosen,
+counts, so its rows outranked every other site's: while the request was unwritten its copy was chosen,
 followed, found to name no torrent, and the episode was reported as though nobody were serving it.
+Since 15 September 2026 seeders rank nothing, and TorrentBay is a first-choice indexer
+(`docs/specs/indexer-search.md`).
 Fifty rows to a page and it answers more, so `pageParameter` is `page` and three pages are read.
 
 `[GeneratedRegex]` was measured returning zero matches here where the identical inline expression
@@ -213,18 +219,21 @@ site answered plenty. Nothing here reads that site any more.
 Rate-limits hard under a burst.
 
 **Nyaa** — an indexer in XML; every item links a real torrent. For anime it is often the only source
-that has the release, and it is asked with both the seasonal and the absolute form.
+that has the release. Like every indexer it is asked only for release names a name source gave; the
+absolute form it was also asked with until 15 September 2026 is not searched for
+(`docs/specs/release-names.md`).
 
 It is the one source with a **library scope**: `"libraries": [ "anime" ]` in `sources.json`. A source
 that names no library is asked about all of them, so the field switches nothing off by omission. A
 television search does not ask Nyaa at all — a paced request per episode spent on a site carrying
 almost no television is a request taken from the sources that would have answered.
 
-Its priority is **above every general indexer**, which is what "ranked first for an anime show"
-means: for anime it is often the only site with the release, so when two sites serve the same copy to
-the same number of peers it is the one to take it from. That is why it is 50 and The Pirate Bay, the
-highest of the general ones, is 45. For television the number never comes up, because it is not
-asked.
+**It is the first first-choice indexer for an anime**, which is what "ranked first for an anime show"
+means: for anime it is often the only site with the release, so it is asked first, and of torrents
+found on the same number of indexers the one Nyaa found wins over one found only on TorrentBay or
+LimeTorrents (`docs/specs/indexer-search.md`). Until 15 September 2026 its priority above every
+general indexer's said this; priority decides no winner now. For television it never comes up,
+because it is not asked.
 
 **srrDB / srrDB search** — name databases. `api.srrdb.com/v1/search/{query}` answers JSON with
 `resultsCount` and `results[].release`. A show with no scene releases honestly answers zero; that is
@@ -244,7 +253,8 @@ reader does both and nothing new had to be written. Captured 22 August 2026 as
 **Where the wrong sentence came from.** 0.3.4 put SceneSource's *feed* address in the search set and
 asked it forty times a cycle, once per episode, getting the same newest-posts answer every time. The
 lesson taken from that was "it has no search". The lesson was "search the search address, once per
-show" — the fault was the address, not the site.
+show" — the fault was the address, not the site. Since 15 September 2026 the search address is asked
+`Show SxxEyy` for an episode no feed named (§ How a run uses the name sources).
 
 **What it cost.** With SceneSource read only for what is new, a show that aired last week was left to
 srrDB's archive, which answers with years of foreign and 2160p releases. The profile then refuses

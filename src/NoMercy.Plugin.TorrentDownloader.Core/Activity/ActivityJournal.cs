@@ -37,13 +37,14 @@ public sealed class ActivityJournal : IActivityJournal
     /// The stages that belong to a search run, and end with it.
     /// </summary>
     /// <remarks>
-    /// The harvest is not one: the feeds are read on a cadence of their own,
-    /// and stopping a search does not stop a feed being read. Downloads and
-    /// dispatch outlive the run on purpose.
+    /// The feeds are one: a run reads them before it works on an episode
+    /// (<c>docs/specs/run.md</c>). Downloads and dispatch outlive the run on
+    /// purpose — Stop leaves what was offered to the client carrying on.
     /// </remarks>
     private static readonly ActivityStage[] RunStages =
     [
         ActivityStage.Clearance,
+        ActivityStage.Harvest,
         ActivityStage.Names,
         ActivityStage.Find,
         ActivityStage.Decide,

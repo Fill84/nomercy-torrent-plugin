@@ -70,28 +70,6 @@ public sealed record EpisodeOutcome(
     /// they were.
     /// </remarks>
     public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
-
-    /// <summary>
-    /// The same release under other hashes, handed over beside it.
-    /// </summary>
-    /// <remarks>
-    /// The owner's decision of 11 September 2026: one release under two
-    /// hashes is two torrents of one file, and which swarm delivers first
-    /// cannot be told from a listing — so both start, the first to finish is
-    /// kept, and the other is stopped and its files deleted. That last part is
-    /// the tick's; this is only what was handed over.
-    /// </remarks>
-    public IReadOnlyList<EpisodeOutcome> Racing { get; init; } = [];
-
-    /// <summary>
-    /// Where this one downloads, when it is not the folder every torrent uses.
-    /// </summary>
-    /// <remarks>
-    /// Only for a copy in <see cref="Racing"/>. Two torrents of one release
-    /// carry one name, and a torrent writes under its own name in the folder it
-    /// is given — so in one folder they would write one path.
-    /// </remarks>
-    public string? Folder { get; init; }
 }
 
 /// <summary>
@@ -101,8 +79,8 @@ public sealed record EpisodeOutcome(
 /// <param name="Blacklisted">Keys already refused, read once for the cycle.</param>
 /// <param name="DryRun">
 /// Decide everything and hand nothing over. It says what to do with a decision
-/// rather than what makes one acceptable, which is why it is not on the
-/// profile.
+/// rather than what makes one acceptable, which is why it is not a show's
+/// setting.
 /// </param>
 /// <param name="IncompleteFolder">Where a download lands while it runs.</param>
 public sealed record CycleOptions(
@@ -188,7 +166,7 @@ public sealed class SearchCycle(
 
         journal.Counted(RunCounter.Episodes, queue.Length);
 
-        Decisions decisions = new(options.Settings, queue, options.Blacklisted);
+        Decisions decisions = new(options.Settings, options.Blacklisted);
 
         // Every name source's feed, read at once before any episode is worked
         // on (docs/specs/run.md). An episode no feed named is looked up inside
@@ -387,7 +365,7 @@ public sealed class SearchCycle(
                 continue;
             }
 
-            decisions.Settle(episode, chosen);
+            decisions.Settle(episode);
 
             return outcome with
             {
@@ -424,17 +402,16 @@ public sealed class SearchCycle(
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>The profile applied to names, which is stage 3 of
-    /// docs/03-architecture.md.</strong> It is the same rule that judges a copy
-    /// — <see cref="NameJudge.JudgeName"/> — and it needs no network to say
-    /// that a German release is not wanted where English only is on, that a
-    /// 720p one is not 1080p, or that h265 is not h264.
+    /// <strong>The show's settings applied to names</strong>
+    /// (<c>docs/specs/release-names.md</c>), through <see cref="NameJudge.JudgeName"/>.
+    /// It needs no network to say that a 720p release is not 1080p, that h265 is
+    /// not h264, or that a name carries a forbidden tag.
     /// </para>
     /// <para>
     /// A name refused here costs nothing. Asked for, it costs one request at
-    /// every indexer that carries the show, waits out each of their paces, and
-    /// has every row it answers with thrown away by the same rule one step
-    /// later.
+    /// every indexer that carries the show and waits out each of their paces —
+    /// and an indexer result is not judged against the settings again, so a name
+    /// that should have been refused would be downloaded.
     /// </para>
     /// <para>
     /// The reasons are kept, not thrown away: an episode where every name was
@@ -453,8 +430,7 @@ public sealed class SearchCycle(
 
         foreach (string candidate in candidates)
         {
-            // The very judgement the ranking makes one step later, and it needs
-            // no network to make it.
+            // Judged once, here: an indexer's rows are not judged again.
             Verdict verdict = decisions.JudgeName(ReleaseName.Parse(candidate), episode);
 
             if (verdict.Accepted)

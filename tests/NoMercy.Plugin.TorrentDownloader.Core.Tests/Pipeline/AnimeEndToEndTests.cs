@@ -14,16 +14,14 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The two halves of anime were each proved on their own and never joined.
-/// <c>S1-03</c> builds an episode's absolute number from the library's own
-/// episode list; the decision reads a release posted under that number. Nothing put the
-/// two together, so nothing said whether the number the library produces is the
-/// number a release is really posted under.
+/// <c>S1-03</c> builds an episode's absolute number from the library's own episode list, and the queue
+/// shows it beside the season and episode. Until 15 September 2026 the decision also took a release
+/// posted under that number alone.
 /// </para>
 /// <para>
-/// It is the whole point of anime support: a fansub row carries no season tag
-/// at all, so if the absolute is wrong by one the episode is never found, and
-/// every page still reads as though the plugin were working.
+/// It no longer does. A release name names one episode by its season and episode number
+/// (<c>docs/specs/release-names.md</c>), for an anime as for a show, and an absolute-numbered post names no
+/// one episode: it is refused, with the reason, and nothing is searched for it.
 /// </para>
 /// </remarks>
 public class AnimeEndToEndTests
@@ -32,12 +30,11 @@ public class AnimeEndToEndTests
     /// The number is the episode's own plus the lengths of the seasons before
     /// it — not its position in a list, which agrees only while the list is
     /// complete. Season one has twelve, so season two's eighth is twenty, and
-    /// twenty is what the captured Nyaa row is really posted as. Nothing in the
-    /// test says twenty to the pipeline: the library says how long season one
-    /// is, and twenty is what comes out.
+    /// twenty is what the captured Nyaa row is really posted as. And that post,
+    /// carrying twenty and no season, is not a release name of S02E08.
     /// </remarks>
     [Fact]
-    public async Task AnAnimeLibraryProducesADecisionForAnEpisodeNobodyWroteASeasonTagFor()
+    public async Task AnAnimePostUnderItsAbsoluteNumberAloneIsRefusedForTheEpisodeItWouldBe()
     {
         FakeLibrary server = Seeded();
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero));
@@ -53,8 +50,8 @@ public class AnimeEndToEndTests
 
         // The name under the absolute number and under nothing else, which is how
         // a fansub really posts it. Handed to the cycle as it is: the name sources
-        // take only a season and episode number (docs/specs/release-names.md), so
-        // this is about the decision on such a release and not where it came from.
+        // already give only names with a season and episode number, so this is
+        // about the judge and not where the name came from.
         FixedNames pool = new((Posted, "Nyaa"));
 
         FakeFetch fetch = new();
@@ -67,8 +64,14 @@ public class AnimeEndToEndTests
 
         EpisodeOutcome outcome = Assert.Single(report.Outcomes, one => one.Episode == missing.Key);
 
-        Assert.Equal(Posted, outcome.Release);
-        Assert.Contains("dry run", outcome.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.Null(outcome.Release);
+        Assert.False(outcome.Searched);
+        Assert.Empty(fetch.Asked);
+
+        SkippedRelease refused = Assert.Single(report.Skipped);
+
+        Assert.Equal(Posted, refused.Title);
+        Assert.Contains("is not S02E08", refused.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>The release as the captured Nyaa page really carries it.</summary>

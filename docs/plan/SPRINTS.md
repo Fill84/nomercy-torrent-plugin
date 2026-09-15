@@ -2907,6 +2907,22 @@ listed in the design as pinning them.
 3. A download already in a folder of its own is still staged from it: `grabs.folder` stays read.
 4. Every living document in `docs/` (`00-goal`, `01`, `02`, `03`, `04`, `05`, `06`, `08`, `10`) says
    what `docs/specs/` says. History stays as it was written.
+5. Skipped pages by route, `/skipped/:page`, as the overview does: the web app sends a plugin no query
+   string, so `?page=2` never arrived (found in `S13-02`). The prefetch endpoint answers the new address.
+6. A feed read is part of the run (`run.md`), so it ends with it: `ActivityStage.Harvest` is a run stage.
+
+**As done.** Removed: `Profile`, `ReleaseDecider` (seeder and priority ranking), `Find.SearchAsync`,
+`ClimbAsync` and `Merge` (the ladder and the merge by name), `SearchTerm.Ladder`, `Decisions.Rank` and a
+season settled by a pack, `NameJudge.JudgeCopy`, `EpisodeOutcome.Racing` and `Folder`, the racing grabs in
+`CycleRecord`, `Transfers`' beaten grab and `GrabRepository.LostAsync`. The Shows page had already gone in
+`S13-02`. Deleted with them: `ProfileTests`, `ReleaseDeciderTests`, `EachSiteClimbsItsOwnLadderTests`, the
+merge-by-name and rating tests in `FindTests`, the pack tests in `DecisionsTests`, the copy tests in
+`NameJudgeTests`, the second-copy test in `CycleRecordTests` and the two race tests in `TransfersTests`.
+Rewritten because their rule only changed shape: `FindTests` (one indexer asked through `AskAsync`, the
+library scope through `IndexersFor`), `DecisionsTests`, `NameJudgeTests.AnAbsoluteNumberedNameIsRefusedEvenForItsOwnEpisode`,
+`AnimeEndToEndTests` (an absolute-numbered post is refused), `ActivityJournalTests.WhenARunEndsNothingOfItStaysInFlight`
+and `TransfersTests.AGrabWithAFolderOfItsOwnIsAddedBackIntoThatFolder`. New: `SettingsStoreTests.SettingsSavedWithAProfileLoadWithoutIt`,
+`TransfersTests.AGrabWithAFolderOfItsOwnIsStagedFromIt`, `PagesReachableTests.ThePagesOfSkippedPastTheFirstHaveAnAddressOfTheirOwn`.
 
 **Done when** nothing in `src/` builds a search term, races two hashes, ranks on seeders or takes a
 pack; the suite is green; and `docs/` agrees with `docs/specs/`.

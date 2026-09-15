@@ -93,14 +93,13 @@ public sealed class NameJudge(EffectiveSettings settings)
             return Verdict.No($"'{name.Original}' is a {type} file and only video files are downloaded.");
         }
 
-        if (!TitleMatcher.Matches(name.Title, episode.ShowTitle))
+        if (!EpisodeNaming.Names(name, episode.ShowTitle, episode.Key))
         {
-            return Verdict.No($"'{name.Title}' is not a release of {episode.ShowTitle}.");
-        }
-
-        if (!Slot(name, episode))
-        {
-            return Verdict.No($"'{name.Original}' is not {episode.Key}.");
+            // Said two ways, because the owner acts on them differently: another programme, or this one's
+            // other episode — or a pack or an absolute-numbered post, which names no one episode.
+            return TitleMatcher.Matches(name.Title, episode.ShowTitle)
+                ? Verdict.No($"'{name.Original}' is not {episode.Key}.")
+                : Verdict.No($"'{name.Title}' is not a release of {episode.ShowTitle}.");
         }
 
         if (settings.Quality is not string quality)
@@ -196,72 +195,10 @@ public sealed class NameJudge(EffectiveSettings settings)
         return false;
     }
 
-    /// <summary>
-    /// Whether this copy is worth taking.
-    /// </summary>
-    /// <remarks>
-    /// The blacklist is the only rule that refuses a copy outright. The owner's decision, 12 September
-    /// 2026: there is no seeder threshold, and a copy nobody is serving still starts; the stall rule ends
-    /// it. Size is not among the rules either: no setting gives it bounds.
-    /// </remarks>
-    public static Verdict JudgeCopy(ReleaseCopy copy, IReadOnlySet<string> blacklisted)
-    {
-        if (copy.InfoHash is string hash && blacklisted.Contains(hash))
-        {
-            return Verdict.No($"{hash} is blacklisted.");
-        }
-
-        if (blacklisted.Contains(Blacklist.KeyOf(copy.Title)))
-        {
-            return Verdict.No($"'{copy.Title}' is blacklisted.");
-        }
-
-        return Verdict.Yes;
-    }
-
-    /// <summary>
-    /// Whether this name is a release of this episode at all.
-    /// </summary>
-    /// <remarks>
-    /// Apart from the rules that say whether it is worth having, because a search engine answers broadly:
-    /// asked about Silo S03E08 on 22 August 2026 a site answered with S03E04 to S03E07 as well. Recording
-    /// those as refused filled the Skipped page with lines the owner could do nothing about.
-    /// </remarks>
-    public static bool IsFor(ReleaseName name, TrackedEpisode episode)
-    {
-        return TitleMatcher.Matches(name.Title, episode.ShowTitle) && Slot(name, episode);
-    }
-
     private static string[] Words(string text)
     {
         return new string([.. text.Select(character => char.IsLetterOrDigit(character) ? character : ' ')])
             .Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 
-    /// <summary>Whether this name is for this episode.</summary>
-    /// <remarks>
-    /// A pack answers for the season it covers, and an absolute number for the anime episode it counts to.
-    /// A row off an indexer can be either until <c>S13-07</c>; a name from a name source never is.
-    /// </remarks>
-    private static bool Slot(ReleaseName name, TrackedEpisode episode)
-    {
-        if (name.Season == episode.Key.Season && name.Episode == episode.Key.Number)
-        {
-            return true;
-        }
-
-        if (name.IsPack && name.Season == episode.Key.Season)
-        {
-            return true;
-        }
-
-        return episode.Absolute is int absolute && Covers(name, absolute);
-    }
-
-    /// <summary>Whether an absolute-numbered name covers this number.</summary>
-    private static bool Covers(ReleaseName name, int absolute)
-    {
-        return name.Absolute is int first
-               && (first == absolute || (name.LastAbsolute is int last && absolute >= first && absolute <= last));
-    }
 }

@@ -8,10 +8,11 @@ forty-two minutes of a cycle that mostly sleeps, and the next cycle starts befor
 
 Three ideas fix it:
 
-1. **One harvest answers for everything.** Feeds are read once per cycle into a pool of release
-   names. Most missing episodes are answered from the pool with no extra request.
-2. **A question is asked once.** What the pool misses is asked per *show and season*, not per
-   episode — six queries instead of forty-two — and memoised for the cycle.
+1. **The feeds answer first.** Every name source's feed is read once, all at the same time, at the
+   start of a run, and a feed name is taken for the episode it names. Only an episode no feed named
+   is looked up in the name sources' search. Nothing is kept between runs.
+2. **A question is asked once.** A question already asked of an indexer during a run is not asked
+   of it again in that run (`docs/specs/run.md`).
 3. **Politeness is per host, parallelism is across hosts.** Every outbound request passes a gate
    keyed by hostname. Every source runs at full speed alongside the others; none is asked faster
    than its catalogue entry allows.
@@ -20,32 +21,32 @@ Three ideas fix it:
 
 ```
                   ┌──────────────┐
-trigger ─────────▶│ 1 Harvest    │  all feed sources in parallel, gated per host
-                  └──────┬───────┘
-                         │ NamePool
-                         ▼
-                  ┌──────────────┐
-then ────────────▶│ 2 Name       │  pool first; misses ask the name databases
-                  │   resolve    │  once per (show, season), memoised
+trigger ─────────▶│ 1 Feeds      │  every name source's feed at once, gated per host
                   └──────┬───────┘
                          ▼
                   ┌──────────────┐
-                  │ 3 Judge the  │  the profile applied to NAMES:
-                  │   name       │  slot, quality, codec, language, group, packs
+then ────────────▶│ 2 Names      │  the feed names taken for the episode; none,
+                  │              │  so every name source's search, Show SxxEyy
                   └──────┬───────┘
                          ▼
                   ┌──────────────┐
-                  │ 4 Find       │  every indexer in parallel, gated per host
-                  │              │  merge by info hash, union the trackers
+                  │ 3 Judge the  │  the show's settings applied to NAMES:
+                  │   name       │  one episode, quality, codec, musts, forbidden
                   └──────┬───────┘
                          ▼
                   ┌──────────────┐
-                  │ 5 Judge the  │  the profile applied to COPIES:
-                  │   copy       │  seeders, size
+                  │ 4 Find       │  one wish group at a time, most wishes first:
+                  │              │  first-choice indexers in order, then the rest
+                  │              │  at once; merge by info hash, union the trackers
                   └──────┬───────┘
                          ▼
                   ┌──────────────┐
-                  │ 6 Grab       │  hand to the torrent client, record it
+                  │ 5 Choose     │  the torrent the most indexers list; level,
+                  │              │  the one found first; a refused release or hash is out
+                  └──────┬───────┘
+                         ▼
+                  ┌──────────────┐
+                  │ 6 Grab       │  hand the winner to the torrent client, record it
                   └──────┬───────┘
                          ▼
                   ┌──────────────┐
@@ -66,8 +67,10 @@ A trigger is the Run button, a finished library scan or the owner's cadence. Eve
 an event or a completed task, and nothing on the line is a clock — see `docs/01-plugin.md` § One
 cycle, driven by events.
 
-Stages 2–6 run per episode, concurrently. Stages 1 and 4 fan out per source, concurrently. Nothing
-is serial except where a host's gate makes it so.
+Stages 2–6 run one episode at a time, in order of show, season and episode, and an episode's winner
+is offered to the client before the next episode is worked on (`docs/specs/run.md`). Stage 1 fans out
+per name source, stage 2's search per name source, and stage 4 across every indexer that is not a
+first-choice one, concurrently. The first-choice indexers are asked one after another.
 
 ## HostGate
 
@@ -88,9 +91,10 @@ backoff and not failure: it is reported, and the host is skipped for the cycle.
 
 | Stage | Concurrency |
 | --- | --- |
-| Harvest | all feed sources at once |
-| Name resolve | `min(8, cores)` episodes |
-| Find | all indexers at once, per name |
+| Feeds | every name source's feed at once |
+| Episodes | one at a time |
+| Names | every name source's search at once, for an episode no feed named |
+| Find | first-choice indexers one after another, then every other enabled indexer at once |
 | Grab | serial — the store and the client are shared, and grabbing is fast |
 | Transfers | all in flight at once |
 
@@ -135,10 +139,10 @@ Built in Sprint 0, before the work it observes. **A stage that cannot be seen do
 ```
 src/
   NoMercy.Plugin.TorrentDownloader.Core/     no NoMercy references, no I/O beyond its ports
-    Domain/          episodes, releases, profiles, anime numbering
+    Domain/          episodes, releases, show settings, anime numbering
     Naming/          release-name parsing and matching
     Sources/         catalogue, readers, fetch abstraction, host gate
-    Pipeline/        harvest, resolve, judge, find, grab, whose show it is
+    Pipeline/        name sources, judge, wish groups, indexer round, grab, which shows are searched
     Ports/           the six interfaces the shell fulfils, and nothing else
     Activity/        the journal
   NoMercy.Plugin.TorrentDownloader.Bittorrent/   the protocol: bencode, peers, pieces, trackers, DHT

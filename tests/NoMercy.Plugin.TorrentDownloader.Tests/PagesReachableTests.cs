@@ -36,6 +36,7 @@ public class PagesReachableTests
                 Pages.ShowSettingsRoute,
                 Pages.LibraryPreferencesRoute,
                 Pages.LibraryShowsRoute,
+                Pages.SkippedPageRoute,
             ],
             plugin.Routes.Routes.Select(route => route.Path));
     }
@@ -136,6 +137,51 @@ public class PagesReachableTests
         Assert.DoesNotContain(
             Rendered.All(view).Select(component => component.Action).OfType<PluginActionIntent>(),
             action => action.Type == PluginActionType.CallPlugin);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The pages after the first are reached by an address of their own.</strong> Skipped paged by
+    /// <c>?page=2</c>, and the web app sends a plugin the path and no query string, so Next drew page one
+    /// again, for ever. The overview pages by route for the same reason (<c>S13-02</c>).
+    /// </para>
+    /// <para>
+    /// Asserted as addresses written out rather than built from the route table, so a paging that goes back
+    /// to the query string fails here instead of agreeing with itself.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ThePagesOfSkippedPastTheFirstHaveAnAddressOfTheirOwn()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = new();
+        plugin.Initialize(context);
+
+        await Configure(plugin);
+
+        GrabRepository grabs = await Grabs(plugin, context);
+
+        for (int refused = 0; refused <= SkippedView.PageSize; refused++)
+        {
+            await grabs.RecordSkippedAsync(
+                new(41, 3, 6),
+                "Silo",
+                $"Silo.S03E06.720p.WEB.H264-CAKES.{refused}",
+                null,
+                "720p is not 1080p.",
+                DateTimeOffset.UtcNow.AddSeconds(refused),
+                CancellationToken.None);
+        }
+
+        PluginView first = await plugin.GetViewAsync(new() { Route = Pages.SkippedRoute }, CancellationToken.None);
+
+        Assert.Equal("/skipped/2", Rendered.ById(first, SkippedView.TableId + "-next").Action!.Payload["route"]);
+
+        PluginView second = await plugin.GetViewAsync(new() { Route = "/skipped/2" }, CancellationToken.None);
+
+        Assert.Contains("page 2 of 2", string.Join(" ", Rendered.EveryValue(second)), StringComparison.Ordinal);
+        Assert.Single(Rendered.ById(second, SkippedView.TableId).Items);
+        Assert.Equal("/skipped", Rendered.ById(second, SkippedView.TableId + "-previous").Action!.Payload["route"]);
     }
 
     /// <remarks>

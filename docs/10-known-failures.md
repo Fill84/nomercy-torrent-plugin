@@ -9,9 +9,9 @@ that is the property to design against.
 
 | # | What happened | Why it was invisible | Test |
 | --- | --- | --- | --- |
-| A1 | **The profile asked a release *name* how many seeders it has.** Every announcement was refused for having nought, the resolver was never reached, and **not one indexer was ever asked**. `MinSeeders` is floored at 1, so no configuration worked. | Names were found for every episode. The log said "searched 24 episodes, found nothing worth taking". | A name with no torrent is not judged on seeders; the resolved copy is, and a copy below the minimum is refused with a history line naming the site and the count. |
+| A1 | **The profile asked a release *name* how many seeders it has.** Every announcement was refused for having nought, the resolver was never reached, and **not one indexer was ever asked**. `MinSeeders` is floored at 1, so no configuration worked. | Names were found for every episode. The log said "searched 24 episodes, found nothing worth taking". | A name with no torrent is not judged on seeders; ~~the resolved copy is, and a copy below the minimum is refused with a history line naming the site and the count.~~ **Superseded 12 and 15 September 2026.** There is no seeder minimum, and seeders decide nothing: the winner is the torrent the most indexers list (`docs/specs/indexer-search.md`). |
 | A2 | **An RSS feed was put in the search set** and asked a question per episode — forty identical requests per cycle, each answering with the newest twenty posts. | Every request succeeded. | A feed with no search address is read whole and never asked a query. |
-| A3 | **Indexers were searched with `Silo S03E06`** instead of the full release name. | It sometimes worked, which is worse. | ~~The find stage is asked the full release name; a query that is not a full name is a bug.~~ **Corrected 22 August 2026 — see below.** An episode is asked for by its own number first, then by its programme, then by the release names the pool has; every row that comes back is judged against the profile, and a row that is not a release of the episode asked about is not a candidate for it. |
+| A3 | **Indexers were searched with `Silo S03E06`** instead of the full release name. | It sometimes worked, which is worse. | ~~The find stage is asked the full release name; a query that is not a full name is a bug.~~ **Corrected 22 August 2026 — see below.** ~~An episode is asked for by its own number first, then by its programme, then by the release names the pool has; every row that comes back is judged against the profile, and a row that is not a release of the episode asked about is not a candidate for it.~~ **Superseded 15 September 2026.** An indexer is asked only for a release name a name source gave, letter for letter and then without its punctuation; a row counts only when its title is that name, and is not judged against the show's settings (`docs/specs/indexer-search.md`). |
 | A4 | **Backfill used the indexers' search** instead of the feeds' and name databases'. | Results came back. | Backfill resolves names through feeds and name databases only. |
 
 **A3 was wrong, and the fix it prescribed is what stopped the plugin working.** The failure was real:
@@ -38,15 +38,20 @@ if its title is a release of that show and its slot is that episode. With that i
 can be as broad as the site needs, because breadth costs nothing but rows to refuse — and a broad
 answer carries the other gaps of the same programme, which are then had for no further request.
 
+Since 15 September 2026 the question is not broad. The plugin builds no search term of its own: an
+indexer is asked only for release names a name source gave, exactly and then without punctuation, and
+an episode no name source gave a name for is not searched on any indexer
+(`docs/specs/release-names.md`, `docs/specs/indexer-search.md`).
+
 ## B. A rule applied where it cannot be true
 
 | # | What happened | Why it was invisible | Test |
 | --- | --- | --- | --- |
 | B1 | **`Unavailable` was permanent.** The query filtered it out and the refresh preserved it. | The queue just got shorter. | ~~A maintenance pass re-derives state from the library; an unavailable episode with a new release becomes missing again.~~ **Superseded 12 September 2026 — `S12-01`.** The re-derivation was the fault, not the fix: every maintenance pass rebuilt the list from the library and put the episode back to `Missing` while counting another attempt, so the state never held and the count ran to 67–69 against a setting of 3. The owner's decision was to drop the state and the limit outright — every gap is searched on every run, for ever. There is no `Unavailable` to test, and `EpisodeStates.FromStored` throws on a row that still carries it; migration `009` rewrites those rows. See `docs/04-domain.md` § Episode states. |
 | B2 | **A failed download burned a search attempt.** Three failed grabs exhausted the episode. | Attempts went up, which looked like work. | A grab that fails does not count as a search attempt. |
-| B3 | **A permission refusal counted as the site failing.** Three attempts parked the source fifteen minutes, and it stayed parked after the owner approved the host. | The message said "parked after repeated failures". | A refusal naming the host gate earns no failure, no backoff, no parking; a site that genuinely keeps failing still parks. |
-| B4 | **Ranking was inverted** — `.ThenBy` on indexer priority picked the worst-rated site, and a test enshrined it. | It always returned something. | Between two acceptable copies the higher-priority indexer wins, asserted with distinct priorities. |
-| B5 | **Ended shows were skipped.** 0.3.4 refused to search a show whose status was not "still going". | It looked like a sensible saving. | Every show in a tv or anime library is searched, whatever its status. Backfill is the point. |
+| B3 | **A permission refusal counted as the site failing.** Three attempts parked the source fifteen minutes, and it stayed parked after the owner approved the host. | The message said "parked after repeated failures". | A refusal naming the host gate earns no failure, no backoff, no parking; a site that genuinely keeps failing still parks. Since 15 September 2026 a site that still gives no answer after the second attempt sits out the rest of the run, and the Sources page says why (`docs/specs/run.md`). |
+| B4 | **Ranking was inverted** — `.ThenBy` on indexer priority picked the worst-rated site, and a test enshrined it. | It always returned something. | ~~Between two acceptable copies the higher-priority indexer wins, asserted with distinct priorities.~~ **Superseded 15 September 2026.** Priority decides nothing: the torrent the most indexers list wins, a tie goes to a first-choice indexer and then to the one found first (`docs/specs/indexer-search.md`). |
+| B5 | **Ended shows were skipped.** 0.3.4 refused to search a show whose status was not "still going". | It looked like a sensible saving. | Every show in a tv or anime library is searched, whatever its status. Backfill is the point. Since 15 September 2026, every show switched on with saved settings and a quality, whatever its status (`docs/specs/show-list.md`). |
 
 ## C. Plumbing that silently went nowhere
 
@@ -97,7 +102,7 @@ all.
 | --- | --- | --- |
 | F1 | **The Run button awaited the cycle inside the HTTP request**, so it held the caller's cancellation token. Twenty-nine minutes of work thrown away. | A run started with an already-cancelled token still runs; the endpoint answers before the work is done. |
 | F2 | **The run lock was taken with the caller's token.** A zero wait cannot block, so it bought nothing and killed the run on the way in. | Covered by F1's test, which fails at exactly this line without the fix. |
-| F3 | **No overlap protection.** A thirty-minute cycle against a five-minute cron is six concurrent searches. | A tick arriving while its own cadence runs is dropped and logged. |
+| F3 | **No overlap protection.** A thirty-minute cycle against a five-minute cron is six concurrent searches. | ~~A tick arriving while its own cadence runs is dropped and logged.~~ **Superseded 13 September 2026.** A start that arrives while a run is going is added to that run, never run beside it (`docs/specs/run.md`, `docs/01-plugin.md` § One cycle, driven by events). |
 | F4 | **A download that finished while the server was down was never noticed.** Completion was only seen while watching. | A torrent whole on disk when it is re-added says so as it opens (`TorrentSession.AnnounceIfFinished`), and is staged and dispatched from that — no sweep, no tick. |
 
 ## G. Reporting that was wrong about itself
@@ -106,14 +111,14 @@ all.
 | --- | --- | --- |
 | G1 | **An error said "search returned HTTP 429" without the address.** When the address was added it leaked the API key. | A refusal names the address, with key-ish parameters blanked out. |
 | G2 | **The health check attributed one source's page to another** and **reported its own rate-limiting as a broken parser**. | The captured body is cleared between sources; a rate-limited source is retried once and reported distinctly. |
-| G3 | **The UI showed raw parser output instead of profile-filtered results.** | Any page listing candidates renders what the profile accepted; a rejected codec never appears. |
+| G3 | **The UI showed raw parser output instead of profile-filtered results.** | Any page listing candidates renders what the profile accepted; a rejected codec never appears. Since 15 September 2026 there is no profile: what a show's settings accepted (`docs/specs/show-list.md`). |
 | G4 | **The Downloads page showed nothing while grabs existed.** | A grab with no transfer yet renders a row saying so. |
 
 ## H. Tests that were worse than none
 
 | # | What happened | Rule |
 | --- | --- | --- |
-| H1 | Every test covering the seeder fault **stubbed the profile out with a fake chooser** and passed throughout. | Chain tests use the real profile. A fake chooser is only for tests about plumbing, never about a decision. |
+| H1 | Every test covering the seeder fault **stubbed the profile out with a fake chooser** and passed throughout. | Chain tests use the real profile — since 15 September 2026, the real show settings (`EffectiveSettings`). A fake chooser is only for tests about plumbing, never about a decision. |
 | H2 | **A test enshrined the inverted ranking.** | Every rule test must fail when the rule is deleted. Check it. |
 | H3 | Parsers tested against hand-written samples avoided every real case: a show called *Greek* read as a Greek-language release, a diacritic tokenised into fragments, `[eztv.re]` appended to every title. | Parsers are tested against real captures only. |
 

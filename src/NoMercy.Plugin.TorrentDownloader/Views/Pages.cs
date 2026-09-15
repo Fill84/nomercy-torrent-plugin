@@ -40,8 +40,19 @@ public static class Pages
     /// <summary>Grabbed, skipped, failed, dispatched and allowed, newest first.</summary>
     public const string HistoryRoute = "/history";
 
-    /// <summary>What the profile or the blacklist refused, and the control to overrule it.</summary>
+    /// <summary>The release names a show's settings or the blacklist refused, and why: the first page.</summary>
     public const string SkippedRoute = "/skipped";
+
+    /// <summary>
+    /// A page of Skipped after the first.
+    /// </summary>
+    /// <remarks>
+    /// By route and not by <c>?page=</c>: the web app sends a plugin the path and no query string, so a
+    /// page number in the query never arrived and Next drew the first page again.
+    /// </remarks>
+    public const string SkippedPageRoute = "/skipped/:page";
+
+    public const string SkippedPageName = "skipped-page";
 
     /// <summary>Per source: what it last answered, and when it is next askable.</summary>
     public const string SourcesRoute = "/sources";
@@ -134,7 +145,8 @@ public static class Pages
         Page(SettingsRoute, "settings", "Settings"),
         Page(ShowSettingsRoute, ShowSettingsName, "Show settings"),
         Page(LibraryPreferencesRoute, LibraryPreferencesName, "Library preferences"),
-        Page(LibraryShowsRoute, LibraryShowsName, "Shows"));
+        Page(LibraryShowsRoute, LibraryShowsName, "Shows"),
+        Page(SkippedPageRoute, SkippedPageName, "Skipped"));
 
     /// <summary>One page, in the dashboard's width like every other.</summary>
     private static PluginRoute Page(string path, string name, string label)

@@ -7,9 +7,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Per site and per question, because each site climbs its own ladder: one of
-/// them may answer on the release name while another is still being asked the
-/// season, so "this term was asked" is only true of the site it was asked of.
+/// <c>docs/specs/run.md</c>: a question already asked of an indexer during a run
+/// is not asked of it again in that run. Per site, because "this name was asked"
+/// is only true of the site it was asked of.
 /// </para>
 /// <para>
 /// And per form. A name asked letter for letter and the same name asked without
@@ -17,11 +17,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// with nothing may well answer the other.
 /// </para>
 /// <para>
-/// The saving it exists for is the season. Every gap of one season has that
-/// season's rungs at the bottom of its ladder, and a site that answers nothing
-/// narrower reaches them for every one of those gaps. Eight gaps once had every
-/// indexer asked the identical question eight times, and apibay — which
-/// rate-limits hard — answered 429 to the ninth.
+/// The saving is real. Eight gaps of one season once had every indexer asked the
+/// identical question eight times, and apibay — which rate-limits hard — answered
+/// 429 to the ninth.
 /// </para>
 /// </remarks>
 public sealed class AskedThisCycle
@@ -64,9 +62,8 @@ public sealed class AskedThisCycle
 
     /// <summary>Remembers what one site answered, empty answers included.</summary>
     /// <remarks>
-    /// An empty answer is worth remembering: it is what sends a site down to the
-    /// next rung, and asking again to be told the same nothing is the request
-    /// this class exists to save.
+    /// An empty answer is worth remembering: asking again to be told the same
+    /// nothing is the request this class exists to save.
     /// </remarks>
     public void Keep(string source, SearchTerm term, ReleaseCopy[] rows)
     {

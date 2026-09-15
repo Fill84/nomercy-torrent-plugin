@@ -1035,7 +1035,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// Looks for every missing episode and takes what the profile accepts.
+    /// Looks for every missing episode and takes the winner of what its show's settings accept.
     /// </summary>
     /// <remarks>
     /// The report is kept so the pages can say what this cycle decided about
@@ -1942,22 +1942,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return view;
     }
 
-    /// <summary>
-    /// A page number off the address, or the first page.
-    /// </summary>
-    /// <remarks>
-    /// Anything that is not a number is the first page rather than an error. A
-    /// hand-typed address is not worth a broken screen, and the page it lands
-    /// on says which page it is.
-    /// </remarks>
-    private static int Requested(PluginViewRequest request, string name)
-    {
-        return request.Query.TryGetValue(name, out string? asked)
-               && int.TryParse(asked, out int page)
-            ? page
-            : 1;
-    }
-
     private async Task<PluginView> PageAsync(PluginViewRequest request, CancellationToken ct)
     {
         // Rendered per request from the current state, never from a tree held
@@ -2017,11 +2001,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     ShowAdvanced);
 
             case "skipped":
+            case Pages.SkippedPageName:
                 // A page of them, not all of them: one refusal is written for
                 // every release every cycle considered and did not take, and
-                // the owner's history held 65,878 of them.
+                // the owner's history held 65,878 of them. Anything that is not
+                // a number is the first page rather than an error.
                 return SkippedView.Render(await (await GrabsAsync(ct)).SkippedAsync(
-                    Requested(request, SkippedView.PageQuery),
+                    int.TryParse(match!.Param("page"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int skippedPage) ? skippedPage : 1,
                     SkippedView.PageSize,
                     ct));
 

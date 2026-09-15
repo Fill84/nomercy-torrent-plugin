@@ -4,8 +4,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 /// Turning a page a source answered into rows.
 /// </summary>
 /// <remarks>
-/// A reader reads and judges nothing. Whether a row is worth having is the
-/// profile's business and happens later, against the copy rather than the page.
+/// A reader reads and judges nothing. Whether a name is worth having is its
+/// show's settings' business, and whether a row counts is the indexer round's.
 /// </remarks>
 public interface ISourceReader
 {

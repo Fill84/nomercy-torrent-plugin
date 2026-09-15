@@ -8,10 +8,10 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Naming;
 /// <remarks>
 /// Everything here is read from the name and nothing is guessed. A field the
 /// name does not carry is null, which is a different thing from a field read as
-/// nought — the profile can refuse an unknown codec and cannot refuse one it
-/// invented.
+/// nought — a show's settings can refuse an unknown codec and cannot refuse one
+/// it invented.
 /// </remarks>
-/// <param name="Original">Exactly what the site printed, kept for the history and the pool.</param>
+/// <param name="Original">Exactly what the site printed, kept for the history and the Skipped page.</param>
 /// <param name="Title">The programme's name, as this release writes it.</param>
 /// <param name="Season">The season, when the name carries one.</param>
 /// <param name="Episode">The episode within the season.</param>
@@ -24,7 +24,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Naming;
 /// <param name="LastAbsolute">The end of a batch's range.</param>
 /// <param name="Version">A <c>v2</c> supersedes the <c>v1</c> of the same episode. One unless the name says otherwise.</param>
 /// <param name="IsPack">Whether it covers a whole season or a run of episodes rather than one.</param>
-/// <param name="Resolution">Written as the ladder writes it: <c>1080p</c>.</param>
+/// <param name="Resolution">Written as a show's quality is: <c>1080p</c>.</param>
 /// <param name="Codec">The family, not the spelling — see <see cref="Parse"/>.</param>
 /// <param name="Group">Who released it.</param>
 /// <param name="Languages">Only the language claims the name really makes.</param>
@@ -50,9 +50,8 @@ public sealed record ReleaseName(
     /// Whether the name says which codec it is.
     /// </summary>
     /// <remarks>
-    /// The profile refuses an untagged release when a codec is required, and
-    /// that is not fussiness: an untagged release is where the unwanted codec
-    /// hides.
+    /// A show with a codec refuses an untagged release, and that is not
+    /// fussiness: an untagged release is where the unwanted codec hides.
     /// </remarks>
     public bool HasCodecTag => Codec is not null;
 

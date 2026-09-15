@@ -1,6 +1,5 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
-using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
@@ -8,12 +7,18 @@ using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
 /// <summary>
-/// Asks every indexer who is serving one release, and merges what comes back.
+/// One indexer's answer to one question, a row's hash off its own page, and a torrent's every tracker.
 /// </summary>
 /// <remarks>
-/// <strong>A3:</strong> what goes out is the full release name and nothing
-/// else. 0.3.4 searched indexers for <c>Silo S03E06</c>, which sometimes
-/// worked — and the times it did hid the times it did not.
+/// <para>
+/// The site-facing half of the indexer round; what is asked, in what order, and which torrent wins is
+/// <see cref="IndexerRound"/>'s (<c>docs/specs/indexer-search.md</c>).
+/// </para>
+/// <para>
+/// <strong>A3:</strong> what goes out is a release name a name source gave, and nothing this plugin makes
+/// up. The ladder of made-up questions — the episode, the season, the quality appended — and the merge by
+/// name went on 15 September 2026 with the owner's requirements.
+/// </para>
 /// </remarks>
 public sealed class Find(
     SourceCatalogue catalogue,
@@ -25,137 +30,6 @@ public sealed class Find(
     ISessionPost? post = null)
 {
     private readonly TimeProvider _time = time ?? TimeProvider.System;
-
-    /// <summary>
-    /// Every copy of <paramref name="releaseName"/> anybody is serving.
-    /// </summary>
-    /// <remarks>
-    /// Every indexer at once. Asked one after another, a search costs the sum
-    /// of the slowest sites — and there is one search per episode of a cycle.
-    /// The gate is the only thing that slows any of it down, and it does that
-    /// per host.
-    /// </remarks>
-    public Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
-        string releaseName,
-        LibraryKind kind,
-        CancellationToken ct)
-    {
-        // A release name, so letter for letter first and then without its
-        // punctuation — the same two questions a cycle puts.
-        return SearchAsync(SearchTerm.Ladder([releaseName], []), kind, ct);
-    }
-
-    /// <summary>
-    /// Every copy anybody is serving, for questions this plugin made up.
-    /// </summary>
-    /// <remarks>
-    /// Each goes out in the site's own style. A release name a source gave is
-    /// not one of these: it goes through <see cref="SearchTerm.Ladder"/>, which
-    /// asks it letter for letter first.
-    /// </remarks>
-    public Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
-        IReadOnlyList<string> ladder,
-        LibraryKind kind,
-        CancellationToken ct,
-        AskedThisCycle? asked = null)
-    {
-        return SearchAsync([.. ladder.Select(rung => new SearchTerm(rung, false))], kind, ct, asked);
-    }
-
-    /// <summary>
-    /// Every copy anybody is serving, each site asked the first question it can
-    /// answer.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>A site that answers nothing was asked the wrong question, so it
-    /// is asked a simpler one.</strong> The owner's rule, 10 September 2026, and
-    /// it is measured: asked for <c>Silo.S03E06.1080p.WEB.H264-CAKES</c>, 1337x
-    /// answers nothing at all and The Pirate Bay answers one row; one rung down,
-    /// at <c>Silo S03E06 1080p</c>, 1337x answers four. It has the release the
-    /// whole time and does not answer to the name it is published under.
-    /// </para>
-    /// <para>
-    /// <strong>Each site climbs on its own, and that is the point.</strong> One
-    /// ladder for all of them stops the moment anybody answers — so a site that
-    /// needed one more rung is left with nothing, and the trackers it publishes
-    /// for that torrent never reach the magnet. Asking every indexer is worth
-    /// nothing if the ones that answer decide when the others stop being asked.
-    /// </para>
-    /// <para>
-    /// A site stops at the rung it answers on. Climbing past it would spend a
-    /// request on a question already answered and drag back the broader rows the
-    /// ladder exists to avoid — the owner watched TorrentGalaxy answer a
-    /// programme's own name with fifty rows of every season and every quality.
-    /// </para>
-    /// </remarks>
-    /// <param name="ladder">
-    /// The questions in order, narrowest first: the release names the sources
-    /// know, then what the plugin makes up for itself.
-    /// </param>
-    /// <param name="kind">Which library, so a site is only asked what it serves.</param>
-    /// <param name="ct">Cancellation.</param>
-    /// <param name="asked">
-    /// What each site has already answered this cycle, so no question is put
-    /// to the same site twice. Null where there is no cycle to remember for.
-    /// </param>
-    /// <param name="about">
-    /// The episode these questions are for, so every one of them — and what it
-    /// came back with — is noted under it on the dashboard. Null where there is
-    /// no episode to note it under.
-    /// </param>
-    public async Task<IReadOnlyList<ReleaseCopy>> SearchAsync(
-        IReadOnlyList<SearchTerm> ladder,
-        LibraryKind kind,
-        CancellationToken ct,
-        AskedThisCycle? asked = null,
-        string? about = null)
-    {
-        // Only the indexers worth asking about this library. An anime-only site
-        // asked about a television show spends a paced request on a site that
-        // carries almost no television, and that request is taken from the ones
-        // that would have answered.
-        SourceDefinition[] indexers = [.. catalogue.For(SourceRole.Indexer).Where(one => one.Serves(kind))];
-
-        ReleaseCopy[][] answers = await Task.WhenAll(
-            indexers.Select(indexer => ClimbAsync(indexer, ladder, asked, about, ct)));
-
-        return Merge([.. answers.SelectMany(answer => answer)]);
-    }
-
-    /// <summary>One site, asked down the ladder until it answers.</summary>
-    private async Task<ReleaseCopy[]> ClimbAsync(
-        SourceDefinition indexer,
-        IReadOnlyList<SearchTerm> ladder,
-        AskedThisCycle? asked,
-        string? about,
-        CancellationToken ct)
-    {
-        foreach (SearchTerm rung in ladder)
-        {
-            ReleaseCopy[]? rows = asked?.Recall(indexer.Name, rung);
-
-            if (rows is null)
-            {
-                rows = await AskAsync(indexer, rung, about, ct);
-                asked?.Keep(indexer.Name, rung, rows);
-            }
-            else
-            {
-                // Said, though nothing was sent: the page shows every question
-                // this episode was answered by, and this one was answered for
-                // another episode earlier in the run.
-                Said(about, indexer, rung, $"already answered this run: {Rows(rows.Length)}");
-            }
-
-            if (rows.Length > 0)
-            {
-                return rows;
-            }
-        }
-
-        return [];
-    }
 
     /// <summary>
     /// The torrent, with every tracker that every indexer holding it knows.
@@ -376,10 +250,9 @@ public sealed class Find(
     /// the magnet on it.
     /// </summary>
     /// <remarks>
-    /// From inside the browser session that loaded the page. Sent from this
-    /// process the request arrives without the session that earned the right to
-    /// ask, and is refused — so where there is no browser this says so and
-    /// changes nothing, which leaves the caller free to try the next copy.
+    /// Over HTTP, in the session the listing was read in (<c>docs/07-solver.md</c>).
+    /// Where nothing can post in that session this says so and changes nothing,
+    /// which leaves the row without a hash to take part with.
     /// </remarks>
     private async Task<string?> AskForMagnetAsync(
         ReleaseCopy chosen,
@@ -391,7 +264,7 @@ public sealed class Find(
 
         if (post is null)
         {
-            journal.Failed(ActivityStage.Find, subject, $"{route.Source} names its torrents only to a browser.");
+            journal.Failed(ActivityStage.Find, subject, $"{route.Source} names its torrents only to a signed request, and nothing here can send one.");
 
             return null;
         }
@@ -424,151 +297,6 @@ public sealed class Find(
 
             return null;
         }
-    }
-
-    /// <summary>
-    /// One torrent per release, with everything every site knew about it.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A scene release name is the file's identity — the group, the resolution
-    /// and the source are all in it — so two rows carrying that name are one
-    /// torrent however differently the sites punctuate it. They are merged, and
-    /// the count that survives is the highest any of them gave, because how
-    /// many are serving a torrent is a property of the swarm and not of the
-    /// site that was asked.
-    /// </para>
-    /// <para>
-    /// <strong>That is not a tidying-up.</strong> On the owner's own library on
-    /// 22 August 2026 TorrentBay offered
-    /// <c>Sugar (2024) S02E08 1080p Web h264 Cakes</c> and said one seeder, so
-    /// it was refused for being under the minimum — while the same release was
-    /// seeded in the thousands everywhere else. Merging was by info hash alone
-    /// and that site publishes none, so nothing could rescue it, and the cycle
-    /// took a different release the owner did not want.
-    /// </para>
-    /// <para>
-    /// Two <em>different</em> hashes under one name are still two files, and
-    /// they stay two: merging those would hand one torrent's trackers to
-    /// another. The copy that survives a merge is one that can actually be
-    /// reached, because the best-informed row is no use if it names nothing to
-    /// download.
-    /// </para>
-    /// </remarks>
-    public static IReadOnlyList<ReleaseCopy> Merge(IReadOnlyList<ReleaseCopy> copies)
-    {
-        List<ReleaseCopy> merged = [];
-
-        foreach (IGrouping<string, ReleaseCopy> named in copies.GroupBy(copy => TitleMatcher.Release(copy.Title)))
-        {
-            string[] hashes =
-            [
-                .. named
-                    .Select(copy => copy.InfoHash)
-                    .OfType<string>()
-                    .Distinct(StringComparer.OrdinalIgnoreCase),
-            ];
-
-            if (hashes.Length > 1)
-            {
-                // One name over two files. Nothing here can say which of them a
-                // row with no hash belongs to, so each hash is its own torrent
-                // and the rest are left exactly as they arrived.
-                merged.AddRange(named.Where(copy => copy.InfoHash is null));
-                merged.AddRange(hashes.Select(hash => One(named.Where(copy =>
-                    string.Equals(copy.InfoHash, hash, StringComparison.OrdinalIgnoreCase)))));
-
-                continue;
-            }
-
-            merged.Add(One(named));
-        }
-
-        // And then by hash, across names. The info hash is the identity: two
-        // rows carrying it are the same bytes in the same swarm, and a site
-        // writing the year in while another leaves it out has not found a
-        // different file. Grouping by name alone kept those apart and their
-        // trackers with them — two Lioness episodes sat at "fetching metadata"
-        // with no peer and no seed while the same release seeded through a
-        // tracker only the row that did not merge had published.
-        //
-        // After the pass above rather than instead of it: a row with no hash
-        // can only be placed by its name, and that is what the name pass is
-        // for. This puts together what the name pass could not see.
-        List<ReleaseCopy> byHash = [];
-
-        foreach (IGrouping<string?, ReleaseCopy> same in merged.GroupBy(copy =>
-                     copy.InfoHash?.ToUpperInvariant()))
-        {
-            if (same.Key is null)
-            {
-                // Nothing identifies these as one another, so they stay as they
-                // are rather than being guessed into a group.
-                byHash.AddRange(same);
-
-                continue;
-            }
-
-            byHash.Add(One(same));
-        }
-
-        return byHash;
-    }
-
-    /// <summary>One torrent out of every row that named it.</summary>
-    private static ReleaseCopy One(IEnumerable<ReleaseCopy> same)
-    {
-        ReleaseCopy[] rows = [.. same];
-
-        // Reachable first: a copy with a route to the torrent, and among those
-        // the site that knew the most about it. A row that names nothing to
-        // download cannot be the one that is handed over, however well
-        // informed it was.
-        ReleaseCopy best = rows
-            .OrderByDescending(copy => copy.Magnet is not null || copy.InfoHash is not null)
-            .ThenByDescending(copy => copy.Seeders ?? 0)
-            .ThenByDescending(copy => copy.Priority)
-            .First();
-
-        // The count belongs to the swarm. Null stays null only when not one
-        // site gave a number: nought is not the same as nobody saying.
-        int? seeders = rows.Select(copy => copy.Seeders).OfType<int>().DefaultIfEmpty().Max();
-
-        return best with
-        {
-            // The release as its group published it, not as a site printed it.
-            // The site's own name on the end travels no further than this: it
-            // is written against the grab, shown on every page, and matched
-            // against the finished file by staging.
-            Title = TitleMatcher.Clean(best.Title),
-            Seeders = rows.Any(copy => copy.Seeders is not null) ? seeders : null,
-            Source = rows
-                .OrderByDescending(copy => copy.Seeders ?? -1)
-                .ThenByDescending(copy => copy.Priority)
-                .First()
-                .Source,
-            Trackers =
-            [
-                .. rows
-                    .SelectMany(copy => copy.Trackers.Union(Magnets.TrackersOf(copy.Magnet), StringComparer.OrdinalIgnoreCase))
-                    .Distinct(StringComparer.OrdinalIgnoreCase),
-            ],
-            // One per indexer, and every one of them kept. This is the whole
-            // difference between a magnet with every site's trackers on it and
-            // the bare one built from a hash that used to go out.
-            Routes =
-            [
-                .. rows
-                    .SelectMany(copy => copy.Routes)
-                    .GroupBy(route => route.Source, StringComparer.OrdinalIgnoreCase)
-                    .Select(perSite => perSite.First()),
-            ],
-            Magnet = best.Magnet ?? rows.Select(copy => copy.Magnet).FirstOrDefault(magnet => magnet is not null),
-            InfoHash = best.InfoHash ?? rows.Select(copy => copy.InfoHash).FirstOrDefault(hash => hash is not null),
-            DetailUrl = best.DetailUrl ?? rows.Select(copy => copy.DetailUrl).FirstOrDefault(url => url is not null),
-            SizeBytes = best.SizeBytes ?? rows.Select(copy => copy.SizeBytes).FirstOrDefault(size => size is not null),
-            Claim = best.Claim ?? rows.Select(copy => copy.Claim).FirstOrDefault(claim => claim is not null),
-        };
     }
 
     /// <summary>
@@ -689,8 +417,8 @@ public sealed class Find(
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
-            // One site is one site, exactly as it is in the harvest. An episode
-            // is worth more than the indexer that failed on it.
+            // One site is one site, exactly as a feed is. An episode is worth
+            // more than the indexer that failed on it.
             journal.Failed(ActivityStage.Find, subject, exception.Message);
             Said(about, indexer, term, exception.Message);
             await WroteAsync(indexer, started, 0, exception.Message, ct);

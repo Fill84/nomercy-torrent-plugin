@@ -141,49 +141,9 @@ public sealed class Transfers(
         // gone by 12:22:46, one episode in the library at the end of it.
         List<string> justStaged = [];
 
-        // Every grab already past the finish: staged, or handed to the encoder.
-        // A second torrent of the same release for the same episode has lost to
-        // it — the owner's decision of 11 September 2026 is that both start and
-        // the first to finish is kept.
-        List<StoredDownload> won = [.. open.Where(one => one.State is GrabState.Staged or GrabState.Dispatched)];
-        HashSet<string> beaten = new(StringComparer.OrdinalIgnoreCase);
-
         foreach (StoredDownload finished in plan.Stage)
         {
-            // Finished, and second. Both copies can complete between two
-            // ticks; staging the other as well would be the same episode
-            // encoded twice.
-            if (Beaten(finished, won) is StoredDownload ahead)
-            {
-                await LoseAsync(finished, ahead, ct);
-                beaten.Add(finished.InfoHash);
-
-                continue;
-            }
-
-            IReadOnlyList<string> staged = await StageAsync(finished, incompleteFolder, intakeFolder, thisTick, ct);
-
-            justStaged.AddRange(staged);
-
-            if (staged.Count > 0)
-            {
-                won.Add(finished);
-            }
-        }
-
-        // And every copy still going that one of those has beaten. Asked of
-        // every open grab and not only of what finished this tick, so a race
-        // decided before a restart is still settled after it.
-        foreach (StoredDownload going in open.Where(one =>
-                     one.State is GrabState.Grabbed or GrabState.Downloading
-                     && !beaten.Contains(one.InfoHash)
-                     && !won.Any(winner => string.Equals(winner.InfoHash, one.InfoHash, StringComparison.OrdinalIgnoreCase))))
-        {
-            if (Beaten(going, won) is StoredDownload ahead)
-            {
-                await LoseAsync(going, ahead, ct);
-                beaten.Add(going.InfoHash);
-            }
+            justStaged.AddRange(await StageAsync(finished, incompleteFolder, intakeFolder, thisTick, ct));
         }
 
         // Every staged file something is waiting on: what the store knew at the
@@ -205,13 +165,6 @@ public sealed class Transfers(
 
         foreach (StoredDownload carrying in plan.Carry)
         {
-            // Written as lost a moment ago, and "downloading" would drag it
-            // back into the open grabs.
-            if (beaten.Contains(carrying.InfoHash))
-            {
-                continue;
-            }
-
             if (carrying.State != GrabState.Downloading)
             {
                 await grabs.StateAsync(carrying.InfoHash, GrabState.Downloading, ct);
@@ -220,72 +173,7 @@ public sealed class Transfers(
     }
 
     /// <summary>
-    /// The grab that has beaten this one to the finish, or null.
-    /// </summary>
-    /// <remarks>
-    /// The same release by name and at least one episode in common, under
-    /// another hash. The name alone is not enough: a release name carries no
-    /// episode when it is a pack, and a pack is not racing the single episode
-    /// it happens to share a group with. A torrent added by hand covers no
-    /// episode at all and so races nothing.
-    /// </remarks>
-    private static StoredDownload? Beaten(StoredDownload one, IEnumerable<StoredDownload> won)
-    {
-        if (one.Covers.Count == 0)
-        {
-            return null;
-        }
-
-        string release = TitleMatcher.Release(one.ReleaseTitle);
-
-        return won.FirstOrDefault(winner =>
-            !string.Equals(winner.InfoHash, one.InfoHash, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(TitleMatcher.Release(winner.ReleaseTitle), release, StringComparison.Ordinal)
-            && winner.Covers.Intersect(one.Covers).Any());
-    }
-
-    /// <summary>
-    /// Stops a torrent another copy of its release beat, and deletes its files.
-    /// </summary>
-    /// <remarks>
-    /// The owner's choice of 11 September 2026: stopped and deleted, not left to
-    /// finish. Nothing taken from a public swarm is ever uploaded, so a loser
-    /// left running gives nothing to anybody and costs the disk the same
-    /// gigabytes twice.
-    /// </remarks>
-    private async Task LoseAsync(StoredDownload loser, StoredDownload winner, CancellationToken ct)
-    {
-        try
-        {
-            await engine.RemoveAsync(loser.InfoHash, deleteFiles: true, ct);
-
-            ClearOwnFolder(loser);
-
-            await grabs.LostAsync(
-                loser.InfoHash,
-                $"the same release under {winner.InfoHash} finished first, so this torrent was stopped and its files deleted; it is not refused",
-                (time ?? TimeProvider.System).GetUtcNow(),
-                ct);
-
-            journal.Finished(
-                ActivityStage.Download,
-                loser.ReleaseTitle,
-                "another torrent of this release finished first, so this one was stopped and its files deleted");
-        }
-        catch (Exception wrong) when (wrong is not OperationCanceledException)
-        {
-            // One torrent is one torrent. The next tick asks again, because the
-            // winner is still past the finish and this one still is not.
-            logger.LogWarning(
-                "{Release} ({Hash}) lost to another copy and could not be stopped: {Reason}",
-                loser.ReleaseTitle,
-                loser.InfoHash,
-                wrong.Message);
-        }
-    }
-
-    /// <summary>
-    /// Removes the folder a second copy of a release was given, once it is empty.
+    /// Removes the folder a download was given of its own, once it is empty.
     /// </summary>
     /// <remarks>
     /// Only when empty. The client deletes what the torrent wrote and nothing

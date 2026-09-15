@@ -111,24 +111,13 @@ public sealed class NameJudgeTests
     /// <remarks>
     /// <strong>A1, the fault this whole plugin was rewritten for.</strong> A name has no seeders, no size and
     /// no site. 0.3.4 asked it how many seeders it had, got nought, and refused every announcement before an
-    /// indexer was ever asked. No setting carries a seeder threshold, on a name or a copy.
+    /// indexer was ever asked. No setting carries a seeder threshold, and since 15 September 2026 no torrent
+    /// is judged on its seeders either: the winner is the one the most indexers list.
     /// </remarks>
     [Fact]
     public void ANameIsNeverJudgedOnSeeders()
     {
         Assert.True(Judge(Settings(quality: "1080p"), Real("1337x.html", "1337x", "Silo.S03E06.1080p.x265-ELiTE")).Accepted);
-    }
-
-    /// <remarks>
-    /// The owner's decision of 12 September 2026: there is no threshold, download what is found. A copy
-    /// nobody is serving still starts, and one whose site gives no count has not said nought.
-    /// </remarks>
-    [Theory]
-    [InlineData(0)]
-    [InlineData(null)]
-    public void ACopyIsNeverRefusedForItsSeeders(int? seeders)
-    {
-        Assert.True(NameJudge.JudgeCopy(Copy(seeders), Blacklist.None).Accepted);
     }
 
     /// <remarks>
@@ -159,17 +148,21 @@ public sealed class NameJudgeTests
     }
 
     /// <remarks>
-    /// An anime row is matched on its absolute number as well, because that is the only number half its
-    /// releases carry. Rows are still judged here until <c>S13-07</c>.
+    /// A release name names one episode by its season and episode number (<c>docs/specs/release-names.md</c>).
+    /// An absolute-numbered post names none, even on the episode whose absolute number it carries, and the
+    /// owner reads why: it is this show's name, and not this episode.
     /// </remarks>
     [Fact]
-    public void AnAnimeReleaseIsMatchedOnItsAbsoluteNumber()
+    public void AnAbsoluteNumberedNameIsRefusedEvenForItsOwnEpisode()
     {
         ReleaseName name = ReleaseName.Parse(Real("nyaa-absolute.xml", "torrent-rss", "[KiyoshiiSubs] One Piece - 1172v2 [1080p][H.265 - 10Bit].mkv"));
-        NameJudge judge = new(Settings(quality: "1080p", codec: "h265"));
 
-        Assert.True(judge.JudgeName(name, Anime("One Piece", 21, 45, 1172), Blacklist.None).Accepted);
-        Assert.False(judge.JudgeName(name, Anime("One Piece", 21, 46, 1173), Blacklist.None).Accepted);
+        Verdict verdict = new NameJudge(Settings(quality: "1080p", codec: "h265"))
+            .JudgeName(name, Anime("One Piece", 21, 45, 1172), Blacklist.None);
+
+        Assert.False(verdict.Accepted);
+        Assert.Contains("is not", verdict.Reason, StringComparison.Ordinal);
+        Assert.DoesNotContain("not a release of", verdict.Reason, StringComparison.Ordinal);
     }
 
     /// <remarks>
@@ -200,19 +193,17 @@ public sealed class NameJudgeTests
     }
 
     /// <remarks>
-    /// A blacklisted title is refused as a name, and a blacklisted hash as a copy: a torrent that failed to
-    /// download is worth refusing under whichever name it is offered next.
+    /// A blacklisted title is refused as a name, before any indexer is asked for it. A blacklisted hash is the
+    /// winner's to drop (<c>WinnerTests</c>).
     /// </remarks>
     [Fact]
-    public void ABlacklistedTitleOrHashIsRefused()
+    public void ABlacklistedTitleIsRefused()
     {
         ReleaseName name = ReleaseName.Parse(Real("1337x.html", "1337x", "Silo.S03E06.1080p.x265-ELiTE"));
 
         Assert.False(new NameJudge(Settings(quality: "1080p"))
             .JudgeName(name, SiloSix, Blacklist.Of(Blacklist.KeyOf("Silo.S03E06.1080p.x265-ELiTE")))
             .Accepted);
-
-        Assert.False(NameJudge.JudgeCopy(Copy(40, "92D8A3F6864911EF292B4BE0DD5286406396D2B3"), Blacklist.Of("92D8A3F6864911EF292B4BE0DD5286406396D2B3")).Accepted);
     }
 
     /// <remarks>
@@ -230,24 +221,6 @@ public sealed class NameJudgeTests
     public void ANameThatCarriesAFileTypeHasToCarryAVideoOne(string title, bool accepted)
     {
         Assert.Equal(accepted, Judge(Settings(quality: "1080p"), title).Accepted);
-    }
-
-    /// <remarks>
-    /// The release group is not a file type: <c>Greek S01E01 HR HDTV XviD-2HD</c> disappeared the first time
-    /// this was written by taking the last word blindly.
-    /// </remarks>
-    [Theory]
-    [InlineData("Greek S01E01 HR HDTV XviD-2HD")]
-    [InlineData("Silo.S03E06.1080p.WEB.H264-FQM")]
-    [InlineData("Silo.S03E06.PROPER.1080p.WEB.H264-NTb")]
-    public void AReleaseGroupIsNotAFileType(string title)
-    {
-        Assert.Null(TitleMatcher.FileType(title));
-    }
-
-    private static ReleaseCopy Copy(int? seeders, string? hash = null)
-    {
-        return new("Silo.S03E06.1080p.x265-ELiTE", "LimeTorrents", 35, hash, null, null, seeders, null);
     }
 
     private static TrackedEpisode Anime(string show, int season, int number, int absolute)
