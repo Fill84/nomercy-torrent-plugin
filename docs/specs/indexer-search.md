@@ -29,6 +29,10 @@
 - For an anime, of merged torrents found on the same number of indexers, the one found on Nyaa wins
   over the one found only on TorrentBay or LimeTorrents.
 - Of merged torrents that are still level, the one found first wins.
+- A release or hash that the download client failed and that is still refused takes no part in
+  choosing the winner.
+- When the winner's magnet or torrent cannot be read from any indexer that listed it, the next merged
+  torrent in the same order becomes the winner.
 
 ## Handing the winner over
 
