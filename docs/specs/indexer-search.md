@@ -11,6 +11,8 @@
 - Every other enabled indexer is asked after the first-choice indexers, for the same release name.
 - Every enabled indexer is asked. A result on a first-choice indexer does not end the search.
 - An indexer result counts only when its title is the release name that was searched for.
+- A title is the release name when the two are the same letters and digits in the same order, with
+  case, punctuation and the site's own tag on the title set aside.
 - An indexer result is not judged against the show's quality, codec, wishes, musts or forbidden.
 
 ## Merging by hash

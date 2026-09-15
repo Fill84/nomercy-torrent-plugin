@@ -9,6 +9,27 @@
 - Only a show or anime is switched on or off. No switch turns a whole library on or off.
 - The settings for a show or anime, and each library's preferences, are set on the overview page.
 - The plugin's settings page holds no quality, codec or tag setting.
+- The overview page opens with the run's status line: whether a run is going, when the last one
+  ended, when the next one starts, and the Run and Stop buttons.
+- Each library's block shows its preferences on one line with an Edit button, and a table of its
+  shows and anime with the columns show, year, missing, quality, codec, tags and state.
+- A row's state is On, Off, or On and not saved.
+- Every row carries a button that switches the show on or off and a button that opens its settings.
+- A library's table shows 50 rows per page, with the shows that are switched on first and each group
+  in alphabetical order, and Previous and Next buttons.
+
+## The settings form
+
+- A show's settings are one form with one Save button: on or off, quality, codec, specials, wishes,
+  musts and forbidden.
+- Quality, codec and specials each offer the choice of following the library, next to their own
+  values.
+- Wishes, musts and forbidden each have a field holding the list as comma-separated text and a field
+  for one tag, which Save appends to the end of that list.
+- Below the form the page shows the settings that apply to the show with its library's preferences
+  counted in.
+- A library's preferences are the same form without the choice of following the library.
+- A library quality taken from the encoding profile is shown as a fixed value.
 
 ## Switching a show on
 
