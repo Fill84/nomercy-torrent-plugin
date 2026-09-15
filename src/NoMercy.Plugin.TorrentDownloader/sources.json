@@ -81,6 +81,7 @@
       "name": "LimeTorrents",
       "kind": "site",
       "url": "https://www.limetorrents.lol/search/all/{query}/",
+      "firstChoice": 3,
       "priority": 35,
       "minimumIntervalSeconds": 15,
       "note": "A hashed .torrent link on the listing, which the generic reader handles."
@@ -91,6 +92,7 @@
       "url": "https://extranet.torrentbay.st/browse/?q={query}&sort=seeders&order=desc",
       "reader": "torrentbay",
       "gated": true,
+      "firstChoice": 2,
       "priority": 60,
       "minimumIntervalSeconds": 15,
       "pageParameter": "page",
@@ -142,6 +144,7 @@
       "libraries": [
         "anime"
       ],
+      "firstChoice": 1,
       "priority": 70,
       "minimumIntervalSeconds": 15,
       "note": "An indexer in XML; every item links a real torrent. For anime it is often the only source that has the release, and it is asked with both the seasonal and the absolute form."

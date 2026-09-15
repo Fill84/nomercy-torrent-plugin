@@ -4,10 +4,34 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-07` · The indexer round and the winner.** Sprint 13 is the owner's
+**Next: `S13-08` · A challenge is solved again, twice at most.** Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-07` is done and green: one round per wish group, merged by hash, and only the winner offered.**
+`IndexerRound` asks the first-choice indexers one after another (`firstChoice` in `sources.json`: Nyaa 1,
+TorrentBay 2, LimeTorrents 3) and then the rest together; each name exactly, then as words where that
+found nothing; a row counts only when its title is the name; a counting row with no hash has its page
+read for one; rows merge by hash with every tracker; `Winner` orders by indexers, then found first, and
+drops a refused release or hash. `SearchCycle` goes group by group, offers the winner — the next only
+when the winner cannot be offered — and says why when nothing is found; with no name that meets the
+settings, no indexer is asked. **A fact found and written down:** most indexers print no hash, so merging
+by hash means reading the page of each row that is the name — bounded to those rows. **And one to look
+into, now step 0 of `S13-08`:** the capture tool's TorrentBay signed request failed after the tab that
+loaded the page had closed. Fresh captures are `tests/fixtures/round-*`; what they showed is in
+`docs/05-sources.md` § How a run asks the indexers. The ladder, the race, packs, seeder ranking and the
+stack of earlier answers are no longer called: thirteen cycle tests pinning them and `TheRightReleaseTests`
+went, and their code goes in `S13-09`. Tests, each red first — the cycle's against the cycle as it was —
+and each rule broken on purpose (sixteen sabotages; the cache and the indexer count first slipped
+through, the count because the captured winner was also found first, so a case where the one found first
+is on fewer indexers was added): `IndexerRoundTests` (five), `MergeTests`, `WinnerTests` (six),
+`SearchCycleTests.OnlyTheWinnerIsOfferedToTheClient`, `ARowIsNotJudgedAgainstTheShowsSettings`,
+`AnEmptyWishGroupHandsOverToTheGroupWithOneWishFewer`,
+`AnEpisodeWithNoTorrentIsShownWithItsReasonAndComesBackNextRun`,
+`NothingIsAskedOfAnIndexerWhenNoNameMeetsTheSettings`,
+`EachEpisodesWinnerIsOfferedBeforeTheNextEpisodeIsWorkedOn` (renamed), and
+`CatalogueTests.TheFirstChoiceIndexersAreNyaaThenTorrentBayThenLimeTorrents`.
 
 **`S13-06` is done and green: a release name is judged by its show's settings, and the global profile
 decides nothing any more.** `NameJudge` (in place of `ReleaseFilter`) takes a name when its resolution is

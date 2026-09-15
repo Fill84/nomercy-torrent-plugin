@@ -150,7 +150,7 @@ public sealed record CycleReport(IReadOnlyList<EpisodeOutcome> Outcomes, IReadOn
 }
 
 /// <summary>
-/// The whole chain for one pass: names, search, decision, grab.
+/// The whole chain for one run: names, the indexer round, the winner, the grab.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -172,6 +172,8 @@ public sealed class SearchCycle(
     Grab? grab = null,
     ICycleJournal? written = null)
 {
+    private readonly IndexerRound _round = new(find, journal);
+
     /// <param name="missing">The gaps to look at, in whatever order they arrive.</param>
     /// <param name="options">What the owner will accept, and what to do with what is found.</param>
     /// <param name="ct">The plugin's own lifetime, never a caller's request.</param>
@@ -201,25 +203,10 @@ public sealed class SearchCycle(
         // were met so the owner's settings do not churn.
         List<string> trackers = [];
 
-        // Every copy any search this cycle answered with, whichever gap it was
-        // asked for. A site asked about one episode answers with the whole
-        // programme, and on 22 August 2026 four 1080p copies of Silo S03E04 to
-        // S03E07 - every one of them an episode the library was missing - came
-        // back from a search for S03E08 and were thrown away. They are kept so
-        // the gap they do answer for can have them without asking again.
-        List<ReleaseCopy> answered = [];
-
-        // What each term this cycle has already been answered with. The
-        // programme's own name is a term every gap of that programme falls
-        // through to, so eight gaps asked every indexer the identical question
-        // eight times - and apibay, which rate-limits hard, answered 429 to the
-        // ninth. It saves the request and never the decision: what comes back
-        // still goes to every gap it answers for.
-        //
-        // For this cycle and no longer. Both this and the copies below are
-        // thrown away when the run ends, so the next one asks again from
-        // nothing - which is what an episode that aired an hour ago needs, and
-        // is why neither of them is written down anywhere.
+        // What each indexer has already been asked this run (run.md: a
+        // question already asked of an indexer during a run is not asked of it
+        // again). Thrown away when the run ends, so the next run asks again
+        // from nothing — which is what an episode with no torrent yet needs.
         AskedThisCycle asked = new();
 
         // One episode at a time, because the decisions of each are part of the
@@ -247,7 +234,6 @@ public sealed class SearchCycle(
                 decisions,
                 options,
                 trackers,
-                answered,
                 asked,
                 ct);
 
@@ -282,7 +268,6 @@ public sealed class SearchCycle(
         Decisions decisions,
         CycleOptions options,
         List<string> trackers,
-        List<ReleaseCopy> answered,
         AskedThisCycle asked,
         CancellationToken ct)
     {
@@ -291,92 +276,58 @@ public sealed class SearchCycle(
         if (decisions.Settled(episode.Key))
         {
             // Already answered for by something taken earlier in this cycle.
-            // Asking again is a search for a file already on its way.
-            return new(episode.Key, null, null, null, false, "settled by a pack taken earlier this cycle");
+            return new(episode.Key, null, null, null, false, "settled by a grab taken earlier this cycle");
         }
 
         journal.Started(ActivityStage.Decide, subject, $"{candidates.Count} names");
 
-        // Why the client would not have a copy that was otherwise worth
-        // taking. Kept, because "nothing anybody is serving is worth taking" is
-        // the wrong answer when the truth is that the disk is full - and the
-        // owner can act on one of those two and not on the other.
+        // Why nothing was taken, in the words the owner can act on: every name
+        // refused and why, a client that would not take a torrent.
         List<string> refused = [];
 
         try
         {
-            // What earlier searches this cycle have already turned up. A
-            // candidate and never an answer: it is added to what this
-            // episode's own search brings back, and decides nothing on its
-            // own.
-            //
-            // It used to decide. The cycle tried this stack first and took the
-            // first acceptable thing in it, so an episode could be settled by
-            // a leftover from another episode's search without one indexer
-            // being asked about it - and on 22 August 2026 Sugar S02E08 was
-            // settled that way while the copy the owner wanted, top of the
-            // page on two sites at four hundred and eighty seeders, was never
-            // fetched at all.
-            List<ReleaseCopy> gathered = [.. answered];
+            IReadOnlyList<IReadOnlyList<string>> groups = Wanted(candidates, episode, decisions, refused, subject);
 
-            // The programme's own answer, already paid for. One search of
-            // "Silo" carries every gap of every season of it, and the term is
-            // asked once a cycle - so the second gap of a season costs nothing
-            // where the first one paid.
-            //
-            bool searched = false;
-
-            // **Stage 3 of docs/03-architecture.md, which was never built.** The
-            // profile applied to NAMES, before an indexer is touched: slot,
-            // quality, codec, language, group. It was only ever applied to the
-            // copies that came back, so a name the owner could never accept was
-            // asked of every indexer, waited out every host's pace, and had
-            // every row it returned thrown away.
-            //
-            // The owner watched four indexers being asked for
-            // South.Park.S15E12.1.Prozent.German.DL.AC3D.1080p.BluRay.x264-JaJunge
-            // on 2 September 2026 with English only on. It is a real scene
-            // release and a real PreDB name — their pool holds 2,238 names in
-            // other languages, and every one of them cost a request at every
-            // indexer that carries the show.
-            IReadOnlyList<string> wanted = Wanted(candidates, episode, decisions, refused, subject);
-
-            // The whole ladder in one pass: each of the source's names letter
-            // for letter and then without its punctuation, then what this plugin
-            // makes up, and each indexer asked down it until that indexer
-            // answers. Nothing is judged until every site has finished — the
-            // owner's rule, and the reason the judging is one call below rather
-            // than one per rung.
-            IReadOnlyList<SearchTerm> ladder = SearchTerm.Ladder(
-                wanted,
-                Rungs(episode, decisions.SettingsFor(episode)).Select(rung => rung.Term));
-
-            await AskAsync(ladder, episode, gathered, answered, asked, trackers, ct);
-
-            searched = true;
-
-            if (await TakeAsync(episode, gathered, decisions, options, subject, trackers, refused, candidates, ct)
-                is EpisodeOutcome taken)
+            if (groups.Count == 0)
             {
-                return taken with { Searched = searched };
+                // release-names.md: no release name, no search. Said as it is, so
+                // the Activity and History pages show why, and the episode is
+                // searched for again on the next run.
+                string why = refused.Count > 0
+                    ? refused[^1]
+                    : "no name source gave a release name for it";
+
+                journal.Finished(ActivityStage.Decide, subject, why);
+
+                return new(episode.Key, null, null, null, false, why);
             }
 
-            journal.Finished(ActivityStage.Decide, subject, "nobody is serving an acceptable copy");
-
-            return new(
-                episode.Key,
-                null,
-                null,
-                null,
-                false,
-                refused.Count > 0
-                    ? refused[^1]
-                    : searched
-                        ? "every indexer was asked, and nothing anybody is serving is worth taking"
-                        : "there was nothing to ask an indexer")
+            foreach (IReadOnlyList<string> group in groups)
             {
-                Searched = searched,
-            };
+                IReadOnlyList<RankedTorrent> ranked = await _round.AskAsync(group, episode, options.Blacklisted, asked, ct);
+
+                // Every tracker of every torrent the round found, taken or not:
+                // TrackerBook decides what is kept.
+                trackers.AddRange(ranked.SelectMany(torrent => torrent.Torrent.Trackers));
+
+                if (await TakeAsync(episode, ranked, decisions, options, subject, trackers, refused, ct) is EpisodeOutcome taken)
+                {
+                    return taken;
+                }
+
+                // indexer-search.md: an empty group hands over to the group with
+                // one wish fewer.
+                journal.Noted(ActivityStage.Decide, subject, $"no torrent for {string.Join(", ", group)}");
+            }
+
+            string none = refused.Count > 0
+                ? refused[^1]
+                : "no indexer listed a torrent for any of its release names";
+
+            journal.Finished(ActivityStage.Decide, subject, none);
+
+            return new(episode.Key, null, null, null, false, none) { Searched = true };
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -387,74 +338,50 @@ public sealed class SearchCycle(
     }
 
     /// <summary>
-    /// Takes the best copy of this episode anybody is serving, or none.
+    /// Offers the winner to the client, and the next torrent in winning order when it cannot be offered.
     /// </summary>
     /// <remarks>
-    /// Down the ranking rather than only at the top of it. The best copy is the
-    /// one with the most seeders, and that is often the one hardest to reach:
-    /// on 22 August 2026 the highest-seeded copy of Silo S03E08 came from a
-    /// site whose magnet lives behind a signed request this plugin does not
-    /// make. The cycle followed it, found no torrent and stopped, with a copy
-    /// of the same episode from another site sitting unexamined and the
-    /// episode reported as though nobody were serving it.
+    /// <para>
+    /// <c>docs/specs/indexer-search.md</c> § Handing the winner over: only the winning torrent is offered, and
+    /// no other hash of the same release is started. The race of two hashes is gone.
+    /// </para>
+    /// <para>
+    /// The next one is tried only when the winner cannot be had: its torrent named nowhere, or a client that
+    /// would not take it — the disk is full, say. The reason is kept, because it is the true answer for this
+    /// episode if nothing else can be had either.
+    /// </para>
     /// </remarks>
     private async Task<EpisodeOutcome?> TakeAsync(
         TrackedEpisode episode,
-        IReadOnlyList<ReleaseCopy> copies,
+        IReadOnlyList<RankedTorrent> ranked,
         Decisions decisions,
         CycleOptions options,
         string subject,
         List<string> trackers,
         List<string> refused,
-        IReadOnlyList<string> known,
         CancellationToken ct)
     {
-        if (copies.Count == 0)
+        foreach (RankedTorrent candidate in ranked)
         {
-            return null;
-        }
+            // Every indexer that listed it, asked once for the artefact its
+            // trackers are on; a page already read in the round is not read again.
+            ReleaseCopy chosen = await find.ResolveAsync(candidate.Torrent, ct);
 
-        Decision decision = decisions.Rank(episode, Find.Merge(copies), known);
-
-        foreach (ReleaseCopy candidate in decision.Ranked)
-        {
-            ReleaseCopy chosen = await find.ResolveAsync(candidate, ct);
-
-            // And the copy that was resolved. No shipped listing publishes a
-            // magnet, so a torrent's trackers are not known until the row's own
-            // page has been read — on every indexer that has it, which is where
-            // this list comes from.
             trackers.AddRange(chosen.Trackers);
 
             if (chosen.Magnet is null)
             {
-                // Reached for and not to be had. Recorded, so the owner can see
-                // which site keeps answering with rows nobody can download
-                // from, and passed over so the next copy gets its turn.
-                decisions.Unreachable(
-                    episode,
-                    candidate,
-                    $"{candidate.Source} named no torrent for it, on the row or on its own page.");
+                refused.Add($"{candidate.Torrent.Title} named no torrent on any indexer that listed it.");
 
                 continue;
             }
 
-            journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}");
+            journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}, on {candidate.Indexers.Count} indexers");
 
-            // Under the name a name database published for it, never under
-            // the site's own rendering.
-            chosen = chosen with { Title = Decisions.NameOf(chosen, known) };
-
-            IReadOnlyList<EpisodeKey> covers = decisions.CoveredBy(episode, ReleaseName.Parse(chosen.Title));
-
-            (EpisodeOutcome outcome, bool stands) = await GrabAsync(episode, chosen, covers, options, ct);
+            (EpisodeOutcome outcome, bool stands) = await GrabAsync(episode, chosen, [episode.Key], options, ct);
 
             if (!stands)
             {
-                // The client would not have it. A download that never started
-                // settles nothing, and the next copy is worth a turn - but the
-                // reason is kept, because it is the true answer for this
-                // episode if no other copy can be had either.
                 refused.Add(outcome.Detail);
 
                 continue;
@@ -465,156 +392,31 @@ public sealed class SearchCycle(
             return outcome with
             {
                 Searched = true,
-                Considered = AheadOf(chosen, decision.Ranked),
-                Racing = await RacingAsync(episode, chosen, outcome, decision.Ranked, covers, options, trackers, known, ct),
+                Considered = AheadOf(candidate, ranked),
             };
         }
 
         return null;
     }
 
-    /// <summary>
-    /// The same release under every other hash anybody is serving, handed over
-    /// beside the copy just taken.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// The owner's decision of 11 September 2026. One release under two hashes
-    /// is one file cut into two torrents, and which of the two swarms delivers
-    /// first is not something a listing can say: The Pirate Bay's own answer for
-    /// Sugar S02E01 carries the NTb 720p twice, seeded by 57 and by 10. So both
-    /// start, the first to finish is kept, and the tick stops the other and
-    /// deletes its files.
-    /// </para>
-    /// <para>
-    /// Each goes into a folder of its own, named after its hash. A torrent
-    /// writes under its own name in the folder it is given, and two torrents of
-    /// one release carry one name — in one folder they would write one path.
-    /// </para>
-    /// </remarks>
-    private async Task<IReadOnlyList<EpisodeOutcome>> RacingAsync(
-        TrackedEpisode episode,
-        ReleaseCopy taken,
-        EpisodeOutcome outcome,
-        IReadOnlyList<ReleaseCopy> ranked,
-        IReadOnlyList<EpisodeKey> covers,
-        CycleOptions options,
-        List<string> trackers,
-        IReadOnlyList<string> known,
-        CancellationToken ct)
-    {
-        if (!outcome.HandedOver || outcome.InfoHash is not string first)
-        {
-            return [];
-        }
-
-        string release = TitleMatcher.Release(taken.Title);
-        HashSet<string> held = new(StringComparer.OrdinalIgnoreCase) { first };
-        List<EpisodeOutcome> racing = [];
-
-        foreach (ReleaseCopy candidate in ranked)
-        {
-            // Only a copy that says which torrent it is. A row without a hash
-            // cannot be told from the one already taken without reading its
-            // page, and most of the time it is that one.
-            if (candidate.InfoHash is not string hash
-                || held.Contains(hash)
-                || !string.Equals(
-                    TitleMatcher.Release(Decisions.NameOf(candidate, known)),
-                    release,
-                    StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            ReleaseCopy resolved = await find.ResolveAsync(candidate, ct);
-
-            trackers.AddRange(resolved.Trackers);
-
-            (EpisodeOutcome rival, _) = await GrabAsync(
-                episode,
-                resolved with { Title = taken.Title },
-                covers,
-                options,
-                ct,
-                Path.Combine(options.IncompleteFolder, hash.ToUpperInvariant()));
-
-            if (rival.HandedOver && rival.InfoHash is string took && held.Add(took))
-            {
-                racing.Add(rival with { Searched = true });
-            }
-        }
-
-        return racing;
-    }
-
-    /// <summary>
-    /// The copies this one was taken ahead of, with what each was seeded by.
-    /// </summary>
-    /// <remarks>
-    /// Three of them, which is enough to see whether the winner won on a
-    /// number or on a whisker, and few enough to read on one line. A count
-    /// nobody gave is said as unknown rather than as nought: the difference is
-    /// the whole reason the ranking sorts them apart.
-    /// </remarks>
-    private static string? AheadOf(ReleaseCopy taken, IReadOnlyList<ReleaseCopy> ranked)
+    /// <summary>The torrents this one won ahead of, with how many indexers listed each.</summary>
+    /// <remarks>Three of them, enough to see whether the winner won by a margin, and few enough to read on one line.</remarks>
+    private static string? AheadOf(RankedTorrent taken, IReadOnlyList<RankedTorrent> ranked)
     {
         string[] others =
         [
             .. ranked
-                .Where(copy => !ReferenceEquals(copy, taken) && copy.Title != taken.Title)
+                .Where(one => !ReferenceEquals(one, taken))
                 .Take(3)
-                .Select(copy => $"{copy.Title} ({copy.Source}, {Count(copy.Seeders)})"),
+                .Select(one => $"{one.Torrent.InfoHash} ({Listed(one.Indexers.Count)})"),
         ];
 
-        return others.Length == 0 ? null : $"ahead of {string.Join("; ", others)}";
+        return others.Length == 0 ? null : $"on {Listed(taken.Indexers.Count)}, ahead of {string.Join("; ", others)}";
     }
 
-    private static string Count(int? seeders)
+    private static string Listed(int indexers)
     {
-        return seeders is int many ? $"{many} seeders" : "no count given";
-    }
-
-    /// <summary>
-    /// Asks every indexer for each term, once per cycle per term.
-    /// </summary>
-    /// <remarks>
-    /// A shelf's answer is shared with every gap it could cover, because a
-    /// season or a programme was asked for the whole of itself. An episode's
-    /// own search was asked about that episode, and letting its leftovers
-    /// settle another gap is how Sugar S02E08 came to be decided by a stray row
-    /// while the release everybody was seeding went unfetched.
-    /// </remarks>
-    private async Task AskAsync(
-        IReadOnlyList<SearchTerm> ladder,
-        TrackedEpisode episode,
-        List<ReleaseCopy> gathered,
-        List<ReleaseCopy> answered,
-        AskedThisCycle asked,
-        List<string> trackers,
-        CancellationToken ct)
-    {
-        IReadOnlyList<ReleaseCopy> copies = await find.SearchAsync(
-            ladder,
-            episode.Kind,
-            ct,
-            asked,
-            about: $"{episode.ShowTitle} {episode.Key}");
-
-        // Every copy, taken or not: a tracker on a release the profile refused
-        // is serving the same swarm as the one it accepted.
-        trackers.AddRange(copies.SelectMany(copy => copy.Trackers));
-
-        // A season's rungs are at the foot of every gap's ladder, so what one
-        // gap's search turned up is a candidate for the others. A candidate and
-        // never an answer: each gap is still decided on its own, which is what
-        // let a stray row settle Sugar S02E08 while the release everybody was
-        // seeding went unfetched.
-        answered.AddRange(copies);
-
-        // Once. It was added twice, so every copy this episode's own search
-        // brought back went into its decision two times over.
-        gathered.AddRange(copies);
+        return indexers == 1 ? "1 indexer" : $"{indexers} indexers";
     }
 
     /// <summary>
@@ -640,7 +442,7 @@ public sealed class SearchCycle(
     /// nothing.
     /// </para>
     /// </remarks>
-    private IReadOnlyList<string> Wanted(
+    private IReadOnlyList<IReadOnlyList<string>> Wanted(
         IReadOnlyList<string> candidates,
         TrackedEpisode episode,
         Decisions decisions,
@@ -673,87 +475,10 @@ public sealed class SearchCycle(
             journal.Noted(ActivityStage.Decide, subject, $"refused {candidate}: {verdict.Reason}");
         }
 
-        // The names carrying the most of the show's wishes first
-        // (release-names.md): the indexers are asked down this list, so the ones
-        // the owner wishes for most are asked about first. A wish nobody's name
-        // carries leaves the rest in one group, still asked.
-        return [.. WishGroups.Of(worth, decisions.SettingsFor(episode).Wishes).SelectMany(group => group)];
-    }
-
-    /// <summary>
-    /// The questions this plugin makes up when the sources cannot answer, each
-    /// carrying the quality the owner asked for.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>The owner's resolution is part of the question.</strong> Their
-    /// decision of 10 September 2026, after watching this ask TorrentGalaxy for
-    /// <c>South Park S15</c> and drag back a hundred rows of every season and
-    /// every quality to throw nearly all of it away. Measured against all nine
-    /// indexers that day, none of them refusing either shape:
-    /// <c>South Park S15E12</c> answered 122 torrents and
-    /// <c>South Park S15E12 1080p</c> answered 38, the wanted release top of
-    /// both. Two thirds less to carry, read and refuse.
-    /// </para>
-    /// <para>
-    /// <strong>The codec is not in the question and cannot be.</strong> The same
-    /// encoder is published as <c>H.264</c>, <c>H264</c>, <c>x264</c> and
-    /// <c>X 264</c> depending on the group, so naming one of them hides the
-    /// other three. It is judged on the rows, where every spelling is
-    /// understood.
-    /// </para>
-    /// <para>
-    /// <strong>The programme on its own is gone.</strong> <c>Silo</c> as a
-    /// question answers with the whole programme — every season, every episode,
-    /// every quality — and every row of it had to be fetched, read and refused.
-    /// It was the broadest question this plugin asked and the one the owner saw
-    /// bringing back rubbish.
-    /// </para>
-    /// <para>
-    /// The season shelf stays, because it is how a season pack is found at all,
-    /// and it is asked once a cycle however many gaps share it.
-    /// </para>
-    /// </remarks>
-    private static IEnumerable<(string Term, bool Shelf)> Rungs(TrackedEpisode episode, EffectiveSettings settings)
-    {
-        // Nothing appended when the show has no quality: an empty quality
-        // would put a trailing space into every query and narrow nothing.
-        string quality = settings.Quality?.Trim() ?? string.Empty;
-        string wanted = quality.Length > 0 ? $" {quality}" : string.Empty;
-
-        // The episode with the owner's quality, then without it. Narrowest
-        // first: a question that names the quality brings back a third of what
-        // the same question without it does, measured against all nine indexers
-        // on 10 September 2026 — 38 torrents against 122.
-        if (wanted.Length > 0)
-        {
-            yield return ($"{episode.ShowTitle} {episode.Key}{wanted}", false);
-        }
-
-        yield return ($"{episode.ShowTitle} {episode.Key}", false);
-
-        if (episode.Absolute is int absolute)
-        {
-            // An absolute-numbered release carries no season tag at all, so the
-            // forms above find none of them.
-            if (wanted.Length > 0)
-            {
-                yield return ($"{episode.ShowTitle} {absolute}{wanted}", false);
-            }
-
-            yield return ($"{episode.ShowTitle} {absolute}", false);
-        }
-
-        // And only then the season, which is the one question a season pack can
-        // be found by at all. A shelf: it is asked once a cycle however many
-        // gaps of that season fall through to it, and every one of them is
-        // entitled to the answer.
-        if (wanted.Length > 0)
-        {
-            yield return ($"{episode.ShowTitle} S{episode.Key.Season:00}{wanted}", true);
-        }
-
-        yield return ($"{episode.ShowTitle} S{episode.Key.Season:00}", true);
+        // Grouped by the show's wishes, most first (release-names.md): each group
+        // is one round of the indexers, and a group that finds no torrent hands
+        // over to the group with one wish fewer.
+        return WishGroups.Of(worth, decisions.SettingsFor(episode).Wishes);
     }
 
     /// <summary>
@@ -770,8 +495,7 @@ public sealed class SearchCycle(
         ReleaseCopy chosen,
         IReadOnlyList<EpisodeKey> covers,
         CycleOptions options,
-        CancellationToken ct,
-        string? folder = null)
+        CancellationToken ct)
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
 
@@ -820,7 +544,7 @@ public sealed class SearchCycle(
         // database.
         Grabbed taken = await grab.TakeAsync(
             chosen,
-            folder ?? options.IncompleteFolder,
+            options.IncompleteFolder,
             options.DefaultTrackers,
             options.OwnTrackerHosts,
             ct);
@@ -854,7 +578,6 @@ public sealed class SearchCycle(
                 InfoHash = taken.InfoHash,
                 Magnet = chosen.Magnet,
                 Covers = covers,
-                Folder = folder,
             },
             true);
     }

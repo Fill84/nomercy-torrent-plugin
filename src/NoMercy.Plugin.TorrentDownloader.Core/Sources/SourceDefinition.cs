@@ -104,6 +104,16 @@ public sealed record SourceDefinition(
     /// </remarks>
     public IReadOnlyList<string> Libraries { get; init; } = [];
 
+    /// <summary>
+    /// This indexer's rank among the first-choice indexers, lowest asked first, or null for every other.
+    /// </summary>
+    /// <remarks>
+    /// <c>docs/specs/indexer-search.md</c>: the first-choice indexers are asked one after another in their
+    /// order, and then every other enabled indexer at the same time. Nyaa 1, TorrentBay 2, LimeTorrents 3:
+    /// Nyaa serves only anime, so a show is asked TorrentBay then LimeTorrents and an anime all three.
+    /// </remarks>
+    public int? FirstChoice { get; init; }
+
     /// <summary>What this source can answer.</summary>
     public SourceRole Role => SourceRoles.For(Kind, SearchUrl is not null);
 

@@ -242,6 +242,55 @@ public sealed class Find(
         };
     }
 
+    /// <summary>
+    /// The indexers that serve this library, in the order a round asks them: the first-choice indexers by
+    /// their rank, then every other in catalogue order.
+    /// </summary>
+    /// <remarks>
+    /// <c>docs/specs/indexer-search.md</c>: TorrentBay and LimeTorrents first for a show, Nyaa then those two
+    /// for an anime. Nyaa serves only anime, so one rank each in <c>sources.json</c> gives both orders.
+    /// </remarks>
+    public IReadOnlyList<SourceDefinition> IndexersFor(LibraryKind kind)
+    {
+        SourceDefinition[] serving = [.. catalogue.For(SourceRole.Indexer).Where(one => one.Serves(kind))];
+
+        return
+        [
+            .. serving.Where(one => one.FirstChoice is not null).OrderBy(one => one.FirstChoice),
+            .. serving.Where(one => one.FirstChoice is null),
+        ];
+    }
+
+    /// <summary>
+    /// One row with the hash its own page names, when its listing named none.
+    /// </summary>
+    /// <remarks>
+    /// Its page, or for a site that prints nothing its signed request — the same routes a winner is resolved
+    /// through. A row whose torrent cannot be read comes back as it was, without a hash, and takes no part.
+    /// </remarks>
+    public async Task<ReleaseCopy> HashOfAsync(ReleaseCopy row, CancellationToken ct)
+    {
+        if (row.InfoHash is not null)
+        {
+            return row;
+        }
+
+        CopyRoute route = row.Routes.Count > 0 ? row.Routes[0] : new CopyRoute(row.Source, row.DetailUrl, row.Magnet, row.Claim);
+
+        if (await ArtefactAsync(row, route, ct) is not string magnet || Magnets.HashOf(magnet) is not string hash)
+        {
+            return row;
+        }
+
+        return row with
+        {
+            Magnet = magnet,
+            InfoHash = hash,
+            Trackers = [.. row.Trackers.Concat(Magnets.TrackersOf(magnet)).Distinct(StringComparer.OrdinalIgnoreCase)],
+            Routes = [route with { Magnet = magnet }],
+        };
+    }
+
     /// <summary>The catalogue's rating of a site, or nought for one it does not carry.</summary>
     private int Rating(string source)
     {
@@ -539,7 +588,8 @@ public sealed class Find(
         return count == 1 ? "1 row" : $"{count} rows";
     }
 
-    private async Task<ReleaseCopy[]> AskAsync(SourceDefinition indexer, SearchTerm term, string? about, CancellationToken ct)
+    /// <summary>One question to one indexer, every page it declares, and the rows it answered.</summary>
+    public async Task<ReleaseCopy[]> AskAsync(SourceDefinition indexer, SearchTerm term, string? about, CancellationToken ct)
     {
         // As it went out, so the page shows the question the site was really
         // put: the name with its dots, or the words it was given instead.

@@ -2828,10 +2828,14 @@ and `TorrentDownloaderPlugin.cs` (the allow endpoint goes). `ReleaseName.cs` nee
 
 ## S13-07 · The indexer round and the winner
 
-**Files:** `Core/Pipeline/Find.cs`, `Core/Pipeline/SearchCycle.cs`, `Core/Pipeline/Decisions.cs`,
-`Core/Pipeline/ReleaseDecider.cs`, `Core/Naming/TitleMatcher.cs`, `Core/Pipeline/AskedThisCycle.cs`,
-`sources.json` (first-choice order), `tests/fixtures/` (captures of each indexer answering an exact
-release name), `docs/05-sources.md`.
+**Files:** `Core/Pipeline/IndexerRound.cs` (the round, `Merging`, `Winner`), `Core/Pipeline/Find.cs`
+(`IndexersFor`, `HashOfAsync`, `AskAsync` made public), `Core/Pipeline/SearchCycle.cs`,
+`Core/Sources/SourceDefinition.cs` and `Configuration/CatalogueLoader.cs` (`FirstChoice`), `sources.json`
+(`firstChoice`), `tests/fixtures/round-*` (each indexer answering an exact release name, the same name as
+words, and the pages of the rows that carry no hash), `docs/05-sources.md`. `TitleMatcher.cs`,
+`Decisions.cs`, `ReleaseDecider.cs` and `AskedThisCycle.cs` needed no change; the ladder, the race, the
+seeder ranking and `Decisions.Rank` are no longer called and go in `S13-09`, and the cycle tests pinning
+them went here, with `TheRightReleaseTests`.
 
 **Steps**
 
@@ -2852,6 +2856,8 @@ release name), `docs/05-sources.md`.
 11. Test (red): `SearchCycleTests.OnlyTheWinnerIsOfferedToTheClient`, and
     `AnEpisodeWithNoTorrentIsShownWithItsReasonAndComesBackNextRun`.
 12. Test (red): `SearchCycleTests.EachEpisodesWinnerIsOfferedBeforeTheNextEpisodeIsWorkedOn`.
+13. A counting row with no hash has its own page read for one, or it cannot be merged or counted;
+    `AnUnreadableWinnerYieldsToTheNext` is the release listed most and readable nowhere.
 
 **Done when** those tests pass and the suite is green. Specs: `indexer-search.md`, `run.md`.
 
@@ -2862,6 +2868,9 @@ release name), `docs/05-sources.md`.
 
 **Steps**
 
+0. First find out why TorrentBay's signed request failed (`Failed to fetch`) when the capture tool sent
+   it on 15 September 2026, after the tab that loaded the page had been closed — and whether the plugin
+   sends it from the same kind of fresh tab after clearing the way. TorrentBay is a first-choice indexer.
 1. Test (red): `ChallengeAwareFetchTests.AChallengeStillThereAfterASolveIsSolvedAgainOnce` — two
    attempts, each after a solve; no third.
 2. Test (red): `ChallengeAwareFetchTests.ASiteThatDoesNotAnswerIsAskedASecondTime`.

@@ -59,24 +59,21 @@ public class SearchCycleTests
 
         Assert.Equal(Folder, engine.Taken[0].DownloadFolder);
 
-        // And the same release under its other hash on this page, started
-        // beside it in a folder of its own — the owner's rule of 11 September
-        // 2026 that the first of the two to finish is kept.
-        EpisodeOutcome racing = Assert.Single(taken.Racing);
-
-        Assert.Equal(2, engine.Taken.Count);
-        Assert.Equal(Path.Combine(Folder, racing.InfoHash!), engine.Taken[1].DownloadFolder);
+        // And only the winner: this page carries the release under a second
+        // hash, and no other hash of it is started (indexer-search.md).
+        Assert.Empty(taken.Racing);
+        Assert.Single(engine.Taken);
 
         // And the episode nobody is serving says exactly that, rather than
-        // disappearing from the report. It was asked about: the indexer was put
-        // the question and answered with a page carrying nothing for it, which
-        // is a different thing from never having been asked.
+        // disappearing from the report. No name source gave a release name for
+        // it, so no indexer was asked (release-names.md: no release, no search),
+        // and it does not count as searched.
         EpisodeOutcome missing = report.Outcomes.Single(outcome => outcome.Episode == Silo(7).Key);
 
         Assert.Null(missing.Release);
         Assert.False(missing.HandedOver);
-        Assert.True(missing.Searched);
-        Assert.Contains("nothing anybody is serving", missing.Detail, StringComparison.OrdinalIgnoreCase);
+        Assert.False(missing.Searched);
+        Assert.Equal("no name source gave a release name for it", missing.Detail);
     }
 
     /// <remarks>
@@ -144,16 +141,11 @@ public class SearchCycleTests
         // And PreDB's feed once, at the start of the run, besides.
         Assert.Equal(43, fetch.Asked.Count(address => address.Host == "predb.me"));
 
-        // And the indexer was asked about every one of them, because an episode
-        // nothing has a name for is still an episode a search engine can be
-        // asked about by number. While it was not, five gaps of the owner's own
-        // Silo season three were never put to a single site: two of them had no
-        // name in the pool at all, and every indexer was carrying the release.
-        // Twice each: the episode with the owner's quality, and the episode
-        // without it when that found nothing.
-        Assert.Equal(84, fetch.Asked.Count(address =>
-            address.Host == "www.limetorrents.lol"
-            && address.AbsolutePath.Contains('E', StringComparison.Ordinal)));
+        // And not one indexer was asked about any of them: no name source gave a
+        // release name, and an indexer is searched only with one
+        // (release-names.md § No release, no search).
+        Assert.DoesNotContain(fetch.Asked, address => address.Host == "www.limetorrents.lol");
+        Assert.All(report.Outcomes, outcome => Assert.Equal("no name source gave a release name for it", outcome.Detail));
     }
 
     /// <remarks>
@@ -200,74 +192,6 @@ public class SearchCycleTests
     }
 
     /// <remarks>
-    /// An episode has many spellings of its release in the pool, and every one
-    /// of them is searched — but no more than that: the one name the show's
-    /// settings accept and the four rungs below it, a fixed set rather than an
-    /// unbounded search of the pool. Asking for ever more spellings is a cycle
-    /// that gets the plugin banned from every site it asks, so a fixed set is
-    /// what bounds the cost; nothing is taken until the names within it have
-    /// all been asked.
-    /// </remarks>
-    [Fact]
-    public async Task NoMoreNamesAreSearchedForThanTheSpellingsAndRungsAllow()
-    {
-        FakeFetch fetch = new();
-        fetch.AnswersAnything(Capture.Fixture("srrdb-search.json"));
-
-        // The one indexer is down, so every name costs one request and none of
-        // them produces a copy.
-        fetch.FailsHost("www.limetorrents.lol", FetchOutcome.Unreachable, "nothing answered");
-
-        // The capture carries four 1080p names; the show's forbidden tags leave one of them, as English
-        // only used to (a language is a tag now, docs/specs/show-list.md).
-        CycleReport report = await Cycle(fetch, new()).RunAsync(
-            [Silo(6)],
-            new(AtQuality("1080p", forbidden: ["GERMAN", "MULTI"]), Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        // The one name the settings accept, letter for letter and then without
-        // its punctuation, then the four rungs below it: the episode with the
-        // owner's quality and without, then the season with it and without. The
-        // programme's own name used to be a question here and is gone — asked
-        // on its own a site answers with every season and every quality it has.
-        Assert.Equal(6, fetch.Asked.Count(address => address.Host == "www.limetorrents.lol"));
-
-        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
-        Assert.False(outcome.HandedOver);
-    }
-
-    /// <remarks>
-    /// A pack taken for one gap answers for the rest of its season, and none of
-    /// them is searched for again this cycle. Without that the plugin asks
-    /// every indexer for episodes already on their way, and grabs the same
-    /// season once per gap.
-    /// </remarks>
-    [Fact]
-    public async Task APackTakenForOneGapSettlesTheRestOfItsSeason()
-    {
-        // One real page throughout: the name databases read its titles, and
-        // Nyaa — which is a real indexer answering in the same XML — reads its
-        // items for the hashes.
-        FakeFetch fetch = new();
-        fetch.AnswersAnything(Capture.Fixture("nyaa-diacritic.xml"));
-
-        FakeTorrentEngine engine = new();
-
-        CycleReport report = await Cycle(fetch, engine, sources: WithNyaa).RunAsync(
-            [Pokemon(1), Pokemon(2), Pokemon(3)],
-            new(AtQuality("1080p"), Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        TorrentRequest taken = Assert.Single(engine.Taken);
-        Assert.StartsWith("magnet:?", taken.Source, StringComparison.Ordinal);
-
-        Assert.Equal(
-            2,
-            report.Outcomes.Count(outcome =>
-                outcome.Detail.Contains("settled", StringComparison.OrdinalIgnoreCase)));
-    }
-
-    /// <remarks>
     /// Every refusal from the whole chain arrives in one list, which is what
     /// the Skipped page renders.
     /// </remarks>
@@ -283,79 +207,6 @@ public class SearchCycleTests
         Assert.NotEmpty(report.Skipped);
         Assert.All(report.Skipped, skipped => Assert.Equal(Silo(6).Key, skipped.Episode));
         Assert.All(report.Skipped, skipped => Assert.NotEqual(string.Empty, skipped.Reason));
-    }
-
-    /// <remarks>
-    /// The store has to be able to find the torrent again after a restart and
-    /// to know which episodes to put back if it fails, and neither is anywhere
-    /// in "taken from Nyaa". A season pack that fails puts back every gap it
-    /// answered for, which is the whole reason the coverage travels with it.
-    /// </remarks>
-    [Fact]
-    public async Task AGrabCarriesTheHashTheMagnetAndEveryEpisodeItAnswersFor()
-    {
-        FakeFetch fetch = new();
-        fetch.AnswersAnything(Capture.Fixture("nyaa-diacritic.xml"));
-
-        CycleReport report = await Cycle(fetch, new(), sources: WithNyaa).RunAsync(
-            [Pokemon(1), Pokemon(2), Pokemon(3)],
-            new(AtQuality("1080p"), Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        EpisodeOutcome taken = Assert.Single(report.Outcomes, outcome => outcome.HandedOver);
-
-        Assert.NotNull(taken.InfoHash);
-        Assert.StartsWith("magnet:?", taken.Magnet!, StringComparison.Ordinal);
-
-        // All three gaps, because it is a pack and the season had three.
-        Assert.Equal(3, taken.Covers.Count);
-        Assert.Contains(Pokemon(2).Key, taken.Covers);
-    }
-
-    /// <remarks>
-    /// <para>
-    /// <strong>One release under two hashes is taken under both.</strong> The
-    /// owner's decision of 11 September 2026: the two start together and the
-    /// first to finish is kept. The Pirate Bay's own answer for Sugar S02E01
-    /// carries <c>… 720p ATVP WEB-DL DDP5 1 H 264-NTb</c> twice, seeded by 57
-    /// and by 10, and which of those two swarms delivers first is not something
-    /// a listing can say.
-    /// </para>
-    /// <para>
-    /// The second goes into a folder of its own. Both torrents carry one name,
-    /// and in one folder they would write one path.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public async Task OneReleaseUnderTwoHashesIsTakenUnderBothIntoFoldersOfTheirOwn()
-    {
-        FakeFetch fetch = new();
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-        fetch.Answers(
-            "https://apibay.org/q.php?q=Sugar+S02E01+720p&cat=",
-            Capture.Fixture("sugar1-apibay.json"));
-
-        FakeTorrentEngine engine = new();
-
-        CycleReport report = await Cycle(fetch, engine, sources: WithPirateBay).RunAsync(
-            [Sugar(1)],
-            new(AtQuality("720p"), Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        EpisodeOutcome taken = Assert.Single(report.Outcomes);
-
-        Assert.True(taken.HandedOver, taken.Detail);
-        Assert.Equal("3592F3263EC91937FF60C3815040EDF14406F96A", taken.InfoHash);
-
-        EpisodeOutcome racing = Assert.Single(taken.Racing);
-
-        Assert.Equal("510E50DD445DDE31DC3C98531EEFE1D2DE2CC5C1", racing.InfoHash);
-        Assert.Equal(taken.Covers, racing.Covers);
-
-        Assert.Equal(2, engine.Taken.Count);
-        Assert.Equal(Folder, engine.Taken[0].DownloadFolder);
-        Assert.Equal(Path.Combine(Folder, racing.InfoHash!), engine.Taken[1].DownloadFolder);
-        Assert.Equal(engine.Taken[1].DownloadFolder, racing.Folder);
     }
 
     /// <remarks>
@@ -386,148 +237,6 @@ public class SearchCycleTests
         Assert.Contains("free", outcome.Detail, StringComparison.Ordinal);
     }
 
-
-    /// <remarks>
-    /// <strong>A3 was wrong, and this is the test that proves it.</strong> The
-    /// rule said an indexer is asked the full release name and nothing else. On
-    /// 22 August 2026 the real library asked apibay for
-    /// <c>Silo S03E08 1080p WEB H264 CAKES</c> and it answered
-    /// <em>No results returned</em>; the same site answers
-    /// <c>Silo S03E08</c> with twelve rows, the first of them seeded by six
-    /// thousand. Both captures are in tests/fixtures. A search engine is asked
-    /// what it can answer, and what comes back is judged by the show's settings — which
-    /// is the protection A3 was really asking for and which 0.3.4 did not have.
-    /// </remarks>
-    [Fact]
-    public async Task AnEpisodeIsAskedForByItsOwnNumberSoASiteCanAnswerIt()
-    {
-        FakeFetch fetch = new();
-
-        // Nothing has a name for it: the pool is empty and the name databases
-        // answer with a feed carrying nothing at all.
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-
-        fetch.Answers(
-            "https://apibay.org/q.php?q=Silo+S03E08+1080p&cat=",
-            Capture.Fixture("the-pirate-bay-episode.json"));
-
-        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
-            [Silo(8)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
-
-        Assert.True(outcome.HandedOver, outcome.Detail);
-        Assert.Equal("Silo S03E08 1080p HEVC x265-MeGusta", outcome.Release);
-        Assert.Equal(6372, outcome.Seeders);
-    }
-
-    /// <remarks>
-    /// A site asked about one gap answers with the whole programme, and the
-    /// other gaps of this cycle are in that answer. Throwing them away is what
-    /// the owner saw on 22 August 2026: four 1080p copies of Silo S03E04 to
-    /// S03E07 came back from a search for S03E08, every one of them an episode
-    /// the library was missing, and every one recorded as refused for not being
-    /// S03E08.
-    /// </remarks>
-    /// <remarks>
-    /// <para>
-    /// <strong>Every name goes to every indexer before anything is taken.</strong>
-    /// A site only answers about the name it was asked. An indexer holding the
-    /// release under a spelling the first name did not use is asked and still
-    /// never finds it, so its trackers never reach the magnet — and more
-    /// trackers is the difference between a download that starts and one that
-    /// does not.
-    /// </para>
-    /// <para>
-    /// The cycle used to stop at the first name that produced a copy worth
-    /// taking. On 26 August 2026 two Lioness episodes sat at "fetching
-    /// metadata" with no peer and no seed for hours, while the same release was
-    /// seeding through trackers published only by a site that had it under
-    /// another name.
-    /// </para>
-    /// <para>
-    /// The cost is names times indexers rather than indexers, and the per-host
-    /// gate is what keeps that civil: every request waits its turn behind that
-    /// site's own pace, whoever asked for it.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public async Task EveryNameIsSearchedEvenOnceOneOfThemHasFoundSomethingWorthTaking()
-    {
-        FakeFetch fetch = new();
-
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-
-        // Takeable rows, so the cycle really does have something worth taking
-        // before it has finished asking.
-        fetch.Answers(
-            "https://apibay.org/q.php?q=Silo+S03+1080p&cat=",
-            Capture.Fixture("the-pirate-bay-show.json"));
-
-        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
-            [Silo(6)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
-
-        Assert.True(outcome.HandedOver, outcome.Detail);
-
-        // More than the one search that produced the copy: the rest were asked
-        // too, which is the whole of the rule.
-        Assert.True(
-            fetch.Asked.Count(address => address.Host == "apibay.org") > 1,
-            "the cycle stopped asking as soon as one name found something worth taking");
-    }
-
-    [Fact]
-    public async Task ACopyThatAnswersAnotherGapOfThisCycleIsGivenToIt()
-    {
-        FakeFetch fetch = new();
-
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-
-        // The whole programme, which is what this site answers when it is asked
-        // for one: a hundred rows from S01E01 to S03E08, with hashes and
-        // seeders on all of them.
-        // The season's own shelf, which is the one fetch every gap of it shares.
-        fetch.Answers(
-            "https://apibay.org/q.php?q=Silo+S03+1080p&cat=",
-            Capture.Fixture("the-pirate-bay-show.json"));
-
-        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
-            [Silo(4), Silo(5), Silo(6), Silo(7)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        Assert.Equal(4, report.Outcomes.Count);
-        Assert.All(report.Outcomes, outcome => Assert.True(outcome.HandedOver, outcome.Detail));
-
-        // The season is still fetched once for the four of them: a season is
-        // asked for the whole of itself, so every gap in it is entitled to the
-        // answer and none of them pays again. That saving is unchanged.
-        //
-        // What each gap now adds is its own names. Every name goes to every
-        // indexer before anything is taken, because a site only answers about
-        // the name it was asked and the one holding a release under another
-        // spelling is otherwise asked and never finds it — with its trackers
-        // never reaching the magnet. So the four gaps cost their own searches
-        // on top of the shared season shelf. Nine: each of the four gaps asks
-        // this site its own episode with the owner's quality and without — the
-        // site answers neither — and then the season, which it does answer and
-        // which the other three gaps are handed without asking again.
-        //
-        // The programme's own name is gone, and each site now climbs on its own
-        // rather than every site descending together: a site that answers
-        // nothing is asked something simpler even while another site has already
-        // answered, because otherwise its trackers never reach the magnet.
-        Assert.Equal(
-            9,
-            fetch.Asked.Count(address => address.Host == "apibay.org"));
-    }
-
     /// <remarks>
     /// A row that came back for another episode is not a refusal. It was never
     /// offered for this one — a search engine answered broadly — and recording
@@ -553,138 +262,6 @@ public class SearchCycleTests
         Assert.DoesNotContain(
             report.Skipped,
             skipped => skipped.Reason.Contains("is not S03E08", StringComparison.Ordinal));
-    }
-
-    /// <remarks>
-    /// The best copy is the one with the most seeders, and the site with the
-    /// most seeders is the one whose magnet is hardest to get: TorrentBay's
-    /// comes from a signed request this plugin does not make, so every row it
-    /// answers with is unreachable. On 22 August 2026 it outranked everything
-    /// for Silo S03E08, the cycle followed it, found no torrent and stopped —
-    /// with a copy of the same episode from another site sitting unexamined.
-    /// </remarks>
-    [Fact]
-    public async Task WhenTheBestCopyNamesNoTorrentTheNextOneIsTaken()
-    {
-        FakeFetch fetch = new();
-
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-
-        // TorrentGalaxy publishes neither a magnet nor a hash, and its rows'
-        // own pages are unreachable in this test — so every copy it offers is
-        // a dead end, and it is asked first because it answers with the higher
-        // count.
-        fetch.Answers(
-            "https://torrentgalaxy.one/get-posts/keywords:Silo%20S03E07/",
-            Capture.Fixture("torrentgalaxy.html"));
-
-        fetch.Answers(
-            "https://apibay.org/q.php?q=Silo+S03E07+1080p&cat=",
-            Capture.Fixture("the-pirate-bay-show.json"));
-
-        CycleReport report = await Cycle(fetch, new(), sources: WithGalaxyAndPirateBay).RunAsync(
-            [Silo(7)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
-
-        Assert.True(outcome.HandedOver, outcome.Detail);
-        Assert.Equal("The Pirate Bay", outcome.Source);
-    }
-
-    /// <remarks>
-    /// <strong>What an earlier search happened to turn up is a candidate, never
-    /// an answer.</strong> The cycle kept every copy it had seen and tried that
-    /// stack before searching, and took the first acceptable thing in it — so
-    /// an episode could be settled by a leftover from another episode's search
-    /// without one indexer being asked about it.
-    ///
-    /// The owner watched it happen on 22 August 2026. Sugar S02E08 was settled
-    /// from the stack by a FLUX release, and
-    /// <c>Sugar 2024 S02E08 1080p WEB H264-CAKES</c> — the top row on both
-    /// TorrentBay and The Pirate Bay, at 483 and 458 seeders — was never
-    /// fetched at all, because nothing ever asked for that episode.
-    ///
-    /// The stack now adds to what a search brings back and decides nothing on
-    /// its own.
-    /// </remarks>
-    [Fact]
-    public async Task WhatAnEarlierSearchTurnedUpDoesNotStopThisOneBeingMade()
-    {
-        FakeFetch fetch = new();
-
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-
-        // The whole programme, which is what the first gap's search brings
-        // back: a hundred rows covering every episode of it.
-        fetch.Answers(
-            "https://apibay.org/q.php?q=Silo+S03E04+1080p&cat=",
-            Capture.Fixture("the-pirate-bay-show.json"));
-
-        // And S03E08's own answer, which carries the copy that is actually
-        // best seeded — six thousand of them.
-        fetch.Answers(
-            "https://apibay.org/q.php?q=Silo+S03E08+1080p&cat=",
-            Capture.Fixture("the-pirate-bay-episode.json"));
-
-        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
-            [Silo(4), Silo(8)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        EpisodeOutcome last = report.Outcomes.Single(outcome => outcome.Episode == Silo(8).Key);
-
-        // Asked, rather than settled out of what the first gap's search left
-        // lying about.
-        Assert.Contains(fetch.Asked, address => address.Query.Contains("Silo+S03E08", StringComparison.Ordinal));
-
-        // And the copy taken is the best-seeded one anybody offered, which is
-        // only in that answer.
-        Assert.True(last.HandedOver, last.Detail);
-        Assert.Equal(6372, last.Seeders);
-    }
-
-    /// <remarks>
-    /// <strong>One term is asked once.</strong> The programme's own name is a
-    /// term every gap of that programme falls through to, so eight gaps asked
-    /// every indexer the identical question eight times — and apibay, which
-    /// rate-limits hard, answered 429 to the ninth. The answer to a question
-    /// already asked this cycle is the answer already in hand.
-    ///
-    /// Not a short cut: it saves the <em>request</em> and never the decision.
-    /// Every gap is still decided over everything, which is
-    /// <see cref="WhatAnEarlierSearchTurnedUpDoesNotStopThisOneBeingMade"/>.
-    /// </remarks>
-    [Fact]
-    public async Task ATermAlreadyAskedThisCycleIsNotAskedAgain()
-    {
-        FakeFetch fetch = new();
-
-        // The name databases have nothing, and neither has either episode's own
-        // number - a real page with no rows on it.
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-
-        // The season's own shelf, which both gaps fall through to. It used to be
-        // the programme's own name, and that question is gone: asked on its own
-        // a site answers with every season and every quality it has, and every
-        // row of it had to be carried back and refused.
-        fetch.Answers(
-            "https://www.limetorrents.lol/search/all/Silo S03 1080p/",
-            Capture.Fixture("limetorrents.html"));
-
-        CycleReport report = await Cycle(fetch, new()).RunAsync(
-            [Silo(6), Silo(7)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        Assert.Equal(2, report.Outcomes.Count);
-
-        Assert.Equal(
-            1,
-            fetch.Asked.Count(address =>
-                address.Host == "www.limetorrents.lol"
-                && address.ToString().EndsWith("/search/all/Silo S03 1080p/", StringComparison.Ordinal)));
     }
 
     /// <remarks>
@@ -732,62 +309,25 @@ public class SearchCycleTests
     }
 
     /// <remarks>
-    /// <para>
-    /// The terms this plugin makes up for itself — the programme, the season,
-    /// the episode as this plugin spells it — are not asked at all while the
-    /// source's own name is answering. They used to go first and always, ahead
-    /// of every name the sources gave, which is not what the architecture
-    /// describes and spent the search budget on guesses.
-    /// </para>
+    /// <c>docs/specs/release-names.md</c> § No release, no search: an episode for which no name source gave a
+    /// release name that meets its show's settings is not searched on any indexer, and the plugin builds no
+    /// search term of its own. The only name here is German and the show forbids the tag; not one indexer
+    /// is asked anything, and the episode says why.
     /// </remarks>
     [Fact]
-    public async Task NothingThisPluginMakesUpIsAskedWhileTheSourcesNameAnswers()
+    public async Task NothingIsAskedOfAnIndexerWhenNoNameMeetsTheSettings()
     {
-        FixedNames pool = new(("Silo.S03E06.1080p.WEB.H264-CAKES", "srrDB"));
+        FixedNames names = new(("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB"));
 
         FakeFetch fetch = Answering();
 
-        await Cycle(fetch, new(), names: pool).RunAsync(
-            [Silo(6)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        Assert.Contains(
-            fetch.Asked,
-            address => address.OriginalString.Contains("Silo.S03E06.1080p.WEB.H264-CAKES", StringComparison.Ordinal));
-
-        Assert.DoesNotContain(
-            fetch.Asked,
-            address => address.AbsolutePath is "/search/all/Silo/" or "/search/all/Silo S03/");
-    }
-
-    /// <remarks>
-    /// And they are asked when the sources leave nothing to ask for. Every name
-    /// here is one the show's settings refuse, so there is no release name to put to
-    /// an indexer — and an episode nobody pre'd in a language the owner reads
-    /// must still be looked for.
-    /// </remarks>
-    [Fact]
-    public async Task WhatThisPluginMakesUpIsAskedWhenTheSourcesLeaveNothing()
-    {
-        FixedNames pool = new(("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB"));
-
-        FakeFetch fetch = Answering();
-
-        // The sources are asked about every episode on every run, so for them
-        // to leave nothing they have to answer nothing.
-        fetch.FailsHost("api.srrdb.com", FetchOutcome.Unreachable, "nothing answered");
-        fetch.FailsHost("predb.me", FetchOutcome.Unreachable, "nothing answered");
-
-        await Cycle(fetch, new(), names: pool).RunAsync(
+        CycleReport report = await Cycle(fetch, new(), names: names).RunAsync(
             [Silo(6)],
             new(AtQuality("1080p", forbidden: ["German"]), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
-        Assert.Contains(
-            fetch.Asked,
-            address => address.ToString().EndsWith("/search/all/Silo S03 1080p/", StringComparison.Ordinal)
-                || address.ToString().EndsWith("/search/all/Silo S03E06 1080p/", StringComparison.Ordinal));
+        Assert.Empty(fetch.Asked);
+        Assert.Contains("German", Assert.Single(report.Outcomes).Detail, StringComparison.Ordinal);
     }
 
     /// <remarks>
@@ -859,74 +399,6 @@ public class SearchCycleTests
         return -1;
     }
 
-    /// <summary>Where a download would land, if anything were downloading.</summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>The owner's ladder, 10 September 2026.</strong> Every rung goes
-    /// to every indexer, and a rung is only climbed down to when the one above
-    /// it found nothing anybody is serving. Nothing is skipped and nothing
-    /// starts halfway.
-    /// </para>
-    /// <para>
-    /// What this replaces was three questions asked together in one breath —
-    /// the season, the programme on its own, and the episode — with the
-    /// programme's own name dragging back every season and every quality the
-    /// site had. The owner watched it ask TorrentGalaxy for "South Park S15"
-    /// and called it what it was.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public async Task TheRungsAreAskedInOrderAndNothingBroaderIsEverAsked()
-    {
-        FakeFetch fetch = new();
-
-        // Every question answers with a real page that has nothing on it, so
-        // the ladder is climbed all the way down.
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-
-        await Cycle(fetch, new()).RunAsync(
-            [Silo(6)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        string[] asked =
-        [
-            .. fetch.Asked
-                .Where(address => address.Host == "www.limetorrents.lol")
-                .Select(address => address.ToString().Replace("https://www.limetorrents.lol/search/all/", string.Empty, StringComparison.Ordinal).TrimEnd('/')),
-        ];
-
-        Assert.Equal(
-            ["Silo S03E06 1080p", "Silo S03E06", "Silo S03 1080p", "Silo S03"],
-            asked);
-    }
-
-    /// <remarks>
-    /// And the ladder stops at the first rung that answers. Climbing on would
-    /// spend a request at every indexer on a question already answered, and
-    /// drag back the broader rubbish this exists to avoid.
-    /// </remarks>
-    [Fact]
-    public async Task ARungThatAnswersIsTheLastOneAsked()
-    {
-        FakeFetch fetch = new();
-
-        fetch.AnswersAnything(Capture.Fixture("nyaa-nothing.xml"));
-        fetch.Answers(
-            "https://www.limetorrents.lol/search/all/Silo S03E06 1080p/",
-            Capture.Fixture("limetorrents.html"));
-
-        await Cycle(fetch, new()).RunAsync(
-            [Silo(6)],
-            new(Wanted, Blacklist.None, DryRun: false, Folder),
-            CancellationToken.None);
-
-        Assert.DoesNotContain(
-            fetch.Asked,
-            address => address.ToString().Contains("/search/all/Silo S03", StringComparison.Ordinal)
-                && !address.ToString().Contains("S03E06", StringComparison.Ordinal));
-    }
-
     /// <remarks>
     /// <para>
     /// <strong>An episode that has been decided is handed to the client before
@@ -943,7 +415,7 @@ public class SearchCycleTests
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task ADecidedEpisodeIsHandedOverBeforeTheNextIsAskedAbout()
+    public async Task EachEpisodesWinnerIsOfferedBeforeTheNextEpisodeIsWorkedOn()
     {
         FakeFetch fetch = Answering();
         FakeTorrentEngine engine = new();
@@ -975,6 +447,142 @@ public class SearchCycleTests
         Assert.True(
             askedAboutTheNext < 0 || askedAboutTheNext > handedOver,
             "the next episode's name was asked for before the first episode was handed over");
+    }
+
+    /// <remarks>
+    /// <c>docs/specs/indexer-search.md</c> § Handing the winner over: the winning merged torrent is offered
+    /// to the download client, and no other hash of the same release is started. Silo's name is listed as
+    /// the TGx upload on six indexers and the EZTV upload on three; only the TGx torrent is started, and the
+    /// decision says what it won ahead of.
+    /// </remarks>
+    [Fact]
+    public async Task OnlyTheWinnerIsOfferedToTheClient()
+    {
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await Round(new FakeFetch().AnsweringSilo(), engine).RunAsync(
+            [IndexerSites.SiloEpisode],
+            new(Wanted, Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        TorrentRequest started = Assert.Single(engine.Taken);
+        Assert.Contains(IndexerSites.TgxHash, started.Source, StringComparison.OrdinalIgnoreCase);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal(IndexerSites.TgxHash, outcome.InfoHash);
+        Assert.Equal(IndexerSites.Silo, outcome.Release);
+        Assert.Equal([IndexerSites.SiloEpisode.Key], outcome.Covers);
+        Assert.Empty(outcome.Racing);
+        Assert.Contains($"{IndexerSites.EztvHash} (3 indexers)", outcome.Considered!, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <c>docs/specs/indexer-search.md</c>: an indexer result is not judged against the show's settings — the
+    /// release name was. The show forbids the tags TGx and EZTV; the name carries neither, the rows carry
+    /// them as the sites' own tags, and the winner is still taken.
+    /// </remarks>
+    [Fact]
+    public async Task ARowIsNotJudgedAgainstTheShowsSettings()
+    {
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await Round(new FakeFetch().AnsweringSilo(), engine).RunAsync(
+            [IndexerSites.SiloEpisode],
+            new(AtQuality("1080p", forbidden: ["TGx", "EZTV"]), Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal(IndexerSites.TgxHash, outcome.InfoHash);
+    }
+
+    /// <remarks>
+    /// <c>docs/specs/release-names.md</c>: the names carrying the most wishes are searched first, and when they
+    /// produce no torrent on any indexer the names carrying one wish fewer are searched. The show wishes for
+    /// MULTI; HiggsBoson's MULTI release is asked first of every indexer and nobody lists it, so the round
+    /// hands over to the plain name, which wins.
+    /// </remarks>
+    [Fact]
+    public async Task AnEmptyWishGroupHandsOverToTheGroupWithOneWishFewer()
+    {
+        const string multi = "Silo.S02E01.MULTI.1080p.WEB.H264-HiggsBoson";
+
+        Assert.Contains(multi, Capture.Rows("names-predb-search-silo-s02e01.xml", "rss"));
+
+        FakeFetch fetch = new FakeFetch().AnsweringSilo();
+        FakeTorrentEngine engine = new();
+
+        foreach (SourceDefinition indexer in IndexerSites.Shipped.Where(one => one.Serves(LibraryKind.Television)))
+        {
+            fetch.Answers(IndexerSites.Exact(indexer, multi), Capture.Fixture("round-solo-nyaa-exact.xml"));
+            fetch.Answers(IndexerSites.Words(indexer, multi), Capture.Fixture("round-solo-nyaa-exact.xml"));
+        }
+
+        CycleReport report = await Round(fetch, engine, names: new FixedNames((IndexerSites.Silo, "PreDB"), (multi, "PreDB"))).RunAsync(
+            [IndexerSites.SiloEpisode],
+            new(SettingsByShow.Every(new() { Quality = "1080p", Wishes = ["MULTI"], Searched = true }), Blacklist.None, DryRun: false, Folder),
+            CancellationToken.None);
+
+        string[] asked = [.. fetch.Asked.Select(address => address.ToString())];
+
+        // Group by group: every indexer has been asked the name carrying the wish before any indexer is asked
+        // the plain one. Asking both names of one indexer before the next would be one group, not two.
+        int lastOfTheWish = IndexerSites.Shipped
+            .Where(one => one.Serves(LibraryKind.Television))
+            .Max(indexer => Array.IndexOf(asked, IndexerSites.Words(indexer, multi)));
+        int firstOfThePlainName = Array.IndexOf(asked, IndexerSites.Exact(IndexerSites.TorrentBay, IndexerSites.Silo));
+
+        Assert.True(lastOfTheWish >= 0 && lastOfTheWish < firstOfThePlainName, "The group carrying the wish was not asked in full first.");
+
+        Assert.Equal(IndexerSites.TgxHash, Assert.Single(report.Outcomes).InfoHash);
+    }
+
+    /// <remarks>
+    /// <c>docs/specs/run.md</c>: an episode for which no wish group produces a torrent is shown with its reason,
+    /// and is searched for again on the next run. Nobody lists the name; the outcome says so, and a second run
+    /// puts every question to every indexer again.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeWithNoTorrentIsShownWithItsReasonAndComesBackNextRun()
+    {
+        FakeFetch fetch = new FakeFetch().AnswersAnything(Capture.Fixture("round-solo-nyaa-exact.xml"));
+        ActivityJournal journal = new();
+        SearchCycle cycle = Round(fetch, new(), journal);
+
+        CycleReport first = await cycle.RunAsync([IndexerSites.SiloEpisode], new(Wanted, Blacklist.None, DryRun: false, Folder), CancellationToken.None);
+        int asked = fetch.Asked.Count;
+
+        CycleReport second = await cycle.RunAsync([IndexerSites.SiloEpisode], new(Wanted, Blacklist.None, DryRun: false, Folder), CancellationToken.None);
+
+        foreach (CycleReport report in (CycleReport[])[first, second])
+        {
+            EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+            Assert.False(outcome.HandedOver);
+            Assert.True(outcome.Searched);
+            Assert.Equal("no indexer listed a torrent for any of its release names", outcome.Detail);
+        }
+
+        Assert.True(asked > 0);
+        Assert.Equal(asked * 2, fetch.Asked.Count);
+        Assert.Contains(
+            journal.Snapshot().History,
+            entry => entry.Stage == ActivityStage.Decide && entry.Detail == "no indexer listed a torrent for any of its release names");
+    }
+
+    /// <summary>A cycle over every shipped indexer, with Silo's name handed over as a name source gave it.</summary>
+    private static SearchCycle Round(FakeFetch fetch, FakeTorrentEngine engine, ActivityJournal? journal = null, IReleaseNames? names = null)
+    {
+        ActivityJournal writing = journal ?? new ActivityJournal();
+
+        return new(
+            names ?? new FixedNames((IndexerSites.Silo, "PreDB")),
+            IndexerSites.Finding(fetch, journal: writing),
+            writing,
+            new Grab(engine, new EndlessDisk(null), writing));
     }
 
     private const string Folder = @"C:\downloads";

@@ -42,7 +42,7 @@ plugin's, tested against a capture.
 | --- | --- | --- |
 | **Feed** | what was released recently | nothing — read whole, every one at once at the start of every run. A feed answers any question with the newest N posts |
 | **Name database** | what a release is called | `Show SxxEyy` and nothing else, for an episode no feed named; answers names, never torrents |
-| **Indexer** | who is serving a named release | the **full release name** letter for letter, then without its punctuation, then the ladder; answers rows with hashes |
+| **Indexer** | who is serving a named release | the **full release name** letter for letter, then without its punctuation when that found nothing; answers rows, some with hashes |
 
 A feed with a search address is both a feed and a name database. `SourceRole` is decided from `kind`
 and the presence of `searchUrl`, and nothing else guesses.
@@ -264,14 +264,40 @@ whole season, 1080p, in English.
 Every error names the address it failed on, with anything matching
 `api_?key|apikey|passkey|token|secret|rss_?key` blanked out.
 
-## Merging
+## How a run asks the indexers
 
-The same torrent on five sites is one torrent with five sets of trackers. Merge by info hash, union
-the trackers, take the highest seeder count, keep the announced title. More trackers is a faster
-download, which is why every indexer is asked.
+`Core/Pipeline/IndexerRound.cs`, `docs/specs/indexer-search.md`. One wish group of release names at a
+time, most wishes first.
 
-Ranking between two different acceptable torrents: seeders first, then indexer priority
-**descending**. 0.3.4 had this inverted and picked the worst-rated site.
+1. **First-choice indexers one after another, then the rest together.** `firstChoice` in
+   `sources.json`: Nyaa 1, TorrentBay 2, LimeTorrents 3. Nyaa serves only anime, so a show asks
+   TorrentBay then LimeTorrents, and an anime Nyaa, TorrentBay, LimeTorrents. Every enabled indexer is
+   asked; a result on a first-choice indexer does not end the round.
+2. **Each name exactly, then without punctuation** where the exact name found nothing. A question
+   already asked of an indexer this run is not asked again.
+3. **A row counts only when its title is the name** — `TitleMatcher.Release`: letters and digits in
+   order, with case, punctuation and the site's tag (`[TGx]`, a trailing `EZTV`, `[EZTVx.to].mkv`) set
+   aside. A row is not judged against the show's settings.
+4. **A counting row with no hash has its own page read for one** (or TorrentBay's signed request).
+   Most indexers print no hash on a listing, and a row without one cannot be merged or counted. Only
+   rows whose title is the name are read, one or two an indexer — C3 still holds.
+5. **Merged by hash**, every tracker of every row on the one torrent. A row whose torrent cannot be
+   read takes no part.
+6. **The winner** is on the most indexers; level, the one found first — which is a first-choice
+   indexer's find, and Nyaa's for an anime. A release or hash still refused takes no part. Only the
+   winner is offered, and the next in order only when the winner cannot be offered. Seeders and a
+   site's rating decide nothing.
+
+**Measured on 15 September 2026**, `tests/fixtures/round-*`: `Silo.S02E01.1080p.WEB.H264-SuccessfulCrab`
+was posted twice. The TGx upload (`87D8…`) is on LimeTorrents and The Pirate Bay with its hash, and on
+1337x, TorrentGalaxy, Torrentz2 and TorrentDownloads behind the row's page — six indexers. The EZTV
+upload (`41B0…`) is on The Pirate Bay, TorrentGalaxy and Torrentz2 — three; EZTV's own page for it
+answered 451. Torrentz2 lists two more uploads of the name on it alone. TorrentGalaxy answers the exact
+name with nothing and the name as words with the release. Nyaa had nothing for the scene anime name
+`Solo.Leveling.S02E01.1080p.WEB.H264-SKYANiME`; TorrentBay had it. Torrentz2's page spells its magnet
+with HTML entities and is read all the same. **The capture tool's check of TorrentBay's signed request
+failed with `Failed to fetch`**, sent after the browser had closed the tab that loaded the page — step 0
+of `S13-08`, because TorrentBay is a first-choice indexer.
 
 ## The health tool
 

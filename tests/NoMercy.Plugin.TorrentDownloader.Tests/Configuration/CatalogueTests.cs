@@ -349,4 +349,20 @@ public class CatalogueTests
                 $"{one.Name} at {one.Priority} outranks TorrentBay at {torrentBay.Priority}."));
     }
 
+    /// <remarks>
+    /// <c>docs/specs/indexer-search.md</c>: TorrentBay, LimeTorrents and Nyaa are the first-choice indexers —
+    /// for a show TorrentBay then LimeTorrents, for an anime Nyaa then those two. Read from the file that
+    /// ships, because the order is the catalogue's to declare.
+    /// </remarks>
+    [Fact]
+    public void TheFirstChoiceIndexersAreNyaaThenTorrentBayThenLimeTorrents()
+    {
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(new CapturingLogger()).Load();
+
+        SourceDefinition[] firstChoice = [.. shipped.Where(one => one.FirstChoice is not null).OrderBy(one => one.FirstChoice)];
+
+        Assert.Equal(["Nyaa", "TorrentBay", "LimeTorrents"], firstChoice.Select(one => one.Name));
+        Assert.Equal(["TorrentBay", "LimeTorrents"], firstChoice.Where(one => one.Serves(LibraryKind.Television)).Select(one => one.Name));
+        Assert.Equal(["Nyaa", "TorrentBay", "LimeTorrents"], firstChoice.Where(one => one.Serves(LibraryKind.Anime)).Select(one => one.Name));
+    }
 }

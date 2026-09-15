@@ -104,6 +104,7 @@ public sealed class CatalogueLoader(ILogger logger)
             Libraries = entry.Libraries ?? [],
             PageParameter = entry.PageParameter,
             Pages = entry.Pages,
+            FirstChoice = entry.FirstChoice,
         };
     }
 
@@ -143,6 +144,9 @@ public sealed class CatalogueLoader(ILogger logger)
 
         /// <summary>How many pages of one search to read. One unless the file says more.</summary>
         public int Pages { get; init; } = 1;
+
+        /// <summary>This indexer's rank among the first-choice indexers, or nothing for every other.</summary>
+        public int? FirstChoice { get; init; }
 
         /// <summary>On unless the file says otherwise, so a new entry works.</summary>
         public bool Enabled { get; init; } = true;
