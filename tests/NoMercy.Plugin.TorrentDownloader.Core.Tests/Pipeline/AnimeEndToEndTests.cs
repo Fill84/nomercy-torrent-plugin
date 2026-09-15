@@ -43,8 +43,8 @@ public class AnimeEndToEndTests
         FakeLibrary server = Seeded();
         FakeTimeProvider clock = new(new DateTimeOffset(2026, 8, 20, 12, 0, 0, TimeSpan.Zero));
 
-        IReadOnlyList<TrackedEpisode> derived = await new MissingRefresh(server, clock)
-            .DeriveAsync(new(), CancellationToken.None);
+        IReadOnlyList<TrackedEpisode> derived = await new MissingRefresh(server, FakeAppliedSettings.EveryShowOn(), clock)
+            .DeriveAsync(CancellationToken.None);
 
         TrackedEpisode missing = Assert.Single(derived, one => one.State == EpisodeState.Missing);
 

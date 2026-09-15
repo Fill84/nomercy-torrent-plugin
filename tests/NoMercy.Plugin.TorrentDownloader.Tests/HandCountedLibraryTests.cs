@@ -77,8 +77,8 @@ public class HandCountedLibraryTests : IDisposable
         await database.MigrateAsync(CancellationToken.None);
         EpisodeRepository episodes = new(database);
 
-        IReadOnlyList<TrackedEpisode> derived = await new MissingRefresh(new HostLibrary(server), clock)
-            .DeriveAsync(new Profile(), CancellationToken.None);
+        IReadOnlyList<TrackedEpisode> derived = await new MissingRefresh(new HostLibrary(server), AppliedToEveryShow.Searched, clock)
+            .DeriveAsync(CancellationToken.None);
 
         await episodes.ReplaceAsync(derived, CancellationToken.None);
 

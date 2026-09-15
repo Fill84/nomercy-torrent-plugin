@@ -875,6 +875,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             engine,
             await GrabsAsync(ct),
             library,
+            await AppliedAsync(ct),
             new Stager(_journal, Context.Logger),
 
             // The contract where this server offers it, and the older way where
@@ -1650,9 +1651,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </summary>
     /// <remarks>
     /// <para>
-    /// The whole rule is in <see cref="MissingRefresh"/>: every show in every
-    /// television and anime library, every episode without a file, missing once
-    /// it has aired. It derives and returns; the repository is what compares
+    /// The whole rule is in <see cref="MissingRefresh"/>: every show switched on
+    /// with saved settings and a quality, every episode without a file, missing
+    /// once it has aired. It derives and returns; the repository is what compares
     /// that against what is stored and keeps the plugin's own bookkeeping —
     /// attempts, last search — for the rows that survive.
     /// </para>
@@ -1665,19 +1666,19 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private async Task RefreshAsync(CancellationToken ct)
     {
-        if (await ConfiguredAsync(ct) is not Settings settings)
+        if (await ConfiguredAsync(ct) is null)
         {
             return;
         }
 
-        await RefreshAsync(settings, ct);
+        await DeriveMissingAsync(ct);
     }
 
-    private async Task RefreshAsync(Settings settings, CancellationToken ct)
+    private async Task DeriveMissingAsync(CancellationToken ct)
     {
-        MissingRefresh refresh = new(new HostLibrary(Context.Library), TimeProvider.System);
+        MissingRefresh refresh = new(new HostLibrary(Context.Library), await AppliedAsync(ct), TimeProvider.System);
 
-        IReadOnlyList<TrackedEpisode> derived = await refresh.DeriveAsync(settings.Profile, ct);
+        IReadOnlyList<TrackedEpisode> derived = await refresh.DeriveAsync(ct);
 
         await (await EpisodesAsync(ct)).ReplaceAsync(derived, ct);
     }
@@ -1711,7 +1712,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     private async Task MaintainAsync(Settings settings, CancellationToken ct)
     {
-        await RefreshAsync(settings, ct);
+        await DeriveMissingAsync(ct);
 
         GrabRepository grabs = await GrabsAsync(ct);
 
@@ -2124,6 +2125,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
                 return await OverviewAsync(null, 1, ct);
         }
+    }
+
+    /// <summary>What applies to each show, read from the saved settings on every call.</summary>
+    private async Task<AppliedSettings> AppliedAsync(CancellationToken ct)
+    {
+        return new(await ShowSettingsAsync(ct), await LibraryPreferencesAsync(ct));
     }
 
     /// <summary>

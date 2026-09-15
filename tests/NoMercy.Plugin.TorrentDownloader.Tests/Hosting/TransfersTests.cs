@@ -447,30 +447,19 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
-    /// <para>
-    /// <strong>A grab for a show the owner does not have is cancelled and its
-    /// download deleted.</strong> On 24 August 2026 the library rule was
-    /// widened to every show in a library, and within the hour the plugin was
-    /// on 479 grabs: the server keeps rows for shows nobody asked for, and
-    /// Family Guy alone claimed 456 missing episodes.
-    /// </para>
-    /// <para>
-    /// Putting the rule back stops more being made. It does nothing about the
-    /// ones already running, and leaving those to finish would fill the owner's
-    /// disk with a show they have never watched. So a grab whose show is not
-    /// one they have goes, and takes its bytes with it.
-    /// </para>
+    /// <c>docs/specs/show-list.md</c> § Switching a show on, the owner's answer of 15 September 2026: a
+    /// download of a show that has nothing searched is cancelled and what it downloaded is deleted.
+    /// Which shows those are, through the plugin's own repositories, is <c>TheSwitchDecidesTests</c>.
     /// </remarks>
     [Fact]
-    public async Task AGrabForAShowTheOwnerDoesNotHaveIsCancelled()
+    public async Task AGrabForAShowThatIsNotSearchedIsCancelledAndDeleted()
     {
         GrabRepository grabs = await Grabs();
         await Grabbed(grabs);
 
         StandingEngine engine = new StandingEngine().Holding(Downloading());
 
-        // The show has no episode on disk, so it is not one the owner has.
-        await Transfers(engine, grabs, Server(), owned: false)
+        await Transfers(engine, grabs, Server(), searched: false)
             .TickAsync(Incomplete, Intake, CancellationToken.None);
 
         (string InfoHash, bool DeleteFiles) removed = Assert.Single(engine.Removed);
@@ -655,6 +644,7 @@ public class TransfersTests : IDisposable
                 .Show(41, "Silo", TelevisionLibrary, year: 2023)
                 .Episode(41, 3, 6)
                 .Episode(41, 1, 1, hasFile: true)),
+            AppliedToEveryShow.Searched,
             new Stager(server.Journal, server.Log),
             encoder,
             server.Journal,
@@ -1066,6 +1056,7 @@ public class TransfersTests : IDisposable
             engine,
             grabs,
             new HostLibrary(query),
+            AppliedToEveryShow.Searched,
             new Stager(server.Journal, server.Log),
             new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
             server.Journal,
@@ -1167,6 +1158,7 @@ public class TransfersTests : IDisposable
             engine,
             grabs,
             new HostLibrary(query),
+            AppliedToEveryShow.Searched,
             new Stager(server.Journal, server.Log),
             encoder,
             server.Journal,
@@ -1224,6 +1216,7 @@ public class TransfersTests : IDisposable
             new StandingEngine(),
             grabs,
             new HostLibrary(query),
+            AppliedToEveryShow.Searched,
             new Stager(server.Journal, server.Log),
             encoder,
             server.Journal,
@@ -1277,6 +1270,7 @@ public class TransfersTests : IDisposable
             new StandingEngine().Holding(Finished() with { State = TorrentState.Finished }),
             grabs,
             new HostLibrary(query),
+            AppliedToEveryShow.Searched,
             new Stager(server.Journal, server.Log),
             new RecordingEncoder(),
             server.Journal,
@@ -1688,7 +1682,7 @@ public class TransfersTests : IDisposable
         GrabRepository grabs,
         FakeProvider server,
         bool encoded = false,
-        bool owned = true,
+        bool searched = true,
         TimeProvider? clock = null,
         IEncoderSays? says = null,
         IEncodeGateway? encoder = null,
@@ -1704,16 +1698,13 @@ public class TransfersTests : IDisposable
             // Whether the encode has landed. It is the only thing the plugin
             // can see that says the job finished.
             .Episode(41, 3, 6, hasFile: encoded)
-
-            // Whether the owner has this show at all: one episode on disk is
-            // what says so, and a show with none is one the server keeps a row
-            // for that nobody asked for.
-            .Episode(41, 1, 1, hasFile: owned);
+            .Episode(41, 1, 1, hasFile: true);
 
         return new(
             engine,
             grabs,
             new HostLibrary(query),
+            searched ? AppliedToEveryShow.Searched : AppliedToEveryShow.NotSearched,
             new Stager(server.Journal, server.Log),
             encoder ?? EncodeGateway.For(server, server.Journal, server.Log),
             server.Journal,

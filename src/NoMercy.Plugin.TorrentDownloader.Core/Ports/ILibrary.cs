@@ -25,11 +25,10 @@ public interface ILibrary
     /// libraries that have somewhere to download to.
     /// </summary>
     /// <remarks>
-    /// Films are not among them and are never asked for. There is no follow
-    /// list, no subscription and no opt-in either: this hands back every show
-    /// in those libraries that has somewhere to download to, and whether one is
-    /// a show the owner actually has is <c>Ownership.Theirs</c>'s question, not
-    /// this port's.
+    /// Films are not among them and are never asked for. This hands back every
+    /// show in those libraries that has somewhere to download to; whether one is
+    /// searched for is the owner's switch, read through <c>IAppliedSettings</c>,
+    /// not this port's.
     /// </remarks>
     Task<IReadOnlyList<Show>> GetShowsAsync(CancellationToken ct);
 

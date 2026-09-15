@@ -4,10 +4,31 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-04` · The episodes searched for.** Sprint 13 is the owner's
+**Next: `S13-05` · Release names: the feeds and backfill.** Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-04` is done and green: the switch decides what is searched for, and what keeps downloading.**
+`MissingRefresh` asks `IAppliedSettings` (Core port; `Storage/AppliedSettings` reads the show's row and
+its library's preferences fresh on every call) and takes a show only when it is switched on, saved and
+has a quality, with season 0 only when that show's specials are on. `Ownership` — a file on disk — is
+gone, so a show just added and switched on is searched from its first episode. **The owner answered one
+question on the way, now in `show-list.md`:** a download of a show that is not searched for is
+cancelled and its bytes deleted, unless its episode is staged, and this holds for the downloads running
+when the plugin moves to the show list. `Transfers` asks the same port for that, where it used to ask
+`Ownership`; it takes the shows from the tick's library, so a show the library no longer lists is not
+searched either. The Queue's rows carry a **Search now** button in an actions cell instead of a click
+on the whole row, and `ControlsReachTheirEndpointsTests` counts a table's buttons as something to press.
+The plugin tests that ran a cycle (`TheLibraryIsReadTests`, `OneCycleRunsEveryStepAndSaysWhenItFinished`)
+switch their show on through `SaveShowSettingsAsync`. Tests, each red first and each rule broken on
+purpose (the switch, the saved check, specials, the cancel, the staged exception):
+`MissingRefreshTests.OnlyShowsSwitchedOnSavedAndWithAQualityAreSearchedFor`,
+`AShowSwitchedOnButNeverSavedHasNothingSearched`, `AShowWithNothingOnDiskIsSearchedForOnceSwitchedOn`,
+`SeasonZeroIsSearchedOnlyWithSpecialsOnForThatShow`; `TheSwitchDecidesTests` (three, in place of
+`OneRuleForWhoseShowItIsTests`); `TransfersTests.AGrabForAShowThatIsNotSearchedIsCancelledAndDeleted`;
+`QueueViewTests.TheQueueListsTheEpisodesSearchedForWithSearchNow`. `docs/02-library.md` and
+`docs/08-ui.md` say so; the rest of the living documents follow in `S13-09`.
 
 **`S13-03` is done and green: the Settings page holds no quality, codec, tag or language, and a
 run may start every 15 minutes.** The Quality group left `SettingsView` and its `profile.*` keys left

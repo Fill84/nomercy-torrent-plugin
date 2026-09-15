@@ -66,8 +66,9 @@ public class ControlsReachTheirEndpointsTests
     {
         foreach ((string page, PluginView view) in Pages())
         {
+            // A button in a table's actions cell counts: the Queue page's are all in its rows.
             Assert.True(
-                Controls(view).Any(),
+                Controls(view).Any() || Buttons(view).Any(),
                 $"The {page} page offers the owner nothing to press.");
         }
     }
@@ -85,15 +86,21 @@ public class ControlsReachTheirEndpointsTests
             // And the buttons in a table's actions cell, which are a row's props rather than
             // components: the overview's switch is one, and a switch posting to nothing is a row that
             // cannot be switched on.
-            foreach (PluginTableAction button in Rendered.All(view)
-                         .SelectMany(component => component.Props.Values)
-                         .OfType<IReadOnlyList<PluginTableAction>>()
-                         .SelectMany(buttons => buttons)
-                         .Where(button => button.Action is { Type: PluginActionType.CallPlugin }))
+            foreach (PluginTableAction button in Buttons(view))
             {
                 yield return (page, (string)button.Action!.Payload["method"]!);
             }
         }
+    }
+
+    /// <summary>The buttons in every table row's actions cell that call the plugin.</summary>
+    private static IEnumerable<PluginTableAction> Buttons(PluginView view)
+    {
+        return Rendered.All(view)
+            .SelectMany(component => component.Props.Values)
+            .OfType<IReadOnlyList<PluginTableAction>>()
+            .SelectMany(buttons => buttons)
+            .Where(button => button.Action is { Type: PluginActionType.CallPlugin });
     }
 
     private static IEnumerable<PluginComponent> Controls(PluginView view)

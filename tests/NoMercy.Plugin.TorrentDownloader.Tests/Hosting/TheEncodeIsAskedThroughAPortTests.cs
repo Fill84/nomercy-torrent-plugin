@@ -145,6 +145,7 @@ public class TheEncodeIsAskedThroughAPortTests : IDisposable
                 engine,
                 grabs,
                 new HostLibrary(query),
+                AppliedToEveryShow.Searched,
                 new Stager(server.Journal, server.Log),
                 encoder,
                 server.Journal,

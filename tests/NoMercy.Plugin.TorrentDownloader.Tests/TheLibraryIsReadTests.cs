@@ -115,6 +115,16 @@ public class TheLibraryIsReadTests : IDisposable
             },
             CancellationToken.None);
 
+        // Both switched on and saved, Dune as well: a film library is left out for being one, and not
+        // because its show happens to be off (docs/specs/show-list.md § Switching a show on).
+        foreach (int show in new[] { 41, 99 })
+        {
+            Assert.Empty(await plugin.SaveShowSettingsAsync(
+                show,
+                new Dictionary<string, string?> { ["switchedOn"] = "true", ["quality"] = "1080p" },
+                CancellationToken.None));
+        }
+
         return plugin;
     }
 

@@ -2747,8 +2747,9 @@ belong to `S13-09`.
 
 ## S13-04 · The episodes searched for
 
-**Files:** `Core/Pipeline/MissingRefresh.cs`, `Core/Pipeline/Ownership.cs`,
-`Core/Pipeline/QueueOrder.cs`, `Views/QueueView.cs`, `tests/…`.
+**Files:** `Core/Pipeline/MissingRefresh.cs`, `Core/Pipeline/Ownership.cs` (removed),
+`Core/Ports/IAppliedSettings.cs`, `Storage/AppliedSettings.cs`, `Hosting/Transfers.cs`,
+`Views/QueueView.cs`, `docs/02-library.md`, `docs/08-ui.md`, `tests/…`.
 
 **Steps**
 
@@ -2760,6 +2761,10 @@ belong to `S13-09`.
 5. `Ownership` no longer decides which shows are searched; the tests pinning it go
    (`AShowWithNotOneEpisodeOnDiskIsNotOneTheOwnerHas`, `OneRuleForWhoseShowItIsTests`) or are rewritten
    against the switch.
+6. A transfers pass cancels a download whose show is not searched for and deletes its bytes, unless
+   the episode is staged — the owner's answer of 15 September 2026, in `show-list.md`. Test (red):
+   `TheSwitchDecidesTests.ADownloadCarriesOnOnlyForAShowThatIsSearched`,
+   `AStagedEpisodeOfAShowSwitchedOffIsLeftToTheEncoder`. `QueueOrder` needed no change.
 
 **Done when** those tests pass and the suite is green. Specs: `show-list.md`, `run.md`.
 

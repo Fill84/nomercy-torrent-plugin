@@ -78,7 +78,9 @@ to the plugin; it has no toggle or tag field inside a table row, and no encoding
 
 On the first start after the update `Profile` is dropped from `config.json` without being carried
 over, every show is off, and nothing new is searched until the owner switches shows on, sets them, and
-saves, with a quality on the show or its library. Downloads already running carry on to the encode.
+saves, with a quality on the show or its library. A download already running for a show that is not
+switched on, saved and with a quality is cancelled and its bytes deleted, unless its episode is already
+staged — the owner's answer of 15 September 2026, in `show-list.md`.
 A library's quality comes from its folders' encoding profile once the server offers it (`S13-10`
 files that issue); until then the owner sets it per library.
 

@@ -30,6 +30,7 @@ public sealed class Transfers(
     ITorrentEngine engine,
     GrabRepository grabs,
     ILibrary library,
+    IAppliedSettings applied,
     Stager stager,
     IEncodeGateway dispatch,
     IActivityJournal journal,
@@ -630,27 +631,26 @@ public sealed class Transfers(
     }
 
     /// <summary>
-    /// Cancels a grab for a show the owner does not have, and deletes what it
+    /// Cancels a grab for a show that has nothing searched, and deletes what it
     /// downloaded.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// On 24 August 2026 the library rule was widened to every show in a
-    /// library, and within the hour the plugin was on 479 grabs: the server
-    /// keeps rows for shows nobody asked for, and Family Guy alone claimed 456
-    /// missing episodes.
+    /// <c>docs/specs/show-list.md</c> § Switching a show on: a show switched off,
+    /// never saved, or without a quality has nothing searched and nothing
+    /// downloaded. Switching one off stops the refresh from searching it; this
+    /// is what stops what was already downloading. The owner chose on
+    /// 15 September 2026 that such a download is cancelled and its bytes
+    /// deleted — the downloads running when the plugin moves to the show list
+    /// included, since every show starts off.
     /// </para>
     /// <para>
-    /// Putting the rule back stops more being made and does nothing about the
-    /// ones already running. Leaving those to finish would fill the owner's
-    /// disk with shows they have never watched, so they go, and take their
-    /// bytes with them.
-    /// </para>
-    /// <para>
-    /// Whose show it is comes from <c>Ownership.Theirs</c>, which is where the
-    /// rule and its reasoning live and is the same call the refresh makes. A
-    /// grab that has already staged its episode is left alone: it is past this
-    /// point and its show now has a file either way.
+    /// The answer is <see cref="IAppliedSettings"/>, the same the refresh asks,
+    /// so the two cannot disagree and grab a show only to cancel it on the next
+    /// tick. It replaces the rule of a file on disk, which would have cancelled
+    /// every download of a show switched on with nothing on disk yet. A grab
+    /// that has already staged its episode is left alone: the file is with the
+    /// encoder.
     /// </para>
     /// </remarks>
     private async Task<IReadOnlyList<string>> NotOursAsync(
@@ -659,6 +659,7 @@ public sealed class Transfers(
         CancellationToken ct)
     {
         List<string> cancelled = [];
+        IReadOnlyList<Show> shelved = await thisTick.GetShowsAsync(ct);
 
         foreach (StoredDownload open in stored)
         {
@@ -667,28 +668,28 @@ public sealed class Transfers(
                 continue;
             }
 
-            bool theirs = true;
+            bool searched = true;
 
-            // No cache of its own. This kept one dictionary of which shows have
-            // a file while FinishAsync fetched the same episodes again for its
-            // own purposes: one tick, one question, two answers. The tick's
-            // library remembers it for both.
-            foreach (int show in open.Covers.Select(one => one.ShowId).Distinct())
+            // The shows from the tick's library, asked once for the whole pass.
+            // A show the library no longer lists has nothing searched either.
+            foreach (int id in open.Covers.Select(one => one.ShowId).Distinct())
             {
-                theirs &= Ownership.Theirs(await thisTick.GetEpisodesAsync(show, ct));
+                searched &= shelved.FirstOrDefault(one => one.Id == id) is Show show
+                            && (await applied.ForAsync(show, ct)).Searched;
             }
 
-            if (theirs)
+            if (searched)
             {
                 continue;
             }
 
-            string reason = "it is not a show the owner has, so it was cancelled and its download deleted";
+            string reason =
+                "its show is not switched on with saved settings and a quality, so it was cancelled and its download deleted";
 
             await engine.RemoveAsync(open.InfoHash, deleteFiles: true, ct);
 
-            // Not about the release at all — about which shows are in the
-            // owner's libraries, which is a thing that changes.
+            // Not about the release at all — about which shows the owner has
+            // switched on, which is a thing that changes.
             await grabs.FailedAsync(
                 open.InfoHash,
                 reason,

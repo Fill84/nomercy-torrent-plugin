@@ -212,6 +212,7 @@ public class OneQuestionPerTickTests : IDisposable
             engine,
             grabs,
             new HostLibrary(query),
+            AppliedToEveryShow.Searched,
             new Stager(server.Journal, server.Log),
             EncodeGateway.For(server, server.Journal, server.Log),
             server.Journal,

@@ -10,41 +10,128 @@ public class MissingRefreshTests
 {
     private static readonly DateTimeOffset Today = new(2026, 8, 14, 9, 0, 0, TimeSpan.Zero);
 
+    private static readonly DateOnly Aired = new(2026, 1, 1);
+
     /// <remarks>
-    /// <para>
-    /// <strong>A show the owner has none of is not a show they have.</strong>
-    /// The server keeps rows for shows nobody asked for, in the same table,
-    /// against the same library id, with a folder and a full episode list.
-    /// Nothing in the row says which is which; having a file does.
-    /// </para>
-    /// <para>
-    /// Taking every show in the library instead was tried on 24 August 2026 and
-    /// the owner's plugin was on 479 grabs within the hour, Family Guy alone
-    /// claiming 456 missing episodes. It was tried again on 31 August, on the
-    /// grounds that media-server #34 and #36 had made membership safe, and
-    /// undone the same hour: those rows are still there. Sixty-seven shows
-    /// carry a library id on the owner's server and fifty-five of them have a
-    /// file, and the first thing the plugin offered to fetch was every episode
-    /// of The Simpsons.
-    /// </para>
+    /// <c>docs/specs/show-list.md</c> § Switching a show on and § Library preferences: a show is searched
+    /// for only when it is switched on, its settings are saved, and it has a quality of its own or from
+    /// its library. Off with everything saved, on with no quality anywhere, and never touched are all
+    /// searched for not at all.
     /// </remarks>
     [Fact]
-    public async Task AShowWithNotOneEpisodeOnDiskIsNotOneTheOwnerHas()
+    public async Task OnlyShowsSwitchedOnSavedAndWithAQualityAreSearchedFor()
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
-            .Episode(1, 1, 1, hasFile: true, airDate: new DateOnly(2020, 1, 1))
-            .Episode(1, 1, 2, airDate: new DateOnly(2020, 1, 8))
+            .Episode(1, 1, 1, airDate: Aired)
+            .Show(2, "Severance")
+            .Episode(2, 1, 1, airDate: Aired)
+            .Show(3, "Andor")
+            .Episode(3, 1, 1, airDate: Aired)
+            .Show(4, "Lioness")
+            .Episode(4, 1, 1, airDate: Aired)
+            .Show(5, "Frieren", 2023, LibraryKind.Anime, "lib-anime", "Anime")
+            .Episode(5, 1, 1, airDate: Aired);
 
-            // A row the server keeps: a folder, a full episode list, no file.
-            .Show(2, "The Simpsons")
-            .Episode(2, 1, 1, airDate: new DateOnly(2020, 1, 1))
-            .Episode(2, 1, 2, airDate: new DateOnly(2020, 1, 8));
+        FakeAppliedSettings settings = new FakeAppliedSettings()
+            .Library(new("lib-anime") { Quality = "1080p" })
 
-        IReadOnlyList<TrackedEpisode> tracked = await Derive(library);
+            // Its own quality.
+            .Show(new(1) { SwitchedOn = true, Saved = true, Quality = "2160p" })
 
-        Assert.NotEmpty(tracked);
-        Assert.All(tracked, episode => Assert.Equal("Silo", episode.ShowTitle));
+            // On and saved, and a quality neither on the show nor on its library.
+            .Show(new(2) { SwitchedOn = true, Saved = true })
+
+            // Everything saved, and switched off.
+            .Show(new(3) { SwitchedOn = false, Saved = true, Quality = "720p" })
+
+            // Lioness is never touched. Frieren follows its library's quality.
+            .Show(new(5) { SwitchedOn = true, Saved = true });
+
+        Assert.Equal(["Silo", "Frieren"], (await Derive(library, settings)).Select(episode => episode.ShowTitle));
+    }
+
+    /// <remarks>
+    /// The overview's row button switches a show on and saves nothing. Until the owner has saved its
+    /// settings form the show searches nothing, even with a quality waiting in its library.
+    /// </remarks>
+    [Fact]
+    public async Task AShowSwitchedOnButNeverSavedHasNothingSearched()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "Silo")
+            .Episode(1, 1, 1, airDate: Aired);
+
+        FakeAppliedSettings settings = new FakeAppliedSettings()
+            .Library(new("lib-tv") { Quality = "1080p" })
+            .Show(new(1) { SwitchedOn = true, Saved = false });
+
+        Assert.Empty(await Derive(library, settings));
+    }
+
+    /// <remarks>
+    /// <c>docs/specs/show-list.md</c>: whether a show has a video file on disk plays no part. Until
+    /// 15 September 2026 a show with nothing on disk was taken to be a row the server keeps that nobody
+    /// added (<c>Ownership</c>, after the 479 grabs of 24 August). The switch is the owner saying which
+    /// shows they want, so a show they have just added and switched on is searched from its first
+    /// episode.
+    /// </remarks>
+    [Fact]
+    public async Task AShowWithNothingOnDiskIsSearchedForOnceSwitchedOn()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "The Simpsons")
+            .Episode(1, 1, 1, airDate: Aired)
+            .Episode(1, 1, 2, airDate: Aired);
+
+        FakeAppliedSettings settings = new FakeAppliedSettings()
+            .Show(new(1) { SwitchedOn = true, Saved = true, Quality = "720p" });
+
+        Assert.Equal(2, (await Derive(library, settings)).Count);
+    }
+
+    /// <remarks>
+    /// <c>docs/specs/show-list.md</c>: with specials off no episode of season 0 is searched for, and a
+    /// show's specials are its library's until the show sets its own — either way round.
+    /// </remarks>
+    [Fact]
+    public async Task SeasonZeroIsSearchedOnlyWithSpecialsOnForThatShow()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "Silo")
+            .Episode(1, 0, 1, airDate: Aired)
+            .Episode(1, 1, 1, airDate: Aired)
+            .Show(2, "Severance")
+            .Episode(2, 0, 1, airDate: Aired)
+            .Episode(2, 1, 1, airDate: Aired)
+            .Show(3, "Frieren", 2023, LibraryKind.Anime, "lib-anime", "Anime")
+            .Episode(3, 0, 1, airDate: Aired)
+            .Episode(3, 1, 1, airDate: Aired)
+            .Show(4, "Dandadan", 2024, LibraryKind.Anime, "lib-anime", "Anime")
+            .Episode(4, 0, 1, airDate: Aired)
+            .Episode(4, 1, 1, airDate: Aired);
+
+        FakeAppliedSettings settings = new FakeAppliedSettings()
+            .Library(new("lib-tv") { Quality = "1080p", Specials = false })
+            .Library(new("lib-anime") { Quality = "1080p", Specials = true })
+
+            // On for itself, in a library with specials off.
+            .Show(new(1) { SwitchedOn = true, Saved = true, Specials = true })
+
+            // Following its library: off.
+            .Show(new(2) { SwitchedOn = true, Saved = true })
+
+            // Off for itself, in a library with specials on.
+            .Show(new(3) { SwitchedOn = true, Saved = true, Specials = false })
+
+            // Following its library: on.
+            .Show(new(4) { SwitchedOn = true, Saved = true });
+
+        Assert.Equal(
+            [new EpisodeKey(1, 0, 1), new EpisodeKey(4, 0, 1)],
+            (await Derive(library, settings)).Where(episode => episode.Key.IsSpecial).Select(episode => episode.Key));
+
+        Assert.Equal(4, (await Derive(library, settings)).Count(episode => !episode.Key.IsSpecial));
     }
 
     /// <remarks>
@@ -153,22 +240,6 @@ public class MissingRefreshTests
         IReadOnlyList<TrackedEpisode> tracked = await Derive(library);
 
         Assert.Equal(new EpisodeKey(1, 1, 2), Assert.Single(tracked).Key);
-    }
-
-    /// <remarks>
-    /// Season 0 is specials, and the owner has to ask for them.
-    /// </remarks>
-    [Fact]
-    public async Task SpecialsAreSkippedUnlessTheOwnerAskedForThem()
-    {
-        FakeLibrary library = new FakeLibrary()
-            .Show(1, "Silo")
-            .Episode(1, 1, 99, airDate: new DateOnly(2015, 1, 1), hasFile: true)
-            .Episode(1, 0, 1, airDate: new DateOnly(2026, 1, 1))
-            .Episode(1, 1, 1, airDate: new DateOnly(2026, 1, 8));
-
-        Assert.Single(await Derive(library));
-        Assert.Equal(2, (await Derive(library, new() { IncludeSpecials = true })).Count);
     }
 
     /// <remarks>
@@ -283,10 +354,11 @@ public class MissingRefreshTests
         return await Derive(library);
     }
 
-    private static async Task<IReadOnlyList<TrackedEpisode>> Derive(FakeLibrary library, Profile? profile = null)
+    private static async Task<IReadOnlyList<TrackedEpisode>> Derive(FakeLibrary library, FakeAppliedSettings? settings = null)
     {
         FakeTimeProvider clock = new(Today);
 
-        return await new MissingRefresh(library, clock).DeriveAsync(profile ?? new Profile(), CancellationToken.None);
+        return await new MissingRefresh(library, settings ?? FakeAppliedSettings.EveryShowOn(), clock)
+            .DeriveAsync(CancellationToken.None);
     }
 }

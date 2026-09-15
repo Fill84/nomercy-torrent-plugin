@@ -58,6 +58,7 @@ public static class QueueView
                 new() { Key = "episode", Label = "Episode" },
                 new() { Key = "attempts", Label = "Attempts" },
                 new() { Key = "last", Label = "Last tried" },
+                new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
             ],
             [
                 .. ordered.Select(episode => Ui.Row(
@@ -69,12 +70,14 @@ public static class QueueView
                         // Never searched is not the same as searched long ago,
                         // and nought would be a date.
                         ["last"] = episode.LastSearchAt?.ToString("u") ?? "never",
-                    },
 
-                    // The row is the control: looking for one episode now is a
-                    // decision about that row, and the attempts beside it are
-                    // what an owner reads before taking it.
-                    Look(episode))),
+                        // A button in the row, where a click on the whole row
+                        // used to do it with nothing on the page to say so
+                        // (docs/specs/pages.md § Queue). Looking for one episode
+                        // now is a decision about that row, and the attempts
+                        // beside it are what an owner reads before taking it.
+                        ["controls"] = new PluginTableAction[] { new() { Label = "Search now", Action = Look(episode) } },
+                    })),
             ],
             "Nothing is being looked for.");
     }

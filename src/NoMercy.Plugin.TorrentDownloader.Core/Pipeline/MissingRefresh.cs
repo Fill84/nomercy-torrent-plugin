@@ -9,11 +9,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The whole rule, and there is no more to it: every show in every television
-/// and anime library, every episode without a file, missing once it has aired.
-/// No follow list, no subscription, no opt-in, no status check and no cut-off —
-/// an episode that aired two years ago counts exactly as much as last night's,
-/// because filling gaps backwards is what the plugin is for.
+/// The whole rule, and there is no more to it: every show switched on with saved
+/// settings and a quality (<c>docs/specs/show-list.md</c>), every episode of it
+/// without a file, missing once it has aired, and season 0 only with specials on
+/// for that show. No status check and no cut-off — an episode that aired two
+/// years ago counts exactly as much as last night's, because filling gaps
+/// backwards is what the plugin is for.
 /// </para>
 /// <para>
 /// It derives and returns; it stores nothing and remembers nothing. What it
@@ -21,7 +22,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// is where the plugin's own bookkeeping is kept.
 /// </para>
 /// </remarks>
-public sealed class MissingRefresh(ILibrary library, TimeProvider time)
+public sealed class MissingRefresh(ILibrary library, IAppliedSettings settings, TimeProvider time)
 {
     /// <summary>
     /// Every episode that should have a row, with the state the library says it
@@ -35,7 +36,7 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
     /// episodes out of the refresh and preserved their state instead, and one
     /// that went unavailable once was invisible for ever.
     /// </remarks>
-    public async Task<IReadOnlyList<TrackedEpisode>> DeriveAsync(Profile profile, CancellationToken ct)
+    public async Task<IReadOnlyList<TrackedEpisode>> DeriveAsync(CancellationToken ct)
     {
         // The broadcast day, in the same shape as an air date. Comparing a date
         // against a moment would make an episode that aired this morning look
@@ -46,17 +47,21 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
 
         foreach (Show show in await library.GetShowsAsync(ct))
         {
-            IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
+            // The switch, and nothing else. Until 15 September 2026 this was
+            // whether the show had a file on disk, because the server keeps rows
+            // for shows nobody added and taking every show put the owner on 479
+            // grabs in an afternoon. Nothing is searched now that the owner did
+            // not switch on, so a show just added is searched from its first
+            // episode. Asked before its episodes, so a show that is off costs no
+            // call to the library. A transfers pass asks the same question.
+            EffectiveSettings applied = await settings.ForAsync(show, ct);
 
-            // Whether the owner has this show at all. The rule and the whole of
-            // its reasoning are in Ownership.Theirs, which a transfers pass
-            // asks as well: the two decide the same thing, and two copies of it
-            // could disagree.
-            if (!Ownership.Theirs(episodes))
+            if (!applied.Searched)
             {
                 continue;
             }
 
+            IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
 
             // Built from the list already fetched, so it costs no extra call —
             // and built from all of it, before anything is filtered out, because
@@ -69,7 +74,7 @@ public sealed class MissingRefresh(ILibrary library, TimeProvider time)
 
             foreach (Episode episode in episodes)
             {
-                if (episode.Key.IsSpecial && !profile.IncludeSpecials)
+                if (episode.Key.IsSpecial && !applied.Specials)
                 {
                     continue;
                 }

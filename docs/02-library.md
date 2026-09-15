@@ -66,40 +66,30 @@ plugin never picks a library; it uses the show's own. See `docs/09-host-contract
 for each library whose media type is "tv" or "anime"
     for each show in GetShowsAsync(library.Id)
         skip the show when Folder is null            ← no folder means nowhere to download to
-        skip the show when no episode HasFile        ← not a show the owner has; see below
+        skip the show unless it is switched on, saved and has a quality   ← the overview's switch
         for each episode in GetEpisodesAsync(show.Id)
-            skip season 0 unless IncludeSpecials
+            skip season 0 unless specials are on for the show
             missing when   HasFile is false
                      and   AirDate is not null and in the past
 ```
 
-That is the whole rule. There is no follow list, no subscription, no opt-in and no status check, and
-an episode that aired two years ago counts exactly as much as one that aired last night.
+That is the whole rule (`docs/specs/show-list.md`). There is no status check, and an episode that
+aired two years ago counts exactly as much as one that aired last night.
 
-### One episode on disk, or it is not the owner's show
+### The switch, where a file on disk used to decide
 
-**A show is the owner's when at least one of its episodes has a file, and only then.** It is taken
-from the query behind the server's own library page
-(`Episodes.Any(e => e.VideoFiles.Any(v => v.Folder != null))`), and it is written once, in
-`Core/Pipeline/Ownership.cs`, where both the refresh and a transfers pass ask it.
+**A show is searched for when the owner switched it on and saved its settings with a quality**, on the
+show or from its library. `Core/Pipeline/MissingRefresh.cs` asks `IAppliedSettings`, and a transfers
+pass asks the same: a download whose show is not searched for is cancelled and its bytes deleted,
+unless its episode is already staged — the owner's answer of 15 September 2026.
 
-**It was widened to every show in a library on 24 August 2026 and put back the same afternoon.**
-Within the hour the plugin was on 479 grabs, 456 of them Family Guy — a show the owner has never
-watched. The reasoning had been sound and the premise was false: a library row is not a show the
-owner added. The server keeps rows for shows nobody asked for, in the same table, against the same
-library id, with a folder and a full episode list, and nothing in such a row tells it apart from a
-show they added. Having a file is the only thing that does.
-
-A per-episode search limit would not have saved this either, even while one existed: it bounded how
-long each episode was looked for, never whether 456 of them were looked for at all — and the owner's
-decision of 12 September 2026 dropped that limit outright, so nothing bounds it any more.
-
-**It is a workaround and it is known to be one.** A show just added has nothing on disk and is
-therefore invisible to this plugin, which is exactly when it would be most use. That is a gap in the
-host contract rather than something to work around here: media-server **#36** stops identification
-importing shows on a guess, so a library row means the owner asked for it, and **#34** makes a newly
-added show visible. When both land, library membership becomes the rule and this paragraph is
-replaced by one sentence. Neither is this repository's to close.
+**Until then a show was the owner's when one of its episodes had a file** (`Ownership`). The library
+rule had been widened to every show on 24 August 2026 and put back the same afternoon: within the hour
+the plugin was on 479 grabs, 456 of them Family Guy, because the server keeps rows for shows nobody
+added and nothing in such a row tells it apart from a show the owner added. It was tried again on
+31 August and undone the same hour, over The Simpsons. The switch ends that: nothing is searched that
+the owner did not switch on, so a show just added and switched on is searched from its first episode,
+which the file rule could never do.
 
 ### Three corrections, each measured
 

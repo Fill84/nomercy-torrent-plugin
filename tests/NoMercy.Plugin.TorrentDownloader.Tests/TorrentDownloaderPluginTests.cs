@@ -248,9 +248,7 @@ public class TorrentDownloaderPluginTests
             .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
             .Show(41, "Silo", "01HQ5W4AVF30N10RT6XCF6AJHM", 2021, folder: "/Silo.(2021)")
 
-            // One file on disk, which is what makes this a show the owner
-            // actually has — Ownership.Theirs — and one missing episode for
-            // the refresh to pick up.
+            // One missing episode for the refresh to pick up, and one on disk.
             .Episode(41, 3, 5, "The Getaway", new DateTime(2020, 1, 1), hasFile: false)
             .Episode(41, 3, 7, "Descent", new DateTime(2020, 1, 15), hasFile: true);
 
@@ -275,6 +273,12 @@ public class TorrentDownloaderPluginTests
             DisableEveryShippedSource(settings);
 
             await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+
+            // Switched on and saved, or the refresh has no show to search for.
+            Assert.Empty(await plugin.SaveShowSettingsAsync(
+                41,
+                new Dictionary<string, string?> { ["switchedOn"] = "true", ["quality"] = "1080p" },
+                CancellationToken.None));
 
             // A second reader of the same file, never the plugin's own
             // repository: what is under test is what actually landed on disk.

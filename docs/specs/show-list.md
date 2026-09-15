@@ -38,6 +38,10 @@
 - A show switched on whose settings have never been saved has nothing searched and nothing
   downloaded.
 - A show switched off has nothing searched and nothing downloaded, and its saved settings are kept.
+- A download of a show that has nothing searched — switched off, never saved, or without a quality —
+  is cancelled and what it downloaded is deleted, unless its episode is already staged for the
+  encoder. This holds as well for downloads running when the plugin is updated to the show list.
+- Whether a show has a video file on disk plays no part in whether it is searched for.
 
 ## The settings of a show
 

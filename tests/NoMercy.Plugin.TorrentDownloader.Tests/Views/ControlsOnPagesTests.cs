@@ -88,7 +88,9 @@ public class ControlsOnPagesTests
 
     /// <remarks>
     /// Looking for one episode now is a decision about that row, and the
-    /// attempts beside it are what an owner reads before taking it.
+    /// attempts beside it are what an owner reads before taking it. A button in
+    /// the row's actions cell (<c>docs/specs/pages.md</c> § Queue), where a click
+    /// on the whole row used to do it with nothing on the page to say so.
     /// </remarks>
     [Fact]
     public void TheQueueOffersLookingForOneEpisodeNow()
@@ -98,17 +100,20 @@ public class ControlsOnPagesTests
                 new(new(41, 3, 6), "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Missing),
             ]);
 
-        PluginComponent row = Assert.Single(
-            Rendered.All(page),
-            one => one.Id.StartsWith($"{QueueView.LookingTableId}-", StringComparison.Ordinal)
-                   && one.Action is not null);
+        PluginComponent row = Assert.Single(Rendered.ById(page, QueueView.LookingTableId).Items);
+        PluginTableAction button = Assert.Single(
+            Assert.IsAssignableFrom<IReadOnlyList<PluginTableAction>>(row.Props["controls"]));
 
-        Assert.Equal("queue/search", Called(row));
+        Assert.Null(row.Action);
+        Assert.Equal("queue/search", Assert.IsType<PluginActionIntent>(button.Action).Payload["method"]);
 
         // The episode travels with it. A control that named the action and not
         // which row it was on would search for whatever the server felt like.
-        Assert.Equal(41, Sent(row)["showId"]);
-        Assert.Equal(6, Sent(row)["episode"]);
+        IReadOnlyDictionary<string, object?> sent =
+            Assert.IsAssignableFrom<IReadOnlyDictionary<string, object?>>(Assert.IsType<PluginActionIntent>(button.Action).Payload["payload"]);
+
+        Assert.Equal(41, sent["showId"]);
+        Assert.Equal(6, sent["episode"]);
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
