@@ -1,0 +1,37 @@
+# Release names
+
+## No release, no search
+
+- An indexer is searched only with a release name that a name source gave.
+- An episode for which no name source gave a release name that meets its show's settings is not
+  searched on any indexer.
+- The plugin builds no search term of its own from a show's title, season or episode.
+
+## Reading the feeds
+
+- On every run the plugin reads the latest feed of every name source: PreDB, srrDB, PreDB.net and
+  SceneSource.
+- A run starts every hour unless the owner sets a different interval.
+- The shortest interval the plugin accepts is 15 minutes. Any longer interval is accepted.
+- A feed item is matched only against shows and anime that are switched on with saved settings.
+- A feed item is taken for an episode of such a show only when that episode has aired and has no
+  video file in the library.
+
+## Backfill
+
+- On every run, every aired episode without a video file of a show that is switched on with saved
+  settings, and that no feed item was taken for, is looked up by show and episode in the name
+  sources' search.
+- A release name that search returns is judged and chosen exactly as a release name from a feed.
+
+## Choosing the release name
+
+- A release name is judged against the settings of its show: its resolution is the show's quality,
+  its codec is the show's codec, it carries every must tag and it carries no forbidden tag.
+- A release name that fails any of those is not searched for.
+- Of the release names that pass, the names that carry the most wishes are searched first.
+- When the names carrying the most wishes produce no torrent on any indexer, the names carrying the
+  next highest number of wishes are searched, and so on down to names carrying no wish.
+- Release names carrying the same number of wishes are searched together, and the winning torrent is
+  chosen across all of them.
+- No show setting is applied anywhere except to release names.

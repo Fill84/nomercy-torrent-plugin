@@ -2066,6 +2066,20 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 
+- **The owner's requirements of 15 September 2026, written out in `docs/specs/`.** They contradict
+  what is built and what `00-goal.md`, `02-library.md`, `05-sources.md`, `06-torrent-client.md` and
+  the decisions below say, and they win. Every show and anime starts switched off; the owner switches
+  one on and saves its settings (quality, codec, wishes, musts, forbidden, with library preferences a
+  show overrides) on the overview page, and only then is it downloaded. **No release from a source,
+  no search**: the `Show SxxExx` ladder of 11 September is gone, and the settings judge release names
+  only, never indexer rows. Backfill is the name sources' search for a missing episode no feed
+  carried. On the indexers the same hash is merged into one, the hash on the most indexers wins, a
+  tie goes to TorrentBay, LimeTorrents or Nyaa (Nyaa first for anime), then to the first found. Only
+  the winner is started, so the two-hash race of 11 September is gone. The run interval defaults to
+  hourly and may be as short as 15 minutes, torrent-feed's feed interval, which undoes the hourly
+  floor of 13 September. torrent-feed was read to confirm it: it merges nothing by hash and searches
+  on the show name, so 2c and 2d are the owner's own rules, not a copy of it.
+
 - **One release under two hashes: both start, the first to finish is kept, the other is stopped
   and its files deleted.** The owner's decision of 11 September 2026, choosing "stop and delete"
   over letting the loser finish. It could not have been the other: nothing is uploaded or seeded
