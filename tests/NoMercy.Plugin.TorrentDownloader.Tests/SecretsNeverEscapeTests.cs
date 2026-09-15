@@ -184,7 +184,7 @@ public class SecretsNeverEscapeTests
 
     /// <summary>Every route the plugin will render.</summary>
     private static string[] Routes =>
-        [Pages.DashboardRoute, Pages.SettingsRoute, Pages.ShowsRoute, Pages.QueueRoute, "/nonsense"];
+        [Pages.OverviewRoute, Pages.SettingsRoute, Pages.ActivityRoute, Pages.QueueRoute, "/nonsense"];
 
     /// <summary>
     /// The secrets themselves.

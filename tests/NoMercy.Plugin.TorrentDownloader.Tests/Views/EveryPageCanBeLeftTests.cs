@@ -34,9 +34,11 @@ public class EveryPageCanBeLeftTests
         using TorrentDownloaderPlugin plugin = new();
         plugin.Initialize(new FakePluginContext());
 
-        IReadOnlyList<string> everywhere = [.. plugin.Routes.Routes.Select(route => route.Path)];
+        // A page with a parameter in its path - one show's settings, one library's page of shows - is
+        // left like any other, but it is not a place a tab can point at.
+        IReadOnlyList<string> everywhere = [.. Pages.Navigable.Select(route => route.Path)];
 
-        foreach (string route in everywhere)
+        foreach (string route in plugin.Routes.Routes.Select(SamplePaths.Of))
         {
             PluginView page = await plugin.GetViewAsync(new() { Route = route }, CancellationToken.None);
 
@@ -63,10 +65,10 @@ public class EveryPageCanBeLeftTests
         plugin.Initialize(new FakePluginContext());
 
         PluginView page = await plugin.GetViewAsync(
-            new() { Route = Pages.DashboardRoute },
+            new() { Route = Pages.OverviewRoute },
             CancellationToken.None);
 
-        foreach (PluginRoute route in plugin.Routes.Routes)
+        foreach (PluginRoute route in Pages.Navigable)
         {
             PluginComponent link = Rendered.ById(page, $"nav-{route.Name}");
 

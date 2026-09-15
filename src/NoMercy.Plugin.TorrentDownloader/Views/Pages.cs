@@ -7,14 +7,29 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 /// </summary>
 public static class Pages
 {
-    /// <summary>Everything the plugin is doing. Beside the libraries.</summary>
-    public const string DashboardRoute = "/";
+    /// <summary>Every show and anime, one list per library, each switched on one by one.</summary>
+    public const string OverviewRoute = "/";
+
+    /// <summary>What a run is doing: the stages, what is in flight, and the notes per episode.</summary>
+    public const string ActivityRoute = "/activity";
+
+    /// <summary>The settings form of one show, by the server's show id.</summary>
+    public const string ShowSettingsRoute = "/shows/:id";
+
+    public const string ShowSettingsName = "show";
+
+    /// <summary>The preferences form of one library, by the server's library id.</summary>
+    public const string LibraryPreferencesRoute = "/libraries/:id";
+
+    public const string LibraryPreferencesName = "library";
+
+    /// <summary>One page of one library's shows, which is where the overview's Next goes.</summary>
+    public const string LibraryShowsRoute = "/libraries/:id/shows/:page";
+
+    public const string LibraryShowsName = "library-shows";
 
     /// <summary>Under the plugin settings list, where the owner expects it.</summary>
     public const string SettingsRoute = "/settings";
-
-    /// <summary>Every show with anything outstanding. Reached from the dashboard.</summary>
-    public const string ShowsRoute = "/shows";
 
     /// <summary>What is being looked for, given up on, and still to air.</summary>
     public const string QueueRoute = "/queue";
@@ -62,7 +77,10 @@ public static class Pages
         return Ui.Row(
             "nav",
             [
-                .. Routes.Routes.Select(one => Ui.Button(
+                // Only the pages that stand on their own. A page with a parameter in its path - one
+                // show's settings, one library's page of shows - is reached from the row or the block
+                // it belongs to, and has no address a tab could hold.
+                .. Navigable.Select(one => Ui.Button(
                     $"nav-{one.Name}",
                     one.Label ?? one.Name,
                     PluginActionIntent.Navigate(one.Path),
@@ -74,6 +92,9 @@ public static class Pages
                     variant: Same(one.Path, route) ? "primary" : "ghost")),
             ]);
     }
+
+    /// <summary>The routes a tab can point at: every one without a parameter in its path.</summary>
+    public static IEnumerable<PluginRoute> Navigable => Routes.Routes.Where(route => !route.Path.Contains(':', StringComparison.Ordinal));
 
     /// <summary>
     /// Whether two routes are the same page.
@@ -103,62 +124,29 @@ public static class Pages
     /// <see cref="NavEntries"/> are a shorter list than this one.
     /// </remarks>
     public static PluginRouteTable Routes { get; } = new(
-        new PluginRoute
+        Page(OverviewRoute, "overview", "Overview"),
+        Page(ActivityRoute, "activity", "Activity"),
+        Page(QueueRoute, "queue", "Queue"),
+        Page(DownloadsRoute, "downloads", "Downloads"),
+        Page(HistoryRoute, "history", "History"),
+        Page(SkippedRoute, "skipped", "Skipped"),
+        Page(SourcesRoute, "sources", "Sources"),
+        Page(SettingsRoute, "settings", "Settings"),
+        Page(ShowSettingsRoute, ShowSettingsName, "Show settings"),
+        Page(LibraryPreferencesRoute, LibraryPreferencesName, "Library preferences"),
+        Page(LibraryShowsRoute, LibraryShowsName, "Shows"));
+
+    /// <summary>One page, in the dashboard's width like every other.</summary>
+    private static PluginRoute Page(string path, string name, string label)
+    {
+        return new()
         {
-            Path = DashboardRoute,
-            Name = "dashboard",
-            Label = "Torrent Downloader",
+            Path = path,
+            Name = name,
+            Label = label,
             Layout = PluginLayout.Wide,
-        },
-        new PluginRoute
-        {
-            Path = ShowsRoute,
-            Name = "shows",
-            Label = "Shows",
-            Layout = PluginLayout.Wide,
-        },
-        new PluginRoute
-        {
-            Path = QueueRoute,
-            Name = "queue",
-            Label = "Queue",
-            Layout = PluginLayout.Wide,
-        },
-        new PluginRoute
-        {
-            Path = DownloadsRoute,
-            Name = "downloads",
-            Label = "Downloads",
-            Layout = PluginLayout.Wide,
-        },
-        new PluginRoute
-        {
-            Path = HistoryRoute,
-            Name = "history",
-            Label = "History",
-            Layout = PluginLayout.Wide,
-        },
-        new PluginRoute
-        {
-            Path = SkippedRoute,
-            Name = "skipped",
-            Label = "Skipped",
-            Layout = PluginLayout.Wide,
-        },
-        new PluginRoute
-        {
-            Path = SourcesRoute,
-            Name = "sources",
-            Label = "Sources",
-            Layout = PluginLayout.Wide,
-        },
-        new PluginRoute
-        {
-            Path = SettingsRoute,
-            Name = "settings",
-            Label = "Settings",
-            Layout = PluginLayout.Wide,
-        });
+        };
+    }
 
     /// <summary>
     /// The mounts in <c>plugin.json</c>, entry for entry — a test holds the two
@@ -177,7 +165,7 @@ public static class Pages
             Section = PluginUiSection.Dashboard,
             Label = PluginIdentity.Name,
             Icon = "download",
-            Route = DashboardRoute,
+            Route = OverviewRoute,
         },
         new()
         {

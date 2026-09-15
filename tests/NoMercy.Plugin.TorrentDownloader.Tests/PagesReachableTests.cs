@@ -25,14 +25,17 @@ public class PagesReachableTests
 
         Assert.Equal(
             [
-                Pages.DashboardRoute,
-                Pages.ShowsRoute,
+                Pages.OverviewRoute,
+                Pages.ActivityRoute,
                 Pages.QueueRoute,
                 Pages.DownloadsRoute,
                 Pages.HistoryRoute,
                 Pages.SkippedRoute,
                 Pages.SourcesRoute,
                 Pages.SettingsRoute,
+                Pages.ShowSettingsRoute,
+                Pages.LibraryPreferencesRoute,
+                Pages.LibraryShowsRoute,
             ],
             plugin.Routes.Routes.Select(route => route.Path));
     }

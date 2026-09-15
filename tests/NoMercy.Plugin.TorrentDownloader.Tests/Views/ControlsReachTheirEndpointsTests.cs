@@ -81,6 +81,18 @@ public class ControlsReachTheirEndpointsTests
             {
                 yield return (page, (string)control.Action!.Payload["method"]!);
             }
+
+            // And the buttons in a table's actions cell, which are a row's props rather than
+            // components: the overview's switch is one, and a switch posting to nothing is a row that
+            // cannot be switched on.
+            foreach (PluginTableAction button in Rendered.All(view)
+                         .SelectMany(component => component.Props.Values)
+                         .OfType<IReadOnlyList<PluginTableAction>>()
+                         .SelectMany(buttons => buttons)
+                         .Where(button => button.Action is { Type: PluginActionType.CallPlugin }))
+            {
+                yield return (page, (string)button.Action!.Payload["method"]!);
+            }
         }
     }
 
@@ -136,9 +148,20 @@ public class ControlsReachTheirEndpointsTests
 
         yield return ("Settings", SettingsView.Render(new(), [], []));
 
-        yield return ("Dashboard", DashboardView.Render(
+        yield return ("Activity", ActivityView.Render(
             ActivitySnapshot.Empty,
             new(false, null, null)));
+
+        const string library = "01HQ5W4AVF30N10RT6XCF6AJHM";
+        Show silo = new(41, "Silo", 2023, library, "Series", LibraryKind.Television, "/Silo.(2023)");
+
+        yield return ("Overview", OverviewView.Render(
+            new(false, null, null),
+            [new(new(library, "Series", LibraryKind.Television), new(library), [new(silo, new(41), EffectiveSettings.Of(new(41), new(library)), null)])]));
+
+        yield return ("Show settings", ShowSettingsView.Render(silo, new(41), new(library)));
+
+        yield return ("Library preferences", LibraryPreferencesView.Render(new(library, "Series", LibraryKind.Television), new(library)));
     }
 
     private static DownloadRow Download()

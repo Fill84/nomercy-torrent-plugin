@@ -52,7 +52,7 @@ public class EveryPageIsTheSameShellTests
     [Fact]
     public void EveryRouteAsksForTheDashboardsShell()
     {
-        PluginRoute dashboard = Pages.Routes.Routes.Single(route => route.Name == "dashboard");
+        PluginRoute dashboard = Pages.Routes.Routes.Single(route => route.Name == "overview");
 
         Assert.Equal(PluginLayout.Wide, dashboard.Layout);
 
@@ -78,7 +78,7 @@ public class EveryPageIsTheSameShellTests
 
         foreach (PluginRoute route in plugin.Routes.Routes)
         {
-            PluginView page = await plugin.GetViewAsync(new() { Route = route.Path }, CancellationToken.None);
+            PluginView page = await plugin.GetViewAsync(new() { Route = SamplePaths.Of(route) }, CancellationToken.None);
 
             Assert.True(
                 page.Layout == PluginLayout.Wide,
@@ -118,7 +118,7 @@ public class EveryPageIsTheSameShellTests
 
         foreach (PluginRoute route in plugin.Routes.Routes)
         {
-            PluginView page = await plugin.GetViewAsync(new() { Route = route.Path }, CancellationToken.None);
+            PluginView page = await plugin.GetViewAsync(new() { Route = SamplePaths.Of(route) }, CancellationToken.None);
 
             string[] inRows =
             [

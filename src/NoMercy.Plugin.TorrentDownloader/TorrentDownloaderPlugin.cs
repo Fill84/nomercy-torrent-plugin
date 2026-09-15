@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NoMercy.Events.Library;
@@ -2039,9 +2040,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // Rendered per request from the current state, never from a tree held
         // between requests: a cached page goes stale silently, and the page
         // most worth trusting is the one saying what is happening now.
-        switch (request.Route)
+        PluginRouteMatch? match = Pages.Routes.Resolve(request.Route);
+
+        switch (match?.Route.Name)
         {
-            case Pages.SettingsRoute:
+            case "settings":
                 // Names, never values. The page is given the keys that exist
                 // and has no route to what is behind them.
                 return SettingsView.Render(
@@ -2057,16 +2060,25 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     _engine?.PortCondition ?? PortState.Unknown,
                     ShowAdvanced);
 
-            case Pages.ShowsRoute:
-                return ShowsView.Render(ShowSummaries.Summarise(await Tracked(ct)));
+            case Pages.ShowSettingsName:
+                return await ShowSettingsPageAsync(match!.Param("id"), ct);
 
-            case Pages.QueueRoute:
+            case Pages.LibraryPreferencesName:
+                return await LibraryPreferencesPageAsync(match!.Param("id"), ct);
+
+            case Pages.LibraryShowsName:
+                return await OverviewAsync(
+                    match!.Param("id"),
+                    int.TryParse(match.Param("page"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int page) ? page : 1,
+                    ct);
+
+            case "queue":
                 return QueueView.Render(await Tracked(ct));
 
-            case Pages.DownloadsRoute:
+            case "downloads":
                 return DownloadsView.Render(await DownloadRowsAsync(ct));
 
-            case Pages.SourcesRoute:
+            case "sources":
                 return SourcesView.Render(
                     await SourceReportsAsync(ct),
                     DateTimeOffset.UtcNow,
@@ -2081,7 +2093,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     await Settings.SecretsSetAsync(ct),
                     ShowAdvanced);
 
-            case Pages.SkippedRoute:
+            case "skipped":
                 // A page of them, not all of them: one refusal is written for
                 // every release every cycle considered and did not take, and
                 // the owner's history held 65,878 of them.
@@ -2090,11 +2102,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     SkippedView.PageSize,
                     ct));
 
-            case Pages.HistoryRoute:
+            case "history":
                 return HistoryView.Render(
                     [.. (await (await GrabsAsync(ct)).HistoryAsync(ct)).Select(Line)]);
 
-            default:
+            case "activity":
                 await LastRunAsync(ct);
 
                 ActivitySnapshot activity = _journal.Snapshot();
@@ -2102,12 +2114,205 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 // What the client holds only while a run is going: that is the
                 // only time the Download stage is drawn, and asking the client
                 // for a page that will not show it is work for nothing.
-                return DashboardView.Render(
+                return ActivityView.Render(
                     activity,
                     CurrentCycle(),
                     activity.Run is null ? null : await DownloadRowsAsync(ct));
+
+            default:
+                await LastRunAsync(ct);
+
+                return await OverviewAsync(null, 1, ct);
         }
     }
+
+    /// <summary>
+    /// The overview, or one library's page of shows: every show of every tv and anime library, with what
+    /// was saved for it and what applies.
+    /// </summary>
+    /// <remarks>
+    /// The missing count comes from the episodes the plugin tracks, and a show it does not track says so
+    /// rather than showing nought (<c>OverviewView</c>).
+    /// </remarks>
+    private async Task<PluginView> OverviewAsync(string? onlyLibraryId, int page, CancellationToken ct)
+    {
+        (IReadOnlyList<Library> libraries, IReadOnlyList<Show> shows, string? unread) = await ShelvesAsync(ct);
+
+        if (unread is not null)
+        {
+            return Unread(unread);
+        }
+
+        IReadOnlyDictionary<int, ShowSettings> saved = await (await ShowSettingsAsync(ct)).AllAsync(ct);
+        LibraryPreferencesRepository preferences = await LibraryPreferencesAsync(ct);
+
+        Dictionary<int, int> missing = ShowSummaries
+            .Summarise(await Tracked(ct))
+            .ToDictionary(show => show.ShowId, show => show.Missing);
+
+        List<LibraryListing> listings = [];
+
+        foreach (Library library in libraries)
+        {
+            LibraryPreferences prefs = await preferences.ForAsync(library.Id, ct);
+
+            listings.Add(new(
+                library,
+                prefs,
+                [
+                    .. shows
+                        .Where(show => show.LibraryId == library.Id)
+                        .Select(show =>
+                        {
+                            ShowSettings settings = saved.GetValueOrDefault(show.Id) ?? new ShowSettings(show.Id);
+
+                            return new ShowListing(
+                                show,
+                                settings,
+                                EffectiveSettings.Of(settings, prefs),
+                                missing.TryGetValue(show.Id, out int count) ? count : null);
+                        }),
+                ]));
+        }
+
+        return OverviewView.Render(CurrentCycle(), listings, onlyLibraryId, page);
+    }
+
+    /// <summary>The settings form of one show, or a page saying there is no such show.</summary>
+    private async Task<PluginView> ShowSettingsPageAsync(string? id, CancellationToken ct)
+    {
+        (_, IReadOnlyList<Show> shows, string? unread) = await ShelvesAsync(ct);
+
+        if (unread is not null)
+        {
+            return Unread(unread);
+        }
+
+        if (!int.TryParse(id, NumberStyles.Integer, CultureInfo.InvariantCulture, out int showId)
+            || shows.FirstOrDefault(show => show.Id == showId) is not Show show)
+        {
+            return Said($"No show with the id {id} is in a tv or anime library.");
+        }
+
+        return ShowSettingsView.Render(
+            show,
+            await (await ShowSettingsAsync(ct)).ForAsync(show.Id, ct),
+            await (await LibraryPreferencesAsync(ct)).ForAsync(show.LibraryId, ct));
+    }
+
+    /// <summary>The preferences form of one library, or a page saying there is no such library.</summary>
+    private async Task<PluginView> LibraryPreferencesPageAsync(string? id, CancellationToken ct)
+    {
+        (IReadOnlyList<Library> libraries, _, string? unread) = await ShelvesAsync(ct);
+
+        if (unread is not null)
+        {
+            return Unread(unread);
+        }
+
+        if (libraries.FirstOrDefault(library => library.Id == id) is not Library library)
+        {
+            return Said($"No tv or anime library has the id {id}.");
+        }
+
+        return LibraryPreferencesView.Render(library, await (await LibraryPreferencesAsync(ct)).ForAsync(library.Id, ct));
+    }
+
+    /// <summary>The tv and anime libraries and their shows, or why they could not be read.</summary>
+    /// <remarks>
+    /// A server that does not let this plugin read its library, or one that fails while it answers, is a
+    /// page that says so. The overview is the landing page, and a landing page that threw would be a blank
+    /// screen with nothing on it to act on.
+    /// </remarks>
+    private async Task<(IReadOnlyList<Library> Libraries, IReadOnlyList<Show> Shows, string? Unread)> ShelvesAsync(CancellationToken ct)
+    {
+        try
+        {
+            HostLibrary library = new(Context.Library);
+
+            return (await library.GetLibrariesAsync(ct), await library.GetShowsAsync(ct), null);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            return ([], [], wrong.Message);
+        }
+    }
+
+    private static PluginView Unread(string reason)
+    {
+        return Said($"The libraries could not be read: {reason}");
+    }
+
+    /// <summary>A page that says one thing, for an address that names nothing the plugin can draw.</summary>
+    private static PluginView Said(string said)
+    {
+        return new()
+        {
+            Layout = PluginLayout.Wide,
+            Components = [Ui.Text("said", said)],
+        };
+    }
+
+    /// <summary>What the owner saved per show.</summary>
+    public async Task<ShowSettingsRepository> ShowSettingsAsync(CancellationToken ct)
+    {
+        return new(await DatabaseAsync(ct));
+    }
+
+    /// <summary>What the owner saved per library.</summary>
+    public async Task<LibraryPreferencesRepository> LibraryPreferencesAsync(CancellationToken ct)
+    {
+        return new(await DatabaseAsync(ct));
+    }
+
+    /// <summary>Switches a show on or off from its row on the overview, and tells the pages.</summary>
+    public async Task SwitchShowAsync(int showId, bool on, CancellationToken ct)
+    {
+        await (await ShowSettingsAsync(ct)).SwitchAsync(showId, on, ct);
+
+        Moved();
+    }
+
+    /// <summary>Saves a show's settings form, or refuses it with the fields named and saves nothing.</summary>
+    public async Task<IReadOnlyList<string>> SaveShowSettingsAsync(
+        int showId,
+        IReadOnlyDictionary<string, string?> fields,
+        CancellationToken ct)
+    {
+        ShowSettingsRepository shows = await ShowSettingsAsync(ct);
+
+        (ShowSettings settings, IReadOnlyList<string> refused) = ShowSettingsEdit.Show(await shows.ForAsync(showId, ct), fields);
+
+        if (refused.Count == 0)
+        {
+            await shows.SaveAsync(settings, ct);
+
+            Moved();
+        }
+
+        return refused;
+    }
+
+    /// <summary>Saves a library's preferences form, or refuses it with the fields named and saves nothing.</summary>
+    public async Task<IReadOnlyList<string>> SaveLibraryPreferencesAsync(
+        string libraryId,
+        IReadOnlyDictionary<string, string?> fields,
+        CancellationToken ct)
+    {
+        LibraryPreferencesRepository libraries = await LibraryPreferencesAsync(ct);
+
+        (LibraryPreferences preferences, IReadOnlyList<string> refused) = ShowSettingsEdit.Library(await libraries.ForAsync(libraryId, ct), fields);
+
+        if (refused.Count == 0)
+        {
+            await libraries.SaveAsync(preferences, ct);
+
+            Moved();
+        }
+
+        return refused;
+    }
+
 
     private async Task<IReadOnlyList<TrackedEpisode>> Tracked(CancellationToken ct)
     {

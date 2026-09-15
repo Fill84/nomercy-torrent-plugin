@@ -1,5 +1,3 @@
-using System.Globalization;
-
 using Microsoft.AspNetCore.Mvc;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugins.Abstractions;
@@ -111,7 +109,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
 
         IReadOnlyList<string> refused = SettingsEdit.Apply(
             settings,
-            fields.ToDictionary(field => field.Key, field => Text(field.Value), StringComparer.Ordinal));
+            PostedFields.AsText(fields));
 
         if (refused.Count > 0)
         {
@@ -124,25 +122,6 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
         SaveResult result = await plugin.Settings.SaveAsync(settings, ct);
 
         return Status(result, result.Saved ? "ok" : "refused", result.Said());
-    }
-
-    /// <summary>
-    /// A posted value as the text it stands for.
-    /// </summary>
-    /// <remarks>
-    /// JSON carries a number as a number and a tick as a boolean, and the
-    /// culture is pinned because a rate typed as 1.5 must not arrive as 15 on a
-    /// machine that writes it 1,5.
-    /// </remarks>
-    private static string? Text(object? value)
-    {
-        return value switch
-        {
-            null => null,
-            bool flag => flag ? "true" : "false",
-            IFormattable number => number.ToString(null, CultureInfo.InvariantCulture),
-            _ => value.ToString(),
-        };
     }
 
     /// <summary>

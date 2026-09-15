@@ -37,16 +37,51 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
     /// </summary>
     public const string Prefetched =
         "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText
-        + "/{page:regex(^(shows|queue|downloads|history|skipped|sources|settings)$)}";
+        + "/{page:regex(^(activity|queue|downloads|history|skipped|sources|settings)$)}";
+
+    /// <summary>Where the web app fetches one show's settings page.</summary>
+    public const string PrefetchedShow =
+        "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText + "/shows/{id}";
+
+    /// <summary>Where the web app fetches one library's preferences page.</summary>
+    public const string PrefetchedLibrary =
+        "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText + "/libraries/{id}";
+
+    /// <summary>Where the web app fetches one page of one library's shows.</summary>
+    public const string PrefetchedLibraryShows =
+        "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText + "/libraries/{id}/shows/{number}";
 
     [HttpGet(Prefetched)]
-    public async Task<IActionResult> Page(string page, CancellationToken ct)
+    public Task<IActionResult> Page(string page, CancellationToken ct)
+    {
+        return View("/" + page, ct);
+    }
+
+    [HttpGet(PrefetchedShow)]
+    public Task<IActionResult> Show(string id, CancellationToken ct)
+    {
+        return View($"/shows/{Uri.EscapeDataString(id)}", ct);
+    }
+
+    [HttpGet(PrefetchedLibrary)]
+    public Task<IActionResult> Library(string id, CancellationToken ct)
+    {
+        return View($"/libraries/{Uri.EscapeDataString(id)}", ct);
+    }
+
+    [HttpGet(PrefetchedLibraryShows)]
+    public Task<IActionResult> LibraryShows(string id, string number, CancellationToken ct)
+    {
+        return View($"/libraries/{Uri.EscapeDataString(id)}/shows/{Uri.EscapeDataString(number)}", ct);
+    }
+
+    private async Task<IActionResult> View(string route, CancellationToken ct)
     {
         if (LivePlugin.Of(plugins, PluginId, out string refusal) is not TorrentDownloaderPlugin plugin)
         {
             return NotFound(refusal);
         }
 
-        return Data(await plugin.GetViewAsync(new() { Route = "/" + page }, ct));
+        return Data(await plugin.GetViewAsync(new() { Route = route }, ct));
     }
 }

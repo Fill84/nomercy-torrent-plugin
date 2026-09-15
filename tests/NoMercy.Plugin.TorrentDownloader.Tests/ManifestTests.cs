@@ -124,7 +124,7 @@ public class ManifestTests
         string[] sections =
         [
             .. Pages.NavEntries
-                .Where(entry => entry.Route == Pages.DashboardRoute)
+                .Where(entry => entry.Route == Pages.OverviewRoute)
                 .Select(entry => entry.Section),
         ];
 

@@ -107,13 +107,33 @@ public class HandCountedLibraryTests : IDisposable
                 .Single(episode => episode.Key == new EpisodeKey(2, 2, 1))
                 .Absolute);
 
-        // And the page says the same numbers as the summaries it was built from.
-        PluginView page = ShowsView.Render(shows);
-        IReadOnlyList<string> words = Rendered.Words(page);
+        // And the overview says the same numbers as the summaries it was built from, each show in the
+        // list of its own library and no film's show or show without a folder on it at all.
+        HostLibrary adapter = new(server);
+        IReadOnlyList<Show> onShelves = await adapter.GetShowsAsync(CancellationToken.None);
+        Dictionary<int, int> missing = shows.ToDictionary(show => show.ShowId, show => show.Missing);
 
-        Assert.Contains("Silo (2023)", words);
-        Assert.Contains("Frieren (2023)", words);
-        Assert.Contains("anime", words);
+        PluginView page = OverviewView.Render(
+            new(false, null, null),
+            [
+                .. (await adapter.GetLibrariesAsync(CancellationToken.None)).Select(library => new LibraryListing(
+                    library,
+                    new(library.Id),
+                    [
+                        .. onShelves.Where(show => show.LibraryId == library.Id).Select(show => new ShowListing(
+                            show,
+                            new(show.Id),
+                            EffectiveSettings.Of(new(show.Id), new(library.Id)),
+                            missing.TryGetValue(show.Id, out int count) ? count : null)),
+                    ])),
+            ]);
+
+        Assert.Equal("2", Rendered.ById(page, "show-1").Props["missing"]);
+        Assert.Equal("1", Rendered.ById(page, "show-2").Props["missing"]);
+        Assert.Contains(Rendered.ById(page, OverviewView.TableId("lib-anime")).Items, row => row.Id == "show-2");
+
+        IReadOnlyList<string> words = Rendered.EveryValue(page);
+
         Assert.DoesNotContain("A film's show", words);
         Assert.DoesNotContain("Homeless", words);
     }

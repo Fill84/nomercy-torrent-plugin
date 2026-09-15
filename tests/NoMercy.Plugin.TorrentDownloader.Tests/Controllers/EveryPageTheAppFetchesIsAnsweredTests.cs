@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 
 using Microsoft.AspNetCore.Mvc;
 
+using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.Plugins.Mvc;
 
@@ -38,8 +39,8 @@ public class EveryPageTheAppFetchesIsAnsweredTests
         string[] pages =
         [
             .. Pages.Routes.Routes
-                .Select(route => route.Path)
-                .Where(path => path != Pages.DashboardRoute),
+                .Where(route => route.Path != Pages.OverviewRoute)
+                .Select(SamplePaths.Of),
         ];
 
         // A walk that found no page would pass in silence.

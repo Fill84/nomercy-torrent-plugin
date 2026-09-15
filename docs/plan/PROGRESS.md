@@ -4,10 +4,37 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-02` · The overview page and the settings forms.** Sprint 13 is the owner's requirements
-of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
+**Next: `S13-03` · The Settings page without quality, codec and tags.** Sprint 13 is the owner's
+requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-02` is done and green: the overview, the two forms, and Activity as a page of its own.**
+`/` is `OverviewView` — the status line, then per library its preferences with Edit and a table of every
+show (switched-on first, alphabetical, 50 a page) with Switch and Settings row buttons. `/shows/:id` is
+`ShowSettingsView`, `/libraries/:id` is `LibraryPreferencesView`, `/libraries/:id/shows/:page` is one
+library's page. What the dashboard showed during a run is `ActivityView` at `/activity`; the status
+line is `RunStatusView`, drawn on both. The Shows page and `ShowsView` are gone (the spec has no
+separate Shows page); `ShowSummaries` stays, as the overview's missing count. `ShowsController` takes
+`shows/:id/on|off|settings` and `libraries/:id/preferences`; `ShowSettingsEdit` turns a posted form into
+settings, all or nothing; `PostedFields` is the one reader of posted values, shared with Settings.
+
+**Two facts found on the way, both measured, not assumed.** The contract resolves routes with
+parameters (`PluginRoute.Match`, `PluginRouteTable.Resolve`, in 0.1.479), and the web app registers each
+declared page and sends the plugin the path after the mount. **And it sends no query string**:
+`PluginScreen.vue` fetches `view?route=<path>&surface=`, and the server builds `PluginViewRequest.Query`
+from that request's own query, so `?page=2` never arrives — which is why the overview pages by route.
+The Skipped page's `?page=` paging (`S11`) has the same problem and is left for `S13-09`, where Skipped
+is rebuilt anyway.
+
+The page-wide guards walk parameterised routes with sample values (`TestSupport/SamplePaths`), the tab
+bar lists only pages without a parameter (`Pages.Navigable`), `PagesController` answers the prefetch of
+the new addresses, and `ControlsReachTheirEndpointsTests` now checks a table's row buttons too — seen to
+fail with the switch endpoint renamed. Tests, each red against a stub, and the ordering, not-saved state,
+follow option and refused save each broken on purpose: `OverviewViewTests` (nine),
+`ShowSettingsViewTests` (four, the library form's among them), `ShowSettingsEditTests` (seven),
+`TheShowListTests` (five, through the plugin), and `TheActivityPageRendersWhatTheRunIsDoingFromTheJournal`
+in place of `TheLandingRouteIsTheDashboard`.
 
 **`S13-01` is done and green, and nothing reads it yet.** `ShowSettings`, `LibraryPreferences` and
 `EffectiveSettings` in Core; `ShowSettingsRepository`, `LibraryPreferencesRepository` and migration 013

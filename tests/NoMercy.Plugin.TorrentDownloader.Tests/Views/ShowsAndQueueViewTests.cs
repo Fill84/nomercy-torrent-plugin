@@ -18,9 +18,9 @@ public class ShowsAndQueueViewTests : IDisposable
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
 
     /// <remarks>
-    /// The number on the row equals the rows it summarises. A count kept
-    /// anywhere else is a second number that can disagree with its own list —
-    /// 0.3.4 showed "0 downloads" while two were running.
+    /// The number on the overview's row equals the rows it summarises, and a show sits in the list of
+    /// the library the server put it in. A count kept anywhere else is a second number that can disagree
+    /// with its own list — 0.3.4 showed "0 downloads" while two were running.
     /// </remarks>
     [Fact]
     public async Task TheMissingCountIsTheRowsForThatShow()
@@ -34,32 +34,13 @@ public class ShowsAndQueueViewTests : IDisposable
             Episode(2, 1, 1, EpisodeState.Missing, "Frieren", LibraryKind.Anime),
         ]);
 
-        PluginView page = await View(plugin, Pages.ShowsRoute);
-        IReadOnlyList<string> words = Rendered.Words(page);
+        PluginView page = await View(plugin, Pages.OverviewRoute);
 
         // Silo: three missing, one waiting. Frieren: one missing, none waiting.
-        Assert.Contains("Silo (2023)", words);
-        Assert.Contains("3", words);
-        Assert.Contains("Frieren (2023)", words);
-    }
-
-    /// <remarks>
-    /// Which library an episode goes back to is the server's own decision, and
-    /// the page says which without guessing from the title.
-    /// </remarks>
-    [Fact]
-    public async Task TheMediaTypeIsRenderedPerShow()
-    {
-        using TorrentDownloaderPlugin plugin = await Seeded(
-        [
-            Episode(1, 1, 1, EpisodeState.Missing),
-            Episode(2, 1, 1, EpisodeState.Missing, "Frieren", LibraryKind.Anime),
-        ]);
-
-        IReadOnlyList<string> words = Rendered.Words(await View(plugin, Pages.ShowsRoute));
-
-        Assert.Contains("tv", words);
-        Assert.Contains("anime", words);
+        Assert.Equal("3", Rendered.ById(page, "show-1").Props["missing"]);
+        Assert.Equal("1", Rendered.ById(page, "show-2").Props["missing"]);
+        Assert.Contains(Rendered.ById(page, OverviewView.TableId(TvLibrary)).Items, row => row.Id == "show-1");
+        Assert.Contains(Rendered.ById(page, OverviewView.TableId(AnimeLibrary)).Items, row => row.Id == "show-2");
     }
 
     /// <remarks>
@@ -193,12 +174,13 @@ public class ShowsAndQueueViewTests : IDisposable
 
         // Which pages the table holds is asserted whole in PagesReachableTests;
         // what matters here is that these two are on it and are not mounts.
-        Assert.Contains(Pages.ShowsRoute, plugin.Routes.Routes.Select(route => route.Path));
+        Assert.Contains(Pages.ShowSettingsRoute, plugin.Routes.Routes.Select(route => route.Path));
         Assert.Contains(Pages.QueueRoute, plugin.Routes.Routes.Select(route => route.Path));
 
         // Resolve answers null for a path no page claims, which is the point of
-        // declaring the table at all.
-        PluginRouteMatch shows = Assert.IsType<PluginRouteMatch>(plugin.Routes.Resolve(Pages.ShowsRoute));
+        // declaring the table at all — and a show's page is found by its id.
+        PluginRouteMatch shows = Assert.IsType<PluginRouteMatch>(plugin.Routes.Resolve("/shows/41"));
+        Assert.Equal("41", shows.Param("id"));
         PluginRouteMatch settings = Assert.IsType<PluginRouteMatch>(plugin.Routes.Resolve(Pages.SettingsRoute));
 
         Assert.Equal(PluginLayout.Wide, shows.Route.Layout);
@@ -207,7 +189,7 @@ public class ShowsAndQueueViewTests : IDisposable
 
         // Two pages, however many sections they are placed in.
         Assert.Equal(
-            [Pages.DashboardRoute, Pages.SettingsRoute],
+            [Pages.OverviewRoute, Pages.SettingsRoute],
             plugin.NavEntries.Select(entry => entry.Route).Distinct().Order());
     }
 
@@ -229,10 +211,22 @@ public class ShowsAndQueueViewTests : IDisposable
         return plugin.GetViewAsync(new() { Route = route }, CancellationToken.None);
     }
 
+    private const string TvLibrary = "01HQ5W4AVF30N10RT6XCF6AJHM";
+
+    private const string AnimeLibrary = "01HQ5W4GAVF30N10RT6XCF6AJQ";
+
     private async Task<TorrentDownloaderPlugin> Seeded(IReadOnlyList<TrackedEpisode> episodes)
     {
         TorrentDownloaderPlugin plugin = new();
-        plugin.Initialize(new FakePluginContext { DataFolderPath = _folder });
+        plugin.Initialize(new FakePluginContext
+        {
+            DataFolderPath = _folder,
+            Shelves = new FakeLibraryQuery()
+                .Library(TvLibrary, "Series", "tv")
+                .Library(AnimeLibrary, "Anime", "anime")
+                .Show(1, "Silo", TvLibrary, year: 2023)
+                .Show(2, "Frieren", AnimeLibrary, year: 2023),
+        });
 
         await (await plugin.EpisodesAsync(CancellationToken.None)).ReplaceAsync(episodes, CancellationToken.None);
 

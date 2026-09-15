@@ -7,7 +7,7 @@ using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Views;
 
-public class DashboardViewTests
+public class ActivityViewTests
 {
     private static readonly DateTimeOffset Now = new(2026, 8, 14, 12, 0, 0, TimeSpan.Zero);
 
@@ -20,7 +20,7 @@ public class DashboardViewTests
     [Fact]
     public void AnIdleDashboardSaysWhenItLastRanAndWhenItIsNextDue()
     {
-        PluginView view = DashboardView.Render(
+        PluginView view = ActivityView.Render(
             new([], [], Now),
             new(false, Now.AddMinutes(-14), Now.AddHours(6)));
 
@@ -56,7 +56,7 @@ public class DashboardViewTests
     [Fact]
     public void ARunningDashboardSaysSinceWhen()
     {
-        PluginView view = DashboardView.Render(
+        PluginView view = ActivityView.Render(
             new([], [], Now),
             new(true, null, Now.AddHours(6)) { StartedAt = Now.AddMinutes(-3) });
 
@@ -74,7 +74,7 @@ public class DashboardViewTests
     [Fact]
     public void AStoppedRunSaysItWasStoppedAndWhen()
     {
-        PluginView view = DashboardView.Render(
+        PluginView view = ActivityView.Render(
             new([], [], Now),
             new(false, Now.AddMinutes(-1), Now.AddHours(6)) { LastEnd = RunEnd.Stopped });
 
@@ -90,7 +90,7 @@ public class DashboardViewTests
     [Fact]
     public void AFinishedRunSaysWhenItFinished()
     {
-        PluginView view = DashboardView.Render(
+        PluginView view = ActivityView.Render(
             new([], [], Now),
             new(false, Now.AddMinutes(-14), Now.AddHours(6)) { LastEnd = RunEnd.Finished });
 
@@ -127,9 +127,9 @@ public class DashboardViewTests
                 }),
         };
 
-        PluginView view = DashboardView.Render(snapshot, new(true, null, Now.AddHours(6)) { StartedAt = Now.AddMinutes(-3) });
+        PluginView view = ActivityView.Render(snapshot, new(true, null, Now.AddHours(6)) { StartedAt = Now.AddMinutes(-3) });
 
-        string[] words = [.. Rendered.Words(new() { Components = [Rendered.ById(view, DashboardView.StagesTableId)] })];
+        string[] words = [.. Rendered.Words(new() { Components = [Rendered.ById(view, ActivityView.StagesTableId)] })];
 
         Assert.Contains("5 sites looked at · 5 challenged · 5 cleared · 0 failed", words);
         Assert.Contains("3 of 42 episodes asked · 17 names · 9 refused", words);
@@ -145,9 +145,9 @@ public class DashboardViewTests
     [Fact]
     public void AnIdleDashboardHasNoStageRows()
     {
-        PluginView view = DashboardView.Render(new([], [], Now), new(false, Now.AddMinutes(-1), null));
+        PluginView view = ActivityView.Render(new([], [], Now), new(false, Now.AddMinutes(-1), null));
 
-        Assert.DoesNotContain(Rendered.All(view), component => component.Id == DashboardView.StagesTableId);
+        Assert.DoesNotContain(Rendered.All(view), component => component.Id == ActivityView.StagesTableId);
     }
 
     /// <remarks>
@@ -170,9 +170,9 @@ public class DashboardViewTests
             ],
         };
 
-        PluginView view = DashboardView.Render(snapshot, new(true, null, null) { StartedAt = Now.AddMinutes(-3) });
+        PluginView view = ActivityView.Render(snapshot, new(true, null, null) { StartedAt = Now.AddMinutes(-3) });
 
-        string[] words = [.. Rendered.Words(new() { Components = [Rendered.ById(view, DashboardView.NotesTableId)] })];
+        string[] words = [.. Rendered.Words(new() { Components = [Rendered.ById(view, ActivityView.NotesTableId)] })];
 
         Assert.Contains("Dark Matter S02E03", words);
         Assert.Contains("PreDB · Dark Matter S02E03 1080p · 1 name: Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES", words);
@@ -192,7 +192,7 @@ public class DashboardViewTests
     [Fact]
     public void ADashboardThatHasNeverRunSaysSoRatherThanShowingNought()
     {
-        PluginView view = DashboardView.Render(new([], [], Now), new(false, null, null));
+        PluginView view = ActivityView.Render(new([], [], Now), new(false, null, null));
 
         string bar = string.Join(" ", Rendered.Words(view));
 
@@ -221,9 +221,9 @@ public class DashboardViewTests
             [],
             Now);
 
-        PluginView view = DashboardView.Render(snapshot, new(true, Now.AddMinutes(-1), Now.AddHours(6)));
+        PluginView view = ActivityView.Render(snapshot, new(true, Now.AddMinutes(-1), Now.AddHours(6)));
 
-        PluginComponent now = Rendered.ById(view, DashboardView.NowTableId);
+        PluginComponent now = Rendered.ById(view, ActivityView.NowTableId);
         string[] words = [.. Rendered.Words(new() { Components = [now] })];
 
         Assert.Contains("Silo S03E06", words);
@@ -242,11 +242,11 @@ public class DashboardViewTests
     [Fact]
     public void NothingInFlightIsStillTheNowTable()
     {
-        PluginView view = DashboardView.Render(
+        PluginView view = ActivityView.Render(
             new([], [], Now),
             new(false, Now.AddMinutes(-14), Now.AddHours(6)));
 
-        Assert.Equal(Ui.TableComponent, Rendered.ById(view, DashboardView.NowTableId).Component);
+        Assert.Equal(Ui.TableComponent, Rendered.ById(view, ActivityView.NowTableId).Component);
     }
 
     /// <remarks>
@@ -263,7 +263,7 @@ public class DashboardViewTests
         CycleStatus cycle = new(true, Now.AddMinutes(-2), Now.AddHours(6));
 
         Assert.Equal(
-            Rendered.Words(DashboardView.Render(snapshot, cycle)),
-            Rendered.Words(DashboardView.Render(snapshot, cycle)));
+            Rendered.Words(ActivityView.Render(snapshot, cycle)),
+            Rendered.Words(ActivityView.Render(snapshot, cycle)));
     }
 }

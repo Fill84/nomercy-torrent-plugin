@@ -145,19 +145,19 @@ public class TorrentDownloaderPluginTests
     }
 
     /// <remarks>
-    /// The landing route is the dashboard, and it renders from the journal
-    /// rather than from anything held between requests. A page nobody can reach
-    /// is not a page: the dashboard has to be what the mount at "/" serves.
+    /// What a run is doing renders from the journal rather than from anything held between
+    /// requests, and it is on the Activity page: the landing route is the overview of the shows since
+    /// the owner's requirements of 15 September 2026 (<c>docs/specs/pages.md</c>).
     /// </remarks>
     [Fact]
-    public async Task TheLandingRouteIsTheDashboard()
+    public async Task TheActivityPageRendersWhatTheRunIsDoingFromTheJournal()
     {
         using TorrentDownloaderPlugin plugin = new();
         plugin.Initialize(new FakePluginContext());
         plugin.Journal.Started(ActivityStage.Find, "Silo S03E06", "asking 1337x");
 
         PluginView view = await plugin.GetViewAsync(
-            new() { Route = Pages.DashboardRoute },
+            new() { Route = Pages.ActivityRoute },
             CancellationToken.None);
 
         Assert.Contains(Rendered.Words(view), word => word == "Silo S03E06");
