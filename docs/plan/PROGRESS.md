@@ -4,6 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**Next: `S13-01` · Settings per show and per library.** Sprint 13 is the owner's requirements of
+15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
+the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
+the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
 **Seen on beast-unit on 15 September 2026: a cycle closes and maintenance runs.** The American Dad
 grab failed at 23:09:05 UTC, the moment its metadata deadline dropped it; the server then updated
 itself to 0.1.501 through the launcher, and the cycle of the run after closed at 23:28:36 UTC with no

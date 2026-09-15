@@ -2665,6 +2665,242 @@ staged within seconds of finishing, an encode that ends closing its grab, a libr
 cycle, the Settings page showing one hourly cadence over the owner's saved four, and no push arriving
 at a Downloads page nobody has open.
 
+## S13 · The show list and the release search
+
+The owner's requirements of 15 September 2026 are `docs/specs/`; the design, approved in five parts,
+is `DESIGN-2026-09-15-show-list-and-release-search.md`. **Read first for every slice: the spec pages
+it names, and that design.** Each slice leaves the plugin building and green. Nothing of `S13` goes to
+beast-unit before `S13-11`, and nothing is released before `S13-12`.
+
+## S13-01 · Settings per show and per library
+
+**Files:** `Storage/Migrations/013-show-settings.sql`, a `ShowSettingsRepository` and a
+`LibraryPreferencesRepository` in `Storage/`, `Core/Domain/ShowSettings.cs`,
+`Core/Domain/LibraryPreferences.cs`, `Core/Domain/EffectiveSettings.cs`, `tests/…/Storage/`,
+`tests/…Core.Tests/Domain/`.
+
+**Steps**
+
+1. Test (red): `EffectiveSettingsTests.AShowFollowsItsLibraryUntilItSetsItsOwn` — quality, codec and
+   specials come from the library when the show leaves them empty, and from the show when it sets them.
+2. Test (red): `EffectiveSettingsTests.TheTagListsAreTheLibrarysAndTheShowsTogether` — and a tag the
+   two put in different lists counts only in the show's list.
+3. Test (red): `EffectiveSettingsTests.AShowWithNoQualityAnywhereSearchesNothing`.
+4. Test (red): `ShowSettingsRepositoryTests.ASavedShowReadsBackAsItWasSaved` — on/off, saved, every
+   field; and `AShowNobodyTouchedIsOffAndNotSaved`.
+5. Test (red): `LibraryPreferencesRepositoryTests.PreferencesReadBackAsTheyWereSaved`.
+6. Migration 013 creates both tables. `StoreTests` rolls forward and back over it.
+
+**Done when** those tests pass and the suite is green. Spec: `show-list.md`.
+
+## S13-02 · The overview page and the settings forms
+
+**Files:** `Views/OverviewView.cs`, `Views/ShowSettingsView.cs`, `Views/LibraryPreferencesView.cs`,
+`Views/ActivityView.cs` (what `DashboardView` draws during a run), `Views/Pages.cs`,
+`TorrentDownloaderPlugin.cs` (`PageAsync`), a controller for the switch and the two saves,
+`plugin.json` mounts, `docs/08-ui.md`.
+
+**Steps**
+
+1. Read how a route with an id reaches the plugin (`PluginViewRequest`, `PluginRoute` in the contract)
+   before drawing `/shows/{id}`. If the contract cannot carry one, the page takes the id as a query
+   value and `docs/08-ui.md` says so.
+2. Test (red): `OverviewViewTests.EveryShowOfEveryTvAndAnimeLibraryIsListedPerLibrary`.
+3. Test (red): `OverviewViewTests.ARowSaysOnOffOrOnAndNotSaved`, and
+   `SwitchedOnShowsComeFirstAndEachGroupIsAlphabetical`, and `ATablePagesAtFiftyRows`.
+4. Test (red): `OverviewViewTests.EveryRowCarriesASwitchAndASettingsButton` — both reach their
+   endpoints (`ControlsReachTheirEndpointsTests` stays green).
+5. Test (red): `ShowSettingsViewTests.OneFormOneSaveWithFollowTheLibraryForQualityCodecAndSpecials`.
+6. Test (red): `ShowSettingsEditTests.ATagTypedInTheOneTagFieldIsAppendedToTheEndOfItsList`, and
+   `ACommaListIsSplitIntoTags`.
+7. Test (red): `ShowSettingsViewTests.BelowTheFormIsWhatAppliesWithTheLibraryCountedIn`.
+8. Test (red): `LibraryPreferencesViewTests.TheSameFormWithoutFollowTheLibrary`.
+9. Test (red): `ActivityViewTests.TheStageCountsInFlightAndNotesAreOnTheActivityPage`, and the
+   overview opens with the status line, Run and Stop.
+10. `EveryPageIsTheSameShellTests`, `NoButtonOnAnyPageIsStretchedAcrossIt`, `PagesReachableTests` and
+    `SecretsNeverEscapeTests` stay green.
+
+**Done when** those tests pass and the suite is green. Specs: `show-list.md`, `pages.md`.
+
+## S13-03 · The Settings page without quality, codec and tags
+
+**Files:** `Views/SettingsView.cs`, `Configuration/SettingsEdit.cs`, `Configuration/Settings.cs`,
+`Configuration/SettingsStore.cs`, `Core/Domain/Profile.cs` (removed), `Core/Domain/Cron.cs`,
+`docs/04-domain.md`, `docs/08-ui.md`.
+
+**Steps**
+
+1. Test (red): `SettingsViewTests.ThePageHoldsNoQualityCodecTagOrLanguageSetting`.
+2. Test (red): `SettingsViewTests.TheRunIntervalIsChosenFromFifteenMinutesToDaily` — 15 min, 30 min,
+   1 h, 6 h, 12 h, daily.
+3. Test (red): `SettingsStoreTests.AnIntervalShorterThanFifteenMinutesIsRefused`, and
+   `FifteenMinutesIsAccepted`. `ACycleMoreOftenThanHourlyIsRefusedAndChangesNothing` and
+   `TheCycleIsOfferedNoMoreOftenThanHourly` are replaced.
+4. Test (red): `SettingsStoreTests.SettingsSavedWithAProfileLoadWithoutIt` — the owner's
+   `config.json` loads, and the profile is not written back.
+5. `Profile` goes, and every reader of it moves to `EffectiveSettings` or goes in `S13-09`.
+
+**Done when** those tests pass and the suite is green. Specs: `show-list.md`, `pages.md`.
+
+## S13-04 · The episodes searched for
+
+**Files:** `Core/Pipeline/MissingRefresh.cs`, `Core/Pipeline/Ownership.cs`,
+`Core/Pipeline/QueueOrder.cs`, `Views/QueueView.cs`, `tests/…`.
+
+**Steps**
+
+1. Test (red): `MissingRefreshTests.OnlyShowsSwitchedOnSavedAndWithAQualityAreSearchedFor`.
+2. Test (red): `MissingRefreshTests.AShowSwitchedOnButNeverSavedHasNothingSearched`, and
+   `ASwitchedOffShowKeepsItsSettings`.
+3. Test (red): `MissingRefreshTests.SeasonZeroIsSearchedOnlyWithSpecialsOnForThatShow`.
+4. Test (red): `QueueViewTests.TheQueueListsTheEpisodesSearchedForWithSearchNow`.
+5. `Ownership` no longer decides which shows are searched; the tests pinning it go
+   (`AShowWithNotOneEpisodeOnDiskIsNotOneTheOwnerHas`, `OneRuleForWhoseShowItIsTests`) or are rewritten
+   against the switch.
+
+**Done when** those tests pass and the suite is green. Specs: `show-list.md`, `run.md`.
+
+## S13-05 · Release names: the feeds and backfill
+
+**Files:** `Core/Pipeline/Harvest.cs`, `Core/Pipeline/NameResolve.cs`, `Core/Sources/SourceRole.cs`,
+`Storage/NamePoolRepository.cs` (removed), a migration dropping `name_pool`, `sources.json`,
+`tests/fixtures/` (fresh captures of the four feeds and the four searches), `docs/05-sources.md`.
+
+**Steps**
+
+1. Take fresh captures of PreDB, srrDB, PreDB.net and SceneSource: each feed and each search for an
+   episode. Correct `docs/05-sources.md` wherever a capture disagrees.
+2. Test (red): `FeedNamesTests.AFeedNameIsTakenForTheEpisodeItsShowAndNumberName` — against the
+   captures; a name for a show not switched on, or an episode not searched for, is left.
+3. Test (red): `FeedNamesTests.ANameWithNoEpisodeNumberIsNeverTaken` — a season pack from a capture.
+4. Test (red): `BackfillTests.AnEpisodeNoFeedNamedIsLookedUpInEverySourcesSearch`, and
+   `AnEpisodeAFeedNamedIsNotLookedUp`.
+5. Test (red): `BackfillTests.TheSearchAsksShowAndEpisodeAndNothingElse` — no quality in the query.
+6. Test (red): `NameSourcesTests.NyaaIsNotANameSourceForAnAnime`.
+7. Test (red): `NameSourcesTests.ASourceWhoseFeedFailsGivesNothingAndTheRunCarriesOn`.
+8. The name pool and its table go.
+
+**Done when** those tests pass and the suite is green. Spec: `release-names.md`, `run.md`.
+
+## S13-06 · Judging the names
+
+**Files:** `Core/Pipeline/ReleaseFilter.cs` (rebuilt as a judge of names against `EffectiveSettings`),
+`Core/Naming/ReleaseName.cs`, `Views/SkippedView.cs`, `Storage/GrabRepository.cs` (skipped history).
+
+**Steps**
+
+1. Test (red): `NameJudgeTests.ANameIsTakenOnlyWithTheShowsQualityAndCodec`.
+2. Test (red): `NameJudgeTests.ANameMissingOneMustIsRefused`, and
+   `ANameCarryingOneForbiddenIsRefusedWhateverElseItCarries`.
+3. Test (red): `NameJudgeTests.ATagIsAWordOfTheNameAndNotPartOfAWord` — `DUAL` in a name, not inside
+   another word.
+4. Test (red): `WishGroupsTests.NamesAreGroupedByHowManyWishesTheyCarryMostFirst`, and
+   `AWishNoNameCarriesLeavesTheShowDownloadable`.
+5. Test (red): `SkippedViewTests.ARefusedNameIsListedWithShowEpisodeAndReasonAndNoAllowButton`.
+6. The English-only list, `RequireCodecTag` and `ExcludeTerms` go with their tests.
+
+**Done when** those tests pass and the suite is green. Specs: `show-list.md`, `release-names.md`.
+
+## S13-07 · The indexer round and the winner
+
+**Files:** `Core/Pipeline/Find.cs`, `Core/Pipeline/SearchCycle.cs`, `Core/Pipeline/Decisions.cs`,
+`Core/Pipeline/ReleaseDecider.cs`, `Core/Naming/TitleMatcher.cs`, `Core/Pipeline/AskedThisCycle.cs`,
+`sources.json` (first-choice order), `tests/fixtures/` (captures of each indexer answering an exact
+release name), `docs/05-sources.md`.
+
+**Steps**
+
+1. Take captures of TorrentBay, LimeTorrents, Nyaa and the other indexers answering one exact release
+   name, and the same name without punctuation.
+2. Test (red): `IndexerRoundTests.FirstChoiceIndexersAreAskedOneAfterAnotherThenTheRestTogether` —
+   tv: TorrentBay then LimeTorrents; anime: Nyaa, TorrentBay, LimeTorrents.
+3. Test (red): `IndexerRoundTests.EachNameIsAskedExactlyThenWithoutPunctuation`.
+4. Test (red): `IndexerRoundTests.ARowCountsOnlyWhenItsTitleIsTheName` — with a site tag on the title.
+5. Test (red): `IndexerRoundTests.ARowIsNotJudgedAgainstTheShowsSettings`.
+6. Test (red): `MergeTests.RowsOfOneHashFromAnyIndexersAreOneTorrentWithEveryTracker`.
+7. Test (red): `WinnerTests.TheTorrentOnTheMostIndexersWins`, `ATieGoesToAFirstChoiceIndexer`,
+   `ForAnAnimeATieGoesToNyaa`, `StillLevelTheOneFoundFirstWins`.
+8. Test (red): `WinnerTests.ARefusedReleaseOrHashTakesNoPart`, and
+   `AnUnreadableWinnerYieldsToTheNext`.
+9. Test (red): `IndexerRoundTests.AnEmptyWishGroupHandsOverToTheGroupWithOneWishFewer`.
+10. Test (red): `IndexerRoundTests.AQuestionAlreadyAskedThisRunIsNotAskedAgain`.
+11. Test (red): `SearchCycleTests.OnlyTheWinnerIsOfferedToTheClient`, and
+    `AnEpisodeWithNoTorrentIsShownWithItsReasonAndComesBackNextRun`.
+12. Test (red): `SearchCycleTests.EachEpisodesWinnerIsOfferedBeforeTheNextEpisodeIsWorkedOn`.
+
+**Done when** those tests pass and the suite is green. Specs: `indexer-search.md`, `run.md`.
+
+## S13-08 · A challenge is solved again, twice at most
+
+**Files:** `Hosting/ChallengeAwareFetch.cs`, `Hosting/Chain.cs`, `Views/SourcesView.cs`,
+`docs/07-solver.md`.
+
+**Steps**
+
+1. Test (red): `ChallengeAwareFetchTests.AChallengeStillThereAfterASolveIsSolvedAgainOnce` — two
+   attempts, each after a solve; no third.
+2. Test (red): `ChallengeAwareFetchTests.ASiteThatDoesNotAnswerIsAskedASecondTime`.
+3. Test (red): `SearchCycleTests.ASiteThatFailsTwiceSitsOutTheRestOfTheRun` — and the Sources page says
+   why.
+
+**Done when** those tests pass and the suite is green. Spec: `run.md`.
+
+## S13-09 · What goes, goes
+
+**Files:** every file `S13-05` to `S13-08` left holding the ladder (`SearchTerm`, `Query` rungs), the
+race (`SearchCycle.RacingAsync`, `Transfers.Beaten`, `LoseAsync` for new grabs), ranking on seeders
+and priority, merging by name, packs (`Decisions` covering a season), the Shows page, and the tests
+listed in the design as pinning them.
+
+**Steps**
+
+1. Remove each, with the tests that pin it. A test whose rule only changed shape is rewritten, never
+   deleted.
+2. A download already in a folder of its own is still staged from it: `grabs.folder` stays read.
+3. Every living document in `docs/` (`00-goal`, `01`, `02`, `03`, `04`, `05`, `06`, `08`, `10`) says
+   what `docs/specs/` says. History stays as it was written.
+
+**Done when** nothing in `src/` builds a search term, races two hashes, ranks on seeders or takes a
+pack; the suite is green; and `docs/` agrees with `docs/specs/`.
+
+## S13-10 · The library's quality from its encoding profile
+
+**Files:** `docs/issues/` (the write-up), media-server issue.
+
+**Steps**
+
+1. Read in the media server where a library folder's encoding presets live and what resolution a
+   preset carries.
+2. File an issue on the media server, written so it can be picked up directly: `PluginLibrary` (or a
+   sibling call) gives the resolution of the encoding profile of the library's folders.
+3. Once the contract carries it, the plugin reads it and draws it as a fixed value (spec
+   `show-list.md`); until then the owner sets a library's quality.
+
+**Done when** the issue is filed and linked from `PROGRESS.md`.
+
+## S13-11 · Seen working on beast-unit
+
+**Steps**
+
+1. Deploy when the owner has stopped the server; ask them to start it.
+2. The owner switches a show and an anime on, sets and saves them. Seen: a feed name taken, an
+   episode backfilled, a name refused with its reason on Skipped, the indexer round in Activity, the
+   winner on the most indexers offered to the client, and the chain after it as before.
+3. `docs/releases/0.6.0.md`, `README.md` and `PROGRESS.md` say what landed.
+
+**Done when** the owner has seen it and approves.
+
+## S13-12 · Released as v0.6.0
+
+**Steps**
+
+1. Only when everything is correct and the owner has approved it: the version goes to 0.6.0 in
+   `Directory.Build.props`, `plugin.json` and `PluginIdentity`; the tag `v0.6.0` is pushed; the
+   release workflow is watched to the end; the release is checked on Forgejo and GitHub with the same
+   package, and `repository.json` names 0.6.0.
+
+**Done when** v0.6.0 is on both forges and in the index.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.
