@@ -62,6 +62,7 @@ Every show and anime has these settings:
 - Each library (`tv` and `anime`) has preferences of the same shape: quality, codec, wishes, musts,
   forbidden and specials.
 - A library's specials are off until the owner switches them on.
+- A library's codec is any until the owner chooses another.
 - A show's specials are those of its library until the show sets its own.
 - A library's quality is the resolution of the encoding profile of the library's folders when the
   server tells the plugin that profile, and otherwise the quality the owner sets for the library.

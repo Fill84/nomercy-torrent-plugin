@@ -4,10 +4,19 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-01` · Settings per show and per library.** Sprint 13 is the owner's requirements of
-15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
+**Next: `S13-02` · The overview page and the settings forms.** Sprint 13 is the owner's requirements
+of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-01` is done and green, and nothing reads it yet.** `ShowSettings`, `LibraryPreferences` and
+`EffectiveSettings` in Core; `ShowSettingsRepository`, `LibraryPreferencesRepository` and migration 013
+(`show_settings`, `library_preferences`, tag lists as JSON arrays). A show with no row is off and not
+saved; the settings form's save marks it saved, the row button only switches it. The owner answered one
+more question on the way: a library's codec is **any** until they choose another, now in
+`show-list.md`. Tests, each seen red against a stub and each rule broken on purpose afterwards:
+`EffectiveSettingsTests` (six) and `ShowSettingsRepositoryTests` (seven — the library preferences' two
+tests live in the same class rather than a class of their own).
 
 **Seen on beast-unit on 15 September 2026: a cycle closes and maintenance runs.** The American Dad
 grab failed at 23:09:05 UTC, the moment its metadata deadline dropped it; the server then updated
