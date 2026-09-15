@@ -79,42 +79,42 @@ public class CadencesTests
 
     /// <remarks>
     /// <para>
-    /// <strong>Never more often than once an hour.</strong> Every cycle reads
-    /// every feed and searches every indexer, and a trigger during an open cycle
-    /// adds another search to it — so a cycle every minute is every indexer asked
-    /// again and again for as long as anything downloads. The owner's ruling of
-    /// 13 September 2026: nothing shorter than an hour, typed by hand or not.
+    /// <strong>Never sooner than fifteen minutes apart.</strong> The owner's requirement of
+    /// 15 September 2026 (<c>docs/specs/release-names.md</c>): the shortest interval accepted is 15
+    /// minutes and any longer one is accepted. It replaces the hourly floor of 13 September.
     /// </para>
     /// <para>
-    /// <strong>Exact, not sampled.</strong> A cron fires at most once an hour
-    /// precisely when its minute field is one number: one minute per matching
-    /// hour. A list, a range, a step or a star in that field fires more than once
-    /// in any hour it matches, and every expression matches at least one hour.
-    /// So nothing here counts occurrences over a window that a weekly pattern
-    /// could slip through.
+    /// <strong>Worked out from the times it fires, not from how it is written.</strong> Every minute of
+    /// the day the minute and hour fields allow is listed, and no two neighbours — the last of the day
+    /// and the first of the next included — may be closer than fifteen minutes. So <c>*/15</c> and
+    /// <c>0,20,40</c> pass, while <c>*/25</c> fails: it fires at 50 and again at 0, ten minutes later.
     /// </para>
     /// </remarks>
     [Theory]
+    [InlineData("*/15 * * * *")]
+    [InlineData("*/30 * * * *")]
+    [InlineData("0,20,40 * * * *")]
     [InlineData("0 * * * *")]
     [InlineData("15 */6 * * *")]
     [InlineData("0 4 * * *")]
     [InlineData("59 23 * * 0")]
-    public void ACycleAtMostOnceAnHourIsAccepted(string expression)
+    public void ACycleAtLeastFifteenMinutesApartIsAccepted(string expression)
     {
-        Assert.True(Cron.AtMostHourly(expression, out string? reason), reason);
+        Assert.True(Cron.AtLeastFifteenMinutesApart(expression, out string? reason), reason);
         Assert.Null(reason);
     }
 
     [Theory]
     [InlineData("* * * * *")]
     [InlineData("*/5 * * * *")]
-    [InlineData("0,30 * * * *")]
-    [InlineData("0-10 4 * * *")]
-    [InlineData("0,30 8 1 * *")]
-    public void ACycleMoreOftenThanHourlyIsRefusedWithTheReason(string expression)
+    [InlineData("*/25 * * * *")]
+    [InlineData("0,10 * * * *")]
+    [InlineData("55,5 * * * *")]
+    [InlineData("58,3 0,23 * * *")]
+    public void ACycleSoonerThanFifteenMinutesApartIsRefusedWithTheReason(string expression)
     {
-        Assert.False(Cron.AtMostHourly(expression, out string? reason));
+        Assert.False(Cron.AtLeastFifteenMinutesApart(expression, out string? reason));
         Assert.NotNull(reason);
-        Assert.Contains("once an hour", reason, StringComparison.Ordinal);
+        Assert.Contains("15 minutes", reason, StringComparison.Ordinal);
     }
 }

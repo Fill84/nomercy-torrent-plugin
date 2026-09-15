@@ -51,7 +51,6 @@ public class SettingsViewTests
     [InlineData("incompleteFolder")]
     [InlineData("intakeFolder")]
     [InlineData("cadences.cycle")]
-    [InlineData("profile.maximumResolution")]
     [InlineData("client.listenPort")]
     public void EverySettingIsOnTheFormTheOwnerCanChange(string field)
     {
@@ -360,7 +359,6 @@ public class SettingsViewTests
         foreach (string field in new[]
                  {
                      "incompleteFolder",
-                     "profile.maximumResolution",
                      "cadences.cycle",
                      "client.maxConcurrentDownloads",
                      "client.seedRatio",
@@ -381,7 +379,7 @@ public class SettingsViewTests
     public void SavingOneSectionLeavesTheOthersAlone()
     {
         Settings settings = new();
-        settings.Profile.MaximumResolution = "2160p";
+        settings.Cadences.Cycle = "0 */6 * * *";
         settings.Client.MaxConcurrentDownloads = 9;
 
         IReadOnlyList<string> problems = SettingsEdit.Apply(
@@ -389,7 +387,7 @@ public class SettingsViewTests
             new Dictionary<string, string?> { ["incompleteFolder"] = Path.GetTempPath() });
 
         Assert.Empty(problems);
-        Assert.Equal("2160p", settings.Profile.MaximumResolution);
+        Assert.Equal("0 */6 * * *", settings.Cadences.Cycle);
         Assert.Equal(9, settings.Client.MaxConcurrentDownloads);
     }
 
@@ -474,7 +472,7 @@ public class SettingsViewTests
         }
 
         // And the ordinary settings are there either way.
-        foreach (string field in new[] { "incompleteFolder", "profile.maximumResolution", "client.maxConcurrentDownloads" })
+        foreach (string field in new[] { "incompleteFolder", "intakeFolder", "client.maxConcurrentDownloads" })
         {
             Assert.Contains(field, open);
             Assert.Contains(field, shut);
@@ -680,13 +678,12 @@ public class SettingsViewTests
     }
 
     /// <remarks>
-    /// The list offers nothing the save would refuse. It was written for four
-    /// cadences, one of them transfers, and so began at every minute — which for
-    /// a whole cycle is every indexer searched every minute. It begins at every
-    /// hour now, and for anything sooner there is the Run button.
+    /// <c>docs/specs/pages.md</c> § Settings: the run interval is chosen from every 15 minutes, every 30
+    /// minutes, every hour, every 6 hours, every 12 hours and once a day — and the list offers nothing
+    /// the save would refuse.
     /// </remarks>
     [Fact]
-    public void TheCycleIsOfferedNoMoreOftenThanHourly()
+    public void TheRunIntervalIsChosenFromFifteenMinutesToDaily()
     {
         PluginView view = SettingsView.Render(new(), [], []);
 
@@ -694,15 +691,35 @@ public class SettingsViewTests
             Every(view),
             field => field.Name == "cadences.cycle" && field.Type == PluginFormFieldType.Select);
 
-        Assert.NotEmpty(chooser.Options!);
+        Assert.Equal(
+            ["every 15 minutes", "every 30 minutes", "every hour", "every 6 hours", "every 12 hours", "once a day, at 4am"],
+            chooser.Options.Select(option => option.Label));
 
-        foreach (PluginFormOption option in chooser.Options!)
+        foreach (PluginFormOption option in chooser.Options)
         {
-            string cron = option.Value?.ToString() ?? string.Empty;
-
-            Assert.True(Cron.AtMostHourly(cron, out string? reason), $"'{option.Label}' is offered and would be refused: {reason}");
+            Assert.True(
+                Cron.AtLeastFifteenMinutesApart(option.Value, out string? reason),
+                $"'{option.Label}' is offered and would be refused: {reason}");
         }
+    }
 
-        Assert.Contains(chooser.Options!, option => option.Value?.ToString() == "0 * * * *");
+    /// <remarks>
+    /// <c>docs/specs/show-list.md</c>: the plugin's settings page holds no quality, codec or tag setting,
+    /// and no English-only setting. Those are set per show and per library on the overview.
+    /// </remarks>
+    [Fact]
+    public void ThePageHoldsNoQualityCodecTagOrLanguageSetting()
+    {
+        PluginView view = SettingsView.Render(new(), [], [], advanced: true);
+
+        string[] names = [.. Every(view).Select(field => field.Name)];
+
+        Assert.DoesNotContain(names, name => name.StartsWith("profile.", StringComparison.Ordinal));
+        Assert.DoesNotContain(
+            Every(view).Select(field => field.Label),
+            label => label.Contains("English", StringComparison.OrdinalIgnoreCase)
+                     || label.Contains("Codec", StringComparison.OrdinalIgnoreCase)
+                     || label.Contains("Resolution", StringComparison.OrdinalIgnoreCase)
+                     || label.Contains("Forbidden", StringComparison.OrdinalIgnoreCase));
     }
 }

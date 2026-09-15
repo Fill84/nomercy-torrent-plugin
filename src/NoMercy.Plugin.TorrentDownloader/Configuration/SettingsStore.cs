@@ -147,7 +147,7 @@ public sealed class SettingsStore
             {
                 errors.Add($"The {name} cadence '{expression}' is not a cron. {reason}");
             }
-            else if (!Cron.AtMostHourly(expression, out string? tooOften))
+            else if (!Cron.AtLeastFifteenMinutesApart(expression, out string? tooOften))
             {
                 // The raw box under Show advanced saves through here as well,
                 // so typing an expression by hand is no way round the floor.

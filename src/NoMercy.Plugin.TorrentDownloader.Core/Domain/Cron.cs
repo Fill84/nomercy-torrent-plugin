@@ -56,38 +56,68 @@ public static class Cron
         return true;
     }
 
+    /// <summary>The shortest interval between two cycles the owner accepts, in minutes.</summary>
+    public const int ShortestIntervalMinutes = 15;
+
     /// <summary>
-    /// Whether <paramref name="expression"/> fires no more often than once an hour,
-    /// and when it does not, what to tell the owner.
+    /// Whether <paramref name="expression"/> never fires twice within fifteen minutes, and when it does,
+    /// what to tell the owner.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>The owner's floor for a cycle, set on 13 September 2026.</strong>
-    /// Every cycle reads every feed and searches every indexer, and a trigger
-    /// during an open cycle adds another search to it — so a cycle every minute
-    /// is every indexer asked again and again for as long as anything downloads.
-    /// Nothing shorter than an hour, typed by hand or chosen from the list.
+    /// <strong>The owner's floor for a run, set on 15 September 2026</strong> in
+    /// <c>docs/specs/release-names.md</c>: the shortest interval accepted is 15 minutes, and any longer
+    /// one is accepted. It replaces the hourly floor of
+    /// 13 September, which was set while every cycle still searched every indexer for every missing
+    /// episode; a run now searches only the release names the feeds brought.
     /// </para>
     /// <para>
-    /// <strong>Exact, not sampled.</strong> A cron fires at most once an hour
-    /// precisely when its minute field is a single number: one minute in every
-    /// hour it matches. A list, a range, a step or a star there fires more than
-    /// once in any hour it matches, and every valid expression matches some hour.
-    /// Counting occurrences over a window instead would let a pattern that fires
-    /// twice on the first of the month through a window that missed the first.
+    /// <strong>Worked out from the minutes it fires, not from how it is written.</strong> Every minute of
+    /// the day the minute and hour fields allow is listed, and each is compared with the next — the last
+    /// of the day with the first of the next day included. A single step or a single number cannot
+    /// answer this: <c>*/25</c> fires at 50 and again at 0, ten minutes later.
+    /// </para>
+    /// <para>
+    /// <strong>The day fields are left out, which errs on the side of refusing.</strong> 23:58 and 00:03
+    /// on a pattern limited to Sundays are a day apart, and this still counts them five minutes apart.
+    /// Nothing the page offers is of that shape, and one typed by hand is refused with the reason.
     /// </para>
     /// </remarks>
-    public static bool AtMostHourly(string? expression, out string? reason)
+    public static bool AtLeastFifteenMinutesApart(string? expression, out string? reason)
     {
         if (!IsValid(expression, out reason))
         {
             return false;
         }
 
-        string minute = expression!
-            .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)[0];
+        string[] fields = expression!.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        bool[] minutes = Allowed(fields[0], Fields[0]);
+        bool[] hours = Allowed(fields[1], Fields[1]);
 
-        if (minute.All(char.IsAsciiDigit))
+        List<int> fires = [];
+
+        for (int hour = 0; hour < 24; hour++)
+        {
+            for (int minute = 0; minute < 60 && hours[hour]; minute++)
+            {
+                if (minutes[minute])
+                {
+                    fires.Add((hour * 60) + minute);
+                }
+            }
+        }
+
+        const int day = 24 * 60;
+        int closest = day;
+
+        for (int at = 0; at < fires.Count; at++)
+        {
+            int next = at + 1 < fires.Count ? fires[at + 1] : fires[0] + day;
+
+            closest = Math.Min(closest, next - fires[at]);
+        }
+
+        if (closest >= ShortestIntervalMinutes)
         {
             reason = null;
 
@@ -95,8 +125,8 @@ public static class Cron
         }
 
         reason =
-            $"'{expression}' would start a cycle more often than once an hour, and every cycle searches every "
-            + "indexer. Give the minute as one number — 0 is on the hour — and use Run for anything sooner.";
+            $"'{expression}' would start a run {closest} minutes after the one before it, and the shortest "
+            + $"interval is {ShortestIntervalMinutes} minutes. Use Run now for anything sooner.";
 
         return false;
     }

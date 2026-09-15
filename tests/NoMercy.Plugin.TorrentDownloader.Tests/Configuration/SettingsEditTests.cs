@@ -45,10 +45,33 @@ public class SettingsEditTests
         Settings settings = new();
         settings.Client.ListenPort = 6881;
 
-        SettingsEdit.Apply(settings, new Dictionary<string, string?> { ["profile.englishOnly"] = "false" });
+        SettingsEdit.Apply(settings, new Dictionary<string, string?> { ["client.stallMinutes"] = "45" });
 
         Assert.Equal(6881, settings.Client.ListenPort);
-        Assert.False(settings.Profile.EnglishOnly);
+        Assert.Equal(45, settings.Client.StallMinutes);
+    }
+
+    /// <remarks>
+    /// <c>docs/specs/show-list.md</c>: quality, codec, tags and language are set per show and per library
+    /// on the overview, and the settings page no longer carries them. A post that still names one is
+    /// refused by name, like any field nothing answers to, rather than written into a profile no page
+    /// shows.
+    /// </remarks>
+    [Theory]
+    [InlineData("profile.maximumResolution")]
+    [InlineData("profile.codec")]
+    [InlineData("profile.requireCodecTag")]
+    [InlineData("profile.englishOnly")]
+    [InlineData("profile.includeSpecials")]
+    [InlineData("profile.excludeTerms")]
+    public void AQualityCodecTagOrLanguageFieldIsNoLongerASetting(string name)
+    {
+        IReadOnlyList<string> problems = SettingsEdit.Apply(
+            new(),
+            new Dictionary<string, string?> { [name] = "1080p" });
+
+        Assert.Contains(problems, problem => problem.Contains(name, StringComparison.Ordinal));
+        Assert.DoesNotContain(name, SettingsEdit.Fields);
     }
 
     /// <remarks>
@@ -91,30 +114,18 @@ public class SettingsEditTests
     public void AToggleArrivesAsWhateverTheClientCallsIt(string value, bool expected)
     {
         Settings settings = new();
-        settings.Profile.EnglishOnly = !expected;
+
+        if (expected)
+        {
+            settings.DisabledDefaultSources.Add("eztv");
+        }
 
         IReadOnlyList<string> problems = SettingsEdit.Apply(
             settings,
-            new Dictionary<string, string?> { ["profile.englishOnly"] = value });
+            new Dictionary<string, string?> { [SettingsEdit.SourcePrefix + "eztv"] = value });
 
         Assert.Empty(problems);
-        Assert.Equal(expected, settings.Profile.EnglishOnly);
-    }
-
-    /// <remarks>
-    /// Terms are typed as one line because that is how a text field takes a
-    /// list. Splitting on the comma is what makes the field usable at all.
-    /// </remarks>
-    [Fact]
-    public void AListIsTypedAsOneLineAndSplitOnTheComma()
-    {
-        Settings settings = new();
-
-        SettingsEdit.Apply(
-            settings,
-            new Dictionary<string, string?> { ["profile.excludeTerms"] = "HDCAM, CAM ,,TS" });
-
-        Assert.Equal(["HDCAM", "CAM", "TS"], settings.Profile.ExcludeTerms);
+        Assert.Equal(expected, !settings.DisabledDefaultSources.Contains("eztv"));
     }
 
     /// <remarks>
@@ -141,8 +152,6 @@ public class SettingsEditTests
         return name switch
         {
             "cadences.cycle" => "0 4 * * *",
-            "profile.maximumResolution" => "1080p",
-            "profile.codec" => Profile.AnyCodec,
             "client.encryption" => nameof(EncryptionPolicy.Allowed),
             _ => Shape(name),
         };

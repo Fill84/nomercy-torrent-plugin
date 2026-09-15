@@ -63,7 +63,9 @@ public static class SettingsView
         List<PluginFormField> fields =
         [
             .. Folders(settings),
-            .. Quality(settings.Profile),
+
+            // No quality, codec, tag or language here any more: those are set per show and per
+            // library on the overview (docs/specs/show-list.md).
             .. Cadences(settings.Cadences),
             .. Client(settings.Client),
         ];
@@ -214,7 +216,7 @@ public static class SettingsView
     /// control is an interval whose values are the expressions they stand for,
     /// so nothing in between has to translate. Whoever wants to type one still
     /// can, under <strong>Show advanced</strong> — and it is held to the same
-    /// floor of once an hour.
+    /// floor of fifteen minutes.
     /// </para>
     /// <para>
     /// <strong>And no label says "takes effect on the next server restart" any
@@ -234,15 +236,14 @@ public static class SettingsView
 
     /// <summary>The intervals offered, and what each one really is.</summary>
     /// <remarks>
-    /// <strong>Nothing sooner than every hour.</strong> This list was written for
-    /// four cadences, one of them transfers, and so began at every minute. For a
-    /// whole cycle that is every feed read and every indexer searched every
-    /// minute, and the owner ruled on 13 September 2026 that nothing shorter
-    /// than an hour is offered or accepted — see <c>Cron.AtMostHourly</c>. For
-    /// anything sooner there is the Run button.
+    /// <strong>Every 15 minutes to once a day</strong>, the list of <c>docs/specs/pages.md</c>
+    /// § Settings. Fifteen minutes is the floor the save holds a typed expression to as well — see
+    /// <c>Cron.AtLeastFifteenMinutesApart</c> — and for anything sooner there is the Run button.
     /// </remarks>
     private static readonly (string Says, string Cron)[] Intervals =
     [
+        ("every 15 minutes", "*/15 * * * *"),
+        ("every 30 minutes", "*/30 * * * *"),
         ("every hour", "0 * * * *"),
         ("every 6 hours", "0 */6 * * *"),
         ("every 12 hours", "0 */12 * * *"),
@@ -279,67 +280,6 @@ public static class SettingsView
                     : [new PluginFormOption { Label = cron, Value = cron }],
             ],
         };
-    }
-
-    private static PluginFormField[] Quality(Profile profile)
-    {
-        return
-        [
-            new PluginFormField
-            {
-                Name = "profile.maximumResolution",
-
-                // Not "maximum". The rule is one rung and never a ceiling -
-                // 1080p means 1080p, and a 720p copy is refused rather than
-                // taken as good enough. The label said the opposite of what
-                // the code does, which is the page telling the owner something
-                // untrue about their own library.
-                Label = "Resolution",
-                Type = PluginFormFieldType.Select,
-                Value = profile.MaximumResolution,
-                Options = [.. Profile.Resolutions.Select(Choice)],
-            },
-            new PluginFormField
-            {
-                Name = "profile.codec",
-                Label = "Codec",
-
-                // A list rather than a box. Typed by hand the field takes
-                // anything, and anything is what it got: a codec spelled a way
-                // the parser does not know refuses every release there is, and
-                // an empty one is not "any" either.
-                Type = PluginFormFieldType.Select,
-                Value = profile.Codec,
-                Options = [.. Profile.Codecs.Select(Choice)],
-            },
-            new PluginFormField
-            {
-                Name = "profile.requireCodecTag",
-                Label = "Refuse a release that does not say which codec it is",
-                Type = PluginFormFieldType.Toggle,
-                Value = profile.RequireCodecTag,
-            },
-            new PluginFormField
-            {
-                Name = "profile.englishOnly",
-                Label = "English only",
-                Type = PluginFormFieldType.Toggle,
-                Value = profile.EnglishOnly,
-            },
-            new PluginFormField
-            {
-                Name = "profile.includeSpecials",
-                Label = "Include specials",
-                Type = PluginFormFieldType.Toggle,
-                Value = profile.IncludeSpecials,
-            },
-            new PluginFormField
-            {
-                Name = "profile.excludeTerms",
-                Label = "Forbidden terms, separated by commas",
-                Value = string.Join(", ", profile.ExcludeTerms),
-                Placeholder = "HDCAM, CAM, TS",
-            }];
     }
 
     /// <summary>
@@ -488,12 +428,6 @@ public static class SettingsView
     private static PluginFormField Cron(string name, string label, string cron)
     {
         return new() { Name = name, Label = label, Value = cron };
-    }
-
-    /// <summary>One entry of a list the owner picks from.</summary>
-    private static PluginFormOption Choice(string value)
-    {
-        return new() { Label = value, Value = value };
     }
 
     /// <summary>

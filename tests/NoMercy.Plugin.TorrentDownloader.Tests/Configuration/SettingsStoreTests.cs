@@ -518,7 +518,7 @@ public class SettingsStoreTests : IDisposable
     /// round it.
     /// </remarks>
     [Fact]
-    public async Task ACycleMoreOftenThanHourlyIsRefusedAndChangesNothing()
+    public async Task AnIntervalShorterThanFifteenMinutesIsRefusedAndChangesNothing()
     {
         FakePluginContext context = new();
         SettingsStore store = new(context.Config, context.Secrets);
@@ -530,10 +530,28 @@ public class SettingsStoreTests : IDisposable
         SaveResult result = await store.SaveAsync(eager, CancellationToken.None);
 
         Assert.False(result.Saved);
-        Assert.Contains(result.Errors, error => error.Contains("once an hour", StringComparison.Ordinal));
+        Assert.Contains(result.Errors, error => error.Contains("15 minutes", StringComparison.Ordinal));
 
         Settings stored = await store.LoadAsync(CancellationToken.None);
         Assert.Equal("0 * * * *", stored.Cadences.Cycle);
+    }
+
+    /// <remarks>
+    /// The shortest interval <c>docs/specs/release-names.md</c> accepts, and it is accepted.
+    /// </remarks>
+    [Fact]
+    public async Task FifteenMinutesIsAccepted()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        Settings quarterly = Writable(new Settings());
+        quarterly.Cadences.Cycle = "*/15 * * * *";
+
+        SaveResult result = await store.SaveAsync(quarterly, CancellationToken.None);
+
+        Assert.True(result.Saved, string.Join("; ", result.Errors));
+        Assert.Equal("*/15 * * * *", (await store.LoadAsync(CancellationToken.None)).Cadences.Cycle);
     }
 
     /// <remarks>

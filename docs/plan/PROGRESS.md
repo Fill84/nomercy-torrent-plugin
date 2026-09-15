@@ -4,10 +4,26 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-03` · The Settings page without quality, codec and tags.** Sprint 13 is the owner's
+**Next: `S13-04` · The episodes searched for.** Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-03` is done and green: the Settings page holds no quality, codec, tag or language, and a
+run may start every 15 minutes.** The Quality group left `SettingsView` and its `profile.*` keys left
+`SettingsEdit`, so a post still naming one is refused by name. The interval list is every 15 minutes,
+30 minutes, hour, 6 hours, 12 hours and once a day, and `Cron.AtLeastFifteenMinutesApart` replaces
+`Cron.AtMostHourly` in the save: it lists the minutes of a day an expression fires, the step into the
+next day included, and refuses any two closer than 15 minutes — so `*/25` is refused (50 then 0). It
+leaves the day fields out and so errs towards refusing, which the comment says. **The slice was
+corrected on the way:** the stored `Profile` and the "loads without a profile" test moved to `S13-09`,
+because `MissingRefresh`, `NameResolve`, `ReleaseFilter`, `Decisions`, `ReleaseDecider` and
+`SearchCycle` still read the profile until `S13-04` to `S13-07`. The comma-list test of
+`SettingsEdit` went with the last list field; the comma rule lives on in `ShowSettingsEditTests`.
+Tests, each red first: `CadencesTests` (thirteen cases, both the floor and the step into the next day
+broken on purpose), `AnIntervalShorterThanFifteenMinutesIsRefusedAndChangesNothing`,
+`FifteenMinutesIsAccepted`, `TheRunIntervalIsChosenFromFifteenMinutesToDaily`,
+`ThePageHoldsNoQualityCodecTagOrLanguageSetting`, `AQualityCodecTagOrLanguageFieldIsNoLongerASetting`.
 
 **`S13-02` is done and green: the overview, the two forms, and Activity as a page of its own.**
 `/` is `OverviewView` — the status line, then per library its preferences with Edit and a table of every

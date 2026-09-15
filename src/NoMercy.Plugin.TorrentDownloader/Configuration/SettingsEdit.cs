@@ -129,25 +129,6 @@ public static class SettingsEdit
             settings => settings.Cadences.Cycle,
             (settings, value) => settings.Cadences.Cycle = value.Trim()),
 
-        ["profile.maximumResolution"] = new(
-            settings => settings.Profile.MaximumResolution,
-            (settings, value) => settings.Profile.MaximumResolution = value.Trim()),
-        ["profile.codec"] = new(
-            settings => settings.Profile.Codec,
-            (settings, value) => settings.Profile.Codec = value.Trim()),
-        ["profile.requireCodecTag"] = new(
-            settings => Text(settings.Profile.RequireCodecTag),
-            (settings, value) => settings.Profile.RequireCodecTag = Flag(value)),
-        ["profile.englishOnly"] = new(
-            settings => Text(settings.Profile.EnglishOnly),
-            (settings, value) => settings.Profile.EnglishOnly = Flag(value)),
-        ["profile.includeSpecials"] = new(
-            settings => Text(settings.Profile.IncludeSpecials),
-            (settings, value) => settings.Profile.IncludeSpecials = Flag(value)),
-        ["profile.excludeTerms"] = new(
-            settings => string.Join(", ", settings.Profile.ExcludeTerms),
-            (settings, value) => settings.Profile.ExcludeTerms = Line(value)),
-
         ["client.listenPort"] = new(
             settings => Text(settings.Client.ListenPort),
             (settings, value) => settings.Client.ListenPort = Whole(value)),
@@ -257,26 +238,7 @@ public static class SettingsEdit
         return Enum.Parse<EncryptionPolicy>(value.Trim(), ignoreCase: true);
     }
 
-    /// <summary>
-    /// A list typed on one line, which is how a text field takes one.
-    /// </summary>
-    /// <remarks>
-    /// Empties are dropped rather than kept: a trailing comma is how a person
-    /// types a list, and an empty forbidden term would match every release
-    /// there is.
-    /// </remarks>
-    private static List<string> Line(string value)
-    {
-        return
-        [
-            .. value
-                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries),
-        ];
-    }
-
     private static string Text(int value) => value.ToString(CultureInfo.InvariantCulture);
 
     private static string Text(long value) => value.ToString(CultureInfo.InvariantCulture);
-
-    private static string Text(bool value) => value ? "true" : "false";
 }

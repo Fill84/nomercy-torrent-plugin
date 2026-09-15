@@ -2724,21 +2724,24 @@ beast-unit before `S13-11`, and nothing is released before `S13-12`.
 
 ## S13-03 · The Settings page without quality, codec and tags
 
-**Files:** `Views/SettingsView.cs`, `Configuration/SettingsEdit.cs`, `Configuration/Settings.cs`,
-`Configuration/SettingsStore.cs`, `Core/Domain/Profile.cs` (removed), `Core/Domain/Cron.cs`,
-`docs/04-domain.md`, `docs/08-ui.md`.
+**Files:** `Views/SettingsView.cs`, `Configuration/SettingsEdit.cs`, `Configuration/SettingsStore.cs`,
+`Core/Domain/Cron.cs`, `docs/08-ui.md`.
 
 **Steps**
 
 1. Test (red): `SettingsViewTests.ThePageHoldsNoQualityCodecTagOrLanguageSetting`.
 2. Test (red): `SettingsViewTests.TheRunIntervalIsChosenFromFifteenMinutesToDaily` — 15 min, 30 min,
    1 h, 6 h, 12 h, daily.
-3. Test (red): `SettingsStoreTests.AnIntervalShorterThanFifteenMinutesIsRefused`, and
-   `FifteenMinutesIsAccepted`. `ACycleMoreOftenThanHourlyIsRefusedAndChangesNothing` and
-   `TheCycleIsOfferedNoMoreOftenThanHourly` are replaced.
-4. Test (red): `SettingsStoreTests.SettingsSavedWithAProfileLoadWithoutIt` — the owner's
-   `config.json` loads, and the profile is not written back.
-5. `Profile` goes, and every reader of it moves to `EffectiveSettings` or goes in `S13-09`.
+3. Test (red): `SettingsStoreTests.AnIntervalShorterThanFifteenMinutesIsRefusedAndChangesNothing`,
+   `FifteenMinutesIsAccepted`, and `CadencesTests` on `Cron.AtLeastFifteenMinutesApart`.
+   `ACycleMoreOftenThanHourlyIsRefusedAndChangesNothing` and `TheCycleIsOfferedNoMoreOftenThanHourly`
+   are replaced.
+4. Test (red): `SettingsEditTests.AQualityCodecTagOrLanguageFieldIsNoLongerASetting` — a posted
+   `profile.*` field is refused by name.
+
+The stored `Profile` itself and `SettingsSavedWithAProfileLoadWithoutIt` are not here: the pipeline
+still reads the profile until `S13-04` to `S13-07` move each reader to `EffectiveSettings`, so both
+belong to `S13-09`.
 
 **Done when** those tests pass and the suite is green. Specs: `show-list.md`, `pages.md`.
 
@@ -2856,8 +2859,11 @@ listed in the design as pinning them.
 
 1. Remove each, with the tests that pin it. A test whose rule only changed shape is rewritten, never
    deleted.
-2. A download already in a folder of its own is still staged from it: `grabs.folder` stays read.
-3. Every living document in `docs/` (`00-goal`, `01`, `02`, `03`, `04`, `05`, `06`, `08`, `10`) says
+2. `Profile` goes from `Settings` and Core, now that nothing reads it. Test (red):
+   `SettingsStoreTests.SettingsSavedWithAProfileLoadWithoutIt` — the owner's `config.json` loads, and
+   the profile is not written back. Moved here from `S13-03`.
+3. A download already in a folder of its own is still staged from it: `grabs.folder` stays read.
+4. Every living document in `docs/` (`00-goal`, `01`, `02`, `03`, `04`, `05`, `06`, `08`, `10`) says
    what `docs/specs/` says. History stays as it was written.
 
 **Done when** nothing in `src/` builds a search term, races two hashes, ranks on seeders or takes a
