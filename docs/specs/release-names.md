@@ -11,6 +11,8 @@
 
 - On every run the plugin reads the latest feed of every name source: PreDB, srrDB, PreDB.net and
   SceneSource.
+- The name sources are the same four for a show and for an anime. Nyaa is an indexer and not a name
+  source.
 - A run starts every hour unless the owner sets a different interval.
 - The shortest interval the plugin accepts is 15 minutes. Any longer interval is accepted.
 - A feed item is matched only against shows and anime that are switched on with saved settings.
@@ -26,6 +28,8 @@
 
 ## Choosing the release name
 
+- A release name names one episode of one show by its season and episode number. A release name
+  without an episode number, such as a season pack, is not searched for.
 - A release name is judged against the settings of its show: its resolution is the show's quality,
   its codec is the show's codec, it carries every must tag and it carries no forbidden tag.
 - A release name that fails any of those is not searched for.
