@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.5.0",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.5.0/NoMercy.Plugin.TorrentDownloader-0.5.0.zip",
+          "checksum": "e560fd89dd422596742cf2fceccf3802787cbdf5438c33c8075f72a447c929b5",
+          "changelog": "The version where the plugin works the way it was always meant to, in two halves.",
+          "timestamp": "2026-09-15T01:21:26Z"
+        },
+        {
           "version": "0.4.1",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.4.1/NoMercy.Plugin.TorrentDownloader-0.4.1.zip",
