@@ -4,10 +4,26 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-05` · Release names: the feeds and backfill.** Sprint 13 is the owner's
+**Next: `S13-06` · Judging the names.** Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
+
+**`S13-05` is done and green: a run's release names come from the four name sources, and nothing is
+kept between runs.** `NameSources` reads the feeds of PreDB, srrDB, PreDB.net and SceneSource at once
+at the start of a run and takes a name for an episode being searched for when it names that show,
+season and episode (`EpisodeNaming`); an episode no feed named is looked up in every name source's
+search, asked `Show SxxEyy` and nothing else, and what a search answers for another episode is left.
+`SearchCycle` takes it through `IReleaseNames`; the harvest step before a cycle, `Harvest`,
+`NameResolve`, the name pool, `PoolKey` and the `name_pool` table (migration 014) are gone. The
+judging, the ladder and the race still stand until `S13-06`, `S13-07` and `S13-09`. Fresh captures of
+all four feeds and all four searches (for Silo S02E01) are `tests/fixtures/names-*`, and what they
+showed is in `docs/05-sources.md` § How a run uses the name sources. Tests, each red against a stub
+and each rule broken on purpose (eleven sabotages, among them a pack taken, the year added to the
+search, a failing feed thrown, Nyaa made a name source and the table kept): `FeedNamesTests` (six),
+`BackfillTests` (three), `NameSourcesTests` (two), `EpisodeNamingTests` (seven, from `PoolKeyTests`),
+`StoreTests.TheNamePoolIsGone`. `EveryEpisodeIsAskedAboutOnItsOwnAtEveryNameDatabase` now counts one
+question a source per episode, where the quality rung made it two.
 
 **`S13-04` is done and green: the switch decides what is searched for, and what keeps downloading.**
 `MissingRefresh` asks `IAppliedSettings` (Core port; `Storage/AppliedSettings` reads the show's row and

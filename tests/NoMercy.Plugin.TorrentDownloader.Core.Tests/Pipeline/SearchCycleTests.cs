@@ -1,6 +1,5 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
-using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
@@ -108,11 +107,10 @@ public class SearchCycleTests
 
     /// <remarks>
     /// <para>
-    /// Forty-two episodes are asked about one at a time, end to end and not only
-    /// in the resolver's own test. Every source here answers nothing, so each
-    /// episode costs both rungs — with the owner's quality and then without —
-    /// and that is eighty-four questions. A source that answers the first rung
-    /// costs one.
+    /// Forty-two episodes are looked up one at a time, end to end and not only
+    /// in the name sources' own test. No feed names any of them, so each is
+    /// looked up in every name source's search, asked show and episode once
+    /// (docs/specs/release-names.md § Backfill): forty-two questions a source.
     /// </para>
     /// <para>
     /// It was six: one question per season. That saving is what hid the release
@@ -141,8 +139,10 @@ public class SearchCycleTests
 
         Assert.Equal(42, report.Outcomes.Count);
 
-        Assert.Equal(84, fetch.Asked.Count(address => address.Host == "api.srrdb.com"));
-        Assert.Equal(84, fetch.Asked.Count(address => address.Host == "predb.me"));
+        Assert.Equal(42, fetch.Asked.Count(address => address.Host == "api.srrdb.com"));
+
+        // And PreDB's feed once, at the start of the run, besides.
+        Assert.Equal(43, fetch.Asked.Count(address => address.Host == "predb.me"));
 
         // And the indexer was asked about every one of them, because an episode
         // nothing has a name for is still an episode a search engine can be
@@ -703,18 +703,13 @@ public class SearchCycleTests
     [Fact]
     public async Task ANameTheProfileRefusesIsNeverPutToAnIndexer()
     {
-        FakePool pool = new();
-
-        await pool.AddAsync(
-            [
-                Pooled("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB"),
-                Pooled("Silo.S03E06.1080p.WEB.H264-CAKES", "srrDB"),
-            ],
-            CancellationToken.None);
+        FixedNames pool = new(
+            ("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB"),
+            ("Silo.S03E06.1080p.WEB.H264-CAKES", "srrDB"));
 
         FakeFetch fetch = Answering();
 
-        await Cycle(fetch, new(), pool: pool).RunAsync(
+        await Cycle(fetch, new(), names: pool).RunAsync(
             [Silo(6)],
             new(Wanted, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
@@ -746,13 +741,11 @@ public class SearchCycleTests
     [Fact]
     public async Task NothingThisPluginMakesUpIsAskedWhileTheSourcesNameAnswers()
     {
-        FakePool pool = new();
-
-        await pool.AddAsync([Pooled("Silo.S03E06.1080p.WEB.H264-CAKES", "srrDB")], CancellationToken.None);
+        FixedNames pool = new(("Silo.S03E06.1080p.WEB.H264-CAKES", "srrDB"));
 
         FakeFetch fetch = Answering();
 
-        await Cycle(fetch, new(), pool: pool).RunAsync(
+        await Cycle(fetch, new(), names: pool).RunAsync(
             [Silo(6)],
             new(Wanted, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
@@ -775,11 +768,7 @@ public class SearchCycleTests
     [Fact]
     public async Task WhatThisPluginMakesUpIsAskedWhenTheSourcesLeaveNothing()
     {
-        FakePool pool = new();
-
-        await pool.AddAsync(
-            [Pooled("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB")],
-            CancellationToken.None);
+        FixedNames pool = new(("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB"));
 
         FakeFetch fetch = Answering();
 
@@ -788,7 +777,7 @@ public class SearchCycleTests
         fetch.FailsHost("api.srrdb.com", FetchOutcome.Unreachable, "nothing answered");
         fetch.FailsHost("predb.me", FetchOutcome.Unreachable, "nothing answered");
 
-        await Cycle(fetch, new(), pool: pool).RunAsync(
+        await Cycle(fetch, new(), names: pool).RunAsync(
             [Silo(6)],
             new(Wanted, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
@@ -850,18 +839,8 @@ public class SearchCycleTests
         Assert.Equal(1, run.Count(RunCounter.Decided));
 
         // What a source was asked, and the exact name put to an indexer.
-        Assert.Contains(noted, line => line.StartsWith("srrDB search · Silo S03E06 1080p · ", StringComparison.Ordinal));
+        Assert.Contains(noted, line => line.StartsWith("srrDB search · Silo S03E06 · ", StringComparison.Ordinal));
         Assert.Contains(noted, line => line.StartsWith("LimeTorrents · Silo.S03E06.1080p.WEB.H264-CAKES · ", StringComparison.Ordinal));
-    }
-
-    /// <summary>One name in the pool, keyed the way the harvest keys it.</summary>
-    private static PooledName Pooled(string title, string source)
-    {
-        return new(
-            PoolKey.Of(ReleaseName.Parse(title))!,
-            title,
-            source,
-            DateTimeOffset.UtcNow);
     }
 
     /// <summary>Where the first request matching this appears, or -1.</summary>
@@ -1068,14 +1047,14 @@ public class SearchCycleTests
         ActivityJournal? journal = null,
         SourceDefinition[]? sources = null,
         long? free = null,
-        FakePool? pool = null)
+        IReleaseNames? names = null)
     {
         SourceCatalogue catalogue = SourceCatalogue.Build(sources ?? Sources, [], []);
         ActivityJournal writing = journal ?? new ActivityJournal();
         Readers readers = Readers.Shipped();
 
         return new(
-            new(catalogue, fetch, readers, pool ?? new FakePool(), writing, TimeProvider.System),
+            names ?? new NameSources(catalogue, fetch, readers, writing, TimeProvider.System),
             new(catalogue, fetch, readers, writing),
             writing,
 

@@ -14,8 +14,10 @@ they were confused — a feed was put in the search set and asked a question per
 identical requests a cycle. This page used to open by calling all fifteen "sources", and by naming
 two different totals three lines apart.
 
-**The sources are PreDB, srrDB and SceneSource. Five entries: PreDB under two mirrors, srrDB under
-both its feed and its search API, and SceneSource.** The owner's rule, 10 September 2026. Everything else in the catalogue is an
+**The name sources are PreDB, srrDB, PreDB.net and SceneSource, for a show and for an anime alike.
+Five entries: srrDB ships as its feed and, separately, its search API.** The owner's rule of
+10 September 2026, with PreDB.net added and Nyaa named an indexer on 15 September 2026
+(`docs/specs/release-names.md`). Everything else in the catalogue is an
 indexer, EZTV included: its endpoint answers rows carrying a magnet, a hash, a seed count and a
 size, which is what an indexer answers and not what a scene database does. It was counted a feed
 until then, and 3,149 of its file names — a quarter of the owner's whole name pool — went in as
@@ -38,12 +40,33 @@ plugin's, tested against a capture.
 
 | Role | Answers | Asked with |
 | --- | --- | --- |
-| **Feed** | what was released recently | nothing — read whole. A feed answers any question with the newest N posts |
-| **Name database** | what a release is called | show and slot; answers names, never torrents |
+| **Feed** | what was released recently | nothing — read whole, every one at once at the start of every run. A feed answers any question with the newest N posts |
+| **Name database** | what a release is called | `Show SxxEyy` and nothing else, for an episode no feed named; answers names, never torrents |
 | **Indexer** | who is serving a named release | the **full release name** letter for letter, then without its punctuation, then the ladder; answers rows with hashes |
 
 A feed with a search address is both a feed and a name database. `SourceRole` is decided from `kind`
 and the presence of `searchUrl`, and nothing else guesses.
+
+## How a run uses the name sources
+
+`Core/Pipeline/NameSources.cs`, `docs/specs/release-names.md` and `run.md`. Nothing is kept between
+runs — the name pool is gone (migration `014`).
+
+1. Every feed is read at once, before any episode is worked on. A feed name is taken for an episode
+   being searched for when it names that show, that season and that episode (`EpisodeNaming`): the
+   show's title with its words run together, or leading the name with only a year or a country after
+   it. A season pack, a run of episodes, an absolute-numbered anime post and a film name no episode.
+2. An episode no feed named is looked up in every name source's search at once, asked `Show SxxEyy` —
+   no quality, no year, no absolute number. What the search answers for another episode is left.
+3. A feed or a search that fails gives nothing that run; the others are read all the same.
+
+**Measured on 15 September 2026** through the plugin's own fetch, and saved as `tests/fixtures/names-*`:
+the four feeds answered 40 (PreDB), 100 (srrDB), 20 (PreDB.net) and 40 (SceneSource) items. PreDB, srrDB
+and PreDB.net carry largely the same scene posts, and srrDB's feed spells its dashes as `&#45;`, which the reader
+turns back into dashes. SceneSource prints names with spaces and often with the episode's title
+inside — `Silo S02E01 The Engineer 1080p ATVP WEB-DL DDP5 1 Atmos H264-FLUX` — and carries season packs
+such as `Forever Home S01 1080p MY5 WEB-DL AAC2.0 H.264-TBN`. Asked `Silo S02E01`, PreDB answered 21
+names, srrDB 21, PreDB.net 20 and SceneSource 1, every one of them for that episode.
 
 ## The shipped catalogue
 

@@ -75,13 +75,33 @@ public class StoreTests : IDisposable
     [InlineData("source_reports")]
     [InlineData("blacklist")]
     [InlineData("history")]
-    [InlineData("name_pool")]
+    [InlineData("show_settings")]
+    [InlineData("library_preferences")]
     public async Task TheDocumentedSchemaIsWhatGetsCreated(string table)
     {
         Store database = new(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         Assert.Equal(0, await Count(database, table));
+    }
+
+    /// <remarks>
+    /// <c>S13-05</c>: the name pool is gone, because a run reads the name sources' feeds and asks their
+    /// searches directly (<c>docs/specs/release-names.md</c>). <c>001</c> still creates the table, so a
+    /// database of any age ends without it only because a later migration drops it.
+    /// </remarks>
+    [Fact]
+    public async Task TheNamePoolIsGone()
+    {
+        Store database = new(_folder);
+        await database.MigrateAsync(CancellationToken.None);
+
+        await using SqliteConnection connection = await database.OpenAsync(CancellationToken.None);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText = "SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'name_pool%';";
+
+        Assert.Equal(0L, (long)(await command.ExecuteScalarAsync(CancellationToken.None))!);
     }
 
     /// <remarks>

@@ -40,7 +40,6 @@ public sealed class Chain : IAsyncDisposable
     private readonly Browser _browser;
     private readonly PuppeteerTabs _tabs;
     private readonly BrowserSolver _solver;
-    private readonly INamePool _pool;
     private readonly ISourceLedger? _ledger;
     private readonly ITorrentEngine? _engine;
 
@@ -58,7 +57,6 @@ public sealed class Chain : IAsyncDisposable
     public Chain(
         IPluginContext context,
         IActivityJournal journal,
-        INamePool pool,
         IReadOnlyList<SourceDefinition> shipped,
         HttpMessageHandler? handler = null,
         ITorrentEngine? engine = null,
@@ -67,7 +65,6 @@ public sealed class Chain : IAsyncDisposable
         _context = context;
         _logger = context.Logger;
         _journal = journal;
-        _pool = pool;
         _engine = engine;
         _ledger = ledger;
         _gate = new(TimeProvider.System);
@@ -322,12 +319,6 @@ public sealed class Chain : IAsyncDisposable
             $"{needing.Length} cleared, and the browser closed");
     }
 
-    /// <summary>Reads every feed into the pool.</summary>
-    public Harvest Harvest(Settings settings)
-    {
-        return new(Catalogue(settings), Fetch(), _readers, _pool, _journal, TimeProvider.System, _ledger);
-    }
-
     /// <summary>The whole search chain: names, indexers, decision, grab.</summary>
     /// <param name="settings">What the owner will accept.</param>
     /// <param name="written">
@@ -340,7 +331,9 @@ public sealed class Chain : IAsyncDisposable
         IFetch fetch = Fetch();
 
         return new(
-            new NameResolve(catalogue, fetch, _readers, _pool, _journal, TimeProvider.System),
+            // The four name sources: their feeds read at the start of the run,
+            // and their searches for an episode no feed named.
+            new NameSources(catalogue, fetch, _readers, _journal, TimeProvider.System, _ledger),
             // The solver again, as the thing that can post from inside the
             // session that loaded the page. TorrentBay names its torrents to
             // nothing else, and while nobody passed this its every row was a

@@ -166,7 +166,7 @@ public sealed record CycleReport(IReadOnlyList<EpisodeOutcome> Outcomes, IReadOn
 /// </para>
 /// </remarks>
 public sealed class SearchCycle(
-    NameResolve names,
+    IReleaseNames names,
     Find find,
     IActivityJournal journal,
     Grab? grab = null,
@@ -188,11 +188,12 @@ public sealed class SearchCycle(
 
         Decisions decisions = new(options.Profile, queue, options.Blacklisted);
 
-        // What the pool already knows, read once. The sources are asked inside
-        // the loop, one episode at a time, so that an episode is handed to the
-        // client the moment it is decided rather than after every other
-        // episode's name has been asked for.
-        PooledNames pooled = await names.FromPoolAsync(queue, ct);
+        // Every name source's feed, read at once before any episode is worked
+        // on (docs/specs/run.md). An episode no feed named is looked up inside
+        // the loop, one episode at a time, so that it is handed to the client
+        // the moment it is decided rather than after every other episode's name
+        // has been asked for.
+        FeedNamesTaken taken = await names.ReadFeedsAsync(queue, ct);
 
         List<EpisodeOutcome> outcomes = [];
 
@@ -238,7 +239,7 @@ public sealed class SearchCycle(
             // and this one has no use.
             IReadOnlyList<string> candidates = decisions.Settled(episode.Key)
                 ? []
-                : await names.NamesForAsync(episode, pooled, options.Profile, ct);
+                : [.. (await names.NamesForAsync(episode, taken, ct)).Select(name => name.Title).Distinct(StringComparer.Ordinal)];
 
             EpisodeOutcome outcome = await LookAsync(
                 episode,

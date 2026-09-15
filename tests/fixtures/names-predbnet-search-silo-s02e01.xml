@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:release="https://api.predb.net/feed/" version="2.0">
+<channel>
+	<title>PreDB.net › Scene Release and NFO Source</title>
+	<link>https://api.predb.net/feed/</link>
+	<atom:link href="https://api.predb.net/feed/" rel="self" type="application/rss+xml"/>
+	<description>PreDB.net › RSS Feed</description>
+	<language>en-us</language>
+	<ttl>5</ttl>
+	<generator>predb.net</generator>
+	<item>
+		<title>Silo.S02E01.720p.WEB.H264-SYLiX</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 3 | Size: 1198.08MB | Title: Silo | Group: SYLiX | Season: 2 | Episode: 1 | Source: WEB | Format: h264 | Resolution: 720p | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.720p.WEB.H264-SYLiX</link>
+		<guid>https://predb.net/rls/Silo.S02E01.720p.WEB.H264-SYLiX</guid>
+		<pubDate>Fri, 10 Jul 2026 1:59:49 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.Die.Ingenieurin.German.DL.WEB.h264-RWF</title>
+		<description>Section: TV-WEB-X264 | Files: 7 | Size: 602MB | Genre: Drama | Show: Silo | Title: Die Ingenieurin | Group: RWF | Season: 2 | Episode: 1 | Source: WEB | Format: h264 | Language: German, Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.Die.Ingenieurin.German.DL.WEB.h264-RWF</link>
+		<guid>https://predb.net/rls/Silo.S02E01.Die.Ingenieurin.German.DL.WEB.h264-RWF</guid>
+		<pubDate>Sun, 15 Jun 2025 19:14:25 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.GERMAN.WEBRiP.x264-AVTOMAT</title>
+		<description>Section: TV-WEB-X264 | Files: 6 | Size: 250MB | Genre: Drama | Title: Silo | Group: AVTOMAT | Season: 2 | Episode: 1 | Source: WEB | Format: x264 | Language: German | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.GERMAN.WEBRiP.x264-AVTOMAT</link>
+		<guid>https://predb.net/rls/Silo.S02E01.GERMAN.WEBRiP.x264-AVTOMAT</guid>
+		<pubDate>Sun, 24 Nov 2024 10:47:35 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.MULTI.HDR.2160p.WEB.H265-HiggsBoson</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 25 | Size: 8546.5MB | Genre: Drama | Title: Silo | Group: HiggsBoson | Season: 2 | Episode: 1 | Flags: HDR | Source: WEB | Format: h265 | Resolution: 2160p | Language: Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.MULTI.HDR.2160p.WEB.H265-HiggsBoson</link>
+		<guid>https://predb.net/rls/Silo.S02E01.MULTI.HDR.2160p.WEB.H265-HiggsBoson</guid>
+		<pubDate>Fri, 15 Nov 2024 3:56:27 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.MULTI.DV.2160p.WEB.H265-HiggsBoson</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 25 | Size: 8490.18MB | Genre: Drama | Title: Silo | Group: HiggsBoson | Season: 2 | Episode: 1 | Flags: Dolby Vision | Source: WEB | Format: h265 | Resolution: 2160p | Language: Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.MULTI.DV.2160p.WEB.H265-HiggsBoson</link>
+		<guid>https://predb.net/rls/Silo.S02E01.MULTI.DV.2160p.WEB.H265-HiggsBoson</guid>
+		<pubDate>Fri, 15 Nov 2024 3:55:27 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.MULTI.2160p.WEB.H265-HiggsBoson</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 22 | Size: 7292.77MB | Genre: Drama | Title: Silo | Group: HiggsBoson | Season: 2 | Episode: 1 | Source: WEB | Format: h265 | Resolution: 2160p | Language: Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.MULTI.2160p.WEB.H265-HiggsBoson</link>
+		<guid>https://predb.net/rls/Silo.S02E01.MULTI.2160p.WEB.H265-HiggsBoson</guid>
+		<pubDate>Fri, 15 Nov 2024 3:53:27 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.FRENCH.720p.WEB.H264-HiggsBoson</title>
+		<description>Section: TV-WEB-HD-X264 | Genre: Drama | Title: Silo | Group: HiggsBoson | Season: 2 | Episode: 1 | Source: WEB | Format: h264 | Resolution: 720p | Language: French | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.FRENCH.720p.WEB.H264-HiggsBoson</link>
+		<guid>https://predb.net/rls/Silo.S02E01.FRENCH.720p.WEB.H264-HiggsBoson</guid>
+		<pubDate>Fri, 15 Nov 2024 2:23:23 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.MULTI.1080p.WEB.H264-HiggsBoson</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 27 | Size: 3759MB | Genre: Drama | Title: Silo | Group: HiggsBoson | Season: 2 | Episode: 1 | Source: WEB | Format: h264 | Resolution: 1080p | Language: Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.MULTI.1080p.WEB.H264-HiggsBoson</link>
+		<guid>https://predb.net/rls/Silo.S02E01.MULTI.1080p.WEB.H264-HiggsBoson</guid>
+		<pubDate>Fri, 15 Nov 2024 2:14:52 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.iTALiAN.DV.2160p.WEB.H265-NEUROSiS</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 18 | Size: 8246.17MB | Title: Silo | Group: NEUROSiS | Season: 2 | Episode: 1 | Flags: Dolby Vision | Source: WEB | Format: h265 | Resolution: 2160p | Language: Italian | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.iTALiAN.DV.2160p.WEB.H265-NEUROSiS</link>
+		<guid>https://predb.net/rls/Silo.S02E01.iTALiAN.DV.2160p.WEB.H265-NEUROSiS</guid>
+		<pubDate>Fri, 15 Nov 2024 2:10:53 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.iTALiAN.HDR.2160p.WEB.H265-NEUROSiS</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 18 | Size: 8300.37MB | Title: Silo | Group: NEUROSiS | Season: 2 | Episode: 1 | Flags: HDR | Source: WEB | Format: h265 | Resolution: 2160p | Language: Italian | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.iTALiAN.HDR.2160p.WEB.H265-NEUROSiS</link>
+		<guid>https://predb.net/rls/Silo.S02E01.iTALiAN.HDR.2160p.WEB.H265-NEUROSiS</guid>
+		<pubDate>Fri, 15 Nov 2024 2:08:48 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.iTALiAN.720p.WEB.H264-NEUROSiS</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 8 | Size: 1199.98MB | Title: Silo | Group: NEUROSiS | Season: 2 | Episode: 1 | Source: WEB | Format: h264 | Resolution: 720p | Language: Italian | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.iTALiAN.720p.WEB.H264-NEUROSiS</link>
+		<guid>https://predb.net/rls/Silo.S02E01.iTALiAN.720p.WEB.H264-NEUROSiS</guid>
+		<pubDate>Fri, 15 Nov 2024 2:06:24 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.iTALiAN.1080p.WEB.H264-NEUROSiS</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 10 | Size: 3510MB | Title: Silo | Group: NEUROSiS | Season: 2 | Episode: 1 | Source: WEB | Format: h264 | Resolution: 1080p | Language: Italian | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.iTALiAN.1080p.WEB.H264-NEUROSiS</link>
+		<guid>https://predb.net/rls/Silo.S02E01.iTALiAN.1080p.WEB.H264-NEUROSiS</guid>
+		<pubDate>Fri, 15 Nov 2024 2:05:52 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.2160p.WEB.H265-SuccessfulCrab</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 15 | Size: 7004.46MB | Title: Silo | Group: SuccessfulCrab | Season: 2 | Episode: 1 | Source: WEB | Format: h265 | Resolution: 2160p | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.2160p.WEB.H265-SuccessfulCrab</link>
+		<guid>https://predb.net/rls/Silo.S02E01.2160p.WEB.H265-SuccessfulCrab</guid>
+		<pubDate>Fri, 15 Nov 2024 2:01:22 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.DV.2160p.WEB.H265-SuccessfulCrab</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 17 | Size: 8210.37MB | Genre: Drama | Title: Silo | Group: SuccessfulCrab | Season: 2 | Episode: 1 | Flags: Dolby Vision | Source: WEB | Format: h265 | Resolution: 2160p | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.DV.2160p.WEB.H265-SuccessfulCrab</link>
+		<guid>https://predb.net/rls/Silo.S02E01.DV.2160p.WEB.H265-SuccessfulCrab</guid>
+		<pubDate>Fri, 15 Nov 2024 2:01:18 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.GERMAN.DL.DV.2160p.WEB.h265-SAUERKRAUT</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 20 | Size: 8308MB | Title: Silo | Group: SAUERKRAUT | Season: 2 | Episode: 1 | Flags: Dolby Vision | Source: WEB | Format: h265 | Resolution: 2160p | Language: German, Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.GERMAN.DL.DV.2160p.WEB.h265-SAUERKRAUT</link>
+		<guid>https://predb.net/rls/Silo.S02E01.GERMAN.DL.DV.2160p.WEB.h265-SAUERKRAUT</guid>
+		<pubDate>Fri, 15 Nov 2024 2:01:14 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.GERMAN.DL.HDR.2160p.WEB.h265-SAUERKRAUT</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 23 | Size: 8559.75MB | Title: Silo | Group: SAUERKRAUT | Season: 2 | Episode: 1 | Flags: HDR | Source: WEB | Format: h265 | Resolution: 2160p | Language: German, Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.GERMAN.DL.HDR.2160p.WEB.h265-SAUERKRAUT</link>
+		<guid>https://predb.net/rls/Silo.S02E01.GERMAN.DL.HDR.2160p.WEB.h265-SAUERKRAUT</guid>
+		<pubDate>Fri, 15 Nov 2024 2:01:13 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.GERMAN.DL.2160p.WEB.h265-SAUERKRAUT</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 19 | Size: 7144MB | Title: Silo | Group: SAUERKRAUT | Season: 2 | Episode: 1 | Source: WEB | Format: h265 | Resolution: 2160p | Language: German, Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.GERMAN.DL.2160p.WEB.h265-SAUERKRAUT</link>
+		<guid>https://predb.net/rls/Silo.S02E01.GERMAN.DL.2160p.WEB.h265-SAUERKRAUT</guid>
+		<pubDate>Fri, 15 Nov 2024 2:01:10 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.GERMAN.DL.720p.WEB.h264-SAUERKRAUT</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 15 | Size: 1427MB | Title: Silo | Group: SAUERKRAUT | Season: 2 | Episode: 1 | Source: WEB | Format: h264 | Resolution: 720p | Language: German, Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.GERMAN.DL.720p.WEB.h264-SAUERKRAUT</link>
+		<guid>https://predb.net/rls/Silo.S02E01.GERMAN.DL.720p.WEB.h264-SAUERKRAUT</guid>
+		<pubDate>Fri, 15 Nov 2024 2:01:10 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.HDR.2160p.WEB.H265-SuccessfulCrab</title>
+		<description>Section: TV-WEB-HD-X265 | Files: 17 | Size: 8276.11MB | Genre: Drama | Title: Silo | Group: SuccessfulCrab | Season: 2 | Episode: 1 | Flags: HDR | Source: WEB | Format: h265 | Resolution: 2160p | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.HDR.2160p.WEB.H265-SuccessfulCrab</link>
+		<guid>https://predb.net/rls/Silo.S02E01.HDR.2160p.WEB.H265-SuccessfulCrab</guid>
+		<pubDate>Fri, 15 Nov 2024 2:01:06 +0000</pubDate>
+	</item>
+	<item>
+		<title>Silo.S02E01.GERMAN.DL.1080p.WEB.h264-SAUERKRAUT</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 20 | Size: 3759MB | Genre: Drama | Title: Silo | Group: SAUERKRAUT | Season: 2 | Episode: 1 | Source: WEB | Format: h264 | Resolution: 1080p | Language: German, Multilingual | Type: TV</description>
+		<link>https://predb.net/rls/Silo.S02E01.GERMAN.DL.1080p.WEB.h264-SAUERKRAUT</link>
+		<guid>https://predb.net/rls/Silo.S02E01.GERMAN.DL.1080p.WEB.h264-SAUERKRAUT</guid>
+		<pubDate>Fri, 15 Nov 2024 2:00:45 +0000</pubDate>
+	</item>
+</channel>
+</rss>

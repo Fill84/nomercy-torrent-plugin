@@ -238,12 +238,6 @@ CREATE TABLE history (
 );
 CREATE INDEX history_at ON history (at DESC);
 
-CREATE TABLE name_pool (
-    normalised TEXT NOT NULL,                 -- show+slot key
-    title      TEXT NOT NULL,
-    source     TEXT NOT NULL,
-    seen_at    TEXT NOT NULL,
-    PRIMARY KEY (normalised, title)
-);
-CREATE INDEX name_pool_seen ON name_pool (seen_at);
+-- name_pool is created by 001 and dropped by 014 (S13-05): a run reads the name sources' feeds and
+-- asks their searches directly, so no release name is kept between runs (docs/specs/release-names.md).
 ```

@@ -1,7 +1,6 @@
 using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
-using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
@@ -17,7 +16,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 /// <para>
 /// The two halves of anime were each proved on their own and never joined.
 /// <c>S1-03</c> builds an episode's absolute number from the library's own
-/// episode list; <c>S3-03</c> asks the pool under that number. Nothing put the
+/// episode list; the decision reads a release posted under that number. Nothing put the
 /// two together, so nothing said whether the number the library produces is the
 /// number a release is really posted under.
 /// </para>
@@ -52,13 +51,11 @@ public class AnimeEndToEndTests
         Assert.Equal(20, missing.Absolute);
         Assert.Equal(LibraryKind.Anime, missing.Kind);
 
-        // The pool holds it under the absolute number and under nothing else,
-        // which is how a fansub really posts it.
-        FakePool pool = new();
-
-        await pool.AddAsync(
-            [new(PoolKey.ForAbsolute("Rilakkuma", 20), Posted, "Nyaa", clock.GetUtcNow())],
-            CancellationToken.None);
+        // The name under the absolute number and under nothing else, which is how
+        // a fansub really posts it. Handed to the cycle as it is: the name sources
+        // take only a season and episode number (docs/specs/release-names.md), so
+        // this is about the decision on such a release and not where it came from.
+        FixedNames pool = new((Posted, "Nyaa"));
 
         FakeFetch fetch = new();
         fetch.AnswersAnything(Capture.Fixture("nyaa-subsplease.xml"));
@@ -107,14 +104,14 @@ public class AnimeEndToEndTests
         return server;
     }
 
-    private static SearchCycle Cycle(FakeFetch fetch, FakePool pool)
+    private static SearchCycle Cycle(FakeFetch fetch, IReleaseNames names)
     {
         SourceCatalogue catalogue = SourceCatalogue.Build(Sources, [], []);
         ActivityJournal journal = new();
         Readers readers = Readers.Shipped();
 
         return new(
-            new NameResolve(catalogue, fetch, readers, pool, journal, TimeProvider.System),
+            names,
             new Find(catalogue, fetch, readers, journal),
             journal);
     }

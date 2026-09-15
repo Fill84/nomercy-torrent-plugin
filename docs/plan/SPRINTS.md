@@ -2770,9 +2770,13 @@ belong to `S13-09`.
 
 ## S13-05 · Release names: the feeds and backfill
 
-**Files:** `Core/Pipeline/Harvest.cs`, `Core/Pipeline/NameResolve.cs`, `Core/Sources/SourceRole.cs`,
-`Storage/NamePoolRepository.cs` (removed), a migration dropping `name_pool`, `sources.json`,
-`tests/fixtures/` (fresh captures of the four feeds and the four searches), `docs/05-sources.md`.
+**Files:** `Core/Pipeline/NameSources.cs` (in place of `Harvest.cs` and `NameResolve.cs`, both removed),
+`Core/Naming/EpisodeNaming.cs` (in place of `PoolKey.cs`), `Core/Pipeline/SearchCycle.cs`,
+`Hosting/Chain.cs`, `TorrentDownloaderPlugin.cs` (the harvest step before a cycle goes),
+`Storage/NamePoolRepository.cs` and `Core/Ports/INamePool.cs` (removed), migration
+`014-no-name-pool.sql`, `tests/fixtures/names-*` (fresh captures of the four feeds and the four searches),
+`docs/05-sources.md`, `docs/04-domain.md`. `SourceRole.cs` and `sources.json` needed no change: the
+catalogue already made the four the feeds and name databases, and Nyaa an indexer.
 
 **Steps**
 
@@ -2787,6 +2791,10 @@ belong to `S13-09`.
 6. Test (red): `NameSourcesTests.NyaaIsNotANameSourceForAnAnime`.
 7. Test (red): `NameSourcesTests.ASourceWhoseFeedFailsGivesNothingAndTheRunCarriesOn`.
 8. The name pool and its table go.
+9. The rules of the old tests that still hold move with them: `HarvestTests` into `FeedNamesTests`
+   (read whole, all at once, journal, ledger), `PoolKeyTests` into `EpisodeNamingTests` (every spelling,
+   a year after the title, no pack, no absolute, no run of episodes). The search cycle's tests that
+   seeded the pool hand their names over through `FixedNames`.
 
 **Done when** those tests pass and the suite is green. Spec: `release-names.md`, `run.md`.
 

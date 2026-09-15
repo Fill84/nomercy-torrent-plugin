@@ -121,17 +121,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <summary>The guard that keeps two cycles from running together.</summary>
     private readonly OneAtATime _running = new();
 
-    /// <summary>
-    /// Guards feed and maintenance against overlapping themselves.
-    /// </summary>
-    /// <remarks>
-    /// Needed only since the due cadences went fire-and-forget (S12-05 fix
-    /// round 1): a slow feed can still be running when the next tick finds it
-    /// due again, and nothing but this stops a second one starting on top of
-    /// it. Search already had <see cref="_running"/> for the same reason, from
-    /// before this plugin had a clock at all.
-    /// </remarks>
-    private readonly OneAtATime _feedRunning = new();
 
     /// <summary>Keeps two transfers passes from staging the same file twice.</summary>
     private readonly OneAtATime _transfersRunning = new();
@@ -575,7 +564,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// Feed, then search, then again for every trigger that arrived meanwhile.
+    /// A search, then again for every trigger that arrived meanwhile.
     /// </summary>
     /// <remarks>
     /// The searching half of a cycle. What it finds it hands to the torrent
@@ -589,8 +578,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             while (!ct.IsCancellationRequested)
             {
-                await HarvestGuardedAsync(ct);
-
+                // No harvest ahead of it any more: the search cycle reads every
+                // name source's feed itself, at its start (docs/specs/run.md).
                 if (_running.TryEnter())
                 {
                     try
@@ -810,34 +799,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             _context?.Logger.LogWarning(
                 wrong, "When the next cycle is due could not be worked out: {Reason}", wrong.Message);
-        }
-    }
-
-    /// <summary>Reads every feed, and never lets it take a cycle down.</summary>
-    private async Task HarvestGuardedAsync(CancellationToken ct)
-    {
-        if (!_feedRunning.TryEnter())
-        {
-            return;
-        }
-
-        try
-        {
-            await HarvestAsync(ct);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception wrong)
-        {
-            // One bad feed is not a reason to skip the search: the name pool
-            // still holds everything every earlier harvest put in it.
-            _context?.Logger.LogWarning(wrong, "Reading the feeds failed: {Reason}", wrong.Message);
-        }
-        finally
-        {
-            _feedRunning.Leave();
         }
     }
 
@@ -1071,17 +1032,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             _context?.Logger.LogWarning(wrong, "Starting up failed: {Reason}", wrong.Message);
         }
-    }
-
-    /// <summary>Reads every feed into the name pool.</summary>
-    private async Task HarvestAsync(CancellationToken ct)
-    {
-        if (await ChainAsync(ct) is not (Chain chain, Settings settings))
-        {
-            return;
-        }
-
-        await chain.Harvest(settings).RunAsync(ct);
     }
 
     /// <summary>
@@ -1842,7 +1792,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             _chain ??= new(
                 Context,
                 _journal,
-                new NamePoolRepository(database),
                 Shipped(),
                 engine: engine,
                 ledger: ledger);

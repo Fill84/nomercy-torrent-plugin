@@ -169,14 +169,14 @@ public class TheRightReleaseTests
     /// <para>
     /// <strong>The release name comes from the name databases, and the copy
     /// that is that release wins outright.</strong> SceneSource publishes the
-    /// scene name minutes after a release lands, which is what the pool is for
-    /// and what the indexers are meant to be asked about. Ranking on seeders
+    /// scene name minutes after a release lands, and it is what the indexers are
+    /// meant to be asked about. Ranking on seeders
     /// alone throws that away: for Silo S03E04 an x265 re-encode is seeded by
     /// 2,898 and the scene release by 1,774, so the re-encode wins a contest
     /// it should never have been in.
     /// </para>
     /// <para>
-    /// And the name that is recorded is the pool's, not the indexer's. The
+    /// And the name that is recorded is the name source's, not the indexer's. The
     /// same release comes off TorrentDownloads as
     /// <c>- Silo S03E04 1080p WEB H264-CAKES</c> and off another site in lower
     /// case with <c>[EZTVx to]</c> stuck on the end. That name is written
@@ -187,12 +187,8 @@ public class TheRightReleaseTests
     [Fact]
     public async Task TheSceneReleaseTheNameDatabasesKnowIsTheOneThatIsTaken()
     {
-        FakePool pool = new();
-
         // Exactly what SceneSource had for this episode on 22 August 2026.
-        await pool.AddAsync(
-            [new("silo|s03e04", "Silo S03E04 1080p WEB H264-CAKES", "SceneSource", DateTimeOffset.UtcNow)],
-            CancellationToken.None);
+        FixedNames pool = new(("Silo S03E04 1080p WEB H264-CAKES", "SceneSource"));
 
         FakeTorrentEngine engine = new();
 
@@ -345,14 +341,14 @@ public class TheRightReleaseTests
         return fetch;
     }
 
-    private static SearchCycle Cycle(FakeTorrentEngine engine, FakeFetch answering, FakePool? pool = null)
+    private static SearchCycle Cycle(FakeTorrentEngine engine, FakeFetch answering, IReleaseNames? names = null)
     {
         SourceCatalogue catalogue = SourceCatalogue.Build(Sources, [], []);
         ActivityJournal journal = new();
         Readers readers = Readers.Shipped();
 
         return new(
-            new(catalogue, answering, readers, pool ?? new FakePool(), journal, TimeProvider.System),
+            names ?? new NameSources(catalogue, answering, readers, journal, TimeProvider.System),
             new(catalogue, answering, readers, journal),
             journal,
             new Grab(engine, new EndlessDisk(), journal));

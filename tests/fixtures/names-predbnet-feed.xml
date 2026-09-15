@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:release="https://api.predb.net/feed/" version="2.0">
+<channel>
+	<title>PreDB.net › Scene Release and NFO Source</title>
+	<link>https://api.predb.net/feed/</link>
+	<atom:link href="https://api.predb.net/feed/" rel="self" type="application/rss+xml"/>
+	<description>PreDB.net › RSS Feed</description>
+	<language>en-us</language>
+	<ttl>5</ttl>
+	<generator>predb.net</generator>
+	<item>
+		<title>MTRZ-Carbon_Dust-(SPEP003)-WEB-2024-PTC</title>
+		<description>Section: MP3-WEB | Files: 5 | Size: 56MB | Artist: MTRZ | Title: Carbon Dust | Group: PTC | Year: 2024 | Source: WEB | Type: Music</description>
+		<link>https://predb.net/rls/MTRZ-Carbon_Dust-(SPEP003)-WEB-2024-PTC</link>
+		<guid>https://predb.net/rls/MTRZ-Carbon_Dust-(SPEP003)-WEB-2024-PTC</guid>
+		<pubDate>Tue, 15 Sep 2026 16:03:22 +0000</pubDate>
+	</item>
+	<item>
+		<title>Aumcore_and_Vladimihir-Splitting_the_Atom-(SPEP002)-WEB-2024-PTC</title>
+		<description>Section: MP3-WEB | Files: 2 | Size: 24MB | Genre: Techno | Artist: Aumcore and Vladimihir | Title: Splitting the Atom | Group: PTC | Year: 2024 | Source: WEB | Type: Music</description>
+		<link>https://predb.net/rls/Aumcore_and_Vladimihir-Splitting_the_Atom-(SPEP002)-WEB-2024-PTC</link>
+		<guid>https://predb.net/rls/Aumcore_and_Vladimihir-Splitting_the_Atom-(SPEP002)-WEB-2024-PTC</guid>
+		<pubDate>Tue, 15 Sep 2026 16:03:05 +0000</pubDate>
+	</item>
+	<item>
+		<title>FVKS-Transcendence-(SPEP001)-WEB-2024-PTC</title>
+		<description>Section: MP3-WEB | Files: 5 | Size: 67MB | Genre: Techno | Artist: FVKS | Title: Transcendence | Group: PTC | Year: 2024 | Source: WEB | Type: Music</description>
+		<link>https://predb.net/rls/FVKS-Transcendence-(SPEP001)-WEB-2024-PTC</link>
+		<guid>https://predb.net/rls/FVKS-Transcendence-(SPEP001)-WEB-2024-PTC</guid>
+		<pubDate>Tue, 15 Sep 2026 16:02:29 +0000</pubDate>
+	</item>
+	<item>
+		<title>VA-Genesis-(SPVA001)-WEB-2024-PTC</title>
+		<description>Section: MP3-WEB | Files: 12 | Size: 161MB | Genre: Techno | Artist: Various | Title: Genesis | Group: PTC | Year: 2024 | Source: WEB | Type: Music</description>
+		<link>https://predb.net/rls/VA-Genesis-(SPVA001)-WEB-2024-PTC</link>
+		<guid>https://predb.net/rls/VA-Genesis-(SPVA001)-WEB-2024-PTC</guid>
+		<pubDate>Tue, 15 Sep 2026 16:01:47 +0000</pubDate>
+	</item>
+	<item>
+		<title>The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265-FLAME</title>
+		<description>Section: X265-HD | Files: 101 | Size: 15150MB | Title: The Gray Man | Group: FLAME | Year: 2022 | Flags: HDR | Source: WEB | Format: h265 | Resolution: 2160p | Language: Polish | Type: Movie</description>
+		<link>https://predb.net/rls/The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265-FLAME</link>
+		<guid>https://predb.net/rls/The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265-FLAME</guid>
+		<pubDate>Tue, 15 Sep 2026 16:00:18 +0000</pubDate>
+	</item>
+	<item>
+		<title>38_Spesh-The_38_Strategies_Of_Raw-LP-FLAC-2019-AUDiOFiLE</title>
+		<description>Section: FLAC-ViNYL | Files: 11 | Size: 720MB | Genre: Hip-Hop | Artist: 38 Spesh | Album: The 38 Strategies Of Raw | Group: AUDiOFiLE | Year: 2019 | Source: LP | Format: FLAC | Type: Music</description>
+		<link>https://predb.net/rls/38_Spesh-The_38_Strategies_Of_Raw-LP-FLAC-2019-AUDiOFiLE</link>
+		<guid>https://predb.net/rls/38_Spesh-The_38_Strategies_Of_Raw-LP-FLAC-2019-AUDiOFiLE</guid>
+		<pubDate>Tue, 15 Sep 2026 15:59:39 +0000</pubDate>
+	</item>
+	<item>
+		<title>Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</title>
+		<description>Section: X265-HD | Files: 35 | Size: 16568MB | Title: Annabelle 2 Creation | Group: NTROPiC | Year: 2017 | Source: WEB | Format: h265 | Resolution: 2160p | Language: Italian, Multilingual | Type: Movie</description>
+		<link>https://predb.net/rls/Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</link>
+		<guid>https://predb.net/rls/Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</guid>
+		<pubDate>Tue, 15 Sep 2026 15:59:33 +0000</pubDate>
+	</item>
+	<item>
+		<title>The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265-FLAME</title>
+		<description>Section: X265-HD | Files: 90 | Size: 18000MB | Title: The Gray Man | Group: FLAME | Year: 2022 | Flags: Dolby Vision | Source: WEB | Format: h265 | Resolution: 2160p | Language: Polish | Type: Movie</description>
+		<link>https://predb.net/rls/The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265-FLAME</link>
+		<guid>https://predb.net/rls/The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265-FLAME</guid>
+		<pubDate>Tue, 15 Sep 2026 15:58:05 +0000</pubDate>
+	</item>
+	<item>
+		<title>38_Spesh_And_Big_Ghost_Ltd.-A_Bullet_For_Every_Heathen-LP-FLAC-2019-AUDiOFiLE</title>
+		<description>Section: FLAC-ViNYL | Files: 10 | Size: 517MB | Genre: Hip-Hop | Artist: 38 Spesh And Big Ghost Ltd | Album: A Bullet For Every Heathen | Group: AUDiOFiLE | Year: 2019 | Source: LP | Format: FLAC | Type: Music</description>
+		<link>https://predb.net/rls/38_Spesh_And_Big_Ghost_Ltd.-A_Bullet_For_Every_Heathen-LP-FLAC-2019-AUDiOFiLE</link>
+		<guid>https://predb.net/rls/38_Spesh_And_Big_Ghost_Ltd.-A_Bullet_For_Every_Heathen-LP-FLAC-2019-AUDiOFiLE</guid>
+		<pubDate>Tue, 15 Sep 2026 15:57:22 +0000</pubDate>
+	</item>
+	<item>
+		<title>The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265-FLAME</title>
+		<description>Section: X265-HD | Files: 98 | Size: 19600MB | Title: The Gray Man | Group: FLAME | Year: 2022 | Flags: Internal | Source: WEB | Format: h265 | Resolution: 2160p | Language: Polish | Type: Movie</description>
+		<link>https://predb.net/rls/The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265-FLAME</link>
+		<guid>https://predb.net/rls/The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265-FLAME</guid>
+		<pubDate>Tue, 15 Sep 2026 15:55:23 +0000</pubDate>
+	</item>
+	<item>
+		<title>SEVEK-Dark_Love_(XiJaro_And_Pitch_Extended_Remix)-(ARMAS3839)-SINGLE-16BIT-WEB-FLAC-2026-FMC</title>
+		<description>Section: FLAC-WEB | Files: 1 | Size: 48MB | Genre: Trance | Artist: SEVEK | Title: Dark Love (XiJaro And Pitch | Group: FMC | Year: 2026 | Flags: Extended | Source: WEB | Format: FLAC | Audio: 16BIT | Type: Music</description>
+		<link>https://predb.net/rls/SEVEK-Dark_Love_(XiJaro_And_Pitch_Extended_Remix)-(ARMAS3839)-SINGLE-16BIT-WEB-FLAC-2026-FMC</link>
+		<guid>https://predb.net/rls/SEVEK-Dark_Love_(XiJaro_And_Pitch_Extended_Remix)-(ARMAS3839)-SINGLE-16BIT-WEB-FLAC-2026-FMC</guid>
+		<pubDate>Tue, 15 Sep 2026 15:55:07 +0000</pubDate>
+	</item>
+	<item>
+		<title>Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</title>
+		<description>Section: X265-HD | Title: Annabelle 2 Creation | Group: NTROPiC | Year: 2017 | Flags: HDR | Source: WEB | Format: h265 | Resolution: 2160p | Language: Italian, Multilingual | Type: Movie</description>
+		<link>https://predb.net/rls/Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</link>
+		<guid>https://predb.net/rls/Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</guid>
+		<pubDate>Tue, 15 Sep 2026 15:55:03 +0000</pubDate>
+	</item>
+	<item>
+		<title>Richard_Durand_X_RinatNevo-Goodbye_My_Love-(MM1708-0)-SINGLE-16BIT-WEB-FLAC-2026-FMC</title>
+		<description>Section: FLAC-WEB | Files: 1 | Size: 59MB | Genre: trance | Artist: Richard Durand X RinatNevo | Title: Goodbye My Love-0) | Group: FMC | Year: 2026 | Source: WEB | Format: FLAC | Audio: 16BIT | Type: Music</description>
+		<link>https://predb.net/rls/Richard_Durand_X_RinatNevo-Goodbye_My_Love-(MM1708-0)-SINGLE-16BIT-WEB-FLAC-2026-FMC</link>
+		<guid>https://predb.net/rls/Richard_Durand_X_RinatNevo-Goodbye_My_Love-(MM1708-0)-SINGLE-16BIT-WEB-FLAC-2026-FMC</guid>
+		<pubDate>Tue, 15 Sep 2026 15:54:32 +0000</pubDate>
+	</item>
+	<item>
+		<title>Dave_Cold-Embrace_Your_Dreams-(2RU112)-16BIT-WEB-FLAC-2026-FMC</title>
+		<description>Section: FLAC-WEB | Files: 2 | Size: 87MB | Genre: trance | Artist: Dave Cold | Title: Embrace Your Dreams | Group: FMC | Year: 2026 | Source: WEB | Format: FLAC | Audio: 16BIT | Type: Music</description>
+		<link>https://predb.net/rls/Dave_Cold-Embrace_Your_Dreams-(2RU112)-16BIT-WEB-FLAC-2026-FMC</link>
+		<guid>https://predb.net/rls/Dave_Cold-Embrace_Your_Dreams-(2RU112)-16BIT-WEB-FLAC-2026-FMC</guid>
+		<pubDate>Tue, 15 Sep 2026 15:53:59 +0000</pubDate>
+	</item>
+	<item>
+		<title>The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264-AFO</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 22 | Size: 1012MB | Title: The Girls A Khloe Kardashian Project | Group: AFO | Season: 1 | Episode: 6 | Source: WEB | Format: h264 | Resolution: 720p | Type: TV</description>
+		<link>https://predb.net/rls/The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264-AFO</link>
+		<guid>https://predb.net/rls/The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264-AFO</guid>
+		<pubDate>Tue, 15 Sep 2026 15:53:10 +0000</pubDate>
+	</item>
+	<item>
+		<title>The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264-AFO</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 23 | Size: 1064MB | Title: The Girls A Khloe Kardashian Project | Group: AFO | Season: 1 | Episode: 5 | Source: WEB | Format: h264 | Resolution: 720p | Type: TV</description>
+		<link>https://predb.net/rls/The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264-AFO</link>
+		<guid>https://predb.net/rls/The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264-AFO</guid>
+		<pubDate>Tue, 15 Sep 2026 15:51:56 +0000</pubDate>
+	</item>
+	<item>
+		<title>Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</title>
+		<description>Section: X265-HD | Title: Annabelle 2 Creation | Group: NTROPiC | Year: 2017 | Flags: Dolby Vision | Source: WEB | Format: h265 | Resolution: 2160p | Language: Italian, Multilingual | Type: Movie</description>
+		<link>https://predb.net/rls/Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+		<guid>https://predb.net/rls/Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+		<pubDate>Tue, 15 Sep 2026 15:50:28 +0000</pubDate>
+	</item>
+	<item>
+		<title>Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264-NTROPiC</title>
+		<description>Section: X264-HD | Files: 14 | Size: 6303MB | Genre: Horror | Title: Annabelle | Group: NTROPiC | Year: 2014 | Source: WEB | Format: h264 | Resolution: 1080p | Language: Italian, Multilingual | Type: Movie</description>
+		<link>https://predb.net/rls/Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264-NTROPiC</link>
+		<guid>https://predb.net/rls/Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264-NTROPiC</guid>
+		<pubDate>Tue, 15 Sep 2026 15:47:16 +0000</pubDate>
+	</item>
+	<item>
+		<title>Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</title>
+		<description>Section: X265-HD | Files: 32 | Size: 14944MB | Title: Annabelle | Group: NTROPiC | Year: 2014 | Source: WEB | Format: h265 | Resolution: 2160p | Language: Italian, Multilingual | Type: Movie</description>
+		<link>https://predb.net/rls/Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</link>
+		<guid>https://predb.net/rls/Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</guid>
+		<pubDate>Tue, 15 Sep 2026 15:43:51 +0000</pubDate>
+	</item>
+	<item>
+		<title>The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264-AFO</title>
+		<description>Section: TV-WEB-HD-X264 | Files: 25 | Size: 1182MB | Title: The Girls A Khloe Kardashian Project | Group: AFO | Season: 1 | Episode: 4 | Source: WEB | Format: h264 | Resolution: 720p | Type: TV</description>
+		<link>https://predb.net/rls/The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264-AFO</link>
+		<guid>https://predb.net/rls/The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264-AFO</guid>
+		<pubDate>Tue, 15 Sep 2026 15:41:07 +0000</pubDate>
+	</item>
+</channel>
+</rss>

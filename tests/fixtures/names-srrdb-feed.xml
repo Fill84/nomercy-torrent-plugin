@@ -1,0 +1,3391 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+     xmlns:admin="http://webns.net/mvcb/" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+     xmlns:content="http://purl.org/rss/1.0/modules/content/">
+    <channel>
+        <title>srrDB.com SRRs</title>
+
+        <link>https://www.srrdb.com/feed/srrs</link>
+
+        <description>The newest SRR files on srrDB</description>
+        <pubDate>Tue, 15 Sep 2026 16:03:35 +0000</pubDate>
+        <ttl>1</ttl>
+        <language>en-en</language>
+        <webMaster>admin@srrdb.com (srrDB)</webMaster>
+        <copyright>Copyright 2026</copyright>
+    <item>
+        <title>MTRZ&#45;Carbon_Dust&#45;(SPEP003)&#45;WEB&#45;2024&#45;PTC</title>
+        <link>https://www.srrdb.com/release/details/MTRZ-Carbon_Dust-(SPEP003)-WEB-2024-PTC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/MTRZ-Carbon_Dust-(SPEP003)-WEB-2024-PTC</guid>
+        <description><![CDATA[
+            <h1>MTRZ-Carbon_Dust-(SPEP003)-WEB-2024-PTC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/MTRZ-Carbon_Dust-(SPEP003)-WEB-2024-PTC">MTRZ-Carbon_Dust-(SPEP003)-WEB-2024-PTC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>PTC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 18:03:30</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 16:03:30 +0000</pubDate>
+    </item>
+    <item>
+        <title>Aumcore_and_Vladimihir&#45;Splitting_the_Atom&#45;(SPEP002)&#45;WEB&#45;2024&#45;PTC</title>
+        <link>https://www.srrdb.com/release/details/Aumcore_and_Vladimihir-Splitting_the_Atom-(SPEP002)-WEB-2024-PTC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Aumcore_and_Vladimihir-Splitting_the_Atom-(SPEP002)-WEB-2024-PTC</guid>
+        <description><![CDATA[
+            <h1>Aumcore_and_Vladimihir-Splitting_the_Atom-(SPEP002)-WEB-2024-PTC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Aumcore_and_Vladimihir-Splitting_the_Atom-(SPEP002)-WEB-2024-PTC">Aumcore_and_Vladimihir-Splitting_the_Atom-(SPEP002)-WEB-2024-PTC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>PTC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 18:03:10</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 16:03:10 +0000</pubDate>
+    </item>
+    <item>
+        <title>FVKS&#45;Transcendence&#45;(SPEP001)&#45;WEB&#45;2024&#45;PTC</title>
+        <link>https://www.srrdb.com/release/details/FVKS-Transcendence-(SPEP001)-WEB-2024-PTC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/FVKS-Transcendence-(SPEP001)-WEB-2024-PTC</guid>
+        <description><![CDATA[
+            <h1>FVKS-Transcendence-(SPEP001)-WEB-2024-PTC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/FVKS-Transcendence-(SPEP001)-WEB-2024-PTC">FVKS-Transcendence-(SPEP001)-WEB-2024-PTC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>PTC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 18:02:36</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 16:02:36 +0000</pubDate>
+    </item>
+    <item>
+        <title>VA&#45;Genesis&#45;(SPVA001)&#45;WEB&#45;2024&#45;PTC</title>
+        <link>https://www.srrdb.com/release/details/VA-Genesis-(SPVA001)-WEB-2024-PTC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/VA-Genesis-(SPVA001)-WEB-2024-PTC</guid>
+        <description><![CDATA[
+            <h1>VA-Genesis-(SPVA001)-WEB-2024-PTC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/VA-Genesis-(SPVA001)-WEB-2024-PTC">VA-Genesis-(SPVA001)-WEB-2024-PTC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>PTC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 18:02:02</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 16:02:02 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265&#45;FLAME</title>
+        <link>https://www.srrdb.com/release/details/The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265-FLAME</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265-FLAME</guid>
+        <description><![CDATA[
+            <h1>The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265-FLAME</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265-FLAME">The.Gray.Man.2022.POLISH.HDR.2160p.WEB.H265-FLAME</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>FLAME</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 18:00:54</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt1649418/">http://www.imdb.com/title/tt1649418/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 16:00:54 +0000</pubDate>
+    </item>
+    <item>
+        <title>38_Spesh&#45;The_38_Strategies_Of_Raw&#45;LP&#45;FLAC&#45;2019&#45;AUDiOFiLE</title>
+        <link>https://www.srrdb.com/release/details/38_Spesh-The_38_Strategies_Of_Raw-LP-FLAC-2019-AUDiOFiLE</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/38_Spesh-The_38_Strategies_Of_Raw-LP-FLAC-2019-AUDiOFiLE</guid>
+        <description><![CDATA[
+            <h1>38_Spesh-The_38_Strategies_Of_Raw-LP-FLAC-2019-AUDiOFiLE</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/38_Spesh-The_38_Strategies_Of_Raw-LP-FLAC-2019-AUDiOFiLE">38_Spesh-The_38_Strategies_Of_Raw-LP-FLAC-2019-AUDiOFiLE</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>AUDiOFiLE</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 18:00:32</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 16:00:32 +0000</pubDate>
+    </item>
+    <item>
+        <title>Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC">Annabelle.2.Creation.2017.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 18:00:07</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt5140878/">http://www.imdb.com/title/tt5140878/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 16:00:07 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265&#45;FLAME</title>
+        <link>https://www.srrdb.com/release/details/The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265-FLAME</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265-FLAME</guid>
+        <description><![CDATA[
+            <h1>The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265-FLAME</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265-FLAME">The.Gray.Man.2022.POLISH.DV.2160p.WEB.H265-FLAME</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>FLAME</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:58:31</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt1649418/">http://www.imdb.com/title/tt1649418/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:58:31 +0000</pubDate>
+    </item>
+    <item>
+        <title>38_Spesh_And_Big_Ghost_Ltd.&#45;A_Bullet_For_Every_Heathen&#45;LP&#45;FLAC&#45;2019&#45;AUDiOFiLE</title>
+        <link>https://www.srrdb.com/release/details/38_Spesh_And_Big_Ghost_Ltd.-A_Bullet_For_Every_Heathen-LP-FLAC-2019-AUDiOFiLE</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/38_Spesh_And_Big_Ghost_Ltd.-A_Bullet_For_Every_Heathen-LP-FLAC-2019-AUDiOFiLE</guid>
+        <description><![CDATA[
+            <h1>38_Spesh_And_Big_Ghost_Ltd.-A_Bullet_For_Every_Heathen-LP-FLAC-2019-AUDiOFiLE</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/38_Spesh_And_Big_Ghost_Ltd.-A_Bullet_For_Every_Heathen-LP-FLAC-2019-AUDiOFiLE">38_Spesh_And_Big_Ghost_Ltd.-A_Bullet_For_Every_Heathen-LP-FLAC-2019-AUDiOFiLE</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>AUDiOFiLE</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:57:52</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:57:52 +0000</pubDate>
+    </item>
+    <item>
+        <title>Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC">Annabelle.2.Creation.2017.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:56:21</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt5140878/">http://www.imdb.com/title/tt5140878/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:56:21 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265&#45;FLAME</title>
+        <link>https://www.srrdb.com/release/details/The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265-FLAME</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265-FLAME</guid>
+        <description><![CDATA[
+            <h1>The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265-FLAME</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265-FLAME">The.Gray.Man.2022.INTERNAL.POLISH.2160p.WEB.H265-FLAME</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>FLAME</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:56:17</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt1649418/">http://www.imdb.com/title/tt1649418/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:56:17 +0000</pubDate>
+    </item>
+    <item>
+        <title>SEVEK&#45;Dark_Love_(XiJaro_And_Pitch_Extended_Remix)&#45;(ARMAS3839)&#45;SINGLE&#45;16BIT&#45;WEB&#45;FLAC&#45;2026&#45;FMC</title>
+        <link>https://www.srrdb.com/release/details/SEVEK-Dark_Love_(XiJaro_And_Pitch_Extended_Remix)-(ARMAS3839)-SINGLE-16BIT-WEB-FLAC-2026-FMC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/SEVEK-Dark_Love_(XiJaro_And_Pitch_Extended_Remix)-(ARMAS3839)-SINGLE-16BIT-WEB-FLAC-2026-FMC</guid>
+        <description><![CDATA[
+            <h1>SEVEK-Dark_Love_(XiJaro_And_Pitch_Extended_Remix)-(ARMAS3839)-SINGLE-16BIT-WEB-FLAC-2026-FMC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/SEVEK-Dark_Love_(XiJaro_And_Pitch_Extended_Remix)-(ARMAS3839)-SINGLE-16BIT-WEB-FLAC-2026-FMC">SEVEK-Dark_Love_(XiJaro_And_Pitch_Extended_Remix)-(ARMAS3839)-SINGLE-16BIT-WEB-FLAC-2026-FMC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>FMC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:55:20</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:55:20 +0000</pubDate>
+    </item>
+    <item>
+        <title>Dave_Cold&#45;Embrace_Your_Dreams&#45;(2RU112)&#45;16BIT&#45;WEB&#45;FLAC&#45;2026&#45;FMC</title>
+        <link>https://www.srrdb.com/release/details/Dave_Cold-Embrace_Your_Dreams-(2RU112)-16BIT-WEB-FLAC-2026-FMC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Dave_Cold-Embrace_Your_Dreams-(2RU112)-16BIT-WEB-FLAC-2026-FMC</guid>
+        <description><![CDATA[
+            <h1>Dave_Cold-Embrace_Your_Dreams-(2RU112)-16BIT-WEB-FLAC-2026-FMC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Dave_Cold-Embrace_Your_Dreams-(2RU112)-16BIT-WEB-FLAC-2026-FMC">Dave_Cold-Embrace_Your_Dreams-(2RU112)-16BIT-WEB-FLAC-2026-FMC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>FMC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:54:18</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:54:18 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264&#45;AFO</title>
+        <link>https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264-AFO</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264-AFO</guid>
+        <description><![CDATA[
+            <h1>The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264-AFO</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264-AFO">The.Girls.A.Khloe.Kardashian.Project.S01E06.720p.WEB.H264-AFO</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>AFO</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:53:15</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt42007275/">http://www.imdb.com/title/tt42007275/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:53:15 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264&#45;AFO</title>
+        <link>https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264-AFO</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264-AFO</guid>
+        <description><![CDATA[
+            <h1>The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264-AFO</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264-AFO">The.Girls.A.Khloe.Kardashian.Project.S01E05.720p.WEB.H264-AFO</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>AFO</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:52:01</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt42007275/">http://www.imdb.com/title/tt42007275/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:52:01 +0000</pubDate>
+    </item>
+    <item>
+        <title>Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Annabelle.2.Creation.2017.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:51:05</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt5140878/">http://www.imdb.com/title/tt5140878/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:51:05 +0000</pubDate>
+    </item>
+    <item>
+        <title>Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264-NTROPiC">Annabelle.2014.iTALiAN.MULTi.1080p.WEB.H264-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:47:31</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt3322940/">http://www.imdb.com/title/tt3322940/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:47:31 +0000</pubDate>
+    </item>
+    <item>
+        <title>Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC">Annabelle.2014.iTALiAN.MULTi.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:44:27</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt3322940/">http://www.imdb.com/title/tt3322940/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:44:27 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264&#45;AFO</title>
+        <link>https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264-AFO</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264-AFO</guid>
+        <description><![CDATA[
+            <h1>The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264-AFO</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264-AFO">The.Girls.A.Khloe.Kardashian.Project.S01E04.720p.WEB.H264-AFO</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>AFO</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:41:16</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt42007275/">http://www.imdb.com/title/tt42007275/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:41:16 +0000</pubDate>
+    </item>
+    <item>
+        <title>DJ_Oggy_&#45;_This_Feeling&#45;(DNZF2662)&#45;WEB&#45;2026&#45;ZzZz</title>
+        <link>https://www.srrdb.com/release/details/DJ_Oggy_-_This_Feeling-(DNZF2662)-WEB-2026-ZzZz</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/DJ_Oggy_-_This_Feeling-(DNZF2662)-WEB-2026-ZzZz</guid>
+        <description><![CDATA[
+            <h1>DJ_Oggy_-_This_Feeling-(DNZF2662)-WEB-2026-ZzZz</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/DJ_Oggy_-_This_Feeling-(DNZF2662)-WEB-2026-ZzZz">DJ_Oggy_-_This_Feeling-(DNZF2662)-WEB-2026-ZzZz</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>ZzZz</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:41:06</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:41:06 +0000</pubDate>
+    </item>
+    <item>
+        <title>David_Navas_&#45;_I_Feel_Myself&#45;(DNZF2668)&#45;SINGLE&#45;WEB&#45;2026&#45;ZzZz</title>
+        <link>https://www.srrdb.com/release/details/David_Navas_-_I_Feel_Myself-(DNZF2668)-SINGLE-WEB-2026-ZzZz</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/David_Navas_-_I_Feel_Myself-(DNZF2668)-SINGLE-WEB-2026-ZzZz</guid>
+        <description><![CDATA[
+            <h1>David_Navas_-_I_Feel_Myself-(DNZF2668)-SINGLE-WEB-2026-ZzZz</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/David_Navas_-_I_Feel_Myself-(DNZF2668)-SINGLE-WEB-2026-ZzZz">David_Navas_-_I_Feel_Myself-(DNZF2668)-SINGLE-WEB-2026-ZzZz</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>ZzZz</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:40:58</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:40:58 +0000</pubDate>
+    </item>
+    <item>
+        <title>AscenderZ_x_Skitzar_&#45;_World_Of_The_Rave&#45;(DNZF2665)&#45;SINGLE&#45;WEB&#45;2026&#45;ZzZz</title>
+        <link>https://www.srrdb.com/release/details/AscenderZ_x_Skitzar_-_World_Of_The_Rave-(DNZF2665)-SINGLE-WEB-2026-ZzZz</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/AscenderZ_x_Skitzar_-_World_Of_The_Rave-(DNZF2665)-SINGLE-WEB-2026-ZzZz</guid>
+        <description><![CDATA[
+            <h1>AscenderZ_x_Skitzar_-_World_Of_The_Rave-(DNZF2665)-SINGLE-WEB-2026-ZzZz</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/AscenderZ_x_Skitzar_-_World_Of_The_Rave-(DNZF2665)-SINGLE-WEB-2026-ZzZz">AscenderZ_x_Skitzar_-_World_Of_The_Rave-(DNZF2665)-SINGLE-WEB-2026-ZzZz</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>ZzZz</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:40:41</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:40:41 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Girls.A.Khloe.Kardashian.Project.S01E03.720p.WEB.H264&#45;AFO</title>
+        <link>https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E03.720p.WEB.H264-AFO</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E03.720p.WEB.H264-AFO</guid>
+        <description><![CDATA[
+            <h1>The.Girls.A.Khloe.Kardashian.Project.S01E03.720p.WEB.H264-AFO</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E03.720p.WEB.H264-AFO">The.Girls.A.Khloe.Kardashian.Project.S01E03.720p.WEB.H264-AFO</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>AFO</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:39:59</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt42007275/">http://www.imdb.com/title/tt42007275/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:39:59 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Girls.A.Khloe.Kardashian.Project.S01E02.720p.WEB.H264&#45;AFO</title>
+        <link>https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E02.720p.WEB.H264-AFO</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E02.720p.WEB.H264-AFO</guid>
+        <description><![CDATA[
+            <h1>The.Girls.A.Khloe.Kardashian.Project.S01E02.720p.WEB.H264-AFO</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E02.720p.WEB.H264-AFO">The.Girls.A.Khloe.Kardashian.Project.S01E02.720p.WEB.H264-AFO</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>AFO</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:38:42</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt42007275/">http://www.imdb.com/title/tt42007275/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:38:42 +0000</pubDate>
+    </item>
+    <item>
+        <title>Annabelle.2014.iTALiAN.MULTi.HDR.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Annabelle.2014.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC">Annabelle.2014.iTALiAN.MULTi.HDR.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:38:41</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt3322940/">http://www.imdb.com/title/tt3322940/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:38:41 +0000</pubDate>
+    </item>
+    <item>
+        <title>RoboCop.2.1990.GERMAN.DL.2160P.UHD.BLURAY.X265&#45;WATCHABLE</title>
+        <link>https://www.srrdb.com/release/details/RoboCop.2.1990.GERMAN.DL.2160P.UHD.BLURAY.X265-WATCHABLE</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/RoboCop.2.1990.GERMAN.DL.2160P.UHD.BLURAY.X265-WATCHABLE</guid>
+        <description><![CDATA[
+            <h1>RoboCop.2.1990.GERMAN.DL.2160P.UHD.BLURAY.X265-WATCHABLE</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/RoboCop.2.1990.GERMAN.DL.2160P.UHD.BLURAY.X265-WATCHABLE">RoboCop.2.1990.GERMAN.DL.2160P.UHD.BLURAY.X265-WATCHABLE</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>WATCHABLE</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:37:31</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt0100502/">http://www.imdb.com/title/tt0100502/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:37:31 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Girls.A.Khloe.Kardashian.Project.S01E01.720p.WEB.H264&#45;AFO</title>
+        <link>https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E01.720p.WEB.H264-AFO</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E01.720p.WEB.H264-AFO</guid>
+        <description><![CDATA[
+            <h1>The.Girls.A.Khloe.Kardashian.Project.S01E01.720p.WEB.H264-AFO</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Girls.A.Khloe.Kardashian.Project.S01E01.720p.WEB.H264-AFO">The.Girls.A.Khloe.Kardashian.Project.S01E01.720p.WEB.H264-AFO</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>AFO</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:37:24</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt42007275/">http://www.imdb.com/title/tt42007275/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:37:24 +0000</pubDate>
+    </item>
+    <item>
+        <title>Annabelle.2014.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Annabelle.2014.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Annabelle.2014.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Annabelle.2014.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:34:13</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt3322940/">http://www.imdb.com/title/tt3322940/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:34:13 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Yumi.00&#45;EX.No.01.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Yumi.00-EX.No.01.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Yumi.00-EX.No.01.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Yumi.00-EX.No.01.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Yumi.00-EX.No.01.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Yumi.00-EX.No.01.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:33:17</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:33:17 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Witchblade.No.24.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Witchblade.No.24.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Witchblade.No.24.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Witchblade.No.24.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Witchblade.No.24.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Witchblade.No.24.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:33:00</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:33:00 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Transformers.No.35.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Transformers.No.35.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Transformers.No.35.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Transformers.No.35.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Transformers.No.35.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Transformers.No.35.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:32:43</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:32:43 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.The.Thing.On.The.Doorstep.Vol.01.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.The.Thing.On.The.Doorstep.Vol.01.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.The.Thing.On.The.Doorstep.Vol.01.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.The.Thing.On.The.Doorstep.Vol.01.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.The.Thing.On.The.Doorstep.Vol.01.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.The.Thing.On.The.Doorstep.Vol.01.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:32:26</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:32:26 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Eyes.of.Others.2025.DUAL.COMPLETE.BLURAY&#45;FULLSiZE</title>
+        <link>https://www.srrdb.com/release/details/The.Eyes.of.Others.2025.DUAL.COMPLETE.BLURAY-FULLSiZE</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Eyes.of.Others.2025.DUAL.COMPLETE.BLURAY-FULLSiZE</guid>
+        <description><![CDATA[
+            <h1>The.Eyes.of.Others.2025.DUAL.COMPLETE.BLURAY-FULLSiZE</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Eyes.of.Others.2025.DUAL.COMPLETE.BLURAY-FULLSiZE">The.Eyes.of.Others.2025.DUAL.COMPLETE.BLURAY-FULLSiZE</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>FULLSiZE</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:32:20</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt34625288/">http://www.imdb.com/title/tt34625288/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:32:20 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Starhenge.Book.Two.A.Kiss.For.Atticus.No.02.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Starhenge.Book.Two.A.Kiss.For.Atticus.No.02.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Starhenge.Book.Two.A.Kiss.For.Atticus.No.02.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Starhenge.Book.Two.A.Kiss.For.Atticus.No.02.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Starhenge.Book.Two.A.Kiss.For.Atticus.No.02.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Starhenge.Book.Two.A.Kiss.For.Atticus.No.02.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:32:08</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:32:08 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Regicide.No.01.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Regicide.No.01.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Regicide.No.01.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Regicide.No.01.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Regicide.No.01.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Regicide.No.01.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:31:50</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:31:50 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Of.The.Earth.No.04.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Of.The.Earth.No.04.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Of.The.Earth.No.04.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Of.The.Earth.No.04.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Of.The.Earth.No.04.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Of.The.Earth.No.04.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:31:32</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:31:32 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.GI.Joe.A.Real.American.Hero.No.331.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.GI.Joe.A.Real.American.Hero.No.331.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.GI.Joe.A.Real.American.Hero.No.331.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.GI.Joe.A.Real.American.Hero.No.331.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.GI.Joe.A.Real.American.Hero.No.331.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.GI.Joe.A.Real.American.Hero.No.331.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:31:14</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:31:14 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Feral.Vol.05.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Feral.Vol.05.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Feral.Vol.05.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Feral.Vol.05.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Feral.Vol.05.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Feral.Vol.05.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:31:00</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:31:00 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Exquisite.Corpses.Rascal.Randy.No.02.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Exquisite.Corpses.Rascal.Randy.No.02.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Exquisite.Corpses.Rascal.Randy.No.02.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Exquisite.Corpses.Rascal.Randy.No.02.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Exquisite.Corpses.Rascal.Randy.No.02.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Exquisite.Corpses.Rascal.Randy.No.02.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:30:39</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:30:39 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Dorc.No.07.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Dorc.No.07.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Dorc.No.07.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Dorc.No.07.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Dorc.No.07.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Dorc.No.07.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:30:21</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:30:21 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Die.Loaded.No.08.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Die.Loaded.No.08.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Die.Loaded.No.08.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Die.Loaded.No.08.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Die.Loaded.No.08.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Die.Loaded.No.08.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:30:03</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:30:03 +0000</pubDate>
+    </item>
+    <item>
+        <title>Rose.2026.GERMAN.COMPLETE.BLURAY&#45;FULLSiZE</title>
+        <link>https://www.srrdb.com/release/details/Rose.2026.GERMAN.COMPLETE.BLURAY-FULLSiZE</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Rose.2026.GERMAN.COMPLETE.BLURAY-FULLSiZE</guid>
+        <description><![CDATA[
+            <h1>Rose.2026.GERMAN.COMPLETE.BLURAY-FULLSiZE</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Rose.2026.GERMAN.COMPLETE.BLURAY-FULLSiZE">Rose.2026.GERMAN.COMPLETE.BLURAY-FULLSiZE</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>FULLSiZE</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:27:22</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt25399154/">http://www.imdb.com/title/tt25399154/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:27:22 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.HDR.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.HDR.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.HDR.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.HDR.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.HDR.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.HDR.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:26:54</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:26:54 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.DV.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.DV.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.DV.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.DV.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.DV.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.DV.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:26:17</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:26:17 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E05.FINAL.MULTI.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:26:14</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:26:14 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E10.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E10.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E10.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E10.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E10.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E10.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:26:06</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:26:06 +0000</pubDate>
+    </item>
+    <item>
+        <title>Sander_Bastiaans_&#45;_Heliopause&#45;(NEXT005)&#45;WEB&#45;2026&#45;FMC</title>
+        <link>https://www.srrdb.com/release/details/Sander_Bastiaans_-_Heliopause-(NEXT005)-WEB-2026-FMC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Sander_Bastiaans_-_Heliopause-(NEXT005)-WEB-2026-FMC</guid>
+        <description><![CDATA[
+            <h1>Sander_Bastiaans_-_Heliopause-(NEXT005)-WEB-2026-FMC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Sander_Bastiaans_-_Heliopause-(NEXT005)-WEB-2026-FMC">Sander_Bastiaans_-_Heliopause-(NEXT005)-WEB-2026-FMC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>FMC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:25:51</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:25:51 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E04.MULTI.DV.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E04.MULTI.DV.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E04.MULTI.DV.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E04.MULTI.DV.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E04.MULTI.DV.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E04.MULTI.DV.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:25:34</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:25:34 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Blood.And.Thunder.No.17.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Blood.And.Thunder.No.17.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Blood.And.Thunder.No.17.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Blood.And.Thunder.No.17.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Blood.And.Thunder.No.17.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Blood.And.Thunder.No.17.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:25:31</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:25:31 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Blood.And.Thunder.No.16.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Blood.And.Thunder.No.16.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Blood.And.Thunder.No.16.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Blood.And.Thunder.No.16.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Blood.And.Thunder.No.16.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Blood.And.Thunder.No.16.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:25:13</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:25:13 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E03.MULTI.HDR.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.HDR.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.HDR.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E03.MULTI.HDR.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.HDR.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E03.MULTI.HDR.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:25:05</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:25:05 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E04.MULTI.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E04.MULTI.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E04.MULTI.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E04.MULTI.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E04.MULTI.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E04.MULTI.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:25:01</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:25:01 +0000</pubDate>
+    </item>
+    <item>
+        <title>Image.Comics.&#45;.Assorted.Crisis.Events.Vol.02.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Image.Comics.-.Assorted.Crisis.Events.Vol.02.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Image.Comics.-.Assorted.Crisis.Events.Vol.02.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Image.Comics.-.Assorted.Crisis.Events.Vol.02.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Image.Comics.-.Assorted.Crisis.Events.Vol.02.2026.HYBRID.COMIC.eBook-21A1">Image.Comics.-.Assorted.Crisis.Events.Vol.02.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:24:59</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:24:59 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E03.MULTI.DV.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.DV.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.DV.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E03.MULTI.DV.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.DV.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E03.MULTI.DV.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:24:29</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:24:29 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E02.MULTI.HDR.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.HDR.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.HDR.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E02.MULTI.HDR.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.HDR.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E02.MULTI.HDR.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:24:20</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:24:20 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E03.MULTI.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E03.MULTI.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E03.MULTI.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E03.MULTI.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:24:09</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:24:09 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E02.MULTI.DV.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.DV.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.DV.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E02.MULTI.DV.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.DV.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E02.MULTI.DV.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:23:51</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:23:51 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E01.MULTI.HDR.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.HDR.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.HDR.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E01.MULTI.HDR.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.HDR.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E01.MULTI.HDR.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:23:23</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:23:23 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E02.MULTI.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E02.MULTI.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E02.MULTI.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E02.MULTI.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:23:21</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:23:21 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E01.MULTI.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E01.MULTI.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E01.MULTI.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:22:45</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:22:45 +0000</pubDate>
+    </item>
+    <item>
+        <title>All.the.Truth.in.My.Lies.S01E01.MULTI.DV.2160p.WEB.H265&#45;HiggsBoson</title>
+        <link>https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.DV.2160p.WEB.H265-HiggsBoson</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.DV.2160p.WEB.H265-HiggsBoson</guid>
+        <description><![CDATA[
+            <h1>All.the.Truth.in.My.Lies.S01E01.MULTI.DV.2160p.WEB.H265-HiggsBoson</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/All.the.Truth.in.My.Lies.S01E01.MULTI.DV.2160p.WEB.H265-HiggsBoson">All.the.Truth.in.My.Lies.S01E01.MULTI.DV.2160p.WEB.H265-HiggsBoson</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>HiggsBoson</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:22:43</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:22:43 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E09.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E09.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E09.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E09.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E09.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E09.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:21:04</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:21:04 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E08.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E08.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E08.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E08.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E08.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E08.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:20:22</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:20:22 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E07.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E07.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E07.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E07.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E07.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E07.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:19:32</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:19:32 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E06.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E06.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E06.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E06.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E06.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E06.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:18:53</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:18:53 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E05.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E05.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E05.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E05.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E05.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E05.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:18:02</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:18:02 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Bobbi.04.XXX.720p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.04.XXX.720p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.04.XXX.720p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Bobbi.04.XXX.720p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.04.XXX.720p.MP4-LEWD">ScandalousGFs.Bobbi.04.XXX.720p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:17:27</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:17:27 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E04.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E04.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E04.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E04.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E04.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E04.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:17:21</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:17:21 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Bobbi.02.XXX.720p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.02.XXX.720p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.02.XXX.720p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Bobbi.02.XXX.720p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.02.XXX.720p.MP4-LEWD">ScandalousGFs.Bobbi.02.XXX.720p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:16:58</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:16:58 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Bobbi.03.XXX.720p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.03.XXX.720p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.03.XXX.720p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Bobbi.03.XXX.720p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.03.XXX.720p.MP4-LEWD">ScandalousGFs.Bobbi.03.XXX.720p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:16:56</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:16:56 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E03.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E03.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E03.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E03.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E03.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E03.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:16:33</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:16:33 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Bobbi.01.XXX.720p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.01.XXX.720p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.01.XXX.720p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Bobbi.01.XXX.720p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Bobbi.01.XXX.720p.MP4-LEWD">ScandalousGFs.Bobbi.01.XXX.720p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:15:58</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:15:58 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E02.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E02.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E02.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E02.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E02.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E02.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:15:52</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:15:52 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Bennett.Showers.With.Hidden.Cam.XXX.1080p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Bennett.Showers.With.Hidden.Cam.XXX.1080p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Bennett.Showers.With.Hidden.Cam.XXX.1080p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Bennett.Showers.With.Hidden.Cam.XXX.1080p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Bennett.Showers.With.Hidden.Cam.XXX.1080p.MP4-LEWD">ScandalousGFs.Bennett.Showers.With.Hidden.Cam.XXX.1080p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:15:26</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:15:26 +0000</pubDate>
+    </item>
+    <item>
+        <title>Stranger.Things.Storie.Dal.1985.S01E01.iTALiAN.MULTi.DV.2160p.WEB.H265&#45;NTROPiC</title>
+        <link>https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E01.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E01.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</guid>
+        <description><![CDATA[
+            <h1>Stranger.Things.Storie.Dal.1985.S01E01.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Stranger.Things.Storie.Dal.1985.S01E01.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC">Stranger.Things.Storie.Dal.1985.S01E01.iTALiAN.MULTi.DV.2160p.WEB.H265-NTROPiC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>NTROPiC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:15:01</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                            <dl>
+                    <dt>IMDb URL</dt>
+                    <dd>
+                        <a href="http://www.imdb.com/title/tt27486290/">http://www.imdb.com/title/tt27486290/</a>
+                    </dd>
+                </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:15:01 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Bella.Has.Nice.Natural.Teen.Tits.XXX.1080p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Bella.Has.Nice.Natural.Teen.Tits.XXX.1080p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Bella.Has.Nice.Natural.Teen.Tits.XXX.1080p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Bella.Has.Nice.Natural.Teen.Tits.XXX.1080p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Bella.Has.Nice.Natural.Teen.Tits.XXX.1080p.MP4-LEWD">ScandalousGFs.Bella.Has.Nice.Natural.Teen.Tits.XXX.1080p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:14:56</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:14:56 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Bastet.Taking.Teenie.Selfies.Nude.XXX.1080p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Bastet.Taking.Teenie.Selfies.Nude.XXX.1080p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Bastet.Taking.Teenie.Selfies.Nude.XXX.1080p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Bastet.Taking.Teenie.Selfies.Nude.XXX.1080p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Bastet.Taking.Teenie.Selfies.Nude.XXX.1080p.MP4-LEWD">ScandalousGFs.Bastet.Taking.Teenie.Selfies.Nude.XXX.1080p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:14:26</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:14:26 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Barbie.Gets.Horny.While.Video.Chatting.XXX.1080p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Barbie.Gets.Horny.While.Video.Chatting.XXX.1080p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Barbie.Gets.Horny.While.Video.Chatting.XXX.1080p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Barbie.Gets.Horny.While.Video.Chatting.XXX.1080p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Barbie.Gets.Horny.While.Video.Chatting.XXX.1080p.MP4-LEWD">ScandalousGFs.Barbie.Gets.Horny.While.Video.Chatting.XXX.1080p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:13:58</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:13:58 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Baiba.Undresses.In.Bedroom.XXX.1080p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Baiba.Undresses.In.Bedroom.XXX.1080p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Baiba.Undresses.In.Bedroom.XXX.1080p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Baiba.Undresses.In.Bedroom.XXX.1080p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Baiba.Undresses.In.Bedroom.XXX.1080p.MP4-LEWD">ScandalousGFs.Baiba.Undresses.In.Bedroom.XXX.1080p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:13:26</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:13:26 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Babe.Shine.On.Dressing.Room.Hidden.Cam.XXX.1080p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Babe.Shine.On.Dressing.Room.Hidden.Cam.XXX.1080p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Babe.Shine.On.Dressing.Room.Hidden.Cam.XXX.1080p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Babe.Shine.On.Dressing.Room.Hidden.Cam.XXX.1080p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Babe.Shine.On.Dressing.Room.Hidden.Cam.XXX.1080p.MP4-LEWD">ScandalousGFs.Babe.Shine.On.Dressing.Room.Hidden.Cam.XXX.1080p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:12:56</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:12:56 +0000</pubDate>
+    </item>
+    <item>
+        <title>ScandalousGFs.Babe.Bamby.Spying.On.Teen.Babe.Bamby.XXX.1080p.MP4&#45;LEWD</title>
+        <link>https://www.srrdb.com/release/details/ScandalousGFs.Babe.Bamby.Spying.On.Teen.Babe.Bamby.XXX.1080p.MP4-LEWD</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/ScandalousGFs.Babe.Bamby.Spying.On.Teen.Babe.Bamby.XXX.1080p.MP4-LEWD</guid>
+        <description><![CDATA[
+            <h1>ScandalousGFs.Babe.Bamby.Spying.On.Teen.Babe.Bamby.XXX.1080p.MP4-LEWD</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/ScandalousGFs.Babe.Bamby.Spying.On.Teen.Babe.Bamby.XXX.1080p.MP4-LEWD">ScandalousGFs.Babe.Bamby.Spying.On.Teen.Babe.Bamby.XXX.1080p.MP4-LEWD</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>LEWD</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:12:27</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:12:27 +0000</pubDate>
+    </item>
+    <item>
+        <title>Abrams.Comicarts.&#45;.The.Dissidents.Autocrats.Vigilantes.Communists.And.Cartoonists.2026.HYBRID.COMIC.eBook&#45;21A1</title>
+        <link>https://www.srrdb.com/release/details/Abrams.Comicarts.-.The.Dissidents.Autocrats.Vigilantes.Communists.And.Cartoonists.2026.HYBRID.COMIC.eBook-21A1</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Abrams.Comicarts.-.The.Dissidents.Autocrats.Vigilantes.Communists.And.Cartoonists.2026.HYBRID.COMIC.eBook-21A1</guid>
+        <description><![CDATA[
+            <h1>Abrams.Comicarts.-.The.Dissidents.Autocrats.Vigilantes.Communists.And.Cartoonists.2026.HYBRID.COMIC.eBook-21A1</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Abrams.Comicarts.-.The.Dissidents.Autocrats.Vigilantes.Communists.And.Cartoonists.2026.HYBRID.COMIC.eBook-21A1">Abrams.Comicarts.-.The.Dissidents.Autocrats.Vigilantes.Communists.And.Cartoonists.2026.HYBRID.COMIC.eBook-21A1</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>21A1</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:11:52</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:11:52 +0000</pubDate>
+    </item>
+    <item>
+        <title>14&#45;18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part08.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part08.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part08.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part08.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part08.DUTCH.720p.HDTV.x264-iFH">14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part08.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:11:14</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:11:14 +0000</pubDate>
+    </item>
+    <item>
+        <title>14&#45;18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part07.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part07.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part07.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part07.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part07.DUTCH.720p.HDTV.x264-iFH">14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part07.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:11:14</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:11:14 +0000</pubDate>
+    </item>
+    <item>
+        <title>14&#45;18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part06.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part06.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part06.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part06.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part06.DUTCH.720p.HDTV.x264-iFH">14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part06.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:11:14</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:11:14 +0000</pubDate>
+    </item>
+    <item>
+        <title>14&#45;18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part01.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part01.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part01.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part01.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part01.DUTCH.720p.HDTV.x264-iFH">14-18.Dagboeken.Uit.De.Eerste.Wereldoorlog.Part01.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:11:14</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:11:14 +0000</pubDate>
+    </item>
+    <item>
+        <title>Scott_Stevenson&#45;Mausoleum_Remixes&#45;(FRIS039)&#45;WEB&#45;2026&#45;PTC</title>
+        <link>https://www.srrdb.com/release/details/Scott_Stevenson-Mausoleum_Remixes-(FRIS039)-WEB-2026-PTC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Scott_Stevenson-Mausoleum_Remixes-(FRIS039)-WEB-2026-PTC</guid>
+        <description><![CDATA[
+            <h1>Scott_Stevenson-Mausoleum_Remixes-(FRIS039)-WEB-2026-PTC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Scott_Stevenson-Mausoleum_Remixes-(FRIS039)-WEB-2026-PTC">Scott_Stevenson-Mausoleum_Remixes-(FRIS039)-WEB-2026-PTC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>PTC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:06:58</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:06:58 +0000</pubDate>
+    </item>
+    <item>
+        <title>OK_EG&#45;GEKO02&#45;(GEKO02)&#45;24BIT&#45;WEB&#45;FLAC&#45;2026&#45;PTC</title>
+        <link>https://www.srrdb.com/release/details/OK_EG-GEKO02-(GEKO02)-24BIT-WEB-FLAC-2026-PTC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/OK_EG-GEKO02-(GEKO02)-24BIT-WEB-FLAC-2026-PTC</guid>
+        <description><![CDATA[
+            <h1>OK_EG-GEKO02-(GEKO02)-24BIT-WEB-FLAC-2026-PTC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/OK_EG-GEKO02-(GEKO02)-24BIT-WEB-FLAC-2026-PTC">OK_EG-GEKO02-(GEKO02)-24BIT-WEB-FLAC-2026-PTC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>PTC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:05:00</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:05:00 +0000</pubDate>
+    </item>
+    <item>
+        <title>OK_EG&#45;GEKO02&#45;(GEKO02)&#45;WEB&#45;2026&#45;PTC</title>
+        <link>https://www.srrdb.com/release/details/OK_EG-GEKO02-(GEKO02)-WEB-2026-PTC</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/OK_EG-GEKO02-(GEKO02)-WEB-2026-PTC</guid>
+        <description><![CDATA[
+            <h1>OK_EG-GEKO02-(GEKO02)-WEB-2026-PTC</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/OK_EG-GEKO02-(GEKO02)-WEB-2026-PTC">OK_EG-GEKO02-(GEKO02)-WEB-2026-PTC</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>PTC</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:03:58</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:03:58 +0000</pubDate>
+    </item>
+    <item>
+        <title>Yoroi&#45;Shinden.Samurai.Troopers.S01E23.1080p.WEB.H264&#45;SENPAI</title>
+        <link>https://www.srrdb.com/release/details/Yoroi-Shinden.Samurai.Troopers.S01E23.1080p.WEB.H264-SENPAI</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Yoroi-Shinden.Samurai.Troopers.S01E23.1080p.WEB.H264-SENPAI</guid>
+        <description><![CDATA[
+            <h1>Yoroi-Shinden.Samurai.Troopers.S01E23.1080p.WEB.H264-SENPAI</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Yoroi-Shinden.Samurai.Troopers.S01E23.1080p.WEB.H264-SENPAI">Yoroi-Shinden.Samurai.Troopers.S01E23.1080p.WEB.H264-SENPAI</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>SENPAI</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:00:38</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:00:38 +0000</pubDate>
+    </item>
+    <item>
+        <title>The.Oblivious.Saint.Cant.Contain.Her.Power.S01E12.1080p.WEB.H264&#45;SENPAI</title>
+        <link>https://www.srrdb.com/release/details/The.Oblivious.Saint.Cant.Contain.Her.Power.S01E12.1080p.WEB.H264-SENPAI</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/The.Oblivious.Saint.Cant.Contain.Her.Power.S01E12.1080p.WEB.H264-SENPAI</guid>
+        <description><![CDATA[
+            <h1>The.Oblivious.Saint.Cant.Contain.Her.Power.S01E12.1080p.WEB.H264-SENPAI</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/The.Oblivious.Saint.Cant.Contain.Her.Power.S01E12.1080p.WEB.H264-SENPAI">The.Oblivious.Saint.Cant.Contain.Her.Power.S01E12.1080p.WEB.H264-SENPAI</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>SENPAI</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 17:00:20</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 15:00:20 +0000</pubDate>
+    </item>
+    <item>
+        <title>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E07.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E07.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E07.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E07.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E07.DUTCH.720p.HDTV.x264-iFH">De.Hollandse.School.Voetbalclub.In.Oprichting.S01E07.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:57:12</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:57:12 +0000</pubDate>
+    </item>
+    <item>
+        <title>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E06.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E06.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E06.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E06.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E06.DUTCH.720p.HDTV.x264-iFH">De.Hollandse.School.Voetbalclub.In.Oprichting.S01E06.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:57:12</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:57:12 +0000</pubDate>
+    </item>
+    <item>
+        <title>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E05.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E05.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E05.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E05.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E05.DUTCH.720p.HDTV.x264-iFH">De.Hollandse.School.Voetbalclub.In.Oprichting.S01E05.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:57:12</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:57:12 +0000</pubDate>
+    </item>
+    <item>
+        <title>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E04.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E04.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E04.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E04.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E04.DUTCH.720p.HDTV.x264-iFH">De.Hollandse.School.Voetbalclub.In.Oprichting.S01E04.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:57:12</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:57:12 +0000</pubDate>
+    </item>
+    <item>
+        <title>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E03.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E03.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E03.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E03.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E03.DUTCH.720p.HDTV.x264-iFH">De.Hollandse.School.Voetbalclub.In.Oprichting.S01E03.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:57:12</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:57:12 +0000</pubDate>
+    </item>
+    <item>
+        <title>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E02.DUTCH.720p.HDTV.x264&#45;iFH</title>
+        <link>https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E02.DUTCH.720p.HDTV.x264-iFH</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E02.DUTCH.720p.HDTV.x264-iFH</guid>
+        <description><![CDATA[
+            <h1>De.Hollandse.School.Voetbalclub.In.Oprichting.S01E02.DUTCH.720p.HDTV.x264-iFH</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/De.Hollandse.School.Voetbalclub.In.Oprichting.S01E02.DUTCH.720p.HDTV.x264-iFH">De.Hollandse.School.Voetbalclub.In.Oprichting.S01E02.DUTCH.720p.HDTV.x264-iFH</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>iFH</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:57:12</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>no</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:57:12 +0000</pubDate>
+    </item>
+    <item>
+        <title>Yngwie_Malmsteen_&#45;_Unleash_The_Fury&#45;2005&#45;MCA</title>
+        <link>https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_Unleash_The_Fury-2005-MCA</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_Unleash_The_Fury-2005-MCA</guid>
+        <description><![CDATA[
+            <h1>Yngwie_Malmsteen_-_Unleash_The_Fury-2005-MCA</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_Unleash_The_Fury-2005-MCA">Yngwie_Malmsteen_-_Unleash_The_Fury-2005-MCA</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>MCA</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:56:01</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:56:01 +0000</pubDate>
+    </item>
+    <item>
+        <title>Yngwie_Malmsteen_&#45;_Trial_By_Fire&#45;Live_In_Leningrad&#45;1989&#45;MCA</title>
+        <link>https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_Trial_By_Fire-Live_In_Leningrad-1989-MCA</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_Trial_By_Fire-Live_In_Leningrad-1989-MCA</guid>
+        <description><![CDATA[
+            <h1>Yngwie_Malmsteen_-_Trial_By_Fire-Live_In_Leningrad-1989-MCA</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_Trial_By_Fire-Live_In_Leningrad-1989-MCA">Yngwie_Malmsteen_-_Trial_By_Fire-Live_In_Leningrad-1989-MCA</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>MCA</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:55:44</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:55:44 +0000</pubDate>
+    </item>
+    <item>
+        <title>Yngwie_Malmsteen_&#45;_The_Seventh_Sign&#45;1994&#45;MCA</title>
+        <link>https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_The_Seventh_Sign-1994-MCA</link>
+        <guid isPermaLink="true">https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_The_Seventh_Sign-1994-MCA</guid>
+        <description><![CDATA[
+            <h1>Yngwie_Malmsteen_-_The_Seventh_Sign-1994-MCA</h1>
+            <dl>
+                <dt>Release name</dt>
+                <dd>
+                    <a href="https://www.srrdb.com/release/details/Yngwie_Malmsteen_-_The_Seventh_Sign-1994-MCA">Yngwie_Malmsteen_-_The_Seventh_Sign-1994-MCA</a>
+                </dd>
+            </dl>
+            <dl>
+                <dt>Group</dt>
+                <dd>MCA</dd>
+            </dl>
+            <dl>
+                <dt>Upload date</dt>
+                <dd>2026-09-15 16:55:43</dd>
+            </dl>
+            <dl>
+                <dt>NFO availability</dt>
+                <dd>yes</dd>
+            </dl>
+            <dl>
+                <dt>SRS availability</dt>
+                <dd>yes</dd>
+            </dl>
+                        ]]>
+        </description>
+        <pubDate>Tue, 15 Sep 2026 14:55:43 +0000</pubDate>
+    </item>
+</channel>
+</rss>

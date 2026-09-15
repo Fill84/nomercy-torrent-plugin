@@ -2,7 +2,6 @@ using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
-using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using Xunit;
 
@@ -56,14 +55,9 @@ public class HardeningTests : IDisposable
     /// spoken for — so what a restart must not lose is the grab itself, still
     /// in the store for recovery to re-add rather than re-download.
     /// </para>
-    /// <para>
-    /// Nor re-harvest: the names are in the pool, written before anything read
-    /// them, so the feeds are not asked all over again for what is already
-    /// known.
-    /// </para>
     /// </remarks>
     [Fact]
-    public async Task ARestartMidCycleDoesNotGrabAgainOrHarvestAgain()
+    public async Task ARestartMidCycleDoesNotGrabAgain()
     {
         using (TorrentDownloaderPlugin before = Initialised())
         {
@@ -86,10 +80,6 @@ public class HardeningTests : IDisposable
                 [Taken],
                 DateTimeOffset.UtcNow,
                 CancellationToken.None);
-
-            await new NamePoolRepository(new Store(_folder)).AddAsync(
-                [new("silos03e06", "Silo.S03E06.1080p.WEB.H264-CAKES", "PreDB", DateTimeOffset.UtcNow)],
-                CancellationToken.None);
         }
 
         // A different plugin over the same folder, which is what a restart is.
@@ -107,10 +97,6 @@ public class HardeningTests : IDisposable
         // And the grab is still there for recovery to re-add rather than
         // download all over again.
         Assert.Single(await (await after.GrabsAsync(CancellationToken.None)).OpenAsync(CancellationToken.None));
-
-        // And the names it harvested are still known.
-        Assert.NotEmpty(await new NamePoolRepository(new Store(_folder))
-            .ForAsync(["silos03e06"], CancellationToken.None));
     }
 
     /// <remarks>
