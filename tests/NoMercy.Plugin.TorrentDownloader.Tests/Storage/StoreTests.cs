@@ -105,6 +105,54 @@ public class StoreTests : IDisposable
     }
 
     /// <remarks>
+    /// <strong>The refusals an older version wrote are taken off the disk.</strong> Nothing writes one any
+    /// more (the owner's word of 16 September 2026), and their own history held 5,851 of them against 219
+    /// lines of everything else. Leaving them would make the History page unreadable for ever on the one
+    /// server it matters on.
+    /// </remarks>
+    [Fact]
+    public async Task TheRefusalsAnOlderVersionWroteAreGone()
+    {
+        Store database = new(_folder);
+        await database.MigrateAsync(CancellationToken.None);
+
+        await using (SqliteConnection connection = await database.OpenAsync(CancellationToken.None))
+        {
+            // Two lines an older version wrote: a refusal, and a grab that is
+            // not one. Written by hand because nothing writes a refusal now.
+            await using SqliteCommand seed = connection.CreateCommand();
+            seed.CommandText =
+                """
+                INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+                VALUES ('2026-09-01T00:00:00.0000000+00:00', 'skipped', 41, 3, 6, 'Silo', 'Silo.S03E06.720p.WEB', '1337x', '720p is not 1080p.'),
+                       ('2026-09-01T00:00:00.0000000+00:00', 'grabbed', 41, 3, 6, 'Silo', 'Silo.S03E06.1080p.WEB', '1337x', 'taken');
+                PRAGMA user_version=15;
+                """;
+            await seed.ExecuteNonQueryAsync(CancellationToken.None);
+        }
+
+        await database.MigrateAsync(CancellationToken.None);
+
+        await using SqliteConnection after = await database.OpenAsync(CancellationToken.None);
+        await using SqliteCommand count = after.CreateCommand();
+
+        count.CommandText = "SELECT event, COUNT(*) FROM history GROUP BY event;";
+
+        Dictionary<string, long> left = [];
+
+        await using (SqliteDataReader reader = await count.ExecuteReaderAsync(CancellationToken.None))
+        {
+            while (await reader.ReadAsync(CancellationToken.None))
+            {
+                left[reader.GetString(0)] = reader.GetInt64(1);
+            }
+        }
+
+        Assert.DoesNotContain("skipped", left.Keys);
+        Assert.Equal(1L, left["grabbed"]);
+    }
+
+    /// <remarks>
     /// The data folder is the plugin's own and may not exist yet on a plugin
     /// installed this morning.
     /// </remarks>

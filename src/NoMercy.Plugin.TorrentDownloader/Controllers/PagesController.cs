@@ -37,7 +37,7 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
     /// </summary>
     public const string Prefetched =
         "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText
-        + "/{page:regex(^(activity|queue|downloads|history|skipped|sources|settings)$)}";
+        + "/{page:regex(^(activity|queue|downloads|history|sources|settings)$)}";
 
     /// <summary>Where the web app fetches one show's settings page.</summary>
     public const string PrefetchedShow =
@@ -50,10 +50,6 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
     /// <summary>Where the web app fetches one page of one library's shows.</summary>
     public const string PrefetchedLibraryShows =
         "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText + "/libraries/{id}/shows/{number}";
-
-    /// <summary>Where the web app fetches a page of Skipped after the first.</summary>
-    public const string PrefetchedSkippedPage =
-        "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText + "/skipped/{number}";
 
     [HttpGet(Prefetched)]
     public Task<IActionResult> Page(string page, CancellationToken ct)
@@ -77,12 +73,6 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
     public Task<IActionResult> LibraryShows(string id, string number, CancellationToken ct)
     {
         return View($"/libraries/{Uri.EscapeDataString(id)}/shows/{Uri.EscapeDataString(number)}", ct);
-    }
-
-    [HttpGet(PrefetchedSkippedPage)]
-    public Task<IActionResult> SkippedPage(string number, CancellationToken ct)
-    {
-        return View($"/skipped/{Uri.EscapeDataString(number)}", ct);
     }
 
     private async Task<IActionResult> View(string route, CancellationToken ct)

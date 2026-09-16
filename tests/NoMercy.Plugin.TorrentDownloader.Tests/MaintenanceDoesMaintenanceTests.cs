@@ -1,6 +1,5 @@
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
-using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 
@@ -35,29 +34,6 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
         "nomercy-maintenance-" + Guid.NewGuid().ToString("n")[..8]);
 
     /// <remarks>
-    /// One refusal is written for every release every cycle considered and did
-    /// not take: the owner's history held 66,149 lines, 65,878 of them
-    /// refusals, and the page stopped answering. A fortnight is long enough to
-    /// look back at why something did not arrive.
-    /// </remarks>
-    [Fact]
-    public async Task TheMaintenanceCadenceClearsRefusalsNobodyWillReadAgain()
-    {
-        using TorrentDownloaderPlugin plugin = await Configured();
-
-        GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
-
-        await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-OLD", DateTimeOffset.UtcNow.AddDays(-30));
-        await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-NEW", DateTimeOffset.UtcNow.AddDays(-1));
-
-        await plugin.RunCycleAsync(CancellationToken.None);
-
-        SkippedRelease left = Assert.Single((await grabs.SkippedAsync(1, 50, CancellationToken.None)).Rows);
-
-        Assert.Equal("Silo.S03E06.2160p.WEB.H265-NEW", left.Title);
-    }
-
-    /// <remarks>
     /// <para>
     /// <strong>A start settles once, whichever cadence ticks first.</strong>
     /// What the library holds is derived rather than stored, and a plugin that
@@ -69,9 +45,7 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
     /// <para>
     /// It used to be the first transfers tick that did this, which made one
     /// tick of one cadence unlike all the others. What is special is the start,
-    /// not the tick, so the start is where it is done — and the refusal pruned
-    /// here can have been pruned by nothing else, because a search cycle does
-    /// no housekeeping of its own.
+    /// not the tick, so the start is where it is done.
     /// </para>
     /// </remarks>
     [Fact]
@@ -79,46 +53,29 @@ public class MaintenanceDoesMaintenanceTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = await Configured();
 
-        GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
+        EpisodeRepository episodes = await plugin.EpisodesAsync(CancellationToken.None);
 
-        // A refusal old enough to be pruned, and one that is not. Pruning is
-        // housekeeping the maintenance cadence owes, so a search cadence
-        // clearing it is the start settling rather than the cadence doing
-        // somebody else's work.
-        await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-OLD", DateTimeOffset.UtcNow.AddDays(-30));
-        await Refused(grabs, "Silo.S03E06.2160p.WEB.H265-NEW", DateTimeOffset.UtcNow.AddDays(-1));
+        // A row a broken build left behind: an episode of a show this library
+        // does not have. Only a re-derivation from the library takes it out, and
+        // a search cycle does no housekeeping of its own.
+        await episodes.ReplaceAsync(
+            [
+                new(
+                    new EpisodeKey(999, 1, 1),
+                    "A show nobody has",
+                    null,
+                    LibraryKind.Television,
+                    null,
+                    new DateOnly(2020, 1, 1),
+                    EpisodeState.Missing),
+            ],
+            CancellationToken.None);
 
         await plugin.RunCycleAsync(CancellationToken.None);
 
-        SkippedRelease left = Assert.Single((await grabs.SkippedAsync(1, 50, CancellationToken.None)).Rows);
-
-        Assert.Equal("Silo.S03E06.2160p.WEB.H265-NEW", left.Title);
-    }
-
-    private static async Task Grabbed(GrabRepository grabs, string hash)
-    {
-        await grabs.RecordAsync(
-            new EpisodeKey(41, 3, 6),
-            "Silo",
-            "Silo.S03E06.1080p.WEB.H264-CAKES",
-            "1337x",
-            hash,
-            $"magnet:?xt=urn:btih:{hash}",
-            [new EpisodeKey(41, 3, 6)],
-            DateTimeOffset.UtcNow,
-            CancellationToken.None);
-    }
-
-    private static async Task Refused(GrabRepository grabs, string release, DateTimeOffset at)
-    {
-        await grabs.RecordSkippedAsync(
-            new EpisodeKey(41, 3, 6),
-            "Silo",
-            release,
-            "1337x",
-            "h265 is not allowed by the profile",
-            at,
-            CancellationToken.None);
+        Assert.DoesNotContain(
+            await episodes.AllAsync(CancellationToken.None),
+            episode => episode.Key.ShowId == 999);
     }
 
     /// <summary>A plugin with somewhere to put things and a library to read.</summary>

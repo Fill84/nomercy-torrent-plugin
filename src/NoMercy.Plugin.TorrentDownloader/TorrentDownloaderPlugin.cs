@@ -1639,18 +1639,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         GrabRepository grabs = await GrabsAsync(ct);
 
-        // The refusals nobody will read again. One is written for every release
-        // every cycle considered and did not take: the owner's history held
-        // 66,149 lines, 65,878 of them refusals, and the page stopped
-        // answering. A fortnight is long enough to look back at why something
-        // did not arrive.
-        int gone = await grabs.PruneHistoryAsync(DateTimeOffset.UtcNow.AddDays(-14), ct);
-
-        if (gone > 0)
-        {
-            Context.Logger.LogInformation("{Count} old refusals were cleared from the history.", gone);
-        }
-
         // Downloads no grab answers for any more. A cancelled or pruned grab
         // used to leave its folder, its metadata and its resume file behind
         // with nothing left to ask for them: 8.6 GB of a cancelled season pack
@@ -1999,17 +1987,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // draws that a key is set and has nothing it could leak.
                     await Settings.SecretsSetAsync(ct),
                     ShowAdvanced);
-
-            case "skipped":
-            case Pages.SkippedPageName:
-                // A page of them, not all of them: one refusal is written for
-                // every release every cycle considered and did not take, and
-                // the owner's history held 65,878 of them. Anything that is not
-                // a number is the first page rather than an error.
-                return SkippedView.Render(await (await GrabsAsync(ct)).SkippedAsync(
-                    int.TryParse(match!.Param("page"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int skippedPage) ? skippedPage : 1,
-                    SkippedView.PageSize,
-                    ct));
 
             case "history":
                 return HistoryView.Render(

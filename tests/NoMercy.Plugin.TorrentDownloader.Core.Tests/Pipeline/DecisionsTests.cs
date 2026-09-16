@@ -48,26 +48,20 @@ public class DecisionsTests
     }
 
     /// <remarks>
-    /// A name the show's settings refuse is recorded with the episode, the name and the reason, and with no
-    /// site against it: nothing was asked, so no site refused anything. "Nothing worth taking" is the sentence
-    /// that hid a release's worth of faults.
+    /// A name the show's settings refuse comes back with the reason, and with no site named in it: nothing
+    /// was asked, so no site refused anything. The reason is said on the Activity
+    /// page while the run is going and kept nowhere (<c>docs/specs/pages.md</c>), so it has to carry the
+    /// whole of what happened on its own.
     /// </remarks>
     [Fact]
-    public void ARefusedNameIsRecordedWithItsReasonAndNoSiteAgainstIt()
+    public void ARefusedNameComesBackWithTheReasonInWordsTheOwnerCanActOn()
     {
         Decisions decisions = new(AtQuality("2160p"), Blacklist.None);
 
         Verdict verdict = decisions.JudgeName(Single, Silo(6));
 
         Assert.False(verdict.Accepted);
-
-        SkippedRelease skipped = Assert.Single(decisions.Skipped);
-
-        Assert.Equal(Silo(6).Key, skipped.Episode);
-        Assert.Equal(Single.Original, skipped.Title);
-        Assert.Equal("Silo", skipped.ShowTitle);
-        Assert.Null(skipped.Source);
-        Assert.Contains("720p is not 2160p", skipped.Reason, StringComparison.Ordinal);
+        Assert.Contains("720p is not 2160p", verdict.Reason, StringComparison.Ordinal);
     }
 
     /// <summary>A real single episode, off the PreDB capture.</summary>

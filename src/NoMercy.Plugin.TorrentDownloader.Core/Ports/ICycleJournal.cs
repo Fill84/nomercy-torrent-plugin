@@ -25,7 +25,6 @@ public interface ICycleJournal
     /// One episode has been decided.
     /// </summary>
     /// <param name="outcome">What became of it.</param>
-    /// <param name="refused">What was refused for it, and why.</param>
     /// <param name="ct">The plugin's own lifetime.</param>
-    Task DecidedAsync(EpisodeOutcome outcome, IReadOnlyList<SkippedRelease> refused, CancellationToken ct);
+    Task DecidedAsync(EpisodeOutcome outcome, CancellationToken ct);
 }

@@ -85,18 +85,6 @@ public static class CycleRecord
         }
 
         await CountSearchesAsync(report, at, episodes, ct);
-
-        foreach (SkippedRelease skipped in report.Skipped)
-        {
-            await grabs.RecordSkippedAsync(
-                skipped.Episode,
-                titles.GetValueOrDefault(skipped.Episode, string.Empty),
-                skipped.Title,
-                skipped.Source,
-                skipped.Reason,
-                at,
-                ct);
-        }
     }
 
     /// <summary>

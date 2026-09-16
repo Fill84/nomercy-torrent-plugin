@@ -111,8 +111,7 @@ public sealed record CycleOptions(
 
 /// <summary>Everything one cycle decided.</summary>
 /// <param name="Outcomes">One per episode looked at, in the order they were looked at.</param>
-/// <param name="Skipped">Every release refused, with its reason, for the Skipped page.</param>
-public sealed record CycleReport(IReadOnlyList<EpisodeOutcome> Outcomes, IReadOnlyList<SkippedRelease> Skipped)
+public sealed record CycleReport(IReadOnlyList<EpisodeOutcome> Outcomes)
 {
     /// <summary>
     /// Every tracker this cycle came across, on any copy of anything.
@@ -195,10 +194,6 @@ public sealed class SearchCycle(
         {
             ct.ThrowIfCancellationRequested();
 
-            // What was refused before this episode, so what is refused for it
-            // can be told apart and written with it.
-            int refusedBefore = decisions.Skipped.Count;
-
             // An episode a pack taken earlier this cycle already answers for is
             // not asked about at all: a question to a source is a paced request,
             // and this one has no use.
@@ -230,14 +225,11 @@ public sealed class SearchCycle(
             // had decided.
             if (written is not null)
             {
-                await written.DecidedAsync(
-                    outcome,
-                    [.. decisions.Skipped.Skip(refusedBefore)],
-                    ct);
+                await written.DecidedAsync(outcome, ct);
             }
         }
 
-        return new(outcomes, decisions.Skipped) { Trackers = trackers };
+        return new(outcomes) { Trackers = trackers };
     }
 
     private async Task<EpisodeOutcome> LookAsync(

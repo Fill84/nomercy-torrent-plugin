@@ -28,7 +28,7 @@ public class CycleRecordTests : IDisposable
         GrabRepository grabs = await Repository();
 
         await CycleRecord.WriteAsync(
-            new([Taken], []),
+            new([Taken]),
             [Tracked],
             grabs,
             When,
@@ -53,37 +53,13 @@ public class CycleRecordTests : IDisposable
         GrabRepository grabs = await Repository();
 
         await CycleRecord.WriteAsync(
-            new([Taken with { HandedOver = false, InfoHash = null }], []),
+            new([Taken with { HandedOver = false, InfoHash = null }]),
             [Tracked],
             grabs,
             When,
             CancellationToken.None);
 
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
-    }
-
-    /// <remarks>
-    /// Every refusal, with the reason it was refused for. The Skipped page is
-    /// opened the morning after an episode did not arrive, and a list held for
-    /// the cycle would be gone by then.
-    /// </remarks>
-    [Fact]
-    public async Task EveryRefusalIsRecordedWithItsReason()
-    {
-        GrabRepository grabs = await Repository();
-
-        await CycleRecord.WriteAsync(
-            new([], [new(Episode, "Silo.S03E06.720p.WEB-DL", "1337x", "720p is below the 1080p rung")]),
-            [Tracked],
-            grabs,
-            When,
-            CancellationToken.None);
-
-        SkippedRelease refused = Assert.Single((await grabs.SkippedAsync(1, 50, CancellationToken.None)).Rows);
-
-        Assert.Equal("Silo.S03E06.720p.WEB-DL", refused.Title);
-        Assert.Equal("1337x", refused.Source);
-        Assert.Contains("1080p rung", refused.Reason, StringComparison.Ordinal);
     }
 
     /// <remarks>
@@ -99,7 +75,7 @@ public class CycleRecordTests : IDisposable
         (GrabRepository grabs, EpisodeRepository episodes) = await Both();
 
         await CycleRecord.WriteAsync(
-            new([Taken with { HandedOver = false, InfoHash = null, Searched = true }], []),
+            new([Taken with { HandedOver = false, InfoHash = null, Searched = true }]),
             [Tracked],
             grabs,
             When,
@@ -129,7 +105,7 @@ public class CycleRecordTests : IDisposable
         (GrabRepository grabs, EpisodeRepository episodes) = await Both();
 
         await CycleRecord.WriteAsync(
-            new([Taken with { HandedOver = false, InfoHash = null, Searched = false }], []),
+            new([Taken with { HandedOver = false, InfoHash = null, Searched = false }]),
             [Tracked],
             grabs,
             When,
@@ -155,7 +131,7 @@ public class CycleRecordTests : IDisposable
         (GrabRepository grabs, EpisodeRepository episodes) = await Both(attempts: 69);
 
         await CycleRecord.WriteAsync(
-            new([Taken with { HandedOver = false, InfoHash = null, Searched = true }], []),
+            new([Taken with { HandedOver = false, InfoHash = null, Searched = true }]),
             [Tracked with { Attempts = 69 }],
             grabs,
             When,
@@ -178,7 +154,7 @@ public class CycleRecordTests : IDisposable
         (GrabRepository grabs, EpisodeRepository episodes) = await Both(attempts: 2);
 
         await CycleRecord.WriteAsync(
-            new([Taken with { Searched = true }], []),
+            new([Taken with { Searched = true }]),
             [Tracked with { Attempts = 2 }],
             grabs,
             When,
@@ -204,15 +180,14 @@ public class CycleRecordTests : IDisposable
 
         await CycleRecord.WriteAsync(
             new(
-                [
-                    Taken with
-                    {
-                        HandedOver = false,
-                        InfoHash = null,
-                        Detail = "would take it — dry run is on",
-                    },
-                ],
-                []),
+            [
+                Taken with
+                {
+                    HandedOver = false,
+                    InfoHash = null,
+                    Detail = "would take it — dry run is on",
+                },
+            ]),
             [Tracked],
             grabs,
             When,
@@ -240,7 +215,7 @@ public class CycleRecordTests : IDisposable
         GrabRepository grabs = await Repository();
 
         await CycleRecord.WriteAsync(
-            new([new(Episode, null, null, null, false, "nobody is serving one")], []),
+            new([new(Episode, null, null, null, false, "nobody is serving one")]),
             [Tracked],
             grabs,
             When,

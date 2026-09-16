@@ -30,13 +30,11 @@ public class PagesReachableTests
                 Pages.QueueRoute,
                 Pages.DownloadsRoute,
                 Pages.HistoryRoute,
-                Pages.SkippedRoute,
                 Pages.SourcesRoute,
                 Pages.SettingsRoute,
                 Pages.ShowSettingsRoute,
                 Pages.LibraryPreferencesRoute,
                 Pages.LibraryShowsRoute,
-                Pages.SkippedPageRoute,
             ],
             plugin.Routes.Routes.Select(route => route.Path));
     }
@@ -101,57 +99,15 @@ public class PagesReachableTests
     }
 
     /// <remarks>
-    /// The reason is the whole page, with the show and episode it was refused
-    /// for, read back from the store. And nothing to press: a refused release
-    /// name offers no button to download it anyway (docs/specs/pages.md).
-    /// </remarks>
-    [Fact]
-    public async Task TheSkippedRouteCarriesEveryRefusalWithItsReason()
-    {
-        using TorrentDownloaderPlugin plugin = new();
-        FakePluginContext context = new();
-        plugin.Initialize(context);
-
-        await Configure(plugin);
-        await (await Grabs(plugin, context)).RecordSkippedAsync(
-            new(41, 3, 6),
-            "Silo",
-            "Silo.S03E06.720p.WEB.H264-CAKES",
-            "1337x",
-            "720p is below the 1080p rung",
-            DateTimeOffset.UtcNow,
-            CancellationToken.None);
-
-        PluginView view = await plugin.GetViewAsync(
-            new() { Route = Pages.SkippedRoute },
-            CancellationToken.None);
-        string page = string.Join(" ", Rendered.EveryValue(view));
-
-        Assert.Contains("Silo.S03E06.720p.WEB.H264-CAKES", page, StringComparison.Ordinal);
-        Assert.Contains("720p is below the 1080p rung", page, StringComparison.Ordinal);
-
-        Assert.Equal("Silo", Rendered.ById(view, SkippedView.TableId + "-0").Props["show"]);
-
-        // Past the plugin's own navigation, nothing on the page calls into the
-        // plugin.
-        Assert.DoesNotContain(
-            Rendered.All(view).Select(component => component.Action).OfType<PluginActionIntent>(),
-            action => action.Type == PluginActionType.CallPlugin);
-    }
-
-    /// <remarks>
     /// <para>
-    /// <strong>The pages after the first are reached by an address of their own.</strong> Skipped paged by
-    /// <c>?page=2</c>, and the web app sends a plugin the path and no query string, so Next drew page one
-    /// again, for ever. The overview pages by route for the same reason (<c>S13-02</c>).
-    /// </para>
-    /// <para>
-    /// Asserted as addresses written out rather than built from the route table, so a paging that goes back
-    /// to the query string fails here instead of agreeing with itself.
+    /// <strong>Nothing about a refusal is written down any more</strong>, on the owner's word of
+    /// 16 September 2026: their history held 5,851 of them, every one a name a show's settings refused
+    /// before an indexer was asked. A run says what it refuses while it runs, on the Activity page, and
+    /// the Skipped page is gone with the rows behind it.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task ThePagesOfSkippedPastTheFirstHaveAnAddressOfTheirOwn()
+    public async Task ARefusedNameIsNotWrittenDownAnywhere()
     {
         using TorrentDownloaderPlugin plugin = new();
         FakePluginContext context = new();
@@ -161,27 +117,21 @@ public class PagesReachableTests
 
         GrabRepository grabs = await Grabs(plugin, context);
 
-        for (int refused = 0; refused <= SkippedView.PageSize; refused++)
-        {
-            await grabs.RecordSkippedAsync(
-                new(41, 3, 6),
-                "Silo",
-                $"Silo.S03E06.720p.WEB.H264-CAKES.{refused}",
-                null,
-                "720p is not 1080p.",
-                DateTimeOffset.UtcNow.AddSeconds(refused),
-                CancellationToken.None);
-        }
+        await grabs.DispatchedAsync(
+            new(41, 3, 6),
+            "Silo",
+            "Silo.S03E06.1080p.WEB.H264-CAKES",
+            "library-tv",
+            DateTimeOffset.UtcNow,
+            CancellationToken.None);
 
-        PluginView first = await plugin.GetViewAsync(new() { Route = Pages.SkippedRoute }, CancellationToken.None);
+        // Nothing in the store writes one, and the page that read them is gone:
+        // a route nobody serves falls through to the overview.
+        Assert.DoesNotContain(
+            await grabs.HistoryAsync(CancellationToken.None),
+            row => row.Event == "skipped");
 
-        Assert.Equal("/skipped/2", Rendered.ById(first, SkippedView.TableId + "-next").Action!.Payload["route"]);
-
-        PluginView second = await plugin.GetViewAsync(new() { Route = "/skipped/2" }, CancellationToken.None);
-
-        Assert.Contains("page 2 of 2", string.Join(" ", Rendered.EveryValue(second)), StringComparison.Ordinal);
-        Assert.Single(Rendered.ById(second, SkippedView.TableId).Items);
-        Assert.Equal("/skipped", Rendered.ById(second, SkippedView.TableId + "-previous").Action!.Payload["route"]);
+        Assert.DoesNotContain(plugin.Routes.Routes, route => route.Path.Contains("skipped", StringComparison.Ordinal));
     }
 
     /// <remarks>

@@ -11,12 +11,14 @@
 - The Queue page lists the episodes being searched for: the aired episodes without a video file of
   the shows and anime that are switched on with saved settings.
 - Every row on the Queue page carries a button that searches for that episode now.
+- The page holds two lists, the episodes being looked for and the episodes waiting to air, each
+  taking half the page's height whatever either of them holds.
 
-## Skipped
+## Refused release names
 
-- The Skipped page lists the release names that a show's settings refused, each with its show,
-  episode and reason.
-- A refused release name offers no button to download it anyway.
+- The plugin has no Skipped page, and nothing about a refused release name is stored.
+- A refusal is said on the Activity page while the run is going, with the name and the reason, and
+  goes when that episode is decided.
 
 ## Settings
 
@@ -28,4 +30,8 @@
 ## Pages that stay as they are
 
 - The Downloads, History and Sources pages show what they show, unchanged by the show list.
+- The History page holds what became of a grab — decided, grabbed, dispatched, failed — and no
+  refusals.
+- On the Downloads page the field that takes a magnet or a .torrent stands under the list of
+  downloads, and the list scrolls within its own height rather than pushing the field down.
 - The plugin has no separate Shows page. The overview page lists the shows.

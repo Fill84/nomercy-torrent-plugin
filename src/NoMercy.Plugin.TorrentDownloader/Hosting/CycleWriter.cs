@@ -31,15 +31,12 @@ public sealed class CycleWriter(
     private readonly Dictionary<EpisodeKey, TrackedEpisode> _looked =
         looked.ToDictionary(episode => episode.Key);
 
-    public async Task DecidedAsync(
-        EpisodeOutcome outcome,
-        IReadOnlyList<SkippedRelease> refused,
-        CancellationToken ct)
+    public async Task DecidedAsync(EpisodeOutcome outcome, CancellationToken ct)
     {
         DateTimeOffset at = now();
 
         await CycleRecord.WriteAsync(
-            new([outcome], refused),
+            new([outcome]),
             _looked.TryGetValue(outcome.Episode, out TrackedEpisode? episode) ? [episode] : [],
             grabs,
             at,

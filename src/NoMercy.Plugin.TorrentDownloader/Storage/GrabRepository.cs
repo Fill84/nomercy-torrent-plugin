@@ -7,7 +7,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 namespace NoMercy.Plugin.TorrentDownloader.Storage;
 
 /// <summary>One line of the history, as the table holds it.</summary>
-/// <param name="Event">grabbed, skipped, failed, dispatched or allowed.</param>
+/// <param name="Event">grabbed, decided, failed or dispatched.</param>
 /// <param name="At">When it happened.</param>
 /// <param name="ShowId">Which show, when the line is about an episode.</param>
 /// <param name="Season">Which season, when the line is about an episode.</param>
@@ -539,46 +539,6 @@ public sealed class GrabRepository(Store database)
     }
 
     /// <summary>
-    /// Records a release name a show's settings or the blacklist refused, and why.
-    /// </summary>
-    /// <remarks>
-    /// In the history rather than in a list held for the cycle, because the
-    /// Skipped page is opened after the fact — usually the next morning, and
-    /// usually because an episode did not arrive. A refusal that lived only in
-    /// memory would be gone by then, and the page would say nothing was
-    /// refused when something was.
-    /// </remarks>
-    public async Task RecordSkippedAsync(
-        EpisodeKey episode,
-        string showTitle,
-        string releaseTitle,
-        string? source,
-        string reason,
-        DateTimeOffset at,
-        CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
-            """
-            INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
-            VALUES ($at, 'skipped', $show, $season, $episode, $title, $release, $source, $reason);
-            """;
-
-        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$show", episode.ShowId);
-        command.Parameters.AddWithValue("$season", episode.Season);
-        command.Parameters.AddWithValue("$episode", episode.Number);
-        command.Parameters.AddWithValue("$title", showTitle);
-        command.Parameters.AddWithValue("$release", releaseTitle);
-        command.Parameters.AddWithValue("$source", (object?)source ?? DBNull.Value);
-        command.Parameters.AddWithValue("$reason", reason);
-
-        await command.ExecuteNonQueryAsync(ct);
-    }
-
-    /// <summary>
     /// Records a release that was decided on and not handed over.
     /// </summary>
     /// <remarks>
@@ -727,72 +687,6 @@ public sealed class GrabRepository(Store database)
     }
 
     /// <summary>
-    /// One page of refusals, newest first, and how many there are in all.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>A page, never all of them.</strong> This used to select every
-    /// refusal there had ever been, and the Skipped page rendered the lot: one
-    /// row is written for every release every cycle considered and did not
-    /// take, so the owner's history reached 66,149 lines with 65,878 of them
-    /// refusals. The page took the better part of a minute to open and the
-    /// client had to lay out sixty-five thousand rows nobody was going to read.
-    /// </para>
-    /// <para>
-    /// Pruning does not solve it and was never meant to: a fortnight of a busy
-    /// library is still tens of thousands of rows. What was missing is a limit.
-    /// </para>
-    /// </remarks>
-    /// <param name="page">One-based. Anything lower is the first page.</param>
-    /// <param name="size">How many rows a page holds.</param>
-    /// <param name="ct">Cancellation.</param>
-    public async Task<SkippedPage> SkippedAsync(int page, int size, CancellationToken ct)
-    {
-        int wanted = Math.Max(1, page);
-        int rows = Math.Clamp(size, 1, 500);
-
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-
-        await using SqliteCommand counting = connection.CreateCommand();
-        counting.CommandText = "SELECT COUNT(*) FROM history WHERE event = 'skipped';";
-
-        int total = Convert.ToInt32(await counting.ExecuteScalarAsync(ct));
-
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
-            """
-            SELECT show_id, season, episode, release_title, source, detail, show_title FROM history
-            WHERE event = 'skipped' ORDER BY id DESC LIMIT $take OFFSET $skip;
-            """;
-
-        command.Parameters.AddWithValue("$take", rows);
-        command.Parameters.AddWithValue("$skip", (wanted - 1) * rows);
-
-        List<SkippedRelease> refused = [];
-
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
-
-        while (await reader.ReadAsync(ct))
-        {
-            refused.Add(new(
-                new(reader.GetInt32(0), reader.GetInt32(1), reader.GetInt32(2)),
-                reader.GetString(3),
-                reader.IsDBNull(4) ? null : reader.GetString(4),
-
-                // Never blank. A refusal with no reason is the one thing the
-                // owner opened the page to read, and an empty string there
-                // would render as a row that refuses to say why.
-                reader.IsDBNull(5) ? "no reason was recorded" : reader.GetString(5))
-            {
-                ShowTitle = reader.IsDBNull(6) ? null : reader.GetString(6),
-            });
-        }
-
-        return new(refused, total, wanted, rows);
-    }
-
-    /// <summary>
     /// How many lines of history a page is given.
     /// </summary>
     /// <remarks>
@@ -801,28 +695,6 @@ public sealed class GrabRepository(Store database)
     /// on a library this size is thousands a day.
     /// </remarks>
     public const int Recent = 500;
-
-    /// <summary>
-    /// Throws away history nobody will read again.
-    /// </summary>
-    /// <remarks>
-    /// A refusal is written for every release every cycle considered and did
-    /// not take, which on the owner's library is thousands a day: 65,878 of
-    /// their 66,149 lines were refusals. What is worth keeping is what became
-    /// of a grab — decided, dispatched, failed — and the refusals of the last
-    /// few days, which are what an owner reads when a release they expected did
-    /// not arrive.
-    /// </remarks>
-    public async Task<int> PruneHistoryAsync(DateTimeOffset before, CancellationToken ct)
-    {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText = "DELETE FROM history WHERE event = 'skipped' AND at < $before;";
-        command.Parameters.AddWithValue("$before", before.ToString("O", CultureInfo.InvariantCulture));
-
-        return await command.ExecuteNonQueryAsync(ct);
-    }
 
     /// <summary>What the history says happened, newest first.</summary>
     /// <remarks>

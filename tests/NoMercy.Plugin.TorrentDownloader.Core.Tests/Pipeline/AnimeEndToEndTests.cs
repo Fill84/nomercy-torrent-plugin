@@ -57,7 +57,17 @@ public class AnimeEndToEndTests
         FakeFetch fetch = new();
         fetch.AnswersAnything(Capture.Fixture("nyaa-subsplease.xml"));
 
-        CycleReport report = await Cycle(fetch, pool).RunAsync(
+        ActivityJournal journal = new();
+        List<string> refusals = [];
+
+        // While the run is going, which is the only place a refusal is said: an
+        // episode's notes go the moment it is decided, and nothing is stored.
+        journal.Recorded += () => refusals.AddRange(
+            journal.Snapshot().Notes
+                .Select(note => note.Line)
+                .Where(line => line.StartsWith("refused ", StringComparison.Ordinal) && !refusals.Contains(line)));
+
+        CycleReport report = await Cycle(fetch, pool, journal).RunAsync(
             derived,
             new(AtQuality("1080p"), Blacklist.None, DryRun: true, Folder),
             CancellationToken.None);
@@ -68,10 +78,10 @@ public class AnimeEndToEndTests
         Assert.False(outcome.Searched);
         Assert.Empty(fetch.Asked);
 
-        SkippedRelease refused = Assert.Single(report.Skipped);
+        string refused = Assert.Single(refusals.Distinct());
 
-        Assert.Equal(Posted, refused.Title);
-        Assert.Contains("is not S02E08", refused.Reason, StringComparison.Ordinal);
+        Assert.Contains(Posted, refused, StringComparison.Ordinal);
+        Assert.Contains("is not S02E08", refused, StringComparison.Ordinal);
     }
 
     /// <summary>The release as the captured Nyaa page really carries it.</summary>
@@ -107,10 +117,10 @@ public class AnimeEndToEndTests
         return server;
     }
 
-    private static SearchCycle Cycle(FakeFetch fetch, IReleaseNames names)
+    private static SearchCycle Cycle(FakeFetch fetch, IReleaseNames names, ActivityJournal? writing = null)
     {
         SourceCatalogue catalogue = SourceCatalogue.Build(Sources, [], []);
-        ActivityJournal journal = new();
+        ActivityJournal journal = writing ?? new ActivityJournal();
         Readers readers = Readers.Shipped();
 
         return new(

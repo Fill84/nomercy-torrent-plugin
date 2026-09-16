@@ -195,17 +195,38 @@ public class SearchCycleTests
     /// the Skipped page renders.
     /// </remarks>
     [Fact]
-    public async Task EveryRefusalOfTheCycleIsReportedTogether()
+    public async Task EveryRefusalIsSaidWhileTheRunIsGoing()
     {
-        CycleReport report = await Cycle(Answering(), new()).RunAsync(
+        ActivityJournal journal = new();
+        List<EpisodeNote> refusals = [];
+
+        // Read as the page reads it: while the run is going. An episode's notes
+        // are cleared the moment it is decided — the page shows what is being
+        // worked on — and nothing of a refusal is written down anywhere else.
+        journal.Recorded += () =>
+        {
+            foreach (EpisodeNote note in journal.Snapshot().Notes)
+            {
+                if (note.Line.StartsWith("refused ", StringComparison.Ordinal) && !refusals.Contains(note))
+                {
+                    refusals.Add(note);
+                }
+            }
+        };
+
+        await Cycle(Answering(), new(), journal).RunAsync(
             [Silo(6)],
             // Wanting 2160p refuses every name the capture carries for it.
             new(AtQuality("2160p"), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
-        Assert.NotEmpty(report.Skipped);
-        Assert.All(report.Skipped, skipped => Assert.Equal(Silo(6).Key, skipped.Episode));
-        Assert.All(report.Skipped, skipped => Assert.NotEqual(string.Empty, skipped.Reason));
+        Assert.NotEmpty(refusals);
+
+        // The name and the reason both, for the episode it was refused for: the
+        // page is read while the run is going and nothing of it is stored
+        // (docs/specs/pages.md).
+        Assert.All(refusals, note => Assert.Contains("Silo", note.Episode, StringComparison.Ordinal));
+        Assert.All(refusals, note => Assert.Contains(": ", note.Line, StringComparison.Ordinal));
     }
 
     /// <remarks>
@@ -237,11 +258,9 @@ public class SearchCycleTests
     }
 
     /// <remarks>
-    /// A row that came back for another episode is not a refusal. It was never
-    /// offered for this one — a search engine answered broadly — and recording
-    /// it as refused is what filled the Skipped page with
-    /// "'Silo S03E04 …' is not S03E08" and buried the reasons the page exists
-    /// for.
+    /// A row that came back for another episode is not a refusal. It was never offered for this one — a
+    /// search engine answered broadly — and saying it was refused is what filled the page with
+    /// "'Silo S03E04 …' is not S03E08" and buried the reasons worth reading.
     /// </remarks>
     [Fact]
     public async Task ARowForAnotherEpisodeIsNotRecordedAsARefusal()
@@ -253,14 +272,16 @@ public class SearchCycleTests
             "https://apibay.org/q.php?q=Silo+S03E08+1080p&cat=",
             Capture.Fixture("the-pirate-bay-show.json"));
 
-        CycleReport report = await Cycle(fetch, new(), sources: WithPirateBay).RunAsync(
+        ActivityJournal journal = new();
+
+        await Cycle(fetch, new(), journal, sources: WithPirateBay).RunAsync(
             [Silo(8)],
             new(Wanted, Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
         Assert.DoesNotContain(
-            report.Skipped,
-            skipped => skipped.Reason.Contains("is not S03E08", StringComparison.Ordinal));
+            journal.Snapshot().Notes,
+            note => note.Line.Contains("is not S03E08", StringComparison.Ordinal));
     }
 
     /// <remarks>
