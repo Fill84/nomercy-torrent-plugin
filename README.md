@@ -41,8 +41,9 @@ PreDB.net — have their feeds read at the start of every run, and an episode no
 in their search as `Show SxxEyy`. They answer what a release is called, never who has it. A name
 names exactly one episode: a season pack or an absolute-numbered post names none. Every name is
 judged against its show's settings — quality, codec, English only, every must tag and no forbidden
-one — before any indexer is asked. No name that passes, no search: the plugin builds no search term
-of its own.
+one — before any indexer is asked. When no name gives a torrent — none passed, or no indexer has one
+for any that did — the indexers are asked for `Show SxxEyy` itself, and a result counts only when it
+names that episode and meets the same settings.
 
 **Wishes decide the order.** The names carrying the most wishes are asked first, all together, and
 only when they find nothing does the group with one wish fewer get its turn.
