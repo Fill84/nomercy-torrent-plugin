@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.6.1",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.6.1/NoMercy.Plugin.TorrentDownloader-0.6.1.zip",
+          "checksum": "362be11a1dca8fdb984946bd671780828a5baef59d0359dccc162ea38233c1e4",
+          "changelog": "Two fixes found on a real server the day after 0.6.0: an episode whose only fitting release is not a scene release is found now, and LimeTorrents answers again.",
+          "timestamp": "2026-09-16T13:56:07Z"
+        },
+        {
           "version": "0.6.0",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.6.0/NoMercy.Plugin.TorrentDownloader-0.6.0.zip",
