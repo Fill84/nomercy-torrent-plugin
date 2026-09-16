@@ -4,6 +4,17 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S13-18` is done: a finished download is moved into the intake folder at once, and a skipped encode no
+longer hangs.** The owner saw South Park S15E12 finished and nothing moved: staging had copied 1.3 GB for
+thirty-five minutes on one disk, the client still held the file so the release stayed in the download
+folder, and the server skipped the encode without a word because its outputs already exist under S00E12
+(#38). A torrent that is not seeding is now let go of, its video moved and the rest of the release
+cleared; a grab closes when the library holds a file named for the episode and the server has not said the
+encode is running; and such an episode is no longer counted or searched as missing. Together with
+`4d5be40` (the plugin deletes only what it created), this wants the owner's word for v0.6.2. The staged
+S15E12 file in `D:\nomercy_finished_downloads` went to the Recycle Bin at 01:32 on 17 September — an
+Explorer delete, neither the plugin nor the server.
+
 **v0.6.1 is released** on the owner's word of 16 September 2026: the episode asked for when no release name
 gives a torrent (`S13-17`), and LimeTorrents on `limetorrents.fun` — the same package on Forgejo and GitHub
 (sha256 `362be11a…`), `repository.json` names 0.6.1 (`9c81297`).

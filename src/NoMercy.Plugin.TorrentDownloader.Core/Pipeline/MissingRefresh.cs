@@ -72,6 +72,9 @@ public sealed class MissingRefresh(ILibrary library, IAppliedSettings settings, 
                 ? AbsoluteNumbering.Build(episodes)
                 : new Dictionary<EpisodeKey, int>();
 
+            // Asked for once, and only for a show with an episode that has no file.
+            IReadOnlyList<string>? files = null;
+
             foreach (Episode episode in episodes)
             {
                 if (episode.Key.IsSpecial && !applied.Specials)
@@ -83,6 +86,20 @@ public sealed class MissingRefresh(ILibrary library, IAppliedSettings settings, 
                 // the absence of a row, so there is no second opinion about it
                 // to go stale or disagree.
                 if (episode.HasFile)
+                {
+                    continue;
+                }
+
+                // Nor is one whose file is in the library under its own name,
+                // registered by the server against another row. South Park
+                // S15E12's encode sits in South.Park.S15E12/ attached to season 0
+                // (media-server #38), so its own row shows no file: it was
+                // downloaded again and again, and the encoder skipped every copy
+                // because its outputs were already there. The name is the proof
+                // Landed reads once an encode is over.
+                files ??= await library.GetFilesAsync(show.Id, ct);
+
+                if (Landed.Wrote(episode.Key, files))
                 {
                     continue;
                 }

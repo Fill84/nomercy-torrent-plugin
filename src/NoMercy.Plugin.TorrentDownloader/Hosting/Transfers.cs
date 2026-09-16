@@ -143,7 +143,11 @@ public sealed class Transfers(
 
         foreach (StoredDownload finished in plan.Stage)
         {
-            justStaged.AddRange(await StageAsync(finished, incompleteFolder, intakeFolder, thisTick, ct));
+            bool seeding = running.Any(one =>
+                string.Equals(one.InfoHash, finished.InfoHash, StringComparison.OrdinalIgnoreCase)
+                && one.State == TorrentState.Seeding);
+
+            justStaged.AddRange(await StageAsync(finished, incompleteFolder, intakeFolder, seeding, thisTick, ct));
         }
 
         // Every staged file something is waiting on: what the store knew at the
@@ -196,6 +200,53 @@ public sealed class Transfers(
         catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException)
         {
             logger.LogWarning("{Folder} could not be removed: {Reason}", own, wrong.Message);
+        }
+    }
+
+    /// <summary>Deletes what a torrent downloaded that is still in its folder, and the folders it made.</summary>
+    /// <remarks>
+    /// Only the files the torrent names, and a folder only once nothing is left in
+    /// it: the plugin deletes what it created itself and nothing else (the owner's
+    /// rule of 16 September 2026). The download folder itself is never one of them.
+    /// </remarks>
+    private void ClearDownload(string folder, IReadOnlyList<TorrentFile> files)
+    {
+        string root = Path.GetFullPath(folder).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        HashSet<string> made = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (TorrentFile file in files)
+        {
+            string path = Path.GetFullPath(Path.Combine(folder, file.Path.Replace('/', Path.DirectorySeparatorChar)));
+
+            // A path is whatever the person who made the torrent typed.
+            if (!path.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            Delete(path);
+
+            for (string? parent = Path.GetDirectoryName(path);
+                 parent is not null && (parent + Path.DirectorySeparatorChar).Length > root.Length;
+                 parent = Path.GetDirectoryName(parent))
+            {
+                made.Add(parent);
+            }
+        }
+
+        foreach (string one in made.OrderByDescending(path => path.Length))
+        {
+            try
+            {
+                if (Directory.Exists(one) && !Directory.EnumerateFileSystemEntries(one).Any())
+                {
+                    Directory.Delete(one);
+                }
+            }
+            catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException)
+            {
+                logger.LogInformation("{Folder} could not be removed: {Reason}", one, wrong.Message);
+            }
         }
     }
 
@@ -330,6 +381,7 @@ public sealed class Transfers(
         StoredDownload finished,
         string incompleteFolder,
         string intakeFolder,
+        bool seeding,
         LibraryThisTick thisTick,
         CancellationToken ct)
     {
@@ -418,6 +470,19 @@ public sealed class Transfers(
 
             string? resolution = ReleaseName.Parse(finished.ReleaseTitle).Resolution;
 
+            if (!seeding)
+            {
+                // Let go of, so its files can be moved. The client keeps every file
+                // of a torrent open for as long as it holds it, finished or not, and
+                // Windows moves no open file: on 16 September 2026 South Park S15E12
+                // was copied for thirty-five minutes instead, and then could not be
+                // taken out of the download folder at all. A torrent that is not
+                // seeding owes nothing more, and a grab once staged is never added
+                // back to the client; one whose staging fails here is, by recovery
+                // on the next pass.
+                await engine.RemoveAsync(finished.InfoHash, deleteFiles: false, ct);
+            }
+
             IReadOnlyList<StagedResult> moved =
                 await stager.MoveAsync(chosen, finished.Folder ?? incompleteFolder, intakeFolder, show, resolution, ct);
 
@@ -436,6 +501,16 @@ public sealed class Transfers(
             string[] staged = [.. moved.Where(one => one.Moved).Select(one => one.Path!)];
 
             await grabs.StagedAsync(finished.InfoHash, staged, ct);
+
+            if (!seeding && moved.All(one => one.Moved))
+            {
+                // Its videos are in the intake folder, so what is left of the
+                // release — the text files it came with, the folder it came in — is
+                // cleared now rather than once the library has the episode. The
+                // owner saw the whole release still in the download folder and read
+                // it, rightly, as nothing having moved.
+                ClearDownload(finished.Folder ?? incompleteFolder, files);
+            }
 
             foreach (StagedResult one in moved.Where(one => one.Moved))
             {
@@ -826,7 +901,13 @@ public sealed class Transfers(
             // is still reading.
             EncodeJob? standing = await StandingAsync(sent, thisTick, ct);
 
-            if (!landed && standing is { State: EncodeJobState.Finished })
+            // Nothing said is asked too. The server says nothing at all about an
+            // encode it skips because every output is already there — South Park
+            // S15E12 on 16 September 2026, filed under season 0 — nor about one
+            // that finished before a restart, and a grab waiting for words that
+            // never come keeps its download for ever. A job it says is running is
+            // still never read this way.
+            if (!landed && standing is null or { State: EncodeJobState.Finished })
             {
                 landed = await WroteItAnywayAsync(sent, thisTick, ct);
             }
@@ -958,8 +1039,9 @@ public sealed class Transfers(
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Asked only of a job the server has said is finished, and only when the
-    /// episode still shows no file. The encoder names what it writes after the
+    /// Asked of a job the server has said is finished or has said nothing about,
+    /// and only when the episode still shows no file — never of one it says is
+    /// running. The encoder names what it writes after the
     /// episode it was asked for, so a file in the show's folders carrying this
     /// season and episode is this episode, whatever row the registration
     /// attached it to.

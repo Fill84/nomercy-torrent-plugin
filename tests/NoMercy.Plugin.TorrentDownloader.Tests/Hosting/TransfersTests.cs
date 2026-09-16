@@ -1533,6 +1533,175 @@ public class TransfersTests : IDisposable
             Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A finished download is moved out of the download folder, and nothing of it stays
+    /// behind.</strong> On 16 September 2026 South Park S15E12 CtrlHD finished at 16:14. The plugin copied its
+    /// 1.3 GB byte by byte into the intake folder, where the episode appeared at 16:49, and could not take the
+    /// download away afterwards, because the client still held the file open. For thirty-five minutes the
+    /// owner saw nothing moved at all, and after that the whole release was still in the download folder.
+    /// </para>
+    /// <para>
+    /// A torrent the client has finished with owes nothing more, so it is let go of first and its video is
+    /// moved; the rest of what it downloaded goes with the folder it came in. The client here holds the files
+    /// exactly as the real one does, and lets go of them only when the torrent is removed.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFinishedDownloadIsMovedOutOfTheDownloadFolderWhole()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string release = Path.Combine(Incomplete, "Silo.S03E06.1080p.WEB.H264-CAKES");
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000, release);
+        string notes = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.nfo", 4_120, release);
+
+        using HoldingClient client = new(
+            new StandingEngine().Holding(
+                Finished() with { State = TorrentState.Finished },
+                new TorrentFile("Silo.S03E06.1080p.WEB.H264-CAKES/Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000),
+                new TorrentFile("Silo.S03E06.1080p.WEB.H264-CAKES/Silo.S03E06.1080p.WEB.H264-CAKES.nfo", 4_120)),
+            episode,
+            notes);
+
+        FakeProvider server = Server();
+
+        await Transfers(client, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "It was never staged.");
+        Assert.False(File.Exists(episode), "The download was left where it was.");
+        Assert.False(Directory.Exists(release), "The rest of the release was left in the download folder.");
+        Assert.NotNull(server.Encoder.Job);
+    }
+
+    /// <remarks>
+    /// The other half. A torrent still seeding owes the swarm what its seeding rules say, and it seeds out of
+    /// the file it downloaded: that file is copied into the intake folder and left with the client, and the
+    /// torrent is not let go of.
+    /// </remarks>
+    [Fact]
+    public async Task ADownloadStillSeedingIsCopiedAndLeftWithTheClient()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string release = Path.Combine(Incomplete, "Silo.S03E06.1080p.WEB.H264-CAKES");
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000, release);
+
+        using HoldingClient client = new(
+            new StandingEngine().Holding(
+                Finished(),
+                new TorrentFile("Silo.S03E06.1080p.WEB.H264-CAKES/Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000)),
+            episode);
+
+        await Transfers(client, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "It was never staged.");
+        Assert.True(File.Exists(episode), "A download the client is still seeding from was taken away.");
+        Assert.Empty(client.Removed);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>An encode the server skips says nothing, and the library still decides.</strong> Asked to
+    /// encode a file whose outputs are already there, the server's <c>VideoEncodeJob</c> logs "skipping
+    /// preset … all desired outputs present" and returns — no started, no completed, no failed. On
+    /// 16 September 2026 that was South Park S15E12, whose file the library holds under its own name but
+    /// registered against season 0 (media-server #38). The grab waited on an encode nobody would ever speak
+    /// of, and the download stayed where it was.
+    /// </para>
+    /// <para>
+    /// Nothing heard about it, and a file in the show's folders named for the episode: it is done. A job the
+    /// server says is still running is still waited on, which is the rule that kept 36 GB.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEncodeTheServerSkippedWithoutAWordIsDoneOnceTheLibraryHasItUnderItsName()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        FakeLibraryQuery query = new FakeLibraryQuery()
+            .Library(TelevisionLibrary, "Television", "tv")
+            .Show(41, "Silo", TelevisionLibrary, year: 2023)
+            .Episode(41, 3, 6, hasFile: false)
+            .Episode(41, 1, 1, hasFile: true)
+            .File(41, 1, 1, "/Silo.(2023)/Silo.S03E06/Silo.S03E06.The.Dive.NoMercy.m3u8");
+
+        Transfers transfers = new(
+            engine,
+            grabs,
+            new HostLibrary(query),
+            AppliedToEveryShow.Searched,
+            new Stager(server.Journal, server.Log),
+            new RecordingEncoder { JobId = "01KZGKX2G0966V80H26EKGG5T1" },
+            server.Journal,
+            server.Log,
+            TimeProvider.System,
+            new SaidPerEpisode([]));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+        Assert.False(File.Exists(Staged), "The staged copy was left in the intake folder.");
+    }
+
+    /// <summary>A client that keeps a torrent's files open the way the real one does, until it is removed.</summary>
+    private sealed class HoldingClient : ITorrentEngine, IDisposable
+    {
+        private readonly StandingEngine _engine;
+        private readonly List<FileStream> _open;
+
+        public HoldingClient(StandingEngine engine, params string[] files)
+        {
+            _engine = engine;
+
+            // Exactly how TorrentDisk holds them: read and write, shared both ways and no further.
+            _open = [.. files.Select(path => new FileStream(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))];
+        }
+
+        public List<(string InfoHash, bool DeleteFiles)> Removed => _engine.Removed;
+
+        public Task<TorrentHandle> AddAsync(TorrentRequest request, CancellationToken ct) => _engine.AddAsync(request, ct);
+
+        public Task<IReadOnlyList<TorrentStatus>> StatusAsync(CancellationToken ct) => _engine.StatusAsync(ct);
+
+        public Task PauseAsync(string infoHash, CancellationToken ct) => _engine.PauseAsync(infoHash, ct);
+
+        public Task ResumeAsync(string infoHash, CancellationToken ct) => _engine.ResumeAsync(infoHash, ct);
+
+        public Task<IReadOnlyList<TorrentFile>> FilesAsync(string infoHash, CancellationToken ct) => _engine.FilesAsync(infoHash, ct);
+
+        public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct)
+        {
+            LetGo();
+
+            return _engine.RemoveAsync(infoHash, deleteFiles, ct);
+        }
+
+        public void Dispose() => LetGo();
+
+        private void LetGo()
+        {
+            foreach (FileStream one in _open)
+            {
+                one.Dispose();
+            }
+
+            _open.Clear();
+        }
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     /// <summary>A torrent an earlier version started beside another of the same release.</summary>
@@ -1643,7 +1812,7 @@ public class TransfersTests : IDisposable
     }
 
     private static Transfers Transfers(
-        StandingEngine engine,
+        ITorrentEngine engine,
         GrabRepository grabs,
         FakeProvider server,
         bool encoded = false,

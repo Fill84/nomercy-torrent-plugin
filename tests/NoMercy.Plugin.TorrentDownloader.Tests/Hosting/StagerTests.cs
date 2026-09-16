@@ -349,6 +349,45 @@ public class StagerTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>On one disk a staged file is moved, never copied.</strong> The owner's download folder and
+    /// intake folder are both on D:, and on 16 September 2026 a 1.3 GB episode took thirty-five minutes to be
+    /// copied from one to the other, byte by byte, while a move is a new name for the same file and takes no
+    /// time at all.
+    /// </para>
+    /// <para>
+    /// A copy is a new file, made now; a moved file is the file it was, and keeps the moment it was made.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task OnOneDiskAStagedFileIsMovedRatherThanCopied()
+    {
+        byte[] content = Content(1024 * 1024);
+        string from = Folder("incomplete-one-disk");
+        string into = Path.Combine(_root, "intake-one-disk");
+        string path = Path.Combine(from, "Silo.S03E07.mkv");
+
+        await File.WriteAllBytesAsync(path, content);
+
+        DateTime made = new(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        File.SetCreationTimeUtc(path, made);
+
+        StagedResult result = Assert.Single(await new Stager(new ActivityJournal(), new CapturingLogger()).MoveAsync(
+            [new("Silo.S03E07.mkv", Episode(7), content.Length)],
+            from,
+            into,
+            // No release name, so the file keeps its own.
+            show: null,
+            resolution: null,
+            CancellationToken.None));
+
+        Assert.True(result.Moved, result.Reason);
+        Assert.False(File.Exists(path));
+        Assert.Equal(made, File.GetCreationTimeUtc(Path.Combine(into, "Silo.S03E07.mkv")));
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>The torrent client is still holding the file.</strong> It keeps
     /// every file of a running torrent open for reading and writing and shares
     /// it both ways, because it seeds out of the same handle it downloaded

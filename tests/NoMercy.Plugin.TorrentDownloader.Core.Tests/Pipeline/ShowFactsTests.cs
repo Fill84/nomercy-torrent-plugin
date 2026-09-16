@@ -70,6 +70,23 @@ public class ShowFactsTests
         Assert.True(ShowFacts.Of([Episode(0, 1, hasFile: true)], Today, specials: false).Held);
     }
 
+    /// <remarks>
+    /// The count follows the run: an episode whose file is in the library under its own name, registered
+    /// against another row by the server (media-server #38), is not counted missing, because it is not
+    /// searched for.
+    /// </remarks>
+    [Fact]
+    public void AnEpisodeWhoseFileIsFiledUnderAnotherIsNotCountedMissing()
+    {
+        ShowFacts facts = ShowFacts.Of(
+            [Episode(0, 12, hasFile: true), Episode(15, 12, hasFile: false), Episode(15, 13, hasFile: false)],
+            Today,
+            specials: false,
+            ["/South.Park.(1997)/South.Park.S15E12/South.Park.S15E12.1%.NoMercy.m3u8"]);
+
+        Assert.Equal(1, facts.Missing);
+    }
+
     /// <remarks>A show with no episodes at all is held by nobody and misses nothing, rather than throwing.</remarks>
     [Fact]
     public void AShowWithNoEpisodesMissesNothingAndIsNotHeld()

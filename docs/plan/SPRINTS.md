@@ -3060,6 +3060,32 @@ indexer". Three sabotages caught. On the way: LimeTorrents moved to `limetorrent
 Bittorrent test that cancelled before the rubbish it tests had arrived — one run in twenty-four under load —
 now waits for it (32 of 32 under load).
 
+## S13-18 · A finished download is moved, and a skipped encode does not hang
+
+**The owner's report of 16 September 2026**: "er wordt dan helemaal niks verplaatst" — South Park S15E12
+CtrlHD finished at 16:14, the Downloads page said finished, and the release stayed whole in
+`D:\torrent-downloads`.
+
+**What the evidence showed.** Staging copied 1.3 GB byte by byte between two folders on D: and the episode
+appeared in the intake folder at 16:49. The download could not be deleted afterwards, because the client
+keeps every file of a torrent open for as long as it holds it, finished or not. The server's
+`VideoEncodeJob` skipped the encode — every output already existed, filed under S00E12 (media-server #38)
+— and publishes no event for a skip, so the grab waited for ever and kept its torrent. And the episode was
+only searched for because its own row shows no file.
+
+**As done.** `Transfers.StageAsync` lets go of a torrent that is not seeding before staging, and clears
+what is left of the release once every video is staged. `Stager` moves the download to the part name and
+renames it into place, copying only where the move is refused (a seeding torrent), refuses a download of
+the wrong length before anything happens to it, and puts a moved file back if the rename fails.
+`FinishAsync` reads a file named for the episode when the server has said the encode finished or has said
+nothing. `MissingRefresh` and `ShowFacts` count an episode whose file is in the library under its own name
+as present. Specs: `run.md` § When a download finishes, `show-list.md`. Tests:
+`AFinishedDownloadIsMovedOutOfTheDownloadFolderWhole` (the client holds the files as `TorrentDisk` does),
+`ADownloadStillSeedingIsCopiedAndLeftWithTheClient` (sabotaged: caught),
+`AnEncodeTheServerSkippedWithoutAWordIsDoneOnceTheLibraryHasItUnderItsName`,
+`OnOneDiskAStagedFileIsMovedRatherThanCopied`, `AnEpisodeWhoseFileTheServerFiledUnderAnotherIsNotMissing`,
+`AnEpisodeWhoseFileIsFiledUnderAnotherIsNotCountedMissing`.
+
 ## S13-12 · Released as v0.6.0
 
 **Steps**

@@ -2078,7 +2078,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 ShowFacts facts = ShowFacts.Of(
                     await library.GetEpisodesAsync(show.Id, ct),
                     today,
-                    applied.Specials);
+                    applied.Specials,
+                    await library.GetFilesAsync(show.Id, ct));
 
                 // Nothing of it on disk and nobody asked for it: a row the
                 // server wrote on a guess, and not the owner's show.

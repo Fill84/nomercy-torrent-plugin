@@ -32,11 +32,12 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// row the server attached it to. That is a fact about the disk, not a guess.
 /// </para>
 /// <para>
-/// <strong>Only once the job is over.</strong> Asked while an encode is still
+/// <strong>Never while the job is running.</strong> Asked while an encode is still
 /// running this would read a file being written as a file that arrived, and the
 /// caller deletes the download on the strength of it — which is the fault that
 /// cost the owner 36 GB. The caller asks the server first and comes here only
-/// for a job it has been told is finished.
+/// for a job it has been told is finished, or one it has heard nothing about:
+/// the server says nothing of an encode it skips because every output is there.
 /// </para>
 /// </remarks>
 public static partial class Landed

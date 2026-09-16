@@ -21,11 +21,12 @@ public sealed record StagedResult(Staged File, string? Path, string? Reason)
 /// </summary>
 /// <remarks>
 /// <para>
-/// Copy and delete rather than a move, because the incomplete folder and the
-/// intake folder are very often on different disks — the download lands on the
-/// fast one and the library lives on the big one — and a move across volumes is
-/// a copy anyway. Doing it in that order means a failure leaves the download
-/// exactly where it was.
+/// A move wherever the file can be moved, and a copy only where it cannot — a
+/// torrent still seeding holds its file open, and Windows moves no open file.
+/// It used to be a copy every time: on 16 September 2026 a 1.3 GB episode took
+/// thirty-five minutes to be copied between two folders on the owner's D:, byte
+/// by byte, where a move is a new name for the same file. Across two disks a
+/// move is a copy anyway, done by the file system.
 /// </para>
 /// <para>
 /// The download is never touched until the copy is complete and its length
@@ -144,9 +145,46 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         // the encoder half an episode and called it done.
         string part = Path.Combine(into, $".nomercy-{Guid.NewGuid():n}.part");
 
+        // Whether the download itself is now the part. Read on the way out: a
+        // part that is the only copy of the episode is put back, never discarded.
+        bool moved = false;
+
         try
         {
             Directory.CreateDirectory(into);
+
+            // Whole before anything happens to it. A move leaves nothing behind to
+            // fall back on, so a download of the wrong length is refused here
+            // rather than found out afterwards.
+            long length = new FileInfo(source).Length;
+
+            if (length != file.Length)
+            {
+                throw new IOException($"it is {length} bytes on disk and the torrent says {file.Length}");
+            }
+
+            ct.ThrowIfCancellationRequested();
+
+            // Under the part's name too, so the episode's own name still appears
+            // in one rename and never over a copy the file system is part way
+            // through between two disks.
+            moved = Moved(source, part);
+        }
+        catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
+        {
+            return Refused(file, source, into, refused);
+        }
+
+        try
+        {
+            if (moved)
+            {
+                File.Move(part, destination, overwrite: true);
+
+                journal.Finished(ActivityStage.Download, Path.GetFileName(source), $"moved into {into}");
+
+                return new(file, destination, null);
+            }
 
             // Shared both ways, because the torrent client is still holding
             // it: it keeps every file of a running torrent open for reading and
@@ -199,16 +237,14 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
         {
-            // Loudly, and the download is left exactly where it was: an
-            // unwritable intake folder is something the owner has to fix, and
-            // deleting the only copy of the episode while saying so would be
-            // unforgivable.
-            string reason = $"{Path.GetFileName(source)} could not be staged into {into}: {refused.Message}";
+            if (moved)
+            {
+                // The part is the download now, so it goes back where it came from
+                // before anything is said.
+                PutBack(part, source);
+            }
 
-            logger.LogWarning("{Reason}", reason);
-            journal.Failed(ActivityStage.Download, Path.GetFileName(source), reason);
-
-            return new(file, null, reason);
+            return Refused(file, source, into, refused);
         }
         finally
         {
@@ -216,6 +252,56 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
             // and must not be — a stopping server is not a staging failure.
             // What it must not do is leave the part behind.
             Discard(part);
+        }
+    }
+
+    /// <summary>Says a file could not be staged, and leaves the download exactly where it was.</summary>
+    /// <remarks>
+    /// Loudly: an unwritable intake folder is something the owner has to fix, and
+    /// deleting the only copy of the episode while saying so would be unforgivable.
+    /// </remarks>
+    private StagedResult Refused(Staged file, string source, string into, Exception refused)
+    {
+        string reason = $"{Path.GetFileName(source)} could not be staged into {into}: {refused.Message}";
+
+        logger.LogWarning("{Reason}", reason);
+        journal.Failed(ActivityStage.Download, Path.GetFileName(source), reason);
+
+        return new(file, null, reason);
+    }
+
+    /// <summary>Moves the download to the part, where nothing holds it open.</summary>
+    /// <remarks>
+    /// False where the move is refused, which is the ordinary answer for a
+    /// torrent still seeding: the client holds the file, and the caller copies
+    /// it instead.
+    /// </remarks>
+    private static bool Moved(string source, string part)
+    {
+        try
+        {
+            File.Move(source, part);
+
+            return true;
+        }
+        catch (Exception held) when (held is IOException or UnauthorizedAccessException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Returns a moved download to where it was, when its staging failed after the move.</summary>
+    private void PutBack(string part, string source)
+    {
+        try
+        {
+            File.Move(part, source);
+        }
+        catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException)
+        {
+            // Left under the part's name rather than lost, and said, so the owner
+            // can find it: Discard will not delete a part it cannot delete either.
+            logger.LogWarning("{File} could not be put back from {Part}: {Reason}", source, part, wrong.Message);
         }
     }
 

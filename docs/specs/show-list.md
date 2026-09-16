@@ -7,7 +7,9 @@
 - A show or anime the library holds no video file of is not listed, unless it is switched on. The
   server keeps a row for every show it ever identified, and those are not the owner's shows.
 - The missing column says, for every show listed, how many of its aired episodes have no video file,
-  whether the show is switched on or off. It counts season 0 only where that show takes specials.
+  whether the show is switched on or off. It counts season 0 only where that show takes specials. An
+  episode whose file is in the library under its own name, registered by the server against another
+  episode, is not counted.
 - Every show and every anime on the list has its own on/off switch.
 - A show or anime nobody has switched on is off.
 - Only a show or anime is switched on or off. No switch turns a whole library on or off.

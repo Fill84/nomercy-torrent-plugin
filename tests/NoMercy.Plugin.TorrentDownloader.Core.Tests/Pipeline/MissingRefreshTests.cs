@@ -342,6 +342,32 @@ public class MissingRefreshTests
         Assert.Equal([1, 2], library.EpisodesAskedFor);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>An episode whose file is in the library under its own name is not missing</strong>, whatever
+    /// row the server attached that file to. South Park S15E12's encode is in
+    /// <c>/South.Park.(1997)/South.Park.S15E12/</c>, registered against season 0 (media-server #38), so its
+    /// own row shows no file. It was searched for, downloaded again and handed to an encoder that skipped it,
+    /// because every output was already there.
+    /// </para>
+    /// <para>
+    /// The file's own name is the same proof <see cref="Landed"/> reads once an encode is over.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeWhoseFileTheServerFiledUnderAnotherIsNotMissing()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(1, "South Park", 1997)
+            .Episode(1, 0, 12, airDate: Aired, hasFile: true)
+            .Episode(1, 15, 12, airDate: Aired)
+            .Episode(1, 15, 13, airDate: Aired);
+
+        library.Files[1] = ["/South.Park.(1997)/South.Park.S15E12/South.Park.S15E12.1%.NoMercy.m3u8"];
+
+        Assert.Equal([new EpisodeKey(1, 15, 13)], (await Derive(library)).Select(episode => episode.Key));
+    }
+
     private static async Task<IReadOnlyList<TrackedEpisode>> DeriveAnime(FakeLibrary library, int seasonOneLength)
     {
         // Season one in full, so the offset is a real count rather than a

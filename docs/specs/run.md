@@ -32,6 +32,21 @@
 - When nothing a run started is still downloading, staged or waiting on an encode, maintenance runs
   and the run ends.
 
+## When a download finishes
+
+- A finished torrent that is not seeding is let go of by the download client, and each video it holds
+  for an episode is moved into the intake folder. On one disk that is a rename and takes no time; across
+  two disks the file system copies it. The episode's own name appears only once the whole file is there.
+- What else that torrent downloaded, and the folders it came in, are then deleted from the download
+  folder.
+- A torrent still seeding keeps its files: each video is copied into the intake folder, and the torrent
+  and its files go once seeding is over and the library has the episode.
+- An encode is asked for each staged video. The grab is done once the library has the episode, or holds
+  a file named for the episode under another episode and the server has not said the encode is still
+  running. The server says nothing about an encode it skips because every output already exists.
+- An episode whose file is in the library under its own name is not missing, whichever episode the
+  server registered that file against.
+
 ## When a site or a source fails
 
 - A question to a site that does not answer, or that stays behind a challenge, is asked at most twice,

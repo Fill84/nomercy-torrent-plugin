@@ -27,7 +27,8 @@ public readonly record struct ShowFacts(int Missing, bool Held)
     /// <param name="episodes">Every episode of the show, those with a file included.</param>
     /// <param name="today">The broadcast day: an episode airing today has aired.</param>
     /// <param name="specials">Whether this show's settings take season 0.</param>
-    public static ShowFacts Of(IReadOnlyList<Episode> episodes, DateOnly today, bool specials)
+    /// <param name="files">Every file the library holds of the show, whichever episode it is registered against.</param>
+    public static ShowFacts Of(IReadOnlyList<Episode> episodes, DateOnly today, bool specials, IReadOnlyList<string>? files = null)
     {
         int missing = 0;
         bool held = false;
@@ -48,9 +49,10 @@ public readonly record struct ShowFacts(int Missing, bool Held)
                 continue;
             }
 
-            // The same rule the run itself follows: no date is not aired, and
-            // today counts as aired.
-            if (episode.AirDate is DateOnly aired && aired <= today)
+            // The same rules the run itself follows: a file in the library named
+            // for the episode is the episode (MissingRefresh says why), no date
+            // is not aired, and today counts as aired.
+            if (episode.AirDate is DateOnly aired && aired <= today && !Landed.Wrote(episode.Key, files ?? []))
             {
                 missing++;
             }
