@@ -34,6 +34,19 @@
 - When the winner's magnet or torrent cannot be read from any indexer that listed it, the next merged
   torrent in the same order becomes the winner.
 
+## When no release name gives a torrent
+
+- When no wish group of release names gives a torrent, the indexers are asked for the show's title with
+  the season and episode, as `South Park S15E12`.
+- The indexers are asked in the same order: the first-choice indexers one after another, then every
+  other enabled indexer at the same time.
+- A result counts only when its title names that show, that season and that episode and nothing more,
+  and it meets the show's settings: quality, codec, English only, musts, forbidden and the refused
+  releases.
+- The results that count are merged by hash, grouped by the wishes they carry — the group carrying the
+  most wishes first — and the winner of a group is chosen and handed over as for a release name.
+- A result's own title is the release name it is downloaded under.
+
 ## Handing the winner over
 
 - The winning merged torrent is offered to the download client.

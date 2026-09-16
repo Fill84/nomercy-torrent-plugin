@@ -259,20 +259,6 @@ public sealed class SearchCycle(
         {
             IReadOnlyList<IReadOnlyList<string>> groups = Wanted(candidates, episode, decisions, refused, subject);
 
-            if (groups.Count == 0)
-            {
-                // release-names.md: no release name, no search. Said as it is, so
-                // the Activity and History pages show why, and the episode is
-                // searched for again on the next run.
-                string why = refused.Count > 0
-                    ? refused[^1]
-                    : "no name source gave a release name for it";
-
-                journal.Finished(ActivityStage.Decide, subject, why);
-
-                return new(episode.Key, null, null, null, false, why);
-            }
-
             foreach (IReadOnlyList<string> group in groups)
             {
                 IReadOnlyList<RankedTorrent> ranked = await _round.AskAsync(group, episode, options.Blacklisted, asked, ct);
@@ -291,9 +277,18 @@ public sealed class SearchCycle(
                 journal.Noted(ActivityStage.Decide, subject, $"no torrent for {string.Join(", ", group)}");
             }
 
+            // indexer-search.md § When no release name gives a torrent: the show and
+            // episode, and the best result that names it and meets the show's settings.
+            if (await ByEpisodeAsync(episode, decisions, options, subject, trackers, refused, asked, ct) is EpisodeOutcome found)
+            {
+                return found;
+            }
+
             string none = refused.Count > 0
                 ? refused[^1]
-                : "no indexer listed a torrent for any of its release names";
+                : groups.Count == 0
+                    ? "no name source gave a release name for it, and no indexer listed a torrent for the episode"
+                    : "no indexer listed a torrent for any of its release names, or for the episode";
 
             journal.Finished(ActivityStage.Decide, subject, none);
 
@@ -305,6 +300,50 @@ public sealed class SearchCycle(
 
             return new(episode.Key, null, null, null, false, exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Asks every indexer for the show and episode, and takes the best result that names it and meets its
+    /// show's settings.
+    /// </summary>
+    /// <remarks>
+    /// <c>docs/specs/indexer-search.md</c> § When no release name gives a torrent, the owner's rule of
+    /// 16 September 2026. The results that count go through the same merge and the same winner as a release
+    /// name's, one wish group at a time, the group carrying the most wishes first.
+    /// </remarks>
+    private async Task<EpisodeOutcome?> ByEpisodeAsync(
+        TrackedEpisode episode,
+        Decisions decisions,
+        CycleOptions options,
+        string subject,
+        List<string> trackers,
+        List<string> refused,
+        AskedThisCycle asked,
+        CancellationToken ct)
+    {
+        journal.Noted(ActivityStage.Decide, subject, $"no release name gave a torrent, so asking the indexers for {subject}");
+
+        IReadOnlyList<RankedTorrent> ranked = await _round.AskForEpisodeAsync(
+            episode,
+            title => decisions.JudgeName(ReleaseName.Parse(title), episode).Accepted,
+            options.Blacklisted,
+            asked,
+            ct);
+
+        trackers.AddRange(ranked.SelectMany(torrent => torrent.Torrent.Trackers));
+
+        foreach (IReadOnlyList<string> group in WishGroups.Of(ranked.Select(torrent => torrent.Torrent.Title), decisions.SettingsFor(episode).Wishes))
+        {
+            HashSet<string> titles = new(group, StringComparer.Ordinal);
+            RankedTorrent[] inGroup = [.. ranked.Where(torrent => titles.Contains(torrent.Torrent.Title))];
+
+            if (await TakeAsync(episode, inGroup, decisions, options, subject, trackers, refused, ct) is EpisodeOutcome taken)
+            {
+                return taken;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

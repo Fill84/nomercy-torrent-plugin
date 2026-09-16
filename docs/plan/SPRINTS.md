@@ -3043,6 +3043,23 @@ refusal pruning are gone; a refusal is said on Activity while the run is going; 
 refusals already written. `StoreTests.TheRefusalsAnOlderVersionWroteAreGone`,
 `PagesReachableTests.ARefusedNameIsNotWrittenDownAnywhere`, `SearchCycleTests.EveryRefusalIsSaidWhileTheRunIsGoing`.
 
+## S13-17 · When no release name gives a torrent, the episode is asked for
+
+**The owner's rule of 16 September 2026**, after South Park S15E12 could not be found: PreDB.net names
+`South.Park.S15E12.1080p.BluRay.x264-FilmHD`, the one scene name meeting 1080p, h264 and English only, and
+no indexer has a torrent for it; the indexers do have `CtrlHD`'s 1080p WEB-DL, which no scene database
+knows.
+
+**As done.** `IndexerRound.AskForEpisodeAsync` puts `Show SxxEyy` to the indexers in the round's order; a
+row counts when its title names that episode and meets the show's settings (`Decisions.JudgeName`), goes by
+its own title, and is merged, grouped by wishes and won exactly as a release name's. `SearchCycle` falls
+back to it once no wish group gave a torrent, or no name met the settings. Specs: `release-names.md`
+§ Release names first, `indexer-search.md` § When no release name gives a torrent, `run.md`. Tests on pages
+captured that day: `ByShowAndEpisodeTests` (four), and five cycle tests rewritten from "no name, no
+indexer". Three sabotages caught. On the way: LimeTorrents moved to `limetorrents.fun` (`7f8fc91`), and a
+Bittorrent test that cancelled before the rubbish it tests had arrived — one run in twenty-four under load —
+now waits for it (32 of 32 under load).
+
 ## S13-12 · Released as v0.6.0
 
 **Steps**

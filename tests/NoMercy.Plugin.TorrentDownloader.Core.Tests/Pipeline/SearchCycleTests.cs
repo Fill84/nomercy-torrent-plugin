@@ -65,14 +65,15 @@ public class SearchCycleTests
 
         // And the episode nobody is serving says exactly that, rather than
         // disappearing from the report. No name source gave a release name for
-        // it, so no indexer was asked (release-names.md: no release, no search),
-        // and it does not count as searched.
+        // it, so the indexers were asked for the episode itself
+        // (indexer-search.md § When no release name gives a torrent), and
+        // nothing on the page names it.
         EpisodeOutcome missing = report.Outcomes.Single(outcome => outcome.Episode == Silo(7).Key);
 
         Assert.Null(missing.Release);
         Assert.False(missing.HandedOver);
-        Assert.False(missing.Searched);
-        Assert.Equal("no name source gave a release name for it", missing.Detail);
+        Assert.True(missing.Searched);
+        Assert.Equal("no name source gave a release name for it, and no indexer listed a torrent for the episode", missing.Detail);
     }
 
     /// <remarks>
@@ -140,11 +141,13 @@ public class SearchCycleTests
         // And PreDB's feed once, at the start of the run, besides.
         Assert.Equal(43, fetch.Asked.Count(address => address.Host == "predb.me"));
 
-        // And not one indexer was asked about any of them: no name source gave a
-        // release name, and an indexer is searched only with one
-        // (release-names.md § No release, no search).
-        Assert.DoesNotContain(fetch.Asked, address => address.Host == "www.limetorrents.lol");
-        Assert.All(report.Outcomes, outcome => Assert.Equal("no name source gave a release name for it", outcome.Detail));
+        // No name source gave a release name, so each episode was put to the
+        // indexer by itself and nothing else (indexer-search.md § When no release
+        // name gives a torrent): once exactly and once as words, per episode.
+        Assert.Equal(84, fetch.Asked.Count(address => address.Host == "www.limetorrents.lol"));
+        Assert.All(
+            report.Outcomes,
+            outcome => Assert.Equal("no name source gave a release name for it, and no indexer listed a torrent for the episode", outcome.Detail));
     }
 
     /// <remarks>
@@ -329,13 +332,12 @@ public class SearchCycleTests
     }
 
     /// <remarks>
-    /// <c>docs/specs/release-names.md</c> § No release, no search: an episode for which no name source gave a
-    /// release name that meets its show's settings is not searched on any indexer, and the plugin builds no
-    /// search term of its own. The only name here is German and the show forbids the tag; not one indexer
-    /// is asked anything, and the episode says why.
+    /// <c>docs/specs/release-names.md</c> § Release names first: a name that does not meet the show's settings
+    /// is never put to an indexer. The only name here is German and the show forbids the tag, so the indexer
+    /// is asked for the episode itself and for nothing else — the owner's rule of 16 September 2026.
     /// </remarks>
     [Fact]
-    public async Task NothingIsAskedOfAnIndexerWhenNoNameMeetsTheSettings()
+    public async Task ANameThatDoesNotMeetTheSettingsIsNeverAskedOnlyTheEpisodeIs()
     {
         FixedNames names = new(("Silo.S03E06.German.DL.AC3D.1080p.BluRay.x264-JaJunge", "PreDB"));
 
@@ -346,8 +348,11 @@ public class SearchCycleTests
             new(AtQuality("1080p", forbidden: ["German"]), Blacklist.None, DryRun: false, Folder),
             CancellationToken.None);
 
-        Assert.Empty(fetch.Asked);
-        Assert.Contains("German", Assert.Single(report.Outcomes).Detail, StringComparison.Ordinal);
+        Assert.NotEmpty(fetch.Asked);
+        Assert.All(
+            fetch.Asked,
+            address => Assert.Contains("Silo S03E06", Uri.UnescapeDataString(address.ToString()).Replace('+', ' ').Replace('-', ' '), StringComparison.Ordinal));
+        Assert.DoesNotContain(fetch.Asked, address => address.OriginalString.Contains("JaJunge", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <remarks>
@@ -560,9 +565,10 @@ public class SearchCycleTests
     }
 
     /// <remarks>
-    /// <c>docs/specs/run.md</c>: an episode for which no wish group produces a torrent is shown with its reason,
-    /// and is searched for again on the next run. Nobody lists the name; the outcome says so, and a second run
-    /// puts every question to every indexer again.
+    /// <c>docs/specs/run.md</c>: an episode for which no wish group produces a torrent, and the search for the
+    /// episode none either, is shown with its reason, and is searched for again on the next run. Nobody lists
+    /// the name or the episode; the outcome says so, and a second run puts every question to every indexer
+    /// again.
     /// </remarks>
     [Fact]
     public async Task AnEpisodeWithNoTorrentIsShownWithItsReasonAndComesBackNextRun()
@@ -582,14 +588,14 @@ public class SearchCycleTests
 
             Assert.False(outcome.HandedOver);
             Assert.True(outcome.Searched);
-            Assert.Equal("no indexer listed a torrent for any of its release names", outcome.Detail);
+            Assert.Equal("no indexer listed a torrent for any of its release names, or for the episode", outcome.Detail);
         }
 
         Assert.True(asked > 0);
         Assert.Equal(asked * 2, fetch.Asked.Count);
         Assert.Contains(
             journal.Snapshot().History,
-            entry => entry.Stage == ActivityStage.Decide && entry.Detail == "no indexer listed a torrent for any of its release names");
+            entry => entry.Stage == ActivityStage.Decide && entry.Detail == "no indexer listed a torrent for any of its release names, or for the episode");
     }
 
     /// <remarks>
@@ -724,15 +730,6 @@ public class SearchCycleTests
             // Through the grab, which is what checks there is room. A cycle that
             // called the client directly went round that check.
             engine is null ? null : new Grab(engine, new EndlessDisk(free), writing));
-    }
-
-    /// <summary>A disk with as much room as the test says, or as much as anyone could want.</summary>
-    private sealed class EndlessDisk(long? free) : IStorageSpace
-    {
-        public long? FreeBytes(string folder)
-        {
-            return free ?? long.MaxValue;
-        }
     }
 
     /// <summary>A gap in the season the captured pack covers.</summary>

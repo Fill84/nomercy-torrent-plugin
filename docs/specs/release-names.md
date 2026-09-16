@@ -1,11 +1,12 @@
 # Release names
 
-## No release, no search
+## Release names first
 
-- An indexer is searched only with a release name that a name source gave.
-- An episode for which no name source gave a release name that meets its show's settings is not
-  searched on any indexer.
-- The plugin builds no search term of its own from a show's title, season or episode.
+- An indexer is searched first with the release names that a name source gave.
+- When no release name gives a torrent — because no name source gave a release name that meets the
+  show's settings, or because no indexer listed a torrent for any of them — the indexers are searched
+  for the show and episode instead (`indexer-search.md` § When no release name gives a torrent).
+- The plugin builds no other search term of its own from a show's title, season or episode.
 
 ## Reading the feeds
 

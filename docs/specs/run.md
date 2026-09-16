@@ -25,8 +25,10 @@
 - A torrent found first is one found on an indexer earlier in that order, and among the other
   indexers one earlier in the source catalogue.
 - A question already asked of an indexer during a run is not asked of it again in that run.
-- An episode for which no wish group produces a torrent is shown with its reason on the Activity and
-  History pages, and is searched for again on the next run.
+- An episode for which no wish group produces a torrent is searched for on the indexers by show and
+  episode (`indexer-search.md` § When no release name gives a torrent).
+- An episode for which that search produces no torrent either is shown with its reason on the Activity
+  and History pages, and is searched for again on the next run.
 - When nothing a run started is still downloading, staged or waiting on an encode, maintenance runs
   and the run ends.
 

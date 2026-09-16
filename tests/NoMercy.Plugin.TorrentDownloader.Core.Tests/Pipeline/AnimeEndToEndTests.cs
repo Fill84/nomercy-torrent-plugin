@@ -75,8 +75,14 @@ public class AnimeEndToEndTests
         EpisodeOutcome outcome = Assert.Single(report.Outcomes, one => one.Episode == missing.Key);
 
         Assert.Null(outcome.Release);
-        Assert.False(outcome.Searched);
-        Assert.Empty(fetch.Asked);
+
+        // The name is never put to an indexer; the episode is, by its own season and
+        // number (indexer-search.md § When no release name gives a torrent), and the
+        // captured page's absolute-numbered post does not name S02E08 there either.
+        Assert.True(outcome.Searched);
+        Assert.All(
+            fetch.Asked,
+            address => Assert.Contains("Rilakkuma S02E08", Uri.UnescapeDataString(address.ToString()).Replace('+', ' '), StringComparison.Ordinal));
 
         string refused = Assert.Single(refusals.Distinct());
 

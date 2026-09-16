@@ -141,8 +141,56 @@ public static class Winner
 /// </remarks>
 public sealed class IndexerRound(Find find, IActivityJournal journal)
 {
-    public async Task<IReadOnlyList<RankedTorrent>> AskAsync(
+    /// <summary>One thing put to every indexer, which of its rows count, and the name a counting row goes by.</summary>
+    /// <param name="Text">What is asked: letter for letter first, then without punctuation.</param>
+    /// <param name="Counts">Whether a row's title counts for this question.</param>
+    /// <param name="NameOf">The release name a counting row is merged and downloaded under.</param>
+    private sealed record Question(string Text, Func<string, bool> Counts, Func<ReleaseCopy, string> NameOf);
+
+    public Task<IReadOnlyList<RankedTorrent>> AskAsync(
         IReadOnlyList<string> names,
+        TrackedEpisode episode,
+        IReadOnlySet<string> blacklisted,
+        AskedThisCycle asked,
+        CancellationToken ct)
+    {
+        Question[] questions =
+        [
+            .. names.Select(name => new Question(name, title => IsTheName(title, name), _ => name)),
+        ];
+
+        return RoundAsync(questions, episode, blacklisted, asked, ct);
+    }
+
+    /// <summary>
+    /// The show and episode put to every indexer, when no release name gave a torrent.
+    /// </summary>
+    /// <remarks>
+    /// <c>docs/specs/indexer-search.md</c> § When no release name gives a torrent — the owner's rule of
+    /// 16 September 2026. South Park S15E12 had one scene name that met its show's settings, a 2012 release no
+    /// indexer has a torrent for, and the release the indexers do have was never asked for. A row counts only
+    /// when <paramref name="meets"/> says it names this episode and meets the show's settings, and it goes by
+    /// its own title: no name source gave it one.
+    /// </remarks>
+    /// <param name="episode">The episode asked for, by its show's title, season and episode.</param>
+    /// <param name="meets">Whether a row's title names the episode and meets the show's settings.</param>
+    /// <param name="blacklisted">Releases and hashes still refused, which take no part.</param>
+    /// <param name="asked">What each indexer has already answered this run.</param>
+    /// <param name="ct">The run's lifetime.</param>
+    public Task<IReadOnlyList<RankedTorrent>> AskForEpisodeAsync(
+        TrackedEpisode episode,
+        Func<string, bool> meets,
+        IReadOnlySet<string> blacklisted,
+        AskedThisCycle asked,
+        CancellationToken ct)
+    {
+        Question[] questions = [new($"{episode.ShowTitle} {episode.Key}", meets, row => row.Title)];
+
+        return RoundAsync(questions, episode, blacklisted, asked, ct);
+    }
+
+    private async Task<IReadOnlyList<RankedTorrent>> RoundAsync(
+        IReadOnlyList<Question> names,
         TrackedEpisode episode,
         IReadOnlySet<string> blacklisted,
         AskedThisCycle asked,
@@ -184,19 +232,19 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         return rows.Select((one, at) => new FoundRow(one.Row, one.Name, (place * Merging.PerIndexer) + at));
     }
 
-    /// <summary>One indexer, asked every name of the group: exactly, and without punctuation where that found nothing.</summary>
+    /// <summary>One indexer, asked every question of the group: exactly, and without punctuation where that found nothing.</summary>
     private async Task<(string Name, ReleaseCopy Row)[]> IndexerAsync(
         SourceDefinition indexer,
-        IReadOnlyList<string> names,
+        IReadOnlyList<Question> questions,
         AskedThisCycle asked,
         string about,
         CancellationToken ct)
     {
         List<(string Name, ReleaseCopy Row)> counted = [];
 
-        foreach (string name in names)
+        foreach (Question question in questions)
         {
-            foreach (SearchTerm term in (SearchTerm[])[new(name, true), new(name, false)])
+            foreach (SearchTerm term in (SearchTerm[])[new(question.Text, true), new(question.Text, false)])
             {
                 if (asked.SitsOut(indexer.Name))
                 {
@@ -204,12 +252,12 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
                     return [.. counted];
                 }
 
-                ReleaseCopy[] rows = asked.Recall(indexer.Name, term) ?? await AskAsync(indexer, term, name, about, asked, ct);
-                ReleaseCopy[] named = [.. rows.Where(row => IsTheName(row.Title, name))];
+                ReleaseCopy[] rows = asked.Recall(indexer.Name, term) ?? await AskAsync(indexer, term, question, about, asked, ct);
+                ReleaseCopy[] named = [.. rows.Where(row => question.Counts(row.Title))];
 
                 if (named.Length > 0)
                 {
-                    counted.AddRange(named.Select(row => (name, row)));
+                    counted.AddRange(named.Select(row => (question.NameOf(row), row)));
 
                     break;
                 }
@@ -219,11 +267,11 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         return [.. counted];
     }
 
-    /// <summary>Asks once, reads a hash for every row that is the name and carries none, and keeps the answer for the run.</summary>
+    /// <summary>Asks once, reads a hash for every row that counts and carries none, and keeps the answer for the run.</summary>
     private async Task<ReleaseCopy[]> AskAsync(
         SourceDefinition indexer,
         SearchTerm term,
-        string name,
+        Question question,
         string about,
         AskedThisCycle asked,
         CancellationToken ct)
@@ -232,7 +280,7 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
 
         for (int at = 0; at < rows.Length; at++)
         {
-            if (rows[at].InfoHash is null && IsTheName(rows[at].Title, name))
+            if (rows[at].InfoHash is null && question.Counts(rows[at].Title))
             {
                 rows[at] = await find.HashOfAsync(rows[at], ct);
             }

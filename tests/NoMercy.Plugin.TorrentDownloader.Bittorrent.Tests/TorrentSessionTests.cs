@@ -213,6 +213,16 @@ public class TorrentSessionTests : IDisposable
             answered++;
         }
 
+        // Stopped only once the rubbish has arrived. Cancelled straight after the
+        // last block was sent, a loaded machine had the session stop before it had
+        // read a byte of it — one run in twenty-four under load read nought — and
+        // then there was nothing for the rule below to have thrown away.
+        while (leecher.Progress().Downloaded == 0 && !stopping.IsCancellationRequested)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(10), stopping.Token)
+                .ContinueWith(_ => { }, TaskScheduler.Default);
+        }
+
         await stopping.CancelAsync();
         await asks.ContinueWith(_ => { }, TaskScheduler.Default);
 
