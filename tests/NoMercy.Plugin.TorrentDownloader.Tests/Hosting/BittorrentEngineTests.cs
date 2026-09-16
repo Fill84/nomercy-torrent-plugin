@@ -755,12 +755,19 @@ public class BittorrentEngineTests : IDisposable
     }
 
     /// <remarks>
-    /// The other half, and the owner's own rule: a download that is removed with
-    /// its files leaves nothing behind at all — not the videos, not the text
-    /// files a release ships with, and not the folder it made for itself.
+    /// <para>
+    /// The other half: a download removed with its files takes every file the torrent names, and the folders
+    /// it made for them once they are empty.
+    /// </para>
+    /// <para>
+    /// <strong>And nothing it did not download.</strong> The folder was deleted whole, so a file somebody else
+    /// put in it went too. The owner's rule of 16 September 2026: the plugin deletes only what it created
+    /// itself. A file in the torrent's folder that the torrent never named stays, and so does the folder
+    /// holding it.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task ARemovedTorrentLeavesNothingOfItsOwnBehind()
+    public async Task ARemovedTorrentDeletesItsOwnFilesAndNothingElse()
     {
         using BittorrentEngine engine = Started();
 
@@ -780,16 +787,34 @@ public class BittorrentEngineTests : IDisposable
 
         Assert.NotEmpty(mine);
 
-        // The folder the torrent made for itself, and something a release
-        // brings along that is not a video and was never downloaded by us.
-        string own = Path.Combine(_folder, mine[0].Path.Split('/')[0]);
+        // The folder the torrent made for itself, and a file in it the torrent
+        // never named: somebody else's.
+        string own = Path.Combine(_folder, mine[0].Path.Split(['/', '\\'])[0]);
+        string somebodys = Path.Combine(own, "read.me.txt");
 
         Directory.CreateDirectory(own);
-        await File.WriteAllTextAsync(Path.Combine(own, "read.me.txt"), "shipped with the release");
+        await File.WriteAllTextAsync(somebodys, "not this torrent's");
 
         await engine.RemoveAsync(handle.InfoHash, deleteFiles: true, CancellationToken.None);
 
-        Assert.False(Directory.Exists(own), $"{own} was left behind.");
+        Assert.All(
+            mine,
+            one => Assert.False(File.Exists(Path.Combine(_folder, one.Path.Replace('/', Path.DirectorySeparatorChar))), $"{one.Path} was left behind."));
+        Assert.True(File.Exists(somebodys), "A file the torrent never named was deleted.");
+
+        // And with nothing but its own in it, the folder goes as well.
+        File.Delete(somebodys);
+
+        TorrentHandle again = await engine.AddAsync(
+            Request with { Source = file, DownloadFolder = _folder },
+            CancellationToken.None);
+
+        _ = await engine.FilesAsync(again.InfoHash, CancellationToken.None);
+        _ = await engine.StatusAsync(CancellationToken.None);
+
+        await engine.RemoveAsync(again.InfoHash, deleteFiles: true, CancellationToken.None);
+
+        Assert.False(Directory.Exists(own), $"{own} was left behind with nothing in it.");
     }
 
     private static byte[] Fixture(string name)
@@ -1077,10 +1102,12 @@ public class BittorrentEngineTests : IDisposable
             keeping.Remember(torrent.InfoHash, Info(file));
 
             // What the download left behind: the torrent's own folder, under
-            // its own name, with one of its files in it.
+            // its own name, with one of its own files in it — a file the
+            // torrent names, because nothing else is this plugin's to delete.
             string left = Path.Combine(folder, torrent.Name);
-            Directory.CreateDirectory(left);
-            await File.WriteAllTextAsync(Path.Combine(left, "half-a-download"), "bytes");
+            string half = Path.Combine(folder, torrent.PathUnderFolder(torrent.Files[0]).Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(half)!);
+            await File.WriteAllTextAsync(half, "bytes");
 
             // An engine that has never been told about this torrent, which is
             // what a restart leaves.
@@ -1156,8 +1183,9 @@ public class BittorrentEngineTests : IDisposable
             keeping.Remember(kept.InfoHash, Info(keptFile));
 
             string abandonedFolder = Path.Combine(folder, abandoned.Name);
-            Directory.CreateDirectory(abandonedFolder);
-            await File.WriteAllTextAsync(Path.Combine(abandonedFolder, "left-behind"), "bytes");
+            string leftBehind = Path.Combine(folder, abandoned.PathUnderFolder(abandoned.Files[0]).Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(leftBehind)!);
+            await File.WriteAllTextAsync(leftBehind, "bytes");
 
             // Something the owner put here themselves, which is not a torrent
             // and is nobody's to delete.

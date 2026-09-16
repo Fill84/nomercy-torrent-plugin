@@ -2120,17 +2120,10 @@ public sealed class BittorrentEngine(
 
         try
         {
-            if (torrent.Files.Count > 1)
-            {
-                string own = Path.Combine(folder, torrent.Name);
-
-                if (Inside(folder, own) && Directory.Exists(own))
-                {
-                    Directory.Delete(own, recursive: true);
-                }
-
-                return;
-            }
+            // Every file the torrent names, and nothing it does not. The folder of a many-file torrent used to
+            // be deleted whole, so whatever somebody else had put in it went too — and the owner's rule of
+            // 16 September 2026 is that this plugin deletes only what it created itself.
+            HashSet<string> folders = new(StringComparer.OrdinalIgnoreCase);
 
             foreach (TorrentFileEntry file in torrent.Files)
             {
@@ -2138,9 +2131,29 @@ public sealed class BittorrentEngine(
                     folder,
                     torrent.PathUnderFolder(file).Replace('/', Path.DirectorySeparatorChar));
 
-                if (Inside(folder, path) && File.Exists(path))
+                if (!Inside(folder, path))
+                {
+                    continue;
+                }
+
+                if (File.Exists(path))
                 {
                     File.Delete(path);
+                }
+
+                for (string? parent = Path.GetDirectoryName(path); parent is not null && Inside(folder, parent); parent = Path.GetDirectoryName(parent))
+                {
+                    folders.Add(parent);
+                }
+            }
+
+            // Then the folders the torrent's files were in, deepest first, and only once nothing is left in
+            // them: a folder still holding something the torrent never named is not this plugin's to remove.
+            foreach (string made in folders.OrderByDescending(one => one.Length))
+            {
+                if (Directory.Exists(made) && !Directory.EnumerateFileSystemEntries(made).Any())
+                {
+                    Directory.Delete(made);
                 }
             }
         }

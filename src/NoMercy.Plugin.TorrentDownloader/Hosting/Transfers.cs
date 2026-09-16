@@ -658,33 +658,26 @@ public sealed class Transfers(
     }
 
     /// <summary>
-    /// Asks for an encode for anything in the intake folder nothing is waiting
-    /// on.
+    /// Clears what this plugin staged into the intake folder and nothing waits on any more, and touches
+    /// nothing else.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// Before a grab recorded where it staged its episode, it was marked done
-    /// the moment the file was copied — whether or not the encode had been
-    /// taken. Three of the owner's episodes were left in the intake folder that
-    /// way, with nothing in the plugin that would ever come back to them.
+    /// <strong>Only what this plugin created is its own to delete</strong> — the owner's rule of
+    /// 16 September 2026. The intake folder is shared. This used to clear whatever no grab was waiting on,
+    /// folders included, and to take on any file whose name matched a grab's release; on that day it emptied
+    /// a folder of somebody else's that had nothing to do with the plugin. The owner's request of 24 August
+    /// to keep the folder from growing is answered by clearing the plugin's own leftovers only.
     /// </para>
     /// <para>
-    /// So the folder itself is read. Anything no open grab is waiting on is
-    /// matched to the grab that put it there, by the release both carry, and
-    /// asked for again — after which it is on the ordinary path: dispatched,
-    /// then the library, then deleted.
+    /// The proof of ownership is the plugin's own record: a path written against a grab when it was staged.
+    /// A folder is never one — staging copies a video out flat — and a file whose name only looks like a
+    /// grab's release is somebody else's. Both are left exactly where they are, and so is a file an encode
+    /// is still reading.
     /// </para>
     /// <para>
-    /// A file no grab can be found for is left alone and said once. It may be
-    /// something the owner put there by hand, and this plugin does not delete
-    /// what it did not make.
-    /// </para>
-    /// <para>
-    /// <c>waited</c> is every staged file something is already waiting on,
-    /// worked out by the tick. It used to be a second read of the open grabs,
-    /// made here because staging has happened since the first one — a file
-    /// staged a moment ago would otherwise read as one nothing is waiting on,
-    /// and be dispatched a second time on every tick.
+    /// <c>waited</c> is every staged file something is already waiting on, worked out by the tick, so a file
+    /// staged a moment ago is not read as one nothing waits on.
     /// </para>
     /// </remarks>
     private async Task LeftBehindAsync(
@@ -700,19 +693,9 @@ public sealed class Transfers(
 
         IReadOnlyList<StoredDownload>? every = null;
 
-        foreach (string entry in Directory.EnumerateFileSystemEntries(intakeFolder))
+        // Files only, and only at the top: a folder in here is never this plugin's.
+        foreach (string entry in Directory.EnumerateFiles(intakeFolder))
         {
-            // A folder is never something this plugin put here: staging copies
-            // the video out flat, because the encoder takes a path and has no
-            // interest in the folders a torrent came in. The owner's intake
-            // folder held six left by 0.3.4, still carrying the tracker's name.
-            if (Directory.Exists(entry))
-            {
-                Discard(entry, "a folder no download of this plugin's uses");
-
-                continue;
-            }
-
             if (waited.Contains(entry))
             {
                 continue;
@@ -720,81 +703,38 @@ public sealed class Transfers(
 
             every ??= await grabs.EveryAsync(ct);
 
-            // Whatever became of its grab, a file an encode is still reading
-            // stays. This step decides on "is a grab waiting on this", and a
-            // grab that has just failed or finished is waiting on nothing — so
-            // on 1 September 2026 it deleted nine staged files a minute after
-            // one episode's encode died, and took episode five's input away
-            // between its first bundle and its second. The encoder opens its
-            // input once per bundle, and the server saying the job is still
-            // going is the only thing here that can know that.
-            StoredDownload? reading = every.FirstOrDefault(one =>
+            StoredDownload? stagedBy = every.FirstOrDefault(one =>
                 one.StagedPaths.Contains(entry, StringComparer.OrdinalIgnoreCase));
 
-            if (reading is not null
-                && await StandingAsync(reading, thisTick, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
+            if (stagedBy is null)
+            {
+                // Not staged by this plugin, so not this plugin's: left exactly where it is.
+                continue;
+            }
+
+            // Whatever became of its grab, a file an encode is still reading stays. On 1 September 2026 a
+            // pass deleted nine staged files a minute after one episode's encode died, and took episode
+            // five's input away between its first bundle and its second.
+            if (await StandingAsync(stagedBy, thisTick, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
             {
                 continue;
             }
 
-            // By the release, so the uploader's spelling of it and the name the
-            // plugin chose come to the same thing.
-            string named = TitleMatcher.Release(Path.GetFileNameWithoutExtension(entry));
-
-            StoredDownload? put = every.FirstOrDefault(one =>
-                string.Equals(TitleMatcher.Release(one.ReleaseTitle), named, StringComparison.Ordinal));
-
-            // Nothing needs it. Cleared rather than left, which is what the
-            // owner asked for on 24 August 2026: the plugin used to leave
-            // whatever it could not account for, and the folder only ever grew
-            // — twenty-two things for five episodes, read again on every tick.
-            //
-            // A grab that already knows where its file is is being waited on,
-            // so another file matching it is a second copy. That cannot happen
-            // any more, since an episode's name comes from the episode, but the
-            // ones already on the owner's disk are still there.
-            if (put is null)
-            {
-                Discard(entry, "no grab of this plugin's is waiting on it");
-
-                continue;
-            }
-
-            if (put.StagedPaths.Count > 0)
-            {
-                Discard(entry, $"a second copy of {put.ReleaseTitle}");
-
-                continue;
-            }
-
-            await grabs.StagedAsync(put.InfoHash, [entry], ct);
-
-            foreach (EpisodeKey episode in put.Covers)
-            {
-                await DispatchAsync(put.InfoHash, episode, entry, thisTick, ct);
-            }
+            Discard(entry, $"this plugin staged it for {stagedBy.ReleaseTitle}, and nothing waits on it any more");
         }
     }
 
-    /// <summary>Takes something out of the intake folder and says why.</summary>
+    /// <summary>Takes one file this plugin staged out of the intake folder and says why.</summary>
     /// <remarks>
-    /// Said every time rather than once, because this deletes the owner's files
-    /// and a deletion nobody can account for afterwards is worse than the
-    /// clutter it cleared. Nothing throws: a file the encoder has open comes
-    /// round again on the next tick.
+    /// A file, never a folder, and said every time: a deletion nobody can account for afterwards is worse
+    /// than the clutter it cleared. Nothing throws: a file the encoder has open comes round again on the next
+    /// tick.
     /// </remarks>
     private void Discard(string entry, string why)
     {
         try
         {
-            if (Directory.Exists(entry))
-            {
-                Directory.Delete(entry, recursive: true);
-            }
-            else
-            {
-                File.Delete(entry);
-            }
+            File.Delete(entry);
 
             logger.LogInformation(
                 "{Entry} was cleared from the intake folder: {Why}.",

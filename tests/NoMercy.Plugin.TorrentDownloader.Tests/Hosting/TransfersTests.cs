@@ -373,49 +373,61 @@ public class TransfersTests : IDisposable
 
     /// <remarks>
     /// <para>
-    /// <strong>A file in the intake folder that nothing is waiting on is still
-    /// dispatched.</strong> Before a grab recorded where it staged its episode,
-    /// it was marked done the moment the file was copied — whether or not the
-    /// encode had been taken. Three of the owner's episodes were left in the
-    /// intake folder that way, with nothing that would ever come back to them.
+    /// <strong>A file this plugin did not stage is not this plugin's</strong>, whatever it is called. It used
+    /// to be matched to a grab by the release in its name and taken on — dispatched, and deleted once the
+    /// library had it — so a file the owner, or anybody else, put in the intake folder under a release's name
+    /// could be encoded and then deleted by a plugin that never made it.
     /// </para>
     /// <para>
-    /// So every tick looks at what is really in the folder, and anything no
-    /// open grab is waiting on is matched to the grab that put it there and
-    /// asked for again. It then joins the ordinary path: dispatched, then the
-    /// library, then deleted.
+    /// The owner's rule of 16 September 2026: the plugin deletes and takes on only what it created itself.
+    /// Here the name is the grab's release to the letter, and the file is still neither dispatched nor
+    /// touched.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AnEpisodeLeftInTheIntakeFolderIsDispatchedAnyway()
+    public async Task AFileThisPluginDidNotStageIsNeitherDispatchedNorDeleted()
     {
         GrabRepository grabs = await Grabs();
         await Grabbed(grabs);
 
-        // Staged and marked done by a version that asked for no encode — and
-        // under the release's name, because that is what that version wrote.
         Directory.CreateDirectory(Intake);
 
-        string staged = Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv");
+        string somebodys = Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES.mkv");
 
-        await File.WriteAllBytesAsync(staged, new byte[2048]);
+        await File.WriteAllBytesAsync(somebodys, new byte[2048]);
         await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
-
-        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
 
         FakeProvider server = Server();
 
-
         await Transfers(new StandingEngine(), grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
 
-        Assert.NotNull(server.Encoder.Job);
+        Assert.Null(server.Encoder.Job);
+        Assert.True(File.Exists(somebodys), "A file this plugin did not stage was deleted.");
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
 
-        // And it is being waited on now, so the copies go when the library has
-        // it rather than being left for ever.
-        StoredDownload waiting = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+    /// <remarks>
+    /// What the plugin did stage is its own to clear once nothing waits on it: the staged path is written
+    /// against the grab, which is the proof. A grab that is over — failed here — leaves its staged file, and
+    /// the next pass takes it away.
+    /// </remarks>
+    [Fact]
+    public async Task AFileThisPluginStagedForAGrabThatIsOverIsCleared()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
 
-        Assert.Equal(GrabState.Dispatched, waiting.State);
-        Assert.Equal([staged], waiting.StagedPaths);
+        Directory.CreateDirectory(Intake);
+
+        string ours = Path.Combine(Intake, "Silo.2023.S03E06.1080p.mkv");
+
+        await File.WriteAllBytesAsync(ours, new byte[2048]);
+        await grabs.StagedAsync(Hash, [ours], CancellationToken.None);
+        await grabs.StateAsync(Hash, GrabState.Failed, CancellationToken.None);
+
+        await Transfers(new StandingEngine(), grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.False(File.Exists(ours), "A file this plugin staged for a grab that is over was left.");
     }
 
     /// <remarks>
@@ -1432,20 +1444,17 @@ public class TransfersTests : IDisposable
 
     /// <remarks>
     /// <para>
-    /// <strong>The intake folder holds what is needed and nothing else.</strong>
-    /// The owner's held twenty-two things: five episodes in pairs, six folders
-    /// left by 0.3.4 with the tracker's name still on them, and loose files
-    /// from releases long since dealt with. Every tick read the lot.
+    /// <strong>Nothing in the intake folder that this plugin did not stage is touched</strong> — the owner's
+    /// rule of 16 September 2026. The folder is shared: on that day the sweep that cleared "whatever no grab
+    /// waits on, folders included" emptied a folder of somebody else's that had nothing to do with the plugin.
     /// </para>
     /// <para>
-    /// Anything a grab is waiting on stays. Everything else goes, folders
-    /// included, and each deletion is said. The owner asked for this on
-    /// 24 August 2026: the plugin used to leave what it had not put there, and
-    /// the folder only ever grew.
+    /// A folder, a loose file from nobody's grab and a second copy of a staged episode made by somebody else
+    /// all stay exactly where they are, and so does what the plugin staged and is waiting on.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task WhatTheIntakeFolderDoesNotNeedIsCleared()
+    public async Task NothingInTheIntakeFolderThisPluginDidNotStageIsTouched()
     {
         GrabRepository grabs = await Grabs();
         await Grabbed(grabs);
@@ -1474,10 +1483,12 @@ public class TransfersTests : IDisposable
         await File.WriteAllBytesAsync(Path.Combine(Intake, "something.nobody.grabbed.mkv"), new byte[2048]);
         File.Copy(Staged, Path.Combine(Intake, "Silo.S03E06.1080p.WEB.H264-CAKES EZTV.mkv"));
 
+        string[] before = [.. Directory.EnumerateFileSystemEntries(Intake, "*", SearchOption.AllDirectories).Order()];
+
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
 
         Assert.True(File.Exists(Staged), "What is waited on was cleared.");
-        Assert.Equal([Staged], Directory.EnumerateFileSystemEntries(Intake).Order());
+        Assert.Equal(before, Directory.EnumerateFileSystemEntries(Intake, "*", SearchOption.AllDirectories).Order());
     }
 
     /// <remarks>

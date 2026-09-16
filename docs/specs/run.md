@@ -40,3 +40,13 @@
   the Sources page shows why.
 - A name source whose feed or search fails gives no release names in that run, and the run carries on.
 - Stop ends the run. Downloads already offered to the download client carry on.
+
+## What the plugin deletes
+
+- The plugin deletes only files and folders it created itself.
+- In the intake folder that is a file the plugin staged, and only once nothing waits on it and no
+  encode is reading it. A folder in the intake folder is never deleted, and neither is a file the
+  plugin did not stage, whatever it is called.
+- In the download folder that is a file a torrent of the plugin's names, and a folder those files were
+  in once nothing else is left in it. A file a torrent does not name is never deleted, and a folder
+  still holding one is kept.
