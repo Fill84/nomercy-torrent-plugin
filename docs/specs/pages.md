@@ -9,7 +9,7 @@
 ## Queue
 
 - The Queue page lists the episodes being searched for: the aired episodes without a video file of
-  the shows and anime that are switched on with saved settings.
+  the shows and anime that are switched on with a quality, their own or their library's.
 - Every row on the Queue page carries a button that searches for that episode now.
 - The page holds two lists, the episodes being looked for and the episodes waiting to air, each
   taking half the page's height whatever either of them holds.

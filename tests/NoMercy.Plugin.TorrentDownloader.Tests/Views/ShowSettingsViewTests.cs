@@ -18,7 +18,7 @@ public class ShowSettingsViewTests
     {
         LibraryPreferences series = new(Tv) { Quality = "1080p" };
 
-        PluginView page = ShowSettingsView.Render(Silo(), new(41) { SwitchedOn = true, Saved = true }, series);
+        PluginView page = ShowSettingsView.Render(Silo(), new(41) { SwitchedOn = true }, series);
 
         PluginComponent form = Assert.Single(Rendered.All(page), one => one.Component == Ui.FormComponent);
 
@@ -49,7 +49,6 @@ public class ShowSettingsViewTests
         ShowSettings silo = new(41)
         {
             SwitchedOn = true,
-            Saved = true,
             Quality = "2160p",
             Specials = false,
             Wishes = ["WEB", "NTb"],
@@ -74,7 +73,7 @@ public class ShowSettingsViewTests
     {
         LibraryPreferences series = new(Tv) { Quality = "720p", Codec = "h265", Forbidden = ["DUAL"] };
 
-        PluginView page = ShowSettingsView.Render(Silo(), new(41) { SwitchedOn = true, Saved = true, Wishes = ["NTb"] }, series);
+        PluginView page = ShowSettingsView.Render(Silo(), new(41) { SwitchedOn = true, Wishes = ["NTb"] }, series);
 
         PluginComponent applied = Rendered.ById(page, ShowSettingsView.AppliedId);
         string words = string.Join(" ", Rendered.EveryValue(new PluginView { Components = [applied] }));

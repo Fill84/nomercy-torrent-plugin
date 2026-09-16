@@ -79,14 +79,22 @@ public class EffectiveSettingsTests
         Assert.False(applied.Searched);
     }
 
+    /// <remarks>
+    /// <strong>The owner's rule of 16 September 2026.</strong> A show switched on is searched with its
+    /// library's settings straight away; only what the owner changes on the show itself overrules them.
+    /// Seven shows switched on from their rows searched nothing for hours, because each was waiting for a
+    /// Save of a form nobody had any reason to open.
+    /// </remarks>
     [Fact]
-    public void AShowSwitchedOnButNeverSavedSearchesNothing()
+    public void AShowSwitchedOnIsSearchedWithItsLibrarysSettingsWithoutBeingSaved()
     {
         LibraryPreferences library = new("tv") { Quality = "1080p" };
 
-        Assert.False(EffectiveSettings.Of(Saved() with { Saved = false }, library).Searched);
-        Assert.False(EffectiveSettings.Of(Saved() with { SwitchedOn = false }, library).Searched);
-        Assert.True(EffectiveSettings.Of(Saved(), library).Searched);
+        EffectiveSettings applied = EffectiveSettings.Of(new ShowSettings(41) { SwitchedOn = true }, library);
+
+        Assert.True(applied.Searched);
+        Assert.Equal("1080p", applied.Quality);
+        Assert.False(EffectiveSettings.Of(new ShowSettings(41) { SwitchedOn = false }, library).Searched);
     }
 
     /// <remarks>
@@ -108,6 +116,6 @@ public class EffectiveSettingsTests
 
     private static ShowSettings Saved()
     {
-        return new(41) { SwitchedOn = true, Saved = true };
+        return new(41) { SwitchedOn = true };
     }
 }

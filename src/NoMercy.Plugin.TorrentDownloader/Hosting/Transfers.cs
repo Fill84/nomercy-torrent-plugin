@@ -525,7 +525,7 @@ public sealed class Transfers(
     /// <remarks>
     /// <para>
     /// <c>docs/specs/show-list.md</c> § Switching a show on: a show switched off,
-    /// never saved, or without a quality has nothing searched and nothing
+    /// or without a quality anywhere, has nothing searched and nothing
     /// downloaded. Switching one off stops the refresh from searching it; this
     /// is what stops what was already downloading. The owner chose on
     /// 15 September 2026 that such a download is cancelled and its bytes
@@ -572,7 +572,7 @@ public sealed class Transfers(
             }
 
             string reason =
-                "its show is not switched on with saved settings and a quality, so it was cancelled and its download deleted";
+                "its show is not switched on with a quality, so it was cancelled and its download deleted";
 
             await engine.RemoveAsync(open.InfoHash, deleteFiles: true, ct);
 

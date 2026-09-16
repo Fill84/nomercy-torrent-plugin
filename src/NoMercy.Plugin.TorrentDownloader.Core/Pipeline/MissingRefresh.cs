@@ -9,8 +9,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// </summary>
 /// <remarks>
 /// <para>
-/// The whole rule, and there is no more to it: every show switched on with saved
-/// settings and a quality (<c>docs/specs/show-list.md</c>), every episode of it
+/// The whole rule, and there is no more to it: every show switched on with a
+/// quality of its own or its library's (<c>docs/specs/show-list.md</c>), every episode of it
 /// without a file, missing once it has aired, and season 0 only with specials on
 /// for that show. No status check and no cut-off — an episode that aired two
 /// years ago counts exactly as much as last night's, because filling gaps

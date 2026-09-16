@@ -9,7 +9,7 @@
 ## The order of a run
 
 - A run first works out the episodes being searched for: the aired episodes without a video file of
-  the shows and anime that are switched on with saved settings and a quality.
+  the shows and anime that are switched on with a quality, their own or their library's.
 - The episodes are worked through in order of show, season and episode.
 - A run reads the feeds of all name sources at the same time before it works on any episode.
 - A feed release name is taken for an episode when its show and its season and episode number are

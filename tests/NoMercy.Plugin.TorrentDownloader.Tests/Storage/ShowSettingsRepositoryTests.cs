@@ -48,7 +48,6 @@ public class ShowSettingsRepositoryTests : IAsyncLifetime
         ShowSettings read = await new ShowSettingsRepository(await Opened()).ForAsync(41, CancellationToken.None);
 
         Assert.True(read.SwitchedOn);
-        Assert.True(read.Saved);
         Assert.Equal("2160p", read.Quality);
         Assert.Equal("h265", read.Codec);
         Assert.True(read.Specials);
@@ -75,20 +74,21 @@ public class ShowSettingsRepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task AShowNobodyTouchedIsOffAndNotSaved()
+    public async Task AShowNobodyTouchedIsOffAndFollowsItsLibraryInEverything()
     {
         ShowSettings read = await new ShowSettingsRepository(await Opened()).ForAsync(41, CancellationToken.None);
 
         Assert.False(read.SwitchedOn);
-        Assert.False(read.Saved);
+        Assert.Null(read.Quality);
+        Assert.Null(read.EnglishOnly);
     }
 
     /// <remarks>
-    /// <c>docs/specs/show-list.md</c>: a show switched off has nothing searched and its saved settings
-    /// are kept; and the overview's row button switches a show on without saving it.
+    /// <c>docs/specs/show-list.md</c>: a show switched off has nothing searched and what was set on it is
+    /// kept; and the overview's row button switches a show on and sets nothing else on it.
     /// </remarks>
     [Fact]
-    public async Task SwitchingAShowKeepsWhatWasSavedAndSavesNothing()
+    public async Task SwitchingAShowKeepsWhatWasSetOnItAndSetsNothingElse()
     {
         ShowSettingsRepository shows = new(await Opened());
 
@@ -98,7 +98,6 @@ public class ShowSettingsRepositoryTests : IAsyncLifetime
         ShowSettings off = await shows.ForAsync(41, CancellationToken.None);
 
         Assert.False(off.SwitchedOn);
-        Assert.True(off.Saved);
         Assert.Equal("720p", off.Quality);
         Assert.Equal(["HDR"], off.Forbidden);
 
@@ -107,7 +106,7 @@ public class ShowSettingsRepositoryTests : IAsyncLifetime
         ShowSettings switchedOnly = await shows.ForAsync(52, CancellationToken.None);
 
         Assert.True(switchedOnly.SwitchedOn);
-        Assert.False(switchedOnly.Saved);
+        Assert.Null(switchedOnly.Quality);
     }
 
     [Fact]
@@ -121,8 +120,6 @@ public class ShowSettingsRepositoryTests : IAsyncLifetime
         IReadOnlyDictionary<int, ShowSettings> all = await shows.AllAsync(CancellationToken.None);
 
         Assert.Equal([41, 52], all.Keys.Order());
-        Assert.True(all[41].Saved);
-        Assert.False(all[52].Saved);
     }
 
     [Fact]

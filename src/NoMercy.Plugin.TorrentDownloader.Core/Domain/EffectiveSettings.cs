@@ -32,9 +32,11 @@ public sealed record EffectiveSettings
 
     /// <summary>Whether this show has anything searched for and downloaded.</summary>
     /// <remarks>
-    /// Switched on, saved, and with a quality on the show or its library. A show switched on from the
-    /// overview's row button without its settings ever being saved searches nothing, and so does one
-    /// with no quality anywhere: there is no resolution to judge a release name against.
+    /// Switched on, with a quality on the show or its library. A show switched on from the overview's row
+    /// button is searched with its library's settings straight away — the owner's rule of 16 September
+    /// 2026, after seven shows switched on that way searched nothing for want of a Save of a form nobody
+    /// had reason to open. One with no quality anywhere searches nothing: there is no resolution to judge
+    /// a release name against.
     /// </remarks>
     public bool Searched { get; init; }
 
@@ -55,7 +57,7 @@ public sealed record EffectiveSettings
             Wishes = Joined(library.Wishes, show.Wishes, shows),
             Musts = Joined(library.Musts, show.Musts, shows),
             Forbidden = Joined(library.Forbidden, show.Forbidden, shows),
-            Searched = show.SwitchedOn && show.Saved && quality is not null,
+            Searched = show.SwitchedOn && quality is not null,
         };
     }
 

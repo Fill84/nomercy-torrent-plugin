@@ -34,8 +34,12 @@ public class OverviewViewTests
         Assert.Equal(["Frieren"], Titles(page, Anime));
     }
 
+    /// <remarks>
+    /// On or off, and nothing between: a show switched on follows its library until the owner sets
+    /// something on the show itself (the owner's rule of 16 September 2026), so there is no "On, not saved".
+    /// </remarks>
     [Fact]
-    public void ARowSaysOnOffOrOnAndNotSaved()
+    public void ARowSaysOnOrOff()
     {
         PluginView page = OverviewView.Render(
             Idle(),
@@ -44,13 +48,13 @@ public class OverviewViewTests
                     Tv,
                     "Series",
                     LibraryKind.Television,
-                    Listed(41, "Alpha", Tv, new(41) { SwitchedOn = true, Saved = true }),
+                    Listed(41, "Alpha", Tv, new(41) { SwitchedOn = true }),
                     Listed(52, "Bravo", Tv, new(52) { SwitchedOn = true }),
                     Listed(63, "Charlie", Tv, new(63))),
             ]);
 
         Assert.Equal("On", Cell(page, Tv, "Alpha", "state"));
-        Assert.Equal("On, not saved", Cell(page, Tv, "Bravo", "state"));
+        Assert.Equal("On", Cell(page, Tv, "Bravo", "state"));
         Assert.Equal("Off", Cell(page, Tv, "Charlie", "state"));
     }
 
@@ -65,7 +69,7 @@ public class OverviewViewTests
                     "Series",
                     LibraryKind.Television,
                     Listed(1, "Zulu", Tv),
-                    Listed(2, "Yankee", Tv, new(2) { SwitchedOn = true, Saved = true }),
+                    Listed(2, "Yankee", Tv, new(2) { SwitchedOn = true }),
                     Listed(3, "alpha", Tv),
                     Listed(4, "Bravo", Tv, new(4) { SwitchedOn = true })),
             ]);
@@ -112,7 +116,7 @@ public class OverviewViewTests
                     Tv,
                     "Series",
                     LibraryKind.Television,
-                    Listed(41, "Silo", Tv, new(41) { SwitchedOn = true, Saved = true }),
+                    Listed(41, "Silo", Tv, new(41) { SwitchedOn = true }),
                     Listed(52, "Sugar", Tv)),
             ]);
 
@@ -134,7 +138,7 @@ public class OverviewViewTests
     public void ARowSaysWhatAppliesAndHowManyAreMissing()
     {
         LibraryPreferences series = new(Tv) { Quality = "1080p", Codec = "h264", Forbidden = ["HDR"] };
-        ShowSettings silo = new(41) { SwitchedOn = true, Saved = true, Wishes = ["NTb"] };
+        ShowSettings silo = new(41) { SwitchedOn = true, Wishes = ["NTb"] };
 
         PluginView page = OverviewView.Render(
             Idle(),

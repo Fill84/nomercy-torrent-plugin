@@ -42,7 +42,7 @@ public sealed class FakeAppliedSettings : IAppliedSettings
     {
         ShowSettings settings = _shows.GetValueOrDefault(show.Id)
                                 ?? (_everyShowOn
-                                    ? new ShowSettings(show.Id) { SwitchedOn = true, Saved = true, Quality = "1080p" }
+                                    ? new ShowSettings(show.Id) { SwitchedOn = true, Quality = "1080p" }
                                     : new ShowSettings(show.Id));
 
         return Task.FromResult(EffectiveSettings.Of(

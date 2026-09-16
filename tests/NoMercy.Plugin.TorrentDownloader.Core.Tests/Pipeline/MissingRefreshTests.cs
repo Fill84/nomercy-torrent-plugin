@@ -19,7 +19,7 @@ public class MissingRefreshTests
     /// searched for not at all.
     /// </remarks>
     [Fact]
-    public async Task OnlyShowsSwitchedOnSavedAndWithAQualityAreSearchedFor()
+    public async Task OnlyShowsSwitchedOnWithAQualityAreSearchedFor()
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
@@ -37,26 +37,26 @@ public class MissingRefreshTests
             .Library(new("lib-anime") { Quality = "1080p" })
 
             // Its own quality.
-            .Show(new(1) { SwitchedOn = true, Saved = true, Quality = "2160p" })
+            .Show(new(1) { SwitchedOn = true, Quality = "2160p" })
 
             // On and saved, and a quality neither on the show nor on its library.
-            .Show(new(2) { SwitchedOn = true, Saved = true })
+            .Show(new(2) { SwitchedOn = true })
 
             // Everything saved, and switched off.
-            .Show(new(3) { SwitchedOn = false, Saved = true, Quality = "720p" })
+            .Show(new(3) { SwitchedOn = false, Quality = "720p" })
 
             // Lioness is never touched. Frieren follows its library's quality.
-            .Show(new(5) { SwitchedOn = true, Saved = true });
+            .Show(new(5) { SwitchedOn = true });
 
         Assert.Equal(["Silo", "Frieren"], (await Derive(library, settings)).Select(episode => episode.ShowTitle));
     }
 
     /// <remarks>
-    /// The overview's row button switches a show on and saves nothing. Until the owner has saved its
-    /// settings form the show searches nothing, even with a quality waiting in its library.
+    /// The overview's row button switches a show on, and that is all a show needs: its library's settings
+    /// apply until the owner changes the show's own (the owner's rule of 16 September 2026).
     /// </remarks>
     [Fact]
-    public async Task AShowSwitchedOnButNeverSavedHasNothingSearched()
+    public async Task AShowSwitchedOnFromItsRowIsSearchedWithItsLibrarysSettings()
     {
         FakeLibrary library = new FakeLibrary()
             .Show(1, "Silo")
@@ -64,9 +64,9 @@ public class MissingRefreshTests
 
         FakeAppliedSettings settings = new FakeAppliedSettings()
             .Library(new("lib-tv") { Quality = "1080p" })
-            .Show(new(1) { SwitchedOn = true, Saved = false });
+            .Show(new(1) { SwitchedOn = true });
 
-        Assert.Empty(await Derive(library, settings));
+        Assert.Single(await Derive(library, settings));
     }
 
     /// <remarks>
@@ -85,7 +85,7 @@ public class MissingRefreshTests
             .Episode(1, 1, 2, airDate: Aired);
 
         FakeAppliedSettings settings = new FakeAppliedSettings()
-            .Show(new(1) { SwitchedOn = true, Saved = true, Quality = "720p" });
+            .Show(new(1) { SwitchedOn = true, Quality = "720p" });
 
         Assert.Equal(2, (await Derive(library, settings)).Count);
     }
@@ -116,16 +116,16 @@ public class MissingRefreshTests
             .Library(new("lib-anime") { Quality = "1080p", Specials = true })
 
             // On for itself, in a library with specials off.
-            .Show(new(1) { SwitchedOn = true, Saved = true, Specials = true })
+            .Show(new(1) { SwitchedOn = true, Specials = true })
 
             // Following its library: off.
-            .Show(new(2) { SwitchedOn = true, Saved = true })
+            .Show(new(2) { SwitchedOn = true })
 
             // Off for itself, in a library with specials on.
-            .Show(new(3) { SwitchedOn = true, Saved = true, Specials = false })
+            .Show(new(3) { SwitchedOn = true, Specials = false })
 
             // Following its library: on.
-            .Show(new(4) { SwitchedOn = true, Saved = true });
+            .Show(new(4) { SwitchedOn = true });
 
         Assert.Equal(
             [new EpisodeKey(1, 0, 1), new EpisodeKey(4, 0, 1)],

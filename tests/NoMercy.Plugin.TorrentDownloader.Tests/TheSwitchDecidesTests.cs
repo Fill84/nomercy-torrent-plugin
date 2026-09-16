@@ -52,11 +52,11 @@ public sealed class TheSwitchDecidesTests : IDisposable
         "nomercy-switch-" + Guid.NewGuid().ToString("n")[..8]);
 
     /// <remarks>
-    /// Silo is switched on and saved with nothing on disk, and its download carries on. Family Guy is
-    /// switched off, Severance switched on and never saved in a library with a quality, and Andor saved
-    /// in a library without one:
-    /// all three have nothing searched, so their downloads are cancelled and their bytes deleted — the
-    /// owner's answer of 15 September 2026.
+    /// Silo is switched on with settings of its own and nothing on disk, and Severance switched on from its
+    /// row with nothing set on it, in a library with a quality: both are searched, so both downloads carry
+    /// on (the owner's rule of 16 September 2026 — a show switched on follows its library). Family Guy is
+    /// switched off and Andor is in a library without a quality: both have nothing searched, so their
+    /// downloads are cancelled and their bytes deleted — the owner's answer of 15 September 2026.
     /// </remarks>
     [Fact]
     public async Task ADownloadCarriesOnOnlyForAShowThatIsSearched()
@@ -80,13 +80,13 @@ public sealed class TheSwitchDecidesTests : IDisposable
         await Tick(engine, grabs, library, applied);
 
         Assert.Equal(
-            [SeveranceHash, AndorHash, FamilyGuyHash],
+            [AndorHash, FamilyGuyHash],
             engine.Removed.Select(removed => removed.InfoHash).Order(StringComparer.Ordinal));
         Assert.All(engine.Removed, removed => Assert.True(removed.DeleteFiles, $"{removed.InfoHash} was left on the disk."));
 
-        StoredDownload open = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
-
-        Assert.Equal(SiloHash, open.InfoHash);
+        Assert.Equal(
+            [SiloHash, SeveranceHash],
+            (await grabs.OpenAsync(CancellationToken.None)).Select(open => open.InfoHash).Order(StringComparer.Ordinal));
     }
 
     /// <remarks>

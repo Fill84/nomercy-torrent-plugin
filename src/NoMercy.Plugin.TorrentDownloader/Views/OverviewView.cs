@@ -142,7 +142,6 @@ public static class OverviewView
         return settings switch
         {
             { SwitchedOn: false } => "Off",
-            { Saved: false } => "On, not saved",
             _ => "On",
         };
     }

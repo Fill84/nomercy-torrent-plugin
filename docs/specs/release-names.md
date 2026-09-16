@@ -15,14 +15,14 @@
   source.
 - A run starts every hour unless the owner sets a different interval.
 - The shortest interval the plugin accepts is 15 minutes. Any longer interval is accepted.
-- A feed item is matched only against shows and anime that are switched on with saved settings.
+- A feed item is matched only against shows and anime that are switched on with a quality.
 - A feed item is taken for an episode of such a show only when that episode has aired and has no
   video file in the library.
 
 ## Backfill
 
-- On every run, every aired episode without a video file of a show that is switched on with saved
-  settings, and that no feed item was taken for, is looked up by show and episode in the name
+- On every run, every aired episode without a video file of a show that is switched on with a
+  quality, and that no feed item was taken for, is looked up by show and episode in the name
   sources' search.
 - A release name that search returns is judged and chosen exactly as a release name from a feed.
 

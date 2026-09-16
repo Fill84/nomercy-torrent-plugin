@@ -17,7 +17,7 @@
   ended, when the next one starts, and the Run and Stop buttons.
 - Each library's block shows its preferences on one line with an Edit button, and a table of its
   shows and anime with the columns show, year, missing, quality, codec, tags and state.
-- A row's state is On, Off, or On and not saved.
+- A row's state is On or Off.
 - Every row carries a button that switches the show on or off and a button that opens its settings.
 - A library's table shows 50 rows per page, with the shows that are switched on first and each group
   in alphabetical order, and Previous and Next buttons.
@@ -37,12 +37,13 @@
 
 ## Switching a show on
 
-- A show or anime is searched for and downloaded only when it is switched on and its settings are
-  saved.
-- A show switched on whose settings have never been saved has nothing searched and nothing
-  downloaded.
-- A show switched off has nothing searched and nothing downloaded, and its saved settings are kept.
-- A download of a show that has nothing searched — switched off, never saved, or without a quality —
+- A show or anime is searched for and downloaded only when it is switched on and a quality applies
+  to it, its own or its library's.
+- A show switched on is searched with its library's settings straight away. The owner saves a show's
+  form only to give that show settings of its own, and only those override the library.
+- A show switched off has nothing searched and nothing downloaded, and the settings set on it are
+  kept.
+- A download of a show that has nothing searched — switched off, or without a quality anywhere —
   is cancelled and what it downloaded is deleted, unless its episode is already staged for the
   encoder. This holds as well for downloads running when the plugin is updated to the show list.
 - Whether a show has a video file on disk plays no part in whether it is searched for.

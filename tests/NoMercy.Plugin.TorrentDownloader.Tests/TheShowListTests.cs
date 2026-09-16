@@ -19,8 +19,12 @@ public sealed class TheShowListTests : IDisposable
     private readonly string _folder =
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", "show-list-" + Guid.NewGuid().ToString("n")[..8]);
 
+    /// <remarks>
+    /// On is on. There is no "On, not saved" any more: a show switched on from its row follows its library
+    /// until the owner changes the show itself (the owner's rule of 16 September 2026).
+    /// </remarks>
     [Fact]
-    public async Task AShowSwitchedOnFromItsRowIsOnAndNotSaved()
+    public async Task AShowSwitchedOnFromItsRowIsOn()
     {
         using TorrentDownloaderPlugin plugin = Loaded();
 
@@ -28,7 +32,7 @@ public sealed class TheShowListTests : IDisposable
 
         await plugin.SwitchShowAsync(41, on: true, CancellationToken.None);
 
-        Assert.Equal("On, not saved", await StateOf(plugin, 41));
+        Assert.Equal("On", await StateOf(plugin, 41));
     }
 
     [Fact]
@@ -71,8 +75,8 @@ public sealed class TheShowListTests : IDisposable
         Assert.NotEmpty(refused);
         Assert.Equal("Off", await StateOf(plugin, 41));
 
-        // Not even marked saved: a refused form is one the owner has not saved.
-        Assert.False((await (await plugin.ShowSettingsAsync(CancellationToken.None)).ForAsync(41, CancellationToken.None)).Saved);
+        // Nothing of it kept: the show still follows its library in everything.
+        Assert.Null((await (await plugin.ShowSettingsAsync(CancellationToken.None)).ForAsync(41, CancellationToken.None)).Quality);
     }
 
     [Fact]

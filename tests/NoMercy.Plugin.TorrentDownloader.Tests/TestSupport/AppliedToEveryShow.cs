@@ -17,7 +17,7 @@ public sealed class AppliedToEveryShow(bool searched) : IAppliedSettings
     public Task<EffectiveSettings> ForAsync(Show show, CancellationToken ct)
     {
         return Task.FromResult(EffectiveSettings.Of(
-            new ShowSettings(show.Id) { SwitchedOn = searched, Saved = searched, Quality = "1080p" },
+            new ShowSettings(show.Id) { SwitchedOn = searched, Quality = "1080p" },
             new LibraryPreferences(show.LibraryId)));
     }
 }
