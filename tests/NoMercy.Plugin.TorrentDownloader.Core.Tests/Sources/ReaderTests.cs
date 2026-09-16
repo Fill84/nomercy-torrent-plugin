@@ -91,6 +91,27 @@ public class ReaderTests
     }
 
     /// <remarks>
+    /// <strong>LimeTorrents moved from <c>limetorrents.lol</c> to <c>limetorrents.fun</c></strong>, found on
+    /// 16 September 2026: the old address answers 301 to the new one, and the manifest permits only the hosts
+    /// it names, so the move left the indexer answering nothing. The page on the new address is the same
+    /// shape — this capture of it is read by the same reader, hashed link, detail page and all.
+    /// </remarks>
+    [Fact]
+    public void TheGenericReaderReadsLimeTorrentsOnItsNewAddress()
+    {
+        IReadOnlyList<SourceRow> rows = new GenericReader().Read(
+            Fixture("limetorrents-fun"),
+            new("https://www.limetorrents.fun/search/all/South-Park-S15E12/"));
+
+        SourceRow ctrlHd = Assert.Single(rows, row => row.InfoHash == "C4F76C30869F05E52FE90527354EBE5252844DB5");
+
+        Assert.Equal("South Park S15E12 1 1080p HMAX WEB-DL DD5 1 H 264-CtrlHD[TGx]", ctrlHd.Title);
+        Assert.Equal(
+            "https://www.limetorrents.fun/South-Park-S15E12-1-1080p-HMAX-WEB-DL-DD5-1-H-264-CtrlHD[TGx]-torrent-18813682.html",
+            ctrlHd.DetailUrl?.ToString());
+    }
+
+    /// <remarks>
     /// A page with nothing on it answers nothing, rather than one empty row.
     /// </remarks>
     [Fact]

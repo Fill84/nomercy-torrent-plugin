@@ -80,7 +80,7 @@
     {
       "name": "LimeTorrents",
       "kind": "site",
-      "url": "https://www.limetorrents.lol/search/all/{query}/",
+      "url": "https://www.limetorrents.fun/search/all/{query}/",
       "firstChoice": 3,
       "priority": 35,
       "minimumIntervalSeconds": 15,

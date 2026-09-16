@@ -45,7 +45,7 @@ internal static class Program
                   the one in sources.json, quoted if it has a space.
 
                   Capture "LimeTorrents" "Silo S03E06"
-                  Capture "LimeTorrents" --page https://www.limetorrents.lol/x.html limetorrents-detail
+                  Capture "LimeTorrents" --page https://www.limetorrents.fun/x.html limetorrents-detail
 
                   The second form saves one particular address — a row's own page —
                   through that source's gate and its clearance, which is the only way

@@ -103,7 +103,7 @@ SceneSource      https://www.scnsrc.me/feed/
 EZTV latest      https://eztv.re/api/get-torrents?limit=100&search={query}
 The Pirate Bay   https://apibay.org/q.php?q={query}&cat=
 1337x            https://www.1337x.to/sort-category-search/{query}/TV/time/desc/1/
-LimeTorrents     https://www.limetorrents.lol/search/all/{query}/
+LimeTorrents     https://www.limetorrents.fun/search/all/{query}/
 TorrentBay       https://extranet.torrentbay.st/browse/?q={query}&sort=seeders&order=desc
 EZTV             https://eztvx.to/search/{query}
 TorrentGalaxy    https://torrentgalaxy.one/get-posts/keywords:{query}/
@@ -213,7 +213,11 @@ spans in that order followed by the size.
 manifest with it. It answered nothing for the episodes of the owner's own library while every other
 site answered plenty. Nothing here reads that site any more.
 
-**LimeTorrents** — a hashed `.torrent` link on the listing; the generic reader handles it.
+**LimeTorrents** — a hashed `.torrent` link on the listing; the generic reader handles it. It moved from
+`limetorrents.lol` to `limetorrents.fun`, found on 16 September 2026: the old address answers 301 to the
+new one, and the manifest permits only the hosts it names, so until the catalogue and the manifest moved
+with it the indexer answered nothing. The page on the new address is the same shape
+(`tests/fixtures/limetorrents-fun.html`).
 
 **The Pirate Bay** — JSON at apibay; the website is a JavaScript shell with no results in it.
 Rate-limits hard under a burst.
