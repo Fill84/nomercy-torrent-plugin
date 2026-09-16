@@ -57,8 +57,11 @@ Every show and anime has these settings:
 - **Musts**: a list of tags every downloaded release name carries, all of them.
 - **Forbidden**: a list of tags no downloaded release name carries.
 - **Specials**: on or off. With specials off, no episode of season 0 is searched for.
+- **English only**: on or off. With English only on, a release name claiming any language other than
+  English is refused, and a release name claiming no language at all is taken.
 
-- Each tag list is filled in as comma-separated text or one tag at a time, appended to the list.
+- Each tag list is filled in as comma-separated text or one tag at a time, appended to the list, and
+  each of those fields shows an example of the tags it takes.
 - A tag is any word a release name can carry: a language such as `DUAL` or `VOSTFR`, a source such
   as `WEB`, a group, or anything else.
 - A wish that no release name carries leaves the show downloadable: release names without that wish
@@ -68,16 +71,17 @@ Every show and anime has these settings:
 ## Library preferences
 
 - Each library (`tv` and `anime`) has preferences of the same shape: quality, codec, wishes, musts,
-  forbidden and specials.
-- A library's specials are off until the owner switches them on.
+  forbidden, specials and English only.
+- A library's specials are off until the owner switches them on, and so is its English only.
 - A library's codec is any until the owner chooses another.
-- A show's specials are those of its library until the show sets its own.
+- A show's specials and English only are those of its library until the show sets its own.
 - A library's quality is the resolution of the encoding profile of the library's folders when the
   server tells the plugin that profile, and otherwise the quality the owner sets for the library.
 - A show's quality and codec are those of its library until the show sets its own.
 - A show whose quality is set neither by the show nor by its library has nothing searched and nothing
   downloaded.
-- The plugin's settings page holds no English-only setting. A language is a tag: `DUAL`, `VOSTFR` or
-  any other language tag goes into a show's or a library's wishes, musts or forbidden.
+- The plugin's settings page holds no English-only setting: it is a setting of a show and of a
+  library. A language is also a tag, so `DUAL`, `VOSTFR` or any other language tag can go into a
+  show's or a library's wishes, musts or forbidden as well.
 - A show's wishes, musts and forbidden are the library's lists together with the show's own lists.
 - A tag that the library and the show put in different lists counts only in the show's list.

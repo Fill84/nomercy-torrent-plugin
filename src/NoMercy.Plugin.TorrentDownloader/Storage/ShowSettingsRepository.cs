@@ -12,7 +12,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Storage;
 /// </remarks>
 public sealed class ShowSettingsRepository(Store database)
 {
-    private const string Columns = "show_id, switched_on, saved, quality, codec, specials, wishes, musts, forbidden";
+    private const string Columns = "show_id, switched_on, saved, quality, codec, specials, wishes, musts, forbidden, english_only";
 
     public async Task<ShowSettings> ForAsync(int showId, CancellationToken ct)
     {
@@ -60,8 +60,8 @@ public sealed class ShowSettingsRepository(Store database)
 
         command.CommandText =
             """
-            INSERT INTO show_settings (show_id, switched_on, saved, quality, codec, specials, wishes, musts, forbidden)
-            VALUES ($show, $on, 1, $quality, $codec, $specials, $wishes, $musts, $forbidden)
+            INSERT INTO show_settings (show_id, switched_on, saved, quality, codec, specials, wishes, musts, forbidden, english_only)
+            VALUES ($show, $on, 1, $quality, $codec, $specials, $wishes, $musts, $forbidden, $english)
             ON CONFLICT(show_id) DO UPDATE SET
                 switched_on = excluded.switched_on,
                 saved = 1,
@@ -70,7 +70,8 @@ public sealed class ShowSettingsRepository(Store database)
                 specials = excluded.specials,
                 wishes = excluded.wishes,
                 musts = excluded.musts,
-                forbidden = excluded.forbidden;
+                forbidden = excluded.forbidden,
+                english_only = excluded.english_only;
             """;
 
         command.Parameters.AddWithValue("$show", settings.ShowId);
@@ -81,6 +82,7 @@ public sealed class ShowSettingsRepository(Store database)
         command.Parameters.AddWithValue("$wishes", TagList.Write(settings.Wishes));
         command.Parameters.AddWithValue("$musts", TagList.Write(settings.Musts));
         command.Parameters.AddWithValue("$forbidden", TagList.Write(settings.Forbidden));
+        command.Parameters.AddWithValue("$english", settings.EnglishOnly is bool english ? (english ? 1 : 0) : DBNull.Value);
 
         await command.ExecuteNonQueryAsync(ct);
     }
@@ -119,6 +121,7 @@ public sealed class ShowSettingsRepository(Store database)
             Wishes = TagList.Read(reader.GetString(6)),
             Musts = TagList.Read(reader.GetString(7)),
             Forbidden = TagList.Read(reader.GetString(8)),
+            EnglishOnly = reader.IsDBNull(9) ? null : reader.GetInt64(9) != 0,
         };
     }
 }

@@ -64,6 +64,24 @@ public static class ShowSettingsView
                                 new() { Value = ShowSettingsEdit.Off, Label = "off" },
                             ],
                         },
+                        new PluginFormField
+                        {
+                            Name = ShowSettingsEdit.EnglishOnlyField,
+                            Label = "English only",
+                            Type = PluginFormFieldType.Select,
+                            Value = settings.EnglishOnly switch
+                            {
+                                true => ShowSettingsEdit.On,
+                                false => ShowSettingsEdit.Off,
+                                null => ShowSettingsEdit.Follow,
+                            },
+                            Options =
+                            [
+                                Follows(library.EnglishOnly ? "on" : "off"),
+                                new() { Value = ShowSettingsEdit.On, Label = "on" },
+                                new() { Value = ShowSettingsEdit.Off, Label = "off" },
+                            ],
+                        },
                         .. TagFields(settings.Wishes, settings.Musts, settings.Forbidden),
                     ]),
                 Ui.Text(
@@ -73,6 +91,7 @@ public static class ShowSettingsView
                         applied.Quality ?? "no quality, so nothing is searched",
                         applied.Codec,
                         applied.Specials ? "specials on" : "specials off",
+                        applied.EnglishOnly ? "English only on" : "English only off",
                         OverviewView.Tags(applied.Wishes, applied.Musts, applied.Forbidden)),
                     "caption"),
             ],
@@ -109,11 +128,14 @@ public static class ShowSettingsView
         IReadOnlyList<string> musts,
         IReadOnlyList<string> forbidden)
     {
-        foreach ((string name, string label, IReadOnlyList<string> tags) in new[]
+        // An example in every box: six empty fields in a row say nothing about
+        // what belongs in them, which is the owner's report of 16 September
+        // 2026. Each is a tag off a real release name.
+        foreach ((string name, string label, IReadOnlyList<string> tags, string example) in new[]
                  {
-                     (ShowSettingsEdit.WishesField, "Wishes", wishes),
-                     (ShowSettingsEdit.MustsField, "Musts", musts),
-                     (ShowSettingsEdit.ForbiddenField, "Forbidden", forbidden),
+                     (ShowSettingsEdit.WishesField, "Wishes", wishes, "ATVP, Atmos"),
+                     (ShowSettingsEdit.MustsField, "Musts", musts, "WEB-DL"),
+                     (ShowSettingsEdit.ForbiddenField, "Forbidden", forbidden, "HDTV, XviD"),
                  })
         {
             yield return new PluginFormField
@@ -121,6 +143,7 @@ public static class ShowSettingsView
                 Name = name,
                 Label = $"{label}, separated by commas",
                 Value = string.Join(", ", tags),
+                Placeholder = example,
             };
 
             yield return new PluginFormField
@@ -128,6 +151,7 @@ public static class ShowSettingsView
                 Name = name + ShowSettingsEdit.AddSuffix,
                 Label = $"Add one to {label.ToLowerInvariant()}",
                 Value = string.Empty,
+                Placeholder = example.Split(',')[0],
             };
         }
     }

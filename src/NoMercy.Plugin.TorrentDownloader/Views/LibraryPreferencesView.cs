@@ -57,6 +57,13 @@ public static class LibraryPreferencesView
                             Type = PluginFormFieldType.Toggle,
                             Value = preferences.Specials,
                         },
+                        new PluginFormField
+                        {
+                            Name = ShowSettingsEdit.EnglishOnlyField,
+                            Label = "English only",
+                            Type = PluginFormFieldType.Toggle,
+                            Value = preferences.EnglishOnly,
+                        },
                         .. ShowSettingsView.TagFields(preferences.Wishes, preferences.Musts, preferences.Forbidden),
                     ]),
             ],

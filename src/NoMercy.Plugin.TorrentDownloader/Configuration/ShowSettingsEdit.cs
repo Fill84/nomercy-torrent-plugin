@@ -26,6 +26,7 @@ public static class ShowSettingsEdit
     public const string QualityField = "quality";
     public const string CodecField = "codec";
     public const string SpecialsField = "specials";
+    public const string EnglishOnlyField = "englishOnly";
     public const string WishesField = "wishes";
     public const string MustsField = "musts";
     public const string ForbiddenField = "forbidden";
@@ -57,6 +58,7 @@ public static class ShowSettingsEdit
             Quality = quality,
             Codec = codec,
             Specials = fields.TryGetValue(SpecialsField, out string? specials) ? Specials(specials) : current.Specials,
+            EnglishOnly = fields.TryGetValue(EnglishOnlyField, out string? english) ? Specials(english) : current.EnglishOnly,
             Wishes = Tags(fields, WishesField, current.Wishes),
             Musts = Tags(fields, MustsField, current.Musts),
             Forbidden = Tags(fields, ForbiddenField, current.Forbidden),
@@ -84,6 +86,7 @@ public static class ShowSettingsEdit
             Quality = quality,
             Codec = codec ?? current.Codec,
             Specials = fields.TryGetValue(SpecialsField, out string? specials) ? Flag(specials) : current.Specials,
+            EnglishOnly = fields.TryGetValue(EnglishOnlyField, out string? english) ? Flag(english) : current.EnglishOnly,
             Wishes = Tags(fields, WishesField, current.Wishes),
             Musts = Tags(fields, MustsField, current.Musts),
             Forbidden = Tags(fields, ForbiddenField, current.Forbidden),

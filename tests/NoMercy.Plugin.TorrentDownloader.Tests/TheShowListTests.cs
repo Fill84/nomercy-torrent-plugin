@@ -141,6 +141,58 @@ public sealed class TheShowListTests : IDisposable
         Assert.Contains(Rendered.All(after), one => one.Id == "show-42");
     }
 
+    /// <remarks>
+    /// <strong>English only, back on the owner's word of 16 September 2026</strong>
+    /// (<c>docs/specs/show-list.md</c>). It is a setting like any other here: the show's own, or its
+    /// library's while the show follows it.
+    /// </remarks>
+    [Fact]
+    public async Task EnglishOnlyIsSavedOnAShowAndFollowedFromItsLibrary()
+    {
+        using TorrentDownloaderPlugin plugin = Loaded();
+
+        Assert.Empty(await plugin.SaveLibraryPreferencesAsync(
+            Tv,
+            new Dictionary<string, string?> { ["quality"] = "1080p", ["englishOnly"] = "true" },
+            CancellationToken.None));
+
+        // The show sets nothing of its own, so it follows its library.
+        Assert.Empty(await plugin.SaveShowSettingsAsync(
+            41,
+            new Dictionary<string, string?> { ["switchedOn"] = "true" },
+            CancellationToken.None));
+
+        Assert.True(await AppliedEnglishOnly(plugin, 41));
+
+        // And its own answer overrules the library's.
+        Assert.Empty(await plugin.SaveShowSettingsAsync(
+            41,
+            new Dictionary<string, string?> { ["switchedOn"] = "true", ["englishOnly"] = "off" },
+            CancellationToken.None));
+
+        Assert.False(await AppliedEnglishOnly(plugin, 41));
+    }
+
+    /// <remarks>
+    /// The owner's report of 16 September 2026: a row of empty boxes says nothing about what belongs in
+    /// them. Each tag field shows an example of the tags it takes.
+    /// </remarks>
+    [Fact]
+    public async Task EveryTagFieldShowsAnExampleOfWhatGoesInIt()
+    {
+        using TorrentDownloaderPlugin plugin = Loaded();
+
+        PluginView page = await plugin.GetViewAsync(new() { Route = "/shows/41" }, CancellationToken.None);
+        IReadOnlyList<PluginFormField> fields = Assert.IsAssignableFrom<IReadOnlyList<PluginFormField>>(
+            Rendered.ById(page, ShowSettingsView.FormId).Props["fields"]);
+
+        Assert.All(
+            fields.Where(field => field.Name.StartsWith("wishes", StringComparison.Ordinal)
+                                  || field.Name.StartsWith("musts", StringComparison.Ordinal)
+                                  || field.Name.StartsWith("forbidden", StringComparison.Ordinal)),
+            field => Assert.False(string.IsNullOrWhiteSpace(field.Placeholder), $"{field.Name} shows no example."));
+    }
+
     [Fact]
     public async Task AShowThatIsInNoLibrarySaysSo()
     {
@@ -180,6 +232,15 @@ public sealed class TheShowListTests : IDisposable
         });
 
         return plugin;
+    }
+
+    /// <summary>What applies to a show, read off its own settings page.</summary>
+    private static async Task<bool> AppliedEnglishOnly(TorrentDownloaderPlugin plugin, int showId)
+    {
+        PluginView page = await plugin.GetViewAsync(new() { Route = $"/shows/{showId}" }, CancellationToken.None);
+        string applied = Assert.IsType<string>(Rendered.ById(page, ShowSettingsView.AppliedId).Props["value"]);
+
+        return applied.Contains("English only on", StringComparison.Ordinal);
     }
 
     private static async Task<string> StateOf(TorrentDownloaderPlugin plugin, int showId)

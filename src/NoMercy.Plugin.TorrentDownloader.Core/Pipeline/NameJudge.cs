@@ -68,6 +68,9 @@ public static class Blacklist
 /// </remarks>
 public sealed class NameJudge(EffectiveSettings settings)
 {
+    /// <summary>The one language claim English only does not refuse, as <see cref="ReleaseName"/> writes it.</summary>
+    private const string English = "english";
+
     /// <summary>
     /// Whether this name is worth putting to an indexer for this episode.
     /// </summary>
@@ -121,6 +124,16 @@ public sealed class NameJudge(EffectiveSettings settings)
             // One rung, not a ceiling. A ceiling reads as generous and behaves as a downgrade: the 720p copy
             // is usually posted first and would be taken every time.
             return Verdict.No($"{name.Resolution} is not {quality}.");
+        }
+
+        if (settings.EnglishOnly
+            && name.Languages.FirstOrDefault(claim => !string.Equals(claim, English, StringComparison.OrdinalIgnoreCase)) is string foreign)
+        {
+            // Refused beside an English tag as well: ENG.ITA is the release carrying English and Italian
+            // both, and on 22 August 2026 that is how a MULTI release came to be taken for an owner who
+            // wanted the plain one. A name claiming no language at all is taken, which is most of them —
+            // an English release rarely says so.
+            return Verdict.No($"'{name.Original}' is marked {foreign} and English only is on.");
         }
 
         if (!string.Equals(settings.Codec, LibraryPreferences.AnyCodec, StringComparison.OrdinalIgnoreCase))

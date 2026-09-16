@@ -15,6 +15,15 @@ public sealed record EffectiveSettings
 
     public bool Specials { get; init; }
 
+    /// <summary>
+    /// Whether a release name claiming a language other than English is refused.
+    /// </summary>
+    /// <remarks>
+    /// A name claiming none is taken: most English releases say nothing about language, so refusing the
+    /// untagged ones would refuse nearly every release there is.
+    /// </remarks>
+    public bool EnglishOnly { get; init; }
+
     public IReadOnlyList<string> Wishes { get; init; } = [];
 
     public IReadOnlyList<string> Musts { get; init; } = [];
@@ -42,6 +51,7 @@ public sealed record EffectiveSettings
             Quality = quality,
             Codec = show.Codec ?? library.Codec,
             Specials = show.Specials ?? library.Specials,
+            EnglishOnly = show.EnglishOnly ?? library.EnglishOnly,
             Wishes = Joined(library.Wishes, show.Wishes, shows),
             Musts = Joined(library.Musts, show.Musts, shows),
             Forbidden = Joined(library.Forbidden, show.Forbidden, shows),

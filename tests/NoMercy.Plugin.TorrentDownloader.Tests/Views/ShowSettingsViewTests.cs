@@ -27,7 +27,7 @@ public class ShowSettingsViewTests
         IReadOnlyList<PluginFormField> fields = Fields(form);
 
         Assert.Equal(
-            ["switchedOn", "quality", "codec", "specials", "wishes", "wishes.add", "musts", "musts.add", "forbidden", "forbidden.add"],
+            ["switchedOn", "quality", "codec", "specials", "englishOnly", "wishes", "wishes.add", "musts", "musts.add", "forbidden", "forbidden.add"],
             fields.Select(field => field.Name));
 
         foreach (string followed in new[] { "quality", "codec", "specials" })
@@ -99,7 +99,7 @@ public class ShowSettingsViewTests
         IReadOnlyList<PluginFormField> fields = Fields(form);
 
         Assert.Equal(
-            ["quality", "codec", "specials", "wishes", "wishes.add", "musts", "musts.add", "forbidden", "forbidden.add"],
+            ["quality", "codec", "specials", "englishOnly", "wishes", "wishes.add", "musts", "musts.add", "forbidden", "forbidden.add"],
             fields.Select(field => field.Name));
         Assert.DoesNotContain(
             fields.SelectMany(field => field.Options),

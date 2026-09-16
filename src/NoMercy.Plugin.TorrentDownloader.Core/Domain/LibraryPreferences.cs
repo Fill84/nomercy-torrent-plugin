@@ -33,6 +33,9 @@ public sealed record LibraryPreferences(string LibraryId)
 
     public bool Specials { get; init; }
 
+    /// <summary>Whether only English releases are taken for the shows of this library.</summary>
+    public bool EnglishOnly { get; init; }
+
     public IReadOnlyList<string> Wishes { get; init; } = [];
 
     public IReadOnlyList<string> Musts { get; init; } = [];

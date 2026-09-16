@@ -17,7 +17,7 @@ public sealed class LibraryPreferencesRepository(Store database)
 
         command.CommandText =
             """
-            SELECT quality, codec, specials, wishes, musts, forbidden
+            SELECT quality, codec, specials, wishes, musts, forbidden, english_only
             FROM library_preferences WHERE library_id = $library;
             """;
 
@@ -38,6 +38,7 @@ public sealed class LibraryPreferencesRepository(Store database)
             Wishes = TagList.Read(reader.GetString(3)),
             Musts = TagList.Read(reader.GetString(4)),
             Forbidden = TagList.Read(reader.GetString(5)),
+            EnglishOnly = reader.GetInt64(6) != 0,
         };
     }
 
@@ -48,15 +49,16 @@ public sealed class LibraryPreferencesRepository(Store database)
 
         command.CommandText =
             """
-            INSERT INTO library_preferences (library_id, quality, codec, specials, wishes, musts, forbidden)
-            VALUES ($library, $quality, $codec, $specials, $wishes, $musts, $forbidden)
+            INSERT INTO library_preferences (library_id, quality, codec, specials, wishes, musts, forbidden, english_only)
+            VALUES ($library, $quality, $codec, $specials, $wishes, $musts, $forbidden, $english)
             ON CONFLICT(library_id) DO UPDATE SET
                 quality = excluded.quality,
                 codec = excluded.codec,
                 specials = excluded.specials,
                 wishes = excluded.wishes,
                 musts = excluded.musts,
-                forbidden = excluded.forbidden;
+                forbidden = excluded.forbidden,
+                english_only = excluded.english_only;
             """;
 
         command.Parameters.AddWithValue("$library", preferences.LibraryId);
@@ -66,6 +68,7 @@ public sealed class LibraryPreferencesRepository(Store database)
         command.Parameters.AddWithValue("$wishes", TagList.Write(preferences.Wishes));
         command.Parameters.AddWithValue("$musts", TagList.Write(preferences.Musts));
         command.Parameters.AddWithValue("$forbidden", TagList.Write(preferences.Forbidden));
+        command.Parameters.AddWithValue("$english", preferences.EnglishOnly ? 1 : 0);
 
         await command.ExecuteNonQueryAsync(ct);
     }

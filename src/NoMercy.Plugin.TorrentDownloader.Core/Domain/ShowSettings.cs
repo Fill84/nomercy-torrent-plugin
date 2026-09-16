@@ -27,6 +27,9 @@ public sealed record ShowSettings(int ShowId)
 
     public bool? Specials { get; init; }
 
+    /// <summary>Whether only English releases are taken, or null while the show follows its library.</summary>
+    public bool? EnglishOnly { get; init; }
+
     public IReadOnlyList<string> Wishes { get; init; } = [];
 
     public IReadOnlyList<string> Musts { get; init; } = [];

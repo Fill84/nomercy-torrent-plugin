@@ -200,6 +200,17 @@ public class StoreTests : IDisposable
             back.CommandText = "ALTER TABLE grabs ADD COLUMN encode_job TEXT;";
             await back.ExecuteNonQueryAsync(CancellationToken.None);
 
+            // And the other way about for 015, which adds two columns: they are
+            // there already, and SQLite has no ADD COLUMN IF NOT EXISTS either,
+            // so the pretended state has to be without them.
+            await using SqliteCommand english = connection.CreateCommand();
+            english.CommandText =
+                """
+                ALTER TABLE show_settings DROP COLUMN english_only;
+                ALTER TABLE library_preferences DROP COLUMN english_only;
+                """;
+            await english.ExecuteNonQueryAsync(CancellationToken.None);
+
             await using SqliteCommand insert = connection.CreateCommand();
             insert.CommandText =
                 """

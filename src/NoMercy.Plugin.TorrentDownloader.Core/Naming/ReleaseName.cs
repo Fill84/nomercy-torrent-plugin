@@ -159,7 +159,9 @@ public sealed record ReleaseName(
         // release being in several languages, and "MULTi" alone means the audio.
         ("multi", new(@"\bmulti\b(?!\s*-?\s*sub)", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("vostfr", new(@"\bvostfr\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        ("dual audio", new(@"\bdual[\s._-]?audio\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
+        // The word on its own is how Torrentz2 prints it, and it means the same
+        // thing: a second language beside the English one.
+        ("dual audio", new(@"\bdual(?:[\s._-]?audio)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("multiple subtitle", new(@"\bmultiple[\s._-]?subtitles?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
 
         // The rest of the list is what the captures carry, and each of them is

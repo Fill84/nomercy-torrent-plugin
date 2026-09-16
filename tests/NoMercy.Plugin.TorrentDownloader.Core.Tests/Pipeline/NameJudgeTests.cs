@@ -101,6 +101,47 @@ public sealed class NameJudgeTests
         Assert.False(NameJudge.Carries("Silo S03E06 The Drive 720p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB", "play"));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>English only, back as a setting on the owner's word of 16 September 2026.</strong> It went
+    /// with the global profile and there was nothing in its place, so a German release was refused only
+    /// where the owner had thought to forbid the word themselves.
+    /// </para>
+    /// <para>
+    /// A name claiming any language that is not English is refused, and the reason names the claim. A name
+    /// claiming none is taken: most English releases say nothing about language at all, so refusing the
+    /// untagged ones would refuse nearly everything. <c>MULTi</c> and a dual audio are refused beside an
+    /// English tag — that is the release carrying English <em>and</em> others, which is what took
+    /// <c>Silo.S03E07.MULTI.1080p.WEB.H264-HiggsBoson</c> for an owner who wanted the plain one.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void WithEnglishOnlyOnAReleaseMarkedAnotherLanguageIsRefused()
+    {
+        EffectiveSettings english = Settings(quality: "1080p", englishOnly: true);
+
+        // A real row, and the shape the fault took: English audio and Italian
+        // beside it, which is not the plain English release.
+        const string Italian = "Silo.S03E06.The.Drive.1080p.ATVP.WEB-DL.DDP5.1.ENG.ITA.Atmos.H265-TheBlackKing.mkv";
+
+        Verdict italian = Judge(english, Real("torrentz2.html", "torrentz2", Italian));
+
+        Assert.False(italian.Accepted);
+        Assert.Contains("italian", italian.Reason, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("English only", italian.Reason, StringComparison.Ordinal);
+
+        // The same name with the setting off is taken, so the refusal is the
+        // setting's and not the name's.
+        Assert.True(Judge(Settings(quality: "1080p", codec: "h265"), Real("torrentz2.html", "torrentz2", Italian)).Accepted);
+
+        // Several languages at once, English among them, is still not the plain
+        // English release.
+        Assert.False(Judge(english, Real("torrentz2.html", "torrentz2", "Silo.S03E06.1080p.WEB-DL.DUAL.5.1")).Accepted);
+
+        // And a name that claims no language is taken, which is most of them.
+        Assert.True(Judge(english, Real("eztv.html", "eztv", "Silo S03E06 1080p WEB H264-CAKES")).Accepted);
+    }
+
     /// <remarks>A wish decides no refusal: a name carrying none of them is judged exactly as one carrying all.</remarks>
     [Fact]
     public void AWishIsNeverAReasonToRefuse()
@@ -238,12 +279,14 @@ public sealed class NameJudgeTests
         string codec = LibraryPreferences.AnyCodec,
         IReadOnlyList<string>? wishes = null,
         IReadOnlyList<string>? musts = null,
-        IReadOnlyList<string>? forbidden = null)
+        IReadOnlyList<string>? forbidden = null,
+        bool englishOnly = false)
     {
         return new()
         {
             Quality = quality,
             Codec = codec,
+            EnglishOnly = englishOnly,
             Wishes = wishes ?? [],
             Musts = musts ?? [],
             Forbidden = forbidden ?? [],
