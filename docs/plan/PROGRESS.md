@@ -4,7 +4,12 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-11` · Seen working on beast-unit.** Sprint 13 is the owner's
+**Next: `S13-12` · Released as v0.6.0, the owner's word of 16 September 2026.** The last look on
+beast-unit: the seven shows switched on were searched with their library's settings; eight aired gaps
+were found; The Freak Brothers S03E01–06 and South Park S29E01 have no scene name anywhere (PreDB.net:
+nothing found), so nothing was asked of an indexer; South Park S15E12's scene names are 2160p H265 or
+German, so all were refused. No grab could be seen for want of a searchable gap, and the owner chose to
+release rather than wait for one. Sprint 13 is the owner's
 requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-show-list-and-release-search.md` is
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
