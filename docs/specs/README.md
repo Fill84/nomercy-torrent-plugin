@@ -29,5 +29,5 @@ ledger's banned-phrase list on every `dotnet test`.
 - [`show-list.md`](show-list.md) — the overview page: which shows and anime download, and their settings
 - [`release-names.md`](release-names.md) — reading the sources, and choosing the release name for an episode
 - [`indexer-search.md`](indexer-search.md) — searching the indexers, merging by hash, and the torrent that wins
-- [`pages.md`](pages.md) — the Activity, Queue, Skipped and Settings pages around the show list
+- [`pages.md`](pages.md) — the Activity, Queue and Settings pages around the show list, and refusals
 - [`run.md`](run.md) — what starts a run, the order of its work, and what happens when a site fails

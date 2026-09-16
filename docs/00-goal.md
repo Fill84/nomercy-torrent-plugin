@@ -9,7 +9,7 @@ That is the whole plugin. Anything that does not serve it is not built.
 
 The owner does not follow or subscribe to anything. They have libraries of type `tv` and `anime`,
 full of shows with episodes, and they switch on the shows they want on the overview page. Any episode
-of a show switched on, with its settings saved and a quality, that has no video file and whose air
+of a show switched on, with a quality of its own or its library's, that has no video file and whose air
 date has passed is missing, and this plugin fetches it (`docs/specs/show-list.md`).
 
 **Backwards as well as forwards.** An episode that aired two years ago and was never downloaded is
@@ -20,7 +20,7 @@ missing in exactly the same way as one that aired last night. A show that has en
 
 ```
 1. Libraries   read every library of type tv or anime
-2. Shows       every show in them switched on, saved and with a quality, every episode
+2. Shows       every show in them switched on with a quality (its own or its library's), every episode
 3. Missing     no video file, air date in the past; season 0 only with specials on
 4. Names       read the latest feed of every name source — PreDB, srrDB, PreDB.net, SceneSource —
                on every run; an episode no feed named is looked up in their search as Show SxxEyy;
