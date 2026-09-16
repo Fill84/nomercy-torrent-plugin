@@ -18,12 +18,18 @@ public class ShowsAndQueueViewTests : IDisposable
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
 
     /// <remarks>
-    /// The number on the overview's row equals the rows it summarises, and a show sits in the list of
-    /// the library the server put it in. A count kept anywhere else is a second number that can disagree
-    /// with its own list — 0.3.4 showed "0 downloads" while two were running.
+    /// <para>
+    /// The number on the overview's row is the show's aired episodes with no file, counted from the
+    /// library, and a show sits in the list of the library the server put it in.
+    /// </para>
+    /// <para>
+    /// <strong>It used to be the rows the plugin tracks</strong>, which are only those of shows switched
+    /// on — so on the owner's server on 16 September 2026 every row read "not counted" while the library
+    /// knew exactly how many were missing.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task TheMissingCountIsTheRowsForThatShow()
+    public async Task TheMissingCountIsTheShowsAiredEpisodesWithNoFile()
     {
         using TorrentDownloaderPlugin plugin = await Seeded(
         [
@@ -217,15 +223,37 @@ public class ShowsAndQueueViewTests : IDisposable
 
     private async Task<TorrentDownloaderPlugin> Seeded(IReadOnlyList<TrackedEpisode> episodes)
     {
+        FakeLibraryQuery shelves = new FakeLibraryQuery()
+            .Library(TvLibrary, "Series", "tv")
+            .Library(AnimeLibrary, "Anime", "anime")
+            .Show(1, "Silo", TvLibrary, year: 2023)
+            .Show(2, "Frieren", AnimeLibrary, year: 2023)
+
+            // One episode of each already on disk, which is what makes them the
+            // owner's shows rather than rows the server wrote on a guess.
+            .Episode(1, 1, 99, airDate: DateTime.UtcNow.AddMonths(-6), hasFile: true)
+            .Episode(2, 1, 99, airDate: DateTime.UtcNow.AddMonths(-6), hasFile: true);
+
+        // The library says the same as the tracked rows, because both describe
+        // one library: the overview counts the gaps here, the queue lists the
+        // rows the plugin is working on.
+        foreach (TrackedEpisode episode in episodes)
+        {
+            shelves.Episode(
+                episode.Key.ShowId,
+                episode.Key.Season,
+                episode.Key.Number,
+                airDate: episode.State == EpisodeState.NotAired
+                    ? DateTime.UtcNow.AddMonths(1)
+                    : DateTime.UtcNow.AddMonths(-1),
+                hasFile: false);
+        }
+
         TorrentDownloaderPlugin plugin = new();
         plugin.Initialize(new FakePluginContext
         {
             DataFolderPath = _folder,
-            Shelves = new FakeLibraryQuery()
-                .Library(TvLibrary, "Series", "tv")
-                .Library(AnimeLibrary, "Anime", "anime")
-                .Show(1, "Silo", TvLibrary, year: 2023)
-                .Show(2, "Frieren", AnimeLibrary, year: 2023),
+            Shelves = shelves,
         });
 
         await (await plugin.EpisodesAsync(CancellationToken.None)).ReplaceAsync(episodes, CancellationToken.None);

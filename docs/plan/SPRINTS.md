@@ -2966,6 +2966,59 @@ owner decides how presets become a quality — which preset when several disagre
 
 **Done when** the owner has seen it and approves.
 
+## S13-13 · The overview counts what is missing, and lists only the owner's shows
+
+**Found on `beast-unit`, 16 September 2026**, by the owner, in the order they raised it. Every slice from
+here to `S13-16` comes before `S13-12`, which stays the last one.
+
+**Steps**
+
+1. The missing column says a number for every show listed, switched on or off. It counts the aired
+   episodes with no video file, specials only where the show's settings take them. `HaveEpisodes` on the
+   server is **not** the source: on the owner's own library every one of the 69 shows reads nought there
+   while 57 of them have files, so the count comes from the episodes themselves.
+2. A show the library holds no video file of at all is not listed, unless it is switched on. Twelve rows
+   on the owner's library are shows nobody added — Brilliant Minds, Family Guy, GINTAMA, The Simpsons and
+   eight more — imported on a guess (media-server #36) and read as "recommended".
+3. `docs/specs/show-list.md` says both, as the owner's answer of 16 September 2026.
+
+**Done when** the overview shows a count for every row and the twelve rows are gone.
+
+## S13-14 · English only, back as a setting
+
+**Steps**
+
+1. A language setting per show and per library, beside quality and codec, with "follow the library": the
+   owner's answer of 16 September 2026 is the toggle back and everything else as it is.
+2. A name claiming another language is refused; a name claiming none is taken.
+3. `docs/specs/show-list.md` and `release-names.md` say so.
+
+**Done when** a show set to English only refuses a GERMAN release and takes an untagged one.
+
+## S13-15 · The forms read like forms
+
+**Steps**
+
+1. Examples in the wishes, musts and forbidden fields, on the show form and the library form.
+2. The fields of a form stand under each other rather than waterfalling across the width. The grid is
+   `PluginForm.vue`'s in `nomercy-app-web`, so the fix is there and the owner deploys it.
+3. The two folder fields open the folder picker through the storage facade. The plugin already declares
+   them as `PluginFormFieldType.Folder`; the deployed web app draws them as plain text boxes, so this is
+   `nomercy-app-web` as well.
+
+**Done when** the owner sees examples, one field per line, and a picker on both folder fields.
+
+## S13-16 · Skipped and History keep what is worth keeping
+
+**Steps**
+
+1. Far less is written down. The owner's history holds 5,851 refusals and every one of them is a name the
+   settings refused before anything was asked — noise they already understand.
+2. What a refusal is worth keeping for, and what both pages show instead, is the owner's to settle.
+3. `docs/specs/pages.md` says what each page holds.
+
+**Done when** the owner reads both pages without wading.
+
 ## S13-12 · Released as v0.6.0
 
 **Steps**

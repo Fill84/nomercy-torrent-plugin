@@ -2056,8 +2056,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// was saved for it and what applies.
     /// </summary>
     /// <remarks>
-    /// The missing count comes from the episodes the plugin tracks, and a show it does not track says so
-    /// rather than showing nought (<c>OverviewView</c>).
+    /// <para>
+    /// <strong>The count is the library's own, not the plugin's.</strong> It used to come from the
+    /// episodes the plugin tracks, which are only those of shows switched on, so every row of a library
+    /// nobody had switched on yet read "not counted" — the owner's report of 16 September 2026, and the
+    /// information was there all along. Each show's episodes are read once here and counted
+    /// (<see cref="ShowFacts"/>).
+    /// </para>
+    /// <para>
+    /// <strong>And a show the library holds no file of is not listed</strong>, unless the owner switched
+    /// it on. The server keeps a row for every show it ever identified — twelve of the owner's
+    /// sixty-nine — and listing those read as recommendations for programmes they do not have.
+    /// </para>
     /// </remarks>
     private async Task<PluginView> OverviewAsync(string? onlyLibraryId, int page, CancellationToken ct)
     {
@@ -2071,33 +2081,39 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         IReadOnlyDictionary<int, ShowSettings> saved = await (await ShowSettingsAsync(ct)).AllAsync(ct);
         LibraryPreferencesRepository preferences = await LibraryPreferencesAsync(ct);
 
-        Dictionary<int, int> missing = ShowSummaries
-            .Summarise(await Tracked(ct))
-            .ToDictionary(show => show.ShowId, show => show.Missing);
+        // One library object for the whole page, so a show's episodes are asked
+        // for once however many times they are wanted while it is drawn.
+        LibraryThisTick library = new(new HostLibrary(Context.Library));
+        DateOnly today = DateOnly.FromDateTime(DateTimeOffset.UtcNow.UtcDateTime);
 
         List<LibraryListing> listings = [];
 
-        foreach (Library library in libraries)
+        foreach (Library shelf in libraries)
         {
-            LibraryPreferences prefs = await preferences.ForAsync(library.Id, ct);
+            LibraryPreferences prefs = await preferences.ForAsync(shelf.Id, ct);
+            List<ShowListing> rows = [];
 
-            listings.Add(new(
-                library,
-                prefs,
-                [
-                    .. shows
-                        .Where(show => show.LibraryId == library.Id)
-                        .Select(show =>
-                        {
-                            ShowSettings settings = saved.GetValueOrDefault(show.Id) ?? new ShowSettings(show.Id);
+            foreach (Show show in shows.Where(one => one.LibraryId == shelf.Id))
+            {
+                ShowSettings settings = saved.GetValueOrDefault(show.Id) ?? new ShowSettings(show.Id);
+                EffectiveSettings applied = EffectiveSettings.Of(settings, prefs);
 
-                            return new ShowListing(
-                                show,
-                                settings,
-                                EffectiveSettings.Of(settings, prefs),
-                                missing.TryGetValue(show.Id, out int count) ? count : null);
-                        }),
-                ]));
+                ShowFacts facts = ShowFacts.Of(
+                    await library.GetEpisodesAsync(show.Id, ct),
+                    today,
+                    applied.Specials);
+
+                // Nothing of it on disk and nobody asked for it: a row the
+                // server wrote on a guess, and not the owner's show.
+                if (!facts.Held && !settings.SwitchedOn)
+                {
+                    continue;
+                }
+
+                rows.Add(new(show, settings, applied, facts.Missing));
+            }
+
+            listings.Add(new(shelf, prefs, rows));
         }
 
         return OverviewView.Render(CurrentCycle(), listings, onlyLibraryId, page);

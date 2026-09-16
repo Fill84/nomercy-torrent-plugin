@@ -4,6 +4,10 @@
 
 - The plugin's overview page lists every show of every `tv` library and every anime of every `anime`
   library, in one list per library.
+- A show or anime the library holds no video file of is not listed, unless it is switched on. The
+  server keeps a row for every show it ever identified, and those are not the owner's shows.
+- The missing column says, for every show listed, how many of its aired episodes have no video file,
+  whether the show is switched on or off. It counts season 0 only where that show takes specials.
 - Every show and every anime on the list has its own on/off switch.
 - A show or anime nobody has switched on is off.
 - Only a show or anime is switched on or off. No switch turns a whole library on or off.
