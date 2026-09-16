@@ -3022,8 +3022,10 @@ switch is named once (`b2d86bbf2`, which also carries the double-label fix left 
 12 September); a table takes its share of the page and scrolls inside it, which makes Queue's two lists
 half and half and keeps the Downloads magnet field in place, and the empty message sits where a first cell
 would be (`f85c19b76`). The folder picker was already in the web app (`a8c0beb99`, through
-`dashboard/drivers` and `dashboard/filesystem/ls`); the deployed build predates it. Both web app commits wait
-on the owner's push and deploy.
+`dashboard/drivers` and `dashboard/filesystem/ls`). Rebased onto the owner's own toggle change of the same
+night, which stopped `NMToggle` drawing its label, so the form's label had to stay (`5f0a2a212`); pushed as
+`479bac615`, `9d6b630bc`, `5f0a2a212`, deployed, and seen by the owner: "dit is perfect zo". The owner's word
+for next time: a plugin page is fixed in the plugin, and the web app is not changed unasked.
 
 ## S13-16 · Skipped and History keep what is worth keeping
 
