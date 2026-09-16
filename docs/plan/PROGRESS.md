@@ -4,6 +4,10 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**v0.6.1 is released** on the owner's word of 16 September 2026: the episode asked for when no release name
+gives a torrent (`S13-17`), and LimeTorrents on `limetorrents.fun` — the same package on Forgejo and GitHub
+(sha256 `362be11a…`), `repository.json` names 0.6.1 (`9c81297`).
+
 **Sprint 13 is done: v0.6.0 is released**, on the owner's word of 16 September 2026 — Forgejo run 732,
 the same package on Forgejo and GitHub (sha256 `3f5081a4…`), and `repository.json` names 0.6.0
 (`6a77e34`). The owner updates through the plugin catalogue. **Open for next time:** media-server #56
