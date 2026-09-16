@@ -4,7 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**Next: `S13-12` · Released as v0.6.0, the owner's word of 16 September 2026.** The last look on
+**Sprint 13 is done: v0.6.0 is released**, on the owner's word of 16 September 2026 — Forgejo run 732,
+the same package on Forgejo and GitHub (sha256 `3f5081a4…`), and `repository.json` names 0.6.0
+(`6a77e34`). The owner updates through the plugin catalogue. **Open for next time:** media-server #56
+(a library's quality from its encoding profile) and #38 (South Park S15E12 registered as S00E12, so the
+plugin keeps seeing it as missing). The last look on
 beast-unit: the seven shows switched on were searched with their library's settings; eight aired gaps
 were found; The Freak Brothers S03E01–06 and South Park S29E01 have no scene name anywhere (PreDB.net:
 nothing found), so nothing was asked of an indexer; South Park S15E12's scene names are 2160p H265 or
