@@ -2984,6 +2984,11 @@ here to `S13-16` comes before `S13-12`, which stays the last one.
 
 **Done when** the overview shows a count for every row and the twelve rows are gone.
 
+**As done** (`ffea51e`). The owner asked for shows with a folder on disk in the library folders, or a
+flag for shows added by hand. Neither can be read: `Tv` carries no such flag, and `PluginLibrary` gives no
+library folder paths. One video file anywhere in the show is what the plugin can see, and on the owner's
+library it removes exactly the twelve rows they named. `ShowFacts`, `TheShowListTests`.
+
 ## S13-14 · English only, back as a setting
 
 **Steps**
@@ -2994,6 +2999,10 @@ here to `S13-16` comes before `S13-12`, which stays the last one.
 3. `docs/specs/show-list.md` and `release-names.md` say so.
 
 **Done when** a show set to English only refuses a GERMAN release and takes an untagged one.
+
+**As done** (`3196b3d`). Migration 015; the claims are the ones `ReleaseName` already reads off real
+captures, and a plain `DUAL` now counts as a dual audio. The tag examples of `S13-15` step 1 landed in the
+same commit.
 
 ## S13-15 · The forms read like forms
 
@@ -3008,6 +3017,14 @@ here to `S13-16` comes before `S13-12`, which stays the last one.
 
 **Done when** the owner sees examples, one field per line, and a picker on both folder fields.
 
+**As done.** Examples in the plugin (`3196b3d`). In `nomercy-app-web`: the form stacks its fields and a
+switch is named once (`b2d86bbf2`, which also carries the double-label fix left uncommitted since
+12 September); a table takes its share of the page and scrolls inside it, which makes Queue's two lists
+half and half and keeps the Downloads magnet field in place, and the empty message sits where a first cell
+would be (`f85c19b76`). The folder picker was already in the web app (`a8c0beb99`, through
+`dashboard/drivers` and `dashboard/filesystem/ls`); the deployed build predates it. Both web app commits wait
+on the owner's push and deploy.
+
 ## S13-16 · Skipped and History keep what is worth keeping
 
 **Steps**
@@ -3018,6 +3035,11 @@ here to `S13-16` comes before `S13-12`, which stays the last one.
 3. `docs/specs/pages.md` says what each page holds.
 
 **Done when** the owner reads both pages without wading.
+
+**As done** (`a8b5bee`). The owner's answer: store nothing. The Skipped page, its routes, its store and the
+refusal pruning are gone; a refusal is said on Activity while the run is going; migration 016 deletes the
+refusals already written. `StoreTests.TheRefusalsAnOlderVersionWroteAreGone`,
+`PagesReachableTests.ARefusedNameIsNotWrittenDownAnywhere`, `SearchCycleTests.EveryRefusalIsSaidWhileTheRunIsGoing`.
 
 ## S13-12 · Released as v0.6.0
 

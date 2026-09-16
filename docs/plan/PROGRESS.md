@@ -9,6 +9,16 @@ requirements of 15 September 2026: `docs/specs/` holds them, `DESIGN-2026-09-15-
 the design they approved in five parts, and `SPRINTS.md` § S13 lists `S13-01` to `S13-12`, ending with
 the v0.6.0 release once the owner approves the whole on beast-unit. v0.5.0 is released.
 
+**`S13-11` is under way, and the first look on beast-unit on 16 September 2026 found eleven things,
+fixed in the owner's order as `S13-13` to `S13-16`.** The overview counts each show's aired gaps from the
+library (its `HaveEpisodes` column reads nought for all 69 shows) and lists only shows with a file on disk
+or switched on; English only is back per show and library; the tag fields show examples; nothing about a
+refused name is stored and the Skipped page is gone. In `nomercy-app-web`, forms stack their fields, a
+switch is named once, and a table takes its share of the page and scrolls inside it. The plugin needs a
+deploy, and the web app a push and deploy, before the owner looks again. One Bittorrent timing test
+(`APeerThatSendsRubbishHasNoneOfItWrittenToDisk`) failed once in a loaded full run and passed three times
+alone.
+
 **`S13-10` is done: the library's quality from its encoding profile is asked of the server as media-server
 [#56](https://github.com/NoMercy-Entertainment/nomercy-media-server/issues/56)**
 (`docs/issues/media-server-library-encoding-resolution.md`). `PluginLibrary` carries only id, title and
