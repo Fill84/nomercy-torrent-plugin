@@ -133,6 +133,11 @@ public static class MetadataTransfer
 /// contributed is dropped and it starts again from nothing.
 /// </para>
 /// <para>
+/// Safe to use from every peer conversation at once, which is how it is used:
+/// a magnet dials many peers and each one that has the metadata hands its
+/// pieces to this one fetch from its own thread.
+/// </para>
+/// <para>
 /// It carries its own clock reading. A magnet nobody in the swarm will serve
 /// the metadata for otherwise sits there saying "fetching metadata" for as long
 /// as the server runs, which is what 0.3.4 did.
@@ -145,6 +150,18 @@ public sealed class MetadataFetch
     private readonly HashSet<int> _have = [];
     private readonly HashSet<string> _contributors = new(StringComparer.Ordinal);
     private readonly DateTimeOffset _started;
+
+    /// <summary>
+    /// Guards the bytes and both sets.
+    /// </summary>
+    /// <remarks>
+    /// Every peer conversation adds to the same fetch concurrently, and a
+    /// <see cref="HashSet{T}"/> grown from two threads at once loses entries or
+    /// throws from inside itself. A lost entry is a piece that arrived and is
+    /// still wanted, so the fetch never completes and the magnet sits on
+    /// "fetching metadata" until it expires.
+    /// </remarks>
+    private readonly Lock _lock = new();
 
     public MetadataFetch(byte[] infoHash, int size, DateTimeOffset started = default)
     {
@@ -162,23 +179,62 @@ public sealed class MetadataFetch
     public int Pieces => MetadataTransfer.Pieces(_bytes.Length);
 
     /// <summary>Whether every piece has arrived.</summary>
-    public bool Complete => _have.Count == Pieces;
+    public bool Complete
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _have.Count == Pieces;
+            }
+        }
+    }
 
     /// <summary>Everybody who sent part of it.</summary>
-    public IReadOnlyCollection<string> Contributors => _contributors;
+    /// <remarks>A copy: the set itself changes under whoever is reading it.</remarks>
+    public IReadOnlyCollection<string> Contributors
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return [.. _contributors];
+            }
+        }
+    }
 
     /// <summary>Whether it is complete and hashes to the hash the magnet named.</summary>
-    public bool Verified => Complete && SHA1.HashData(_bytes).AsSpan().SequenceEqual(_infoHash);
+    public bool Verified
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return IsVerified();
+            }
+        }
+    }
 
     /// <summary>The pieces still to ask somebody for.</summary>
+    /// <remarks>
+    /// Taken all at once rather than yielded, so the answer is one moment's
+    /// answer and nobody enumerates the set while another peer adds to it.
+    /// </remarks>
     public IEnumerable<int> Wanted()
     {
-        for (int piece = 0; piece < Pieces; piece++)
+        lock (_lock)
         {
-            if (!_have.Contains(piece))
+            List<int> wanted = [];
+
+            for (int piece = 0; piece < Pieces; piece++)
             {
-                yield return piece;
+                if (!_have.Contains(piece))
+                {
+                    wanted.Add(piece);
+                }
             }
+
+            return wanted;
         }
     }
 
@@ -208,9 +264,12 @@ public sealed class MetadataFetch
                 $"Metadata piece {piece} is {length} bytes, and this peer sent {data.Length}.");
         }
 
-        data.CopyTo(_bytes.AsSpan(at));
-        _have.Add(piece);
-        _contributors.Add(peer);
+        lock (_lock)
+        {
+            data.CopyTo(_bytes.AsSpan(at));
+            _have.Add(piece);
+            _contributors.Add(peer);
+        }
     }
 
     /// <summary>
@@ -223,13 +282,16 @@ public sealed class MetadataFetch
     /// </remarks>
     public IReadOnlyCollection<string> Discard()
     {
-        string[] blamed = [.. _contributors];
+        lock (_lock)
+        {
+            string[] blamed = [.. _contributors];
 
-        Array.Clear(_bytes);
-        _have.Clear();
-        _contributors.Clear();
+            Array.Clear(_bytes);
+            _have.Clear();
+            _contributors.Clear();
 
-        return blamed;
+            return blamed;
+        }
     }
 
     /// <summary>
@@ -251,9 +313,19 @@ public sealed class MetadataFetch
     /// <remarks>
     /// Kept so it can be written down: a client that has the metadata should
     /// never have to ask a swarm for it again, and a swarm that has gone quiet
-    /// cannot answer.
+    /// cannot answer. A copy taken under the lock, so a late piece from another
+    /// peer cannot change the bytes while they are being written.
     /// </remarks>
-    public ReadOnlySpan<byte> Info => Verified ? _bytes : [];
+    public ReadOnlySpan<byte> Info
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return IsVerified() ? _bytes.ToArray() : [];
+            }
+        }
+    }
 
     /// <summary>
     /// The torrent, once it is verified.
@@ -265,14 +337,23 @@ public sealed class MetadataFetch
     /// <exception cref="TorrentFormatException">It is not complete, or it did not verify.</exception>
     public TorrentMetadata Read(IReadOnlyList<string> trackers)
     {
-        if (!Verified)
+        lock (_lock)
         {
-            throw new TorrentFormatException(
-                Complete
-                    ? "The metadata does not hash to the hash the magnet named."
-                    : $"{_have.Count} of {Pieces} metadata pieces have arrived.");
-        }
+            if (!IsVerified())
+            {
+                throw new TorrentFormatException(
+                    _have.Count == Pieces
+                        ? "The metadata does not hash to the hash the magnet named."
+                        : $"{_have.Count} of {Pieces} metadata pieces have arrived.");
+            }
 
-        return TorrentMetadata.FromInfo(_bytes, trackers);
+            return TorrentMetadata.FromInfo(_bytes, trackers);
+        }
+    }
+
+    /// <summary>Whether it is complete and verifies. Only called holding the lock.</summary>
+    private bool IsVerified()
+    {
+        return _have.Count == Pieces && SHA1.HashData(_bytes).AsSpan().SequenceEqual(_infoHash);
     }
 }

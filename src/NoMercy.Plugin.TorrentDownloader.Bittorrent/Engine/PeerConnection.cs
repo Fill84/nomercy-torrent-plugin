@@ -22,6 +22,31 @@ public sealed class PeerConnection(Stream wire, PeerHandshake introduction, int 
     private readonly PeerMessageReader _reader = new();
     private readonly byte[] _buffer = new byte[64 * 1024];
 
+    /// <summary>
+    /// One send at a time, held from the write until the flush is done.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The keep-alive beat, the read loop answering a request and every other
+    /// peer's conversation announcing a verified piece all write here without
+    /// waiting for each other. On an encrypted connection the RC4 keystream is
+    /// one running state: two sends encrypting at once tear it, and two that
+    /// encrypt in one order and reach the socket in the other put bytes on the
+    /// wire out of keystream order. Everything after that decrypts to rubbish
+    /// at the peer, which drops the connection. The upload counter lost
+    /// increments the same way.
+    /// </para>
+    /// <para>
+    /// Never disposed. A <see cref="SemaphoreSlim"/> holds nothing to release
+    /// unless its wait handle is asked for, and disposing it would strand a
+    /// send already waiting for its turn: disposal wakes no waiter, so that
+    /// send would hang for ever instead of failing on the closed stream with
+    /// the <see cref="ObjectDisposedException"/> or <see cref="IOException"/>
+    /// every caller already handles.
+    /// </para>
+    /// </remarks>
+    private readonly SemaphoreSlim _sending = new(1, 1);
+
     /// <summary>Who they said they were.</summary>
     public PeerHandshake Introduction => introduction;
 
@@ -49,25 +74,36 @@ public sealed class PeerConnection(Stream wire, PeerHandshake introduction, int 
     /// <summary>Sends one message.</summary>
     public async Task SendAsync(PeerMessage message, CancellationToken ct)
     {
-        if (message.Id == PeerMessageId.Piece)
-        {
-            // The payload is the piece index, the offset and then the block, so
-            // what really went out is what is left after those eight bytes.
-            Uploaded += Math.Max(0, message.Payload.Length - 8);
-        }
+        byte[] frame = message.Write();
 
-        if (message.Id == PeerMessageId.Unchoke)
-        {
-            Choking = false;
-        }
+        await _sending.WaitAsync(ct).ConfigureAwait(false);
 
-        if (message.Id == PeerMessageId.Choke)
+        try
         {
-            Choking = true;
-        }
+            if (message.Id == PeerMessageId.Piece)
+            {
+                // The payload is the piece index, the offset and then the block, so
+                // what really went out is what is left after those eight bytes.
+                Uploaded += Math.Max(0, message.Payload.Length - 8);
+            }
 
-        await wire.WriteAsync(message.Write(), ct).ConfigureAwait(false);
-        await wire.FlushAsync(ct).ConfigureAwait(false);
+            if (message.Id == PeerMessageId.Unchoke)
+            {
+                Choking = false;
+            }
+
+            if (message.Id == PeerMessageId.Choke)
+            {
+                Choking = true;
+            }
+
+            await wire.WriteAsync(frame, ct).ConfigureAwait(false);
+            await wire.FlushAsync(ct).ConfigureAwait(false);
+        }
+        finally
+        {
+            _sending.Release();
+        }
     }
 
     /// <summary>
