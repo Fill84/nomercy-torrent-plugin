@@ -77,6 +77,13 @@ public sealed record ReleaseCopy(
     /// </remarks>
     public Sources.Readers.SignedClaim? Claim { get; init; }
 
+    /// <summary>When its site says it was uploaded, or null when the site does not write a date.</summary>
+    /// <remarks>
+    /// An indexer's title carries no year, so two programmes of one title answer the same episode search with
+    /// the same words; when each was uploaded is what differs.
+    /// </remarks>
+    public DateTimeOffset? Published { get; init; }
+
     /// <summary>Never null: a copy naming no tracker names none.</summary>
     public IReadOnlyList<string> Trackers { get; init; } = Trackers ?? [];
 

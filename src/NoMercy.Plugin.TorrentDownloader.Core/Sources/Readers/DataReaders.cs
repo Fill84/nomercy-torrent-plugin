@@ -58,14 +58,7 @@ public sealed class RssNameReader : ISourceReader
                 // S02E04 from another of the same name years apart. PreDB.net writes
                 // the hour without its leading nought, which the invariant parse
                 // takes; a date it cannot read is no date rather than a wrong one.
-                Published = date.Success
-                            && DateTimeOffset.TryParse(
-                                Html.Text(date.Groups[1].Value),
-                                System.Globalization.CultureInfo.InvariantCulture,
-                                System.Globalization.DateTimeStyles.AssumeUniversal,
-                                out DateTimeOffset at)
-                    ? at
-                    : null,
+                Published = date.Success ? Html.Moment(date.Groups[1].Value) : null,
             });
         }
 
@@ -88,7 +81,7 @@ public sealed class TorrentRssReader : ISourceReader
         RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
 
     private static readonly Regex Tag = new(
-        "<(?:[a-z]+:)?(title|link|seeders|leechers|infoHash|size)>(.*?)</(?:[a-z]+:)?\\1>",
+        "<(?:[a-z]+:)?(title|link|seeders|leechers|infoHash|size|pubDate)>(.*?)</(?:[a-z]+:)?\\1>",
         RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
 
     public string Name => "torrent-rss";
@@ -114,7 +107,11 @@ public sealed class TorrentRssReader : ISourceReader
                 InfoHash: tags.GetValueOrDefault("infohash")?.ToUpperInvariant(),
                 Seeders: Html.Count(tags.GetValueOrDefault("seeders")),
                 Leechers: Html.Count(tags.GetValueOrDefault("leechers")),
-                SizeBytes: Html.Size(tags.GetValueOrDefault("size"))));
+                SizeBytes: Html.Size(tags.GetValueOrDefault("size")),
+
+                // When it was uploaded, which is what tells one programme's episode from another's of the
+                // same title years apart: Dark Matter's S02E04 of 2016 taken for the one of 17 September 2026.
+                Published: Html.Moment(tags.GetValueOrDefault("pubdate"))));
         }
 
         return rows;
@@ -159,7 +156,12 @@ public sealed class ApibayReader : ISourceReader
                 InfoHash: hash?.ToUpperInvariant(),
                 Seeders: Json.Number(row, "seeders"),
                 Leechers: Json.Number(row, "leechers"),
-                SizeBytes: Json.Long(row, "size")));
+                SizeBytes: Json.Long(row, "size"),
+
+                // When it was added, as a unix timestamp in a string. On 17 September 2026 this site's
+                // Dark Matter S02E04 remux of the 2015 programme, added that February, was the row taken for
+                // the 2024 programme's S02E04 aired that day.
+                Published: Json.Unix(row, "added")));
         }
 
         return rows;
@@ -191,7 +193,8 @@ public sealed class EztvApiReader : ISourceReader
                 Json.Text(row, "hash")?.ToUpperInvariant(),
                 Json.Number(row, "seeds"),
                 Json.Number(row, "peers"),
-                Json.Long(row, "size_bytes")));
+                Json.Long(row, "size_bytes"),
+                Published: Json.Unix(row, "date_released_unix")));
         }
 
         return rows;
@@ -350,6 +353,18 @@ internal static class Json
     public static long? Long(JsonElement row, string property)
     {
         return long.TryParse(Text(row, property), out long number) ? number : null;
+    }
+
+    /// <summary>A moment written as seconds since 1970, as a number or as a string.</summary>
+    /// <remarks>
+    /// Nought and below are left undated: an endpoint writes nought for a date it does not have, and 1970
+    /// is not when anything here was uploaded.
+    /// </remarks>
+    public static DateTimeOffset? Unix(JsonElement row, string property)
+    {
+        return long.TryParse(Text(row, property), out long seconds) && seconds > 0
+            ? DateTimeOffset.FromUnixTimeSeconds(seconds)
+            : null;
     }
 
     private static JsonElement? Parse(string body)

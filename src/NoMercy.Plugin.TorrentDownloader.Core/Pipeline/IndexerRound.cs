@@ -145,7 +145,24 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
     /// <param name="Text">What is asked: letter for letter first, then without punctuation.</param>
     /// <param name="Counts">Whether a row's title counts for this question.</param>
     /// <param name="NameOf">The release name a counting row is merged and downloaded under.</param>
-    private sealed record Question(string Text, Func<string, bool> Counts, Func<ReleaseCopy, string> NameOf);
+    /// <param name="Aired">
+    /// The episode whose air date a row is held against, when its title alone cannot say which programme it
+    /// is of; null when the title is a release name that was already judged by its own date.
+    /// </param>
+    private sealed record Question(string Text, Func<string, bool> Counts, Func<ReleaseCopy, string> NameOf, TrackedEpisode? Aired = null)
+    {
+        /// <summary>Whether a row whose title counts was uploaded too long before the episode aired to be of it.</summary>
+        public bool UploadedBeforeItAired(ReleaseCopy row)
+        {
+            return Aired is TrackedEpisode episode && SourceName.PublishedBeforeItAired(row.Published, episode);
+        }
+
+        /// <summary>Whether a row counts for this question: its title, and when it was uploaded.</summary>
+        public bool Takes(ReleaseCopy row)
+        {
+            return Counts(row.Title) && !UploadedBeforeItAired(row);
+        }
+    }
 
     public Task<IReadOnlyList<RankedTorrent>> AskAsync(
         IReadOnlyList<string> names,
@@ -171,6 +188,13 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
     /// indexer has a torrent for, and the release the indexers do have was never asked for. A row counts only
     /// when <paramref name="meets"/> says it names this episode and meets the show's settings, and it goes by
     /// its own title: no name source gave it one.
+    /// <para>
+    /// A row its indexer dates more than <see cref="SourceName.Before"/> before the episode aired does not
+    /// count. Two programmes share the title Dark Matter, and on 17 September 2026 this search took the 2015
+    /// programme's S02E04 remux, uploaded that February, for the 2024 programme's S02E04 aired that day: the
+    /// title carries no year, and when it was uploaded is the one thing that differs. A row with no date
+    /// counts as its title says.
+    /// </para>
     /// </remarks>
     /// <param name="episode">The episode asked for, by its show's title, season and episode.</param>
     /// <param name="meets">Whether a row's title names the episode and meets the show's settings.</param>
@@ -184,7 +208,7 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         AskedThisCycle asked,
         CancellationToken ct)
     {
-        Question[] questions = [new($"{episode.ShowTitle} {episode.Key}", meets, row => row.Title)];
+        Question[] questions = [new($"{episode.ShowTitle} {episode.Key}", meets, row => row.Title, episode)];
 
         return RoundAsync(questions, episode, blacklisted, asked, ct);
     }
@@ -253,7 +277,16 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
                 }
 
                 ReleaseCopy[] rows = asked.Recall(indexer.Name, term) ?? await AskAsync(indexer, term, question, about, asked, ct);
-                ReleaseCopy[] named = [.. rows.Where(row => question.Counts(row.Title))];
+                ReleaseCopy[] titled = [.. rows.Where(row => question.Counts(row.Title))];
+                ReleaseCopy[] named = [.. titled.Where(row => !question.UploadedBeforeItAired(row))];
+
+                if (named.Length < titled.Length)
+                {
+                    journal.Noted(
+                        ActivityStage.Find,
+                        about,
+                        $"{indexer.Name} · {titled.Length - named.Length} results uploaded more than a week before it aired were left out: another programme of the same name");
+                }
 
                 if (named.Length > 0)
                 {
@@ -280,7 +313,9 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
 
         for (int at = 0; at < rows.Length; at++)
         {
-            if (rows[at].InfoHash is null && question.Counts(rows[at].Title))
+            // Only a row that counts, date included: a page read for a row that was uploaded years before the
+            // episode is a request for a torrent that is never taken.
+            if (rows[at].InfoHash is null && question.Takes(rows[at]))
             {
                 rows[at] = await find.HashOfAsync(rows[at], ct);
             }

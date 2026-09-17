@@ -251,6 +251,24 @@ public static class Html
         return (long)(amount * unit);
     }
 
+    /// <summary>A moment a page writes out in full, or null when it cannot be read as one.</summary>
+    /// <remarks>
+    /// Null rather than a guess: a wrong date would leave out a torrent for an episode it really is, and
+    /// no date leaves the row exactly as it was before any date was read. A moment written with no offset
+    /// is taken as UTC, which is what every source that dates its rows writes.
+    /// </remarks>
+    public static DateTimeOffset? Moment(string? text)
+    {
+        return text is not null
+               && DateTimeOffset.TryParse(
+                   Text(text),
+                   System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.AssumeUniversal,
+                   out DateTimeOffset at)
+            ? at
+            : null;
+    }
+
     private static readonly Regex SizeText = new(
         @"([0-9]+(?:\.[0-9]+)?)\s*(TB|GB|MB|KB|B)\b",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);

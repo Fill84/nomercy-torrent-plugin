@@ -55,10 +55,37 @@ public sealed class X1337Reader : ISourceReader
                 Leechers: Html.Count(Cells.Of(markup, "coll-3")),
                 // The size cell has the seed count nested inside it, so it is
                 // read as text rather than as a number.
-                SizeBytes: Html.Size(Cells.Of(markup, "coll-4"))));
+                SizeBytes: Html.Size(Cells.Of(markup, "coll-4")),
+                Published: Uploaded(Cells.Of(markup, "coll-date"))));
         }
 
         return rows;
+    }
+
+    /// <summary>A day this listing writes with its year: <c>Nov. 15th '24</c>.</summary>
+    private static readonly Regex DayOfAYear = new(
+        @"^([A-Z][a-z]{2})\.?\s+(\d{1,2})(?:st|nd|rd|th)\s+'(\d{2})$",
+        RegexOptions.Compiled);
+
+    /// <summary>The day a row was uploaded, where the listing writes its year.</summary>
+    /// <remarks>
+    /// An upload of this year is written without one, <c>11pm Aug. 11th</c>, and is left undated: which year
+    /// that is depends on the moment the page was served, which the page does not say. An upload of an
+    /// earlier year — the one that can be another programme of the same title — always carries it.
+    /// </remarks>
+    private static DateTimeOffset? Uploaded(string? cell)
+    {
+        Match day = cell is null ? Match.Empty : DayOfAYear.Match(Html.Text(cell));
+
+        return day.Success
+               && DateTime.TryParseExact(
+                   $"{day.Groups[1].Value} {day.Groups[2].Value} 20{day.Groups[3].Value}",
+                   "MMM d yyyy",
+                   System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.None,
+                   out DateTime at)
+            ? new DateTimeOffset(at, TimeSpan.Zero)
+            : null;
     }
 }
 

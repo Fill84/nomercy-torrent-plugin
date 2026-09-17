@@ -31,7 +31,20 @@ public sealed record SourceName(string Title, string Source, DateTimeOffset? Pub
     /// </remarks>
     public bool PublishedBeforeItAired(TrackedEpisode episode)
     {
-        return Published is DateTimeOffset at
+        return PublishedBeforeItAired(Published, episode);
+    }
+
+    /// <summary>
+    /// Whether something published at <paramref name="published"/> was published too long before the episode
+    /// aired to be of it.
+    /// </summary>
+    /// <remarks>
+    /// One rule for a name and for an indexer's row, so the week is the same week for both. No date on either
+    /// side is not judged by this.
+    /// </remarks>
+    public static bool PublishedBeforeItAired(DateTimeOffset? published, TrackedEpisode episode)
+    {
+        return published is DateTimeOffset at
                && episode.AirDate is DateOnly aired
                && at < new DateTimeOffset(aired.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) - Before;
     }

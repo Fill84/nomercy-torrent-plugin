@@ -117,15 +117,54 @@ public sealed class Torrentz2Reader : ISourceReader
                 .GroupBy(span => span.Groups[1].Value)
                 .ToDictionary(span => span.Key, span => span.First().Groups[2].Value);
 
+            Match age = Age.Match(markup);
+
             rows.Add(new(
                 ForeignPrefix.Replace(Html.Text(release.Groups[2].Value), string.Empty),
                 Html.Absolute(release.Groups[1].Value, from),
                 Seeders: Html.Count(spans.GetValueOrDefault("u")),
                 Leechers: Html.Count(spans.GetValueOrDefault("d")),
-                SizeBytes: Html.Size(spans.GetValueOrDefault("s"))));
+                SizeBytes: Html.Size(spans.GetValueOrDefault("s")),
+                Published: age.Success ? Uploaded(Html.Decode(age.Groups[1].Value)) : null));
         }
 
         return rows;
+    }
+
+    /// <summary>The moment behind the age this site prints, which it keeps in the age's title.</summary>
+    private static readonly Regex Age = new(
+        @"<span class=""a""><span title=""([^""]+)""",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>The browser's own rendering of a moment: <c>Mon Nov 18 2024 21:09:41 GMT+0000 (…)</c>.</summary>
+    private static readonly Regex Rendered = new(
+        @"^[A-Za-z]{3}\s+([A-Za-z]{3}\s+\d{1,2}\s+\d{4}\s+\d{2}:\d{2}:\d{2})\s+GMT([+-]\d{2})(\d{2})",
+        RegexOptions.Compiled);
+
+    /// <summary>When a row was uploaded, in either of the two ways this site has written it.</summary>
+    /// <remarks>
+    /// The capture of 15 August 2026 writes <c>2026-08-07T18:02:19.368Z</c>, and the capture of 15 September
+    /// 2026 writes a browser's rendering of the same kind of moment. Neither is read as the other, so both are
+    /// read, and anything else is no date.
+    /// </remarks>
+    private static DateTimeOffset? Uploaded(string title)
+    {
+        Match rendered = Rendered.Match(title);
+
+        if (!rendered.Success)
+        {
+            return Html.Moment(title);
+        }
+
+        // GMT+0000 written as +00:00, which is the one way an offset is parsed.
+        return DateTimeOffset.TryParseExact(
+                   $"{rendered.Groups[1].Value} {rendered.Groups[2].Value}:{rendered.Groups[3].Value}",
+                   "MMM d yyyy HH:mm:ss zzz",
+                   System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.AllowInnerWhite,
+                   out DateTimeOffset at)
+            ? at
+            : null;
     }
 }
 
@@ -312,10 +351,34 @@ public sealed class TorrentBayReader : ISourceReader
                 // prints neither a magnet nor a hash anywhere. A row missing
                 // any of the three cannot be asked at all, and says so by
                 // carrying no claim rather than by carrying half of one.
-                Claim: ClaimOn(markup, token, session)));
+                Claim: ClaimOn(markup, token, session),
+
+                // The day it was uploaded, which the age this page prints keeps in its title.
+                Published: Uploaded(markup)));
         }
 
         return rows;
+    }
+
+    /// <summary>The day behind the age a row prints: <c>&lt;span title="15 November 2024"&gt;1 year ago&lt;/span&gt;</c>.</summary>
+    private static readonly Regex AgeTitle = new(
+        @"<span title=""(\d{1,2} [A-Za-z]+ \d{4})"">",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>The day a row was uploaded, at midnight UTC since the page gives no hour.</summary>
+    private static DateTimeOffset? Uploaded(string markup)
+    {
+        Match day = AgeTitle.Match(markup);
+
+        return day.Success
+               && DateTime.TryParseExact(
+                   day.Groups[1].Value,
+                   "d MMMM yyyy",
+                   System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.None,
+                   out DateTime at)
+            ? new DateTimeOffset(at, TimeSpan.Zero)
+            : null;
     }
 
     /// <summary>The row's id and the page's two tokens, when the page has all three.</summary>

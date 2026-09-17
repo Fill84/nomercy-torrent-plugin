@@ -446,6 +446,7 @@ public sealed class Find(
             Magnets.TrackersOf(row.Magnet))
         {
             Claim = row.Claim,
+            Published = row.Published,
 
             // Its own route, before any merging. What survives a merge is the
             // union of these, so every site that has the torrent can be asked

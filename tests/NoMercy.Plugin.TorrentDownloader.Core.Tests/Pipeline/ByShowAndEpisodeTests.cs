@@ -129,6 +129,95 @@ public class ByShowAndEpisodeTests
                        || Uri.UnescapeDataString(address.ToString()).Replace('+', ' ').EndsWith("q=Silo S02E01", StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A result uploaded long before the episode aired is not a result for it.</strong> Two programmes
+    /// are called Dark Matter, one from 2015 and the owner's from 2024, and their S02E04s share every word of
+    /// an indexer's title. On 17 September 2026, the day the 2024 programme's S02E04 aired, the episode search
+    /// took <c>Dark Matter S02E04 We Were Family 1080p TrueHD 5 1 AVC REMUX-FraMeSToR</c> for it: the 2015
+    /// programme's Blu-ray remux.
+    /// </para>
+    /// <para>
+    /// The Pirate Bay's answer to <c>Dark Matter S02E04</c>, captured that day, dates that row
+    /// 6 February 2026, seven months before the episode aired. It is the one result at 1080p in h264, and it is
+    /// not taken.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AResultUploadedLongBeforeTheEpisodeAiredIsNotTakenForIt()
+    {
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await DarkMatterCycle(engine).RunAsync(
+            [DarkMatter2024],
+            new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.False(outcome.HandedOver, outcome.Release);
+        Assert.Empty(engine.Taken);
+    }
+
+    /// <remarks>
+    /// The same answer for the 2015 programme's S02E04, which aired on 22 July 2016: MeGusta's 720p x265,
+    /// uploaded the next day, is taken for it — and not for the 2024 programme's S02E04, ten years later.
+    /// </remarks>
+    [Fact]
+    public async Task AResultUploadedAsTheEpisodeAiredIsTakenForIt()
+    {
+        SettingsByShow h265At720 = SettingsByShow.Every(new() { Quality = "720p", Codec = "h265", EnglishOnly = true, Searched = true });
+
+        FakeTorrentEngine older = new();
+
+        CycleReport olderReport = await DarkMatterCycle(older).RunAsync(
+            [DarkMatter2015],
+            new(h265At720, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome taken = Assert.Single(olderReport.Outcomes);
+
+        Assert.True(taken.HandedOver, taken.Detail);
+        Assert.Equal("FE037FFB0951D1ED1442B0CCF6197902C642FEA1", taken.InfoHash);
+        Assert.Equal("Dark.Matter.S02E04.720p.HEVC.x265-MeGusta", taken.Release);
+
+        FakeTorrentEngine theirs = new();
+
+        CycleReport theirReport = await DarkMatterCycle(theirs).RunAsync(
+            [DarkMatter2024],
+            new(h265At720, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        Assert.False(Assert.Single(theirReport.Outcomes).HandedOver);
+        Assert.Empty(theirs.Taken);
+    }
+
+    private static readonly TrackedEpisode DarkMatter2024 =
+        new(new(196322, 2, 4), "Dark Matter", 2024, LibraryKind.Television, null, new DateOnly(2026, 9, 17), EpisodeState.Missing);
+
+    private static readonly TrackedEpisode DarkMatter2015 =
+        new(new(61889, 2, 4), "Dark Matter", 2015, LibraryKind.Television, null, new DateOnly(2016, 7, 22), EpisodeState.Missing);
+
+    /// <summary>No name source, and The Pirate Bay answering <c>Dark Matter S02E04</c> as it did on the day.</summary>
+    /// <remarks>
+    /// Captured with the spaces written as <c>%20</c>, the letter-for-letter ask. The words ask writes them as
+    /// <c>+</c>, which a query string reads as the same spaces, so it is the same search and the same answer.
+    /// </remarks>
+    private static SearchCycle DarkMatterCycle(FakeTorrentEngine engine)
+    {
+        FakeFetch fetch = new FakeFetch()
+            .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
+            .Answers(IndexerSites.Words(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"));
+
+        ActivityJournal journal = new();
+
+        return new(
+            new FixedNames(),
+            IndexerSites.Finding(fetch, sources: [IndexerSites.ThePirateBay], journal: journal),
+            journal,
+            new Grab(engine, new EndlessDisk(null), journal));
+    }
+
     private static readonly TrackedEpisode SouthPark =
         new(new(2190, 15, 12), "South Park", 1997, LibraryKind.Television, "1%", new DateOnly(2011, 11, 16), EpisodeState.Missing);
 
