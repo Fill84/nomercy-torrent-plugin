@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.6.2",
+          "targetAbi": "10.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.6.2/NoMercy.Plugin.TorrentDownloader-0.6.2.zip",
+          "checksum": "0ce60dcceea86c9c8285a040eda2ef223c4bcbc0287ff12d85bfb22d65f11f82",
+          "changelog": "What a real server showed on the nights after 0.6.1: a finished download that did not move, files that stayed in use, a programme taken for another of the same name, and a plugin that deleted what was not its own. Every fix below has a test that fails without it.",
+          "timestamp": "2026-09-17T10:35:00Z"
+        },
+        {
           "version": "0.6.1",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.6.1/NoMercy.Plugin.TorrentDownloader-0.6.1.zip",
