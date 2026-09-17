@@ -119,7 +119,10 @@ public class ClientAcceptanceTests : IDisposable
     [Fact]
     public async Task WhatIsAlreadyOnDiskIsFoundWithoutAResumeFile()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(60));
+        // A hang's bound, and both waits below run to it rather than to a
+        // stretch of their own. Twenty seconds shared between the disk pass and
+        // the resume write was a guess at how busy the machine was.
+        using CancellationTokenSource stopping = new(Hang.Limit);
 
         byte[] content = Fixture("archive-multifile.torrent");
         TorrentMetadata torrent = Synthetic(content, pieceLength: 2048);
@@ -151,29 +154,33 @@ public class ClientAcceptanceTests : IDisposable
         // The disk pass runs on the run's own thread, off the client's lock,
         // so the figure it finds is a moment behind the add — and the client
         // answers in the meantime, which is the point.
-        TorrentStatus status = Assert.Single(await engine.StatusAsync(stopping.Token));
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(20);
+        //
+        // The delays are not handed the token: a wait that runs out ends in the
+        // assertion, which says what was never found, rather than in a
+        // cancellation that says nothing.
+        TorrentStatus status = Assert.Single(await engine.StatusAsync(CancellationToken.None));
 
-        while (status.BytesDone != torrent.TotalLength && DateTimeOffset.UtcNow < giveUpAt)
+        while (status.BytesDone != torrent.TotalLength && !stopping.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(50), stopping.Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), CancellationToken.None);
 
-            status = Assert.Single(await engine.StatusAsync(stopping.Token));
+            status = Assert.Single(await engine.StatusAsync(CancellationToken.None));
         }
 
         Assert.Equal(torrent.TotalLength, status.BytesDone);
 
         // And it is written down this time, so the next start costs nothing at
         // all. Nothing called ResumeKeeper.Tick, so no resume file had ever
-        // been written by anything but a test. Written on a status pass after
-        // the session exists, at the keeper's own interval — so the pass that
-        // first saw the bytes may have fallen inside that interval, and the
-        // file arrives on the one after. CI saw exactly that on Linux.
-        while (Directory.GetFiles(Folder("ondisk"), "*.resume").Length == 0 && DateTimeOffset.UtcNow < giveUpAt)
+        // been written by anything but a test. The engine writes it when the run
+        // says the session is whole and when it says it has settled what it
+        // holds — both raised just after the disk pass, on the run's thread —
+        // while the bytes above are read off the session as soon as they are
+        // verified. So the figure can be seen a moment before the file exists,
+        // and this waits for the file. Asking for the status in between would
+        // do nothing: it only reads.
+        while (Directory.GetFiles(Folder("ondisk"), "*.resume").Length == 0 && !stopping.IsCancellationRequested)
         {
-            await Task.Delay(TimeSpan.FromMilliseconds(200), stopping.Token);
-
-            _ = await engine.StatusAsync(stopping.Token);
+            await Task.Delay(TimeSpan.FromMilliseconds(50), CancellationToken.None);
         }
 
         Assert.NotEmpty(Directory.GetFiles(Folder("ondisk"), "*.resume"));

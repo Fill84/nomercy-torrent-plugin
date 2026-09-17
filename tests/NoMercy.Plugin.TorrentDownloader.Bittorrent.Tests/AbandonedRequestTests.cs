@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests.TestSupport;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests;
@@ -28,7 +29,10 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests;
 /// <para>
 /// The endgame hides it at the very end of a download — with a handful of
 /// pieces left everything is asked of everybody — which is why this test leaves
-/// more than that many stranded.
+/// more than that many stranded. One quiet peer cannot do that on its own: a
+/// peer is asked for <see cref="TorrentSession.Pipeline"/> pieces at a time, and
+/// four stranded pieces are inside the endgame's eight. So there are as many
+/// quiet peers as it takes to strand more than the endgame covers.
 /// </para>
 /// </remarks>
 public class AbandonedRequestTests : IDisposable
@@ -42,9 +46,13 @@ public class AbandonedRequestTests : IDisposable
     /// </summary>
     /// <remarks>
     /// Short, because the test waits it out in real time. What is being proved
-    /// is that it is given back at all, not the length of the wait.
+    /// is that it is given back at all, not the length of the wait. A second
+    /// rather than a quarter of one: the real seeder's blocks count against it
+    /// too, and on a loaded runner a quarter of a second was often not enough
+    /// for one to cross, so its pieces were given up and asked again over and
+    /// over while the test's bound ran down.
     /// </remarks>
-    private static readonly TimeSpan Patience = TimeSpan.FromMilliseconds(250);
+    private static readonly TimeSpan Patience = TimeSpan.FromSeconds(1);
 
     private readonly string _folder = Path.Combine(
         Path.GetTempPath(),
@@ -56,37 +64,53 @@ public class AbandonedRequestTests : IDisposable
         byte[] content = RandomNumberGenerator.GetBytes(PieceLength * Pieces);
         TorrentMetadata torrent = Torrent(content);
 
-        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
-        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
-        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+        using CancellationTokenSource stopping = new(Hang.Limit);
 
         using TorrentSession leecher = Fresh(torrent);
 
-        // A peer with everything, that unchokes and then answers nothing at
-        // all. Every nudge sends it after another piece, and every one of those
-        // is a piece the picker will not offer anybody else again.
-        (Stream quiet, Stream ours) = await LoopbackAsync(stopping.Token);
+        // More pieces stranded than the endgame rescues. Without the sweep, the
+        // real seeder below takes every other piece, the download stops with
+        // these still missing and too many of them for the endgame to ask of
+        // anybody else, and nothing moves again.
+        int quiet = (PiecePicker.DefaultEndgamePieces / TorrentSession.Pipeline) + 1;
 
-        PeerConnection?[] introduced = await Task.WhenAll(
-            PeerConnection.IntroduceAsync(quiet, Hash(torrent), Id("QUIET"), Pieces, dialling: false, stopping.Token),
-            PeerConnection.IntroduceAsync(ours, Hash(torrent), Id("LEECH"), Pieces, dialling: true, stopping.Token));
+        List<Task> talking = [];
 
-        PeerConnection silent = introduced[0]!;
-
-        Task talking = leecher.RunAsync(introduced[1]!, stopping.Token);
-
-        await silent.SendAsync(new(PeerMessageId.Bitfield, Everything(torrent).Write()), stopping.Token);
-        await silent.SendAsync(PeerMessage.Of(PeerMessageId.Unchoke), stopping.Token);
-
-        // Twenty of the forty, stranded. Twenty is more than the endgame's
-        // handful, so nothing else in the client can rescue them.
-        for (int nudge = 0; nudge < 20; nudge++)
+        for (int one = 0; one < quiet; one++)
         {
-            await silent.SendAsync(PeerMessage.Have(nudge), stopping.Token);
+            // A peer with everything, that unchokes and then answers nothing at
+            // all. What it is asked for is a piece the picker will not offer
+            // anybody else again until it is given back.
+            (Stream quietEnd, Stream ours) = await LoopbackAsync(stopping.Token);
 
-            // Read what it asks for and answer none of it, which is the whole
-            // behaviour being modelled.
-            await silent.NextAsync(stopping.Token);
+            PeerConnection?[] introduced = await Task.WhenAll(
+                PeerConnection.IntroduceAsync(quietEnd, Hash(torrent), Id("QUIET" + one), Pieces, dialling: false, stopping.Token),
+                PeerConnection.IntroduceAsync(ours, Hash(torrent), Id("LEECH" + one), Pieces, dialling: true, stopping.Token));
+
+            PeerConnection silent = introduced[0]!;
+
+            talking.Add(leecher.RunAsync(introduced[1]!, stopping.Token));
+
+            await silent.SendAsync(new(PeerMessageId.Bitfield, Everything(torrent).Write()), stopping.Token);
+            await silent.SendAsync(PeerMessage.Of(PeerMessageId.Unchoke), stopping.Token);
+
+            // Read until it has been asked for a whole pipeline, and answer none
+            // of it, which is the whole behaviour being modelled. Counted rather
+            // than timed, so the pieces are certainly claimed before the seeder
+            // arrives however slowly this machine is running.
+            HashSet<int> asked = [];
+
+            while (asked.Count < TorrentSession.Pipeline)
+            {
+                PeerMessage? message = await silent.NextAsync(stopping.Token);
+
+                Assert.NotNull(message);
+
+                if (message.Id == PeerMessageId.Request)
+                {
+                    asked.Add(message.AsRequest().Piece);
+                }
+            }
         }
 
         // A real seeder, arriving after the damage.
@@ -106,7 +130,7 @@ public class AbandonedRequestTests : IDisposable
         await stopping.CancelAsync();
 
         await Task.WhenAll(
-            talking.ContinueWith(_ => { }, TaskScheduler.Default),
+            Task.WhenAll(talking).ContinueWith(_ => { }, TaskScheduler.Default),
             serves.ContinueWith(_ => { }, TaskScheduler.Default),
             asks.ContinueWith(_ => { }, TaskScheduler.Default));
 

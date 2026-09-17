@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests.TestSupport;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests;
@@ -305,7 +306,7 @@ public class TorrentSessionTests : IDisposable
 
         Assert.Equal(secret, torrent.Private);
 
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(20));
+        using CancellationTokenSource stopping = new(Hang.Limit);
 
         (Stream seeding, Stream asking) = await LoopbackAsync(stopping.Token);
 
@@ -319,46 +320,46 @@ public class TorrentSessionTests : IDisposable
 
         PeerConnection?[] both = await Task.WhenAll(ours, theirs);
 
-        Task serves = seeder.RunAsync(both[0]!, stopping.Token);
+        PeerConnection served = both[0]!;
+        Task serves = seeder.RunAsync(served, stopping.Token);
 
         PeerConnection taker = both[1]!;
 
         await taker.SendAsync(PeerMessage.Of(PeerMessageId.Interested), stopping.Token);
         await taker.SendAsync(PeerMessage.Request(0, 0, PeerMessage.BlockLength), stopping.Token);
 
+        // A marker after the request, so the end of the answer is a fact and not a guess. The session reads
+        // one message at a time and handles each — a block included, sent and flushed — before it reads the
+        // next, so once it has taken in this bitfield every answer to the request is already on the wire.
+        // Listening for three seconds instead measured the machine: a loaded runner took longer than that to
+        // send the private torrent's block, and the test read the silence as a refusal.
+        Bitfield marker = new(torrent.PieceCount);
+
+        marker.Set(0);
+
+        await taker.SendAsync(new(PeerMessageId.Bitfield, marker.Write()), stopping.Token);
+        await Until(() => served.Has.Has(0), stopping.Token);
+
+        // Then the seeding side is closed, which puts an end on the taker's stream after whatever it sent.
+        // Reading to that end cannot stop short of a block, however slowly the bytes cross, and for a public
+        // torrent it is how nothing arriving comes to an end without a clock.
+        await stopping.CancelAsync();
+        await serves.ContinueWith(_ => { }, TaskScheduler.Default);
+
+        served.Dispose();
+
         bool block = false;
         bool unchoked = false;
 
-        // Long enough for an answer to cross a loopback socket many times over,
-        // and it has to end by itself: the thing being proved for a public
-        // torrent is that nothing arrives, and nothing arriving never wakes a
-        // read up.
-        using CancellationTokenSource listening = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
+        using CancellationTokenSource draining = new(Hang.Limit);
 
-        listening.CancelAfter(TimeSpan.FromSeconds(3));
-
-        try
+        while (await taker.NextAsync(draining.Token) is PeerMessage said)
         {
-            while (!block)
-            {
-                PeerMessage? said = await taker.NextAsync(listening.Token);
-
-                if (said is null)
-                {
-                    break;
-                }
-
-                block |= said.Id == PeerMessageId.Piece;
-                unchoked |= said.Id == PeerMessageId.Unchoke;
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Nothing came, which for a public torrent is the whole point.
+            block |= said.Id == PeerMessageId.Piece;
+            unchoked |= said.Id == PeerMessageId.Unchoke;
         }
 
-        await stopping.CancelAsync();
-        await serves.ContinueWith(_ => { }, TaskScheduler.Default);
+        taker.Dispose();
 
         Assert.Equal(expected, block);
         Assert.Equal(expected, unchoked);
@@ -509,15 +510,18 @@ public class TorrentSessionTests : IDisposable
     /// A loopback handshake takes microseconds on an idle machine and can take
     /// seconds on a runner with a dozen other jobs on it. Sleeping a fixed
     /// stretch is how a test comes to fail for a reason that is nothing to do
-    /// with what it is testing.
+    /// with what it is testing, and so is giving up after one: the bound is
+    /// <see cref="Hang.Limit"/>, which tells a hang from a slow answer. The delay
+    /// is not handed the caller's token, so running out ends in the assertion
+    /// below rather than in a cancellation that says nothing.
     /// </remarks>
     private static async Task Until(Func<bool> settled, CancellationToken ct)
     {
-        DateTimeOffset giveUp = DateTimeOffset.UtcNow.AddSeconds(15);
+        DateTimeOffset giveUp = DateTimeOffset.UtcNow + Hang.Limit;
 
-        while (!settled() && DateTimeOffset.UtcNow < giveUp)
+        while (!settled() && !ct.IsCancellationRequested && DateTimeOffset.UtcNow < giveUp)
         {
-            await Task.Delay(25, ct);
+            await Task.Delay(25, CancellationToken.None);
         }
 
         Assert.True(settled(), "it never happened.");
@@ -735,7 +739,16 @@ public class TorrentSessionTests : IDisposable
 
             // On another thread on purpose: it has to take the session's lock,
             // which is only free if this is being raised outside it.
-            readable = Task.Run(() => leecher.Progress()).Wait(TimeSpan.FromSeconds(5));
+            //
+            // A thread of its own rather than the pool, and a hang's bound rather
+            // than five seconds. Task.Run waited on a free pool thread as well as
+            // on the lock, and a loaded runner has none to spare. A lock that is
+            // really held never lets go, so the long bound proves the same thing.
+            Thread reading = new(() => leecher.Progress()) { IsBackground = true };
+
+            reading.Start();
+
+            readable = reading.Join(Hang.Limit);
 
             said.TrySetResult();
         };
