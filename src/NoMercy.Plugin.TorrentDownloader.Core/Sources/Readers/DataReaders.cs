@@ -219,9 +219,21 @@ public sealed class SrrdbReader : ISourceReader
         return
         [
             .. Json.ArrayUnder(body, "results")
-                .Select(row => Json.Text(row, "release"))
-                .Where(release => release is not null)
-                .Select(release => new SourceRow(release!, SizeBytes: null)),
+                .Where(row => Json.Text(row, "release") is not null)
+                .Select(row => new SourceRow(Json.Text(row, "release")!, SizeBytes: null)
+                {
+                    // When the release was added, written "2016-07-23 20:49:24". It is what tells one
+                    // programme's S02E04 from another's of the same title, and left unread it let the 2015
+                    // Dark Matter's FaiLED release through for the 2024 programme on 17 September 2026.
+                    Published = DateTimeOffset.TryParseExact(
+                        Json.Text(row, "date"),
+                        "yyyy-MM-dd HH:mm:ss",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.AssumeUniversal,
+                        out DateTimeOffset added)
+                        ? added
+                        : null,
+                }),
         ];
     }
 }

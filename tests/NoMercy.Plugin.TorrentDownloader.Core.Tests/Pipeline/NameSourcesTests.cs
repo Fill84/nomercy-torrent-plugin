@@ -74,6 +74,33 @@ public sealed class NameSourcesTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A name any source dates too old is left out, whichever source gave it.</strong> On
+    /// 17 September 2026 the 2015 Dark Matter's <c>Dark.Matter.S02E04.1080p.WEB.x264-FaiLED</c> was grabbed
+    /// twice more for the 2024 programme's S02E04, after the rule was in: PreDB.net dated it 2016 and its copy
+    /// was left out, and a copy from a source that writes no date — PreDB's RSS has none — was kept.
+    /// </para>
+    /// <para>
+    /// A name is published once. Any source that says when is saying it for all of them. Here Silo S02E01 is
+    /// taken to have aired in 2027, so every dated name for it is too old, and PreDB's undated copy of a name
+    /// PreDB.net dated goes too.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ANameAnySourceDatesTooOldIsLeftOutWhereverItCameFrom()
+    {
+        FakeFetch fetch = new FakeFetch().AnsweringFeeds().AnsweringSiloSearches();
+        NameSources sources = Over(fetch);
+        TrackedEpisode later = Episode(41, "Silo", 2, 1, year: 2023) with { AirDate = new DateOnly(2027, 6, 1) };
+
+        FeedNamesTaken taken = await sources.ReadFeedsAsync([later], CancellationToken.None);
+        IReadOnlyList<SourceName> names = await sources.NamesForAsync(later, taken, CancellationToken.None);
+
+        Assert.Contains("Silo.S02E01.720p.WEB.H264-SYLiX", Capture.Rows("names-predb-search-silo-s02e01.xml", "rss"));
+        Assert.DoesNotContain(names, name => name.Title == "Silo.S02E01.720p.WEB.H264-SYLiX");
+    }
+
+    /// <remarks>
     /// <c>run.md</c>: a site that still gives no answer after its second attempt is left out of the rest of the
     /// run. srrDB's search does not answer about Silo S02E01, so it is not asked about Silo S02E02 either;
     /// the other three are.

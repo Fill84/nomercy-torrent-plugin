@@ -21,6 +21,23 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Sources;
 /// </remarks>
 public class UploadDateTests
 {
+    /// <remarks>
+    /// srrDB's search writes when a release was added: <c>"date":"2016-07-23 20:49:24"</c>. It named the 2015
+    /// Dark Matter's FaiLED release with no date read, and that undated copy is what was taken for the 2024
+    /// programme on 17 September 2026.
+    /// </remarks>
+    [Fact]
+    public void SrrDbsSearchGivesTheMomentAReleaseWasAdded()
+    {
+        IReadOnlyList<SourceRow> rows = new SrrdbReader().Read(
+            Capture.Fixture("names-srrdb-search-dark-matter-s02e04.json"),
+            new("https://api.srrdb.com/v1/search/dark-matter-s02e04"));
+
+        SourceRow failed = rows.Single(row => row.Title == "Dark.Matter.S02E04.1080p.WEB.x264-FaiLED");
+
+        Assert.Equal(new DateTimeOffset(2016, 7, 23, 20, 49, 24, TimeSpan.Zero), failed.Published);
+    }
+
     /// <remarks>apibay writes the moment as a unix timestamp in a string: <c>"added":"1731637437"</c>.</remarks>
     [Fact]
     public void ThePirateBayGivesTheMomentATorrentWasAdded()

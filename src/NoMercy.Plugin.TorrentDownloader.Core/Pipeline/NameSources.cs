@@ -48,6 +48,20 @@ public sealed record SourceName(string Title, string Source, DateTimeOffset? Pub
                && episode.AirDate is DateOnly aired
                && at < new DateTimeOffset(aired.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) - Before;
     }
+
+    /// <summary>The names published too long before the episode aired, by whichever source dated them.</summary>
+    /// <remarks>
+    /// A name is published once, so one source's date is the date of every copy of it. Judged copy by copy, a
+    /// name one source dated and another did not survived on the undated copy: the 2015 Dark Matter's FaiLED
+    /// release, dated 2016 by PreDB.net and by nothing else PreDB gave, was grabbed twice more for the 2024
+    /// programme on 17 September 2026 after this rule was in.
+    /// </remarks>
+    public static IReadOnlySet<string> TooOld(IEnumerable<SourceName> names, TrackedEpisode episode)
+    {
+        return new HashSet<string>(
+            names.Where(name => name.PublishedBeforeItAired(episode)).Select(name => name.Title),
+            StringComparer.Ordinal);
+    }
 }
 
 /// <summary>The feed release names a run took, per episode, and the name sources that failed in it.</summary>
@@ -174,13 +188,15 @@ public sealed class NameSources(
 
         foreach (TrackedEpisode episode in searched)
         {
-            SourceName[] named =
+            SourceName[] naming =
             [
                 .. names
-                    .Where(name => EpisodeNaming.Names(ReleaseName.Parse(name.Title), episode.ShowTitle, episode.Key)
-                                   && !name.PublishedBeforeItAired(episode))
+                    .Where(name => EpisodeNaming.Names(ReleaseName.Parse(name.Title), episode.ShowTitle, episode.Key))
                     .Distinct(),
             ];
+
+            IReadOnlySet<string> tooOld = SourceName.TooOld(naming, episode);
+            SourceName[] named = [.. naming.Where(name => !tooOld.Contains(name.Title))];
 
             if (named.Length > 0)
             {
@@ -256,7 +272,19 @@ public sealed class NameSources(
         journal.Started(ActivityStage.Names, subject, $"asking {searches.Length} sources what it is called");
 
         SourceName[][] answers = await Task.WhenAll(searches.Select(search => AskAsync(search, episode, term, subject, taken, ct)));
-        SourceName[] names = [.. answers.SelectMany(answer => answer).Distinct()];
+        SourceName[] every = [.. answers.SelectMany(answer => answer).Distinct()];
+
+        // Judged across every source's answer, never one source at a time: any source's date is the name's.
+        IReadOnlySet<string> tooOld = SourceName.TooOld(every, episode);
+        SourceName[] names = [.. every.Where(name => !tooOld.Contains(name.Title))];
+
+        if (tooOld.Count > 0)
+        {
+            journal.Noted(
+                ActivityStage.Names,
+                subject,
+                $"{tooOld.Count} names published more than a week before it aired were left out, from every source that gave them: another programme of the same name");
+        }
 
         journal.Counted(RunCounter.EpisodesAsked);
         journal.Counted(RunCounter.NamesFound, names.Length);
@@ -307,17 +335,9 @@ public sealed class NameSources(
                     .Select(row => new SourceName(row.Title, search.Name, row.Published)),
             ];
 
-            // And only what was published once it could be this episode: another programme of the same name
-            // answers the same search with names years older.
-            SourceName[] names = [.. naming.Where(name => !name.PublishedBeforeItAired(episode))];
-
-            if (names.Length < naming.Length)
-            {
-                journal.Noted(
-                    ActivityStage.Names,
-                    subject,
-                    $"{search.Name} · {naming.Length - names.Length} names published more than a week before it aired were left out: another programme of the same name");
-            }
+            // Every name, dated or not: whether one is too old is judged across every source's answer, since
+            // one source's date is the date of every copy.
+            SourceName[] names = naming;
 
             // What the source was asked and what it said, word for word, for the Activity page.
             journal.Noted(ActivityStage.Names, subject, Answered(search, term, names));

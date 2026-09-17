@@ -146,8 +146,8 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
     /// <param name="Counts">Whether a row's title counts for this question.</param>
     /// <param name="NameOf">The release name a counting row is merged and downloaded under.</param>
     /// <param name="Aired">
-    /// The episode whose air date a row is held against, when its title alone cannot say which programme it
-    /// is of; null when the title is a release name that was already judged by its own date.
+    /// The episode whose air date a row is held against: a torrent uploaded long before it aired is another
+    /// programme's, whatever its title says. Null holds a row to nothing but its title.
     /// </param>
     private sealed record Question(string Text, Func<string, bool> Counts, Func<ReleaseCopy, string> NameOf, TrackedEpisode? Aired = null)
     {
@@ -173,7 +173,10 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
     {
         Question[] questions =
         [
-            .. names.Select(name => new Question(name, title => IsTheName(title, name), _ => name)),
+            // Held to the episode's air date as well. A name no source dated reached the indexers as the 2015
+            // Dark Matter's FaiLED release, and Torrentz2 dated its torrents 2019 — years before the 2024
+            // programme's S02E04 aired, which it was grabbed for twice on 17 September 2026.
+            .. names.Select(name => new Question(name, title => IsTheName(title, name), _ => name, episode)),
         ];
 
         return RoundAsync(questions, episode, blacklisted, asked, ct);

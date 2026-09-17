@@ -192,6 +192,33 @@ public class ByShowAndEpisodeTests
         Assert.Empty(theirs.Taken);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A release name's torrents are held to the episode's air date too.</strong> A name no source
+    /// dated reached the indexers as <c>Dark.Matter.S02E04.1080p.WEB.x264-FaiLED</c>, and Torrentz2 listed it —
+    /// uploaded in January 2019, years before the 2024 programme's S02E04 aired. It was taken, twice, on
+    /// 17 September 2026. The date was on the page; only the episode search looked at it.
+    /// </para>
+    /// <para>
+    /// Left out, it is not even read further: no detail page is asked for a torrent that will not be taken.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AReleaseNamesTorrentUploadedLongBeforeTheEpisodeAiredIsNotTaken()
+    {
+        const string failed = "Dark.Matter.S02E04.1080p.WEB.x264-FaiLED";
+
+        FakeFetch fetch = new FakeFetch()
+            .Answers(IndexerSites.Exact(IndexerSites.Torrentz2, failed), Capture.Fixture("round-dark-matter-torrentz2-failed.html"))
+            .Answers(IndexerSites.Words(IndexerSites.Torrentz2, failed), Capture.Fixture("round-dark-matter-torrentz2-failed.html"));
+
+        IReadOnlyList<RankedTorrent> ranked = await IndexerSites.Round(fetch, [IndexerSites.Torrentz2])
+            .AskAsync([failed], DarkMatter2024, Blacklist.None, new(), CancellationToken.None);
+
+        Assert.Empty(ranked);
+        Assert.All(fetch.Asked, address => Assert.Contains("/search", address.AbsolutePath, StringComparison.Ordinal));
+    }
+
     private static readonly TrackedEpisode DarkMatter2024 =
         new(new(196322, 2, 4), "Dark Matter", 2024, LibraryKind.Television, null, new DateOnly(2026, 9, 17), EpisodeState.Missing);
 
