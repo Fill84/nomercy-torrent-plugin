@@ -147,7 +147,8 @@ public sealed class Transfers(
                 string.Equals(one.InfoHash, finished.InfoHash, StringComparison.OrdinalIgnoreCase)
                 && one.State == TorrentState.Seeding);
 
-            justStaged.AddRange(await StageAsync(finished, incompleteFolder, intakeFolder, seeding, thisTick, ct));
+            justStaged.AddRange(
+                await StageAsync(finished, incompleteFolder, intakeFolder, seeding, trackers ?? [], thisTick, ct));
         }
 
         // Every staged file something is waiting on: what the store knew at the
@@ -201,6 +202,64 @@ public sealed class Transfers(
         {
             logger.LogWarning("{Folder} could not be removed: {Reason}", own, wrong.Message);
         }
+    }
+
+    /// <summary>
+    /// A staged file that is gone, when every episode of the grab still to arrive has lost its file; null
+    /// while any of them still has one.
+    /// </summary>
+    /// <remarks>
+    /// Every one, not the first. A grab that fails is over, and the sweep of the intake folder then takes
+    /// the staged files of a grab that is over — so failing a pack because one episode's file had gone
+    /// would take the files its other episodes' encodes are still waiting to read, which is how eight of
+    /// nine Dark Matter episodes were lost on 1 September 2026. An episode already in the library needs its
+    /// file no longer, and is not counted.
+    /// </remarks>
+    private static async Task<string?> NothingLeftToEncodeAsync(
+        StoredDownload sent,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        string? gone = null;
+
+        foreach (IGrouping<int, EpisodeKey> show in sent.Covers.GroupBy(one => one.ShowId))
+        {
+            IReadOnlyList<Episode> episodes = await thisTick.GetEpisodesAsync(show.Key, ct);
+
+            foreach (EpisodeKey wanted in show)
+            {
+                if (episodes.Any(one => one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile)
+                    || Staged(sent, wanted) is not string path)
+                {
+                    continue;
+                }
+
+                if (File.Exists(path))
+                {
+                    return null;
+                }
+
+                gone ??= path;
+            }
+        }
+
+        return gone;
+    }
+
+    /// <summary>Fails a grab whose staged file is no longer there, so its episodes are looked for again.</summary>
+    private async Task GoneAsync(StoredDownload grab, string missing, CancellationToken ct)
+    {
+        string reason = $"{Path.GetFileName(missing)} was staged and is no longer there";
+
+        await grabs.FailedAsync(
+            grab.InfoHash,
+            reason,
+            DateTimeOffset.UtcNow,
+            DateTimeOffset.UtcNow + RefusedFor,
+            ct);
+
+        logger.LogWarning("{Release}: {Reason}", grab.ReleaseTitle, reason);
+        journal.Failed(ActivityStage.Dispatch, grab.ReleaseTitle, reason);
     }
 
     /// <summary>Deletes what a torrent downloaded that is still in its folder, and the folders it made.</summary>
@@ -382,6 +441,7 @@ public sealed class Transfers(
         string incompleteFolder,
         string intakeFolder,
         bool seeding,
+        IReadOnlyList<string> trackers,
         LibraryThisTick thisTick,
         CancellationToken ct)
     {
@@ -470,21 +530,38 @@ public sealed class Transfers(
 
             string? resolution = ReleaseName.Parse(finished.ReleaseTitle).Resolution;
 
-            if (!seeding)
+            bool letGo = !seeding && chosen.Count > 0;
+
+            if (letGo)
             {
-                // Let go of, so its files can be moved. The client keeps every file
+                // Let go of, so its files can be moved — and only when there is a
+                // file to move: one with nothing to stage was let go of on every
+                // pass, added back by recovery, checked again and let go of again. The client keeps every file
                 // of a torrent open for as long as it holds it, finished or not, and
                 // Windows moves no open file: on 16 September 2026 South Park S15E12
                 // was copied for thirty-five minutes instead, and then could not be
                 // taken out of the download folder at all. A torrent that is not
                 // seeding owes nothing more, and a grab once staged is never added
-                // back to the client; one whose staging fails here is, by recovery
-                // on the next pass.
-                await engine.RemoveAsync(finished.InfoHash, deleteFiles: false, ct);
+                // back to the client; one whose staging fails is held again below.
+                await engine.ReleaseAsync(finished.InfoHash, ct);
             }
 
             IReadOnlyList<StagedResult> moved =
                 await stager.MoveAsync(chosen, finished.Folder ?? incompleteFolder, intakeFolder, show, resolution, ct);
+
+            if (letGo && !moved.Any(one => one.Moved))
+            {
+                // Nothing moved, so the client holds it again, exactly as it did: its
+                // grab is still downloading, and a torrent nothing holds waits for
+                // whatever next starts a pass. What the client kept of it brings it
+                // back without its swarm.
+                //
+                // Not when part of it moved. Held again, the client would find the
+                // moved files missing and download them a second time; let go of, its
+                // grab goes on to its encodes and what is left is deleted when the
+                // grab is done, by what the client kept of it.
+                await engine.AddAsync(new(finished.Magnet, trackers, finished.Folder ?? incompleteFolder), ct);
+            }
 
             if (!moved.Any(one => one.Moved))
             {
@@ -502,7 +579,7 @@ public sealed class Transfers(
 
             await grabs.StagedAsync(finished.InfoHash, staged, ct);
 
-            if (!seeding && moved.All(one => one.Moved))
+            if (letGo && moved.All(one => one.Moved))
             {
                 // Its videos are in the intake folder, so what is left of the
                 // release — the text files it came with, the folder it came in — is
@@ -702,17 +779,7 @@ public sealed class Transfers(
                 //
                 // Whether the owner moved it or something deleted it cannot be
                 // told from here, and either way the library does not have it.
-                string reason = $"{Path.GetFileName(missing)} was staged and is no longer there";
-
-                await grabs.FailedAsync(
-                    staged.InfoHash,
-                    reason,
-                    DateTimeOffset.UtcNow,
-                    DateTimeOffset.UtcNow + RefusedFor,
-                    ct);
-
-                logger.LogWarning("{Release}: {Reason}", staged.ReleaseTitle, reason);
-                journal.Failed(ActivityStage.Dispatch, staged.ReleaseTitle, reason);
+                await GoneAsync(staged, missing, ct);
 
                 continue;
             }
@@ -910,6 +977,20 @@ public sealed class Transfers(
             if (!landed && standing is null or { State: EncodeJobState.Finished })
             {
                 landed = await WroteItAnywayAsync(sent, thisTick, ct);
+            }
+
+            if (!landed
+                && standing is not { State: EncodeJobState.Queued or EncodeJobState.Running }
+                && await NothingLeftToEncodeAsync(sent, thisTick, ct) is string gone)
+            {
+                // Its file has gone from the intake folder, so no encode can ever
+                // read it. Only a grab still waiting to be dispatched was checked for
+                // this, and a dispatched one waited on a file that was not there for
+                // ever: the episode was never looked for again. The server saying an
+                // encode is running is the one reason to wait — the encoder has it.
+                await GoneAsync(sent, gone, ct);
+
+                continue;
             }
 
             if (!landed)

@@ -1600,6 +1600,7 @@ public class TransfersTests : IDisposable
         Assert.True(File.Exists(Staged), "It was never staged.");
         Assert.True(File.Exists(episode), "A download the client is still seeding from was taken away.");
         Assert.Empty(client.Removed);
+        Assert.Empty(client.Released);
     }
 
     /// <remarks>
@@ -1656,6 +1657,197 @@ public class TransfersTests : IDisposable
         Assert.False(File.Exists(Staged), "The staged copy was left in the intake folder.");
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent is let go of only when there is something to move.</strong> One whose files answer
+    /// for none of its episodes stages nothing, and letting go of it anyway had recovery add it back on the
+    /// next pass, check every file of it again, and let go of it again — on every pass, for as long as it
+    /// sat there.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentWithNothingToStageIsNotLetGoOf()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.nfo", 4_120);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile("Silo.S03E06.1080p.WEB.H264-CAKES.nfo", 4_120));
+
+        await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(engine.Released);
+        Assert.Contains(await engine.StatusAsync(CancellationToken.None), one => one.InfoHash == Hash);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent let go of whose files could not be moved is held again at once</strong>, exactly as
+    /// it was: its grab is still downloading, and a torrent the client does not hold is one nothing will
+    /// stage or clear up. Here the intake folder cannot be made, because a file has its name.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentWhoseFilesCouldNotBeMovedIsHeldAgain()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        await File.WriteAllTextAsync(Intake, "not a folder");
+
+        await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(episode), "The download is not where it was.");
+
+        TorrentRequest again = Assert.Single(engine.Taken);
+
+        Assert.Equal($"magnet:?xt=urn:btih:{Hash}", again.Source);
+        Assert.Equal(Incomplete, again.DownloadFolder);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A staged file that goes after its encode was asked for is looked for again.</strong> Only a
+    /// grab still waiting to be dispatched was checked for its file. Once dispatched, a file deleted from the
+    /// intake folder — by hand, or by anything else — left an encode that could never read it and a grab that
+    /// waited on it for ever, and the episode was never searched for again.
+    /// </para>
+    /// <para>
+    /// Gone, not in the library, and no encode the server says is running: the grab fails and the episode is
+    /// missing again.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFileThatGoesAfterItsEncodeWasAskedForIsLookedForAgain()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        Transfers transfers = Transfers(engine, grabs, Server());
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(GrabState.Dispatched, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+
+        File.Delete(Staged);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
+    /// <remarks>
+    /// The other half: while the server says the encode is running, a file that is not where it was is not
+    /// a reason to give up on it. The encoder has it open.
+    /// </remarks>
+    [Fact]
+    public async Task AFileThatGoesWhileTheServerSaysItsEncodeIsRunningIsStillWaitedOn()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        Transfers transfers = Transfers(engine, grabs, Server(), says: new SaidOfEverything(new(EncodeJobState.Running, null)));
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        File.Delete(Staged);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(GrabState.Dispatched, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+    }
+
+    /// <remarks>
+    /// A pack of which only part moved is not held again. Held again, the client would find the moved
+    /// episodes' files missing and download them a second time; let go of, the grab goes on to the encodes
+    /// of what did move. Here episode 7 cannot be given its name, because a folder already has it.
+    /// </remarks>
+    [Fact]
+    public async Task APackOfWhichOnlyPartMovedIsNotHeldAgain()
+    {
+        GrabRepository grabs = await Grabs();
+        await Pack(grabs);
+
+        string six = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        string seven = Downloaded("Silo.S03E07.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(six), 900_000_000),
+            new TorrentFile(Path.GetFileName(seven), 900_000_000));
+
+        Directory.CreateDirectory(Path.Combine(Intake, EpisodeName.For("Silo", 2023, Seventh, "1080p", ".mkv")));
+
+        await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "The episode that could move was not staged.");
+        Assert.True(File.Exists(seven), "The episode that could not move is not where it was.");
+        Assert.Empty(engine.Taken);
+    }
+
+    /// <remarks>
+    /// A pack is not given up on because one episode's file has gone while another's is still there. Failing
+    /// the grab would have the sweep take the file the other episode's encode is still to read — which is
+    /// how eight of nine Dark Matter episodes were lost on 1 September 2026.
+    /// </remarks>
+    [Fact]
+    public async Task APackWithOneFileGoneIsStillWaitedOnWhileAnotherIsThere()
+    {
+        GrabRepository grabs = await Grabs();
+        await Pack(grabs);
+
+        string seventh = Path.Combine(Intake, EpisodeName.For("Silo", 2023, Seventh, "1080p", ".mkv"));
+
+        Directory.CreateDirectory(Intake);
+        await File.WriteAllBytesAsync(seventh, new byte[2048]);
+
+        await grabs.StagedAsync(Hash, [Staged, seventh], CancellationToken.None);
+        await grabs.StateAsync(Hash, GrabState.Dispatched, CancellationToken.None);
+
+        await Transfers(new StandingEngine(), grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(GrabState.Dispatched, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+        Assert.True(File.Exists(seventh), "The file an encode is still to read was taken.");
+    }
+
+    private static EpisodeKey Seventh => new(41, 3, 7);
+
+    /// <summary>A grab of two episodes, six and seven.</summary>
+    private static async Task Pack(GrabRepository grabs)
+    {
+        await grabs.RecordAsync(
+            Episode,
+            "Silo",
+            "Silo.S03.1080p.WEB.H264-CAKES",
+            "1337x",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode, Seventh],
+            DateTimeOffset.UtcNow,
+            CancellationToken.None);
+    }
+
     /// <summary>A client that keeps a torrent's files open the way the real one does, until it is removed.</summary>
     private sealed class HoldingClient : ITorrentEngine, IDisposable
     {
@@ -1687,6 +1879,15 @@ public class TransfersTests : IDisposable
             LetGo();
 
             return _engine.RemoveAsync(infoHash, deleteFiles, ct);
+        }
+
+        public List<string> Released => _engine.Released;
+
+        public Task ReleaseAsync(string infoHash, CancellationToken ct)
+        {
+            LetGo();
+
+            return _engine.ReleaseAsync(infoHash, ct);
         }
 
         public void Dispose() => LetGo();

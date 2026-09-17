@@ -250,8 +250,16 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         {
             // Including when the tick was cancelled, which is not caught above
             // and must not be — a stopping server is not a staging failure.
-            // What it must not do is leave the part behind.
-            Discard(part);
+            // What it must not do is leave a part-copy behind.
+            //
+            // A part that is the download itself is never one to discard: it is
+            // renamed into place, or put back, and where neither could be done it
+            // is the only copy of the episode there is. It used to be discarded
+            // whatever it was.
+            if (!moved)
+            {
+                Discard(part);
+            }
         }
     }
 
@@ -300,8 +308,12 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException)
         {
             // Left under the part's name rather than lost, and said, so the owner
-            // can find it: Discard will not delete a part it cannot delete either.
-            logger.LogWarning("{File} could not be put back from {Part}: {Reason}", source, part, wrong.Message);
+            // can find it.
+            logger.LogWarning(
+                "{File} could not be put back, and is kept whole as {Part}: {Reason}",
+                source,
+                part,
+                wrong.Message);
         }
     }
 

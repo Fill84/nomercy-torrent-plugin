@@ -1065,6 +1065,82 @@ public class BittorrentEngineTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>A torrent let go of for its files to be moved is still known.</strong> Staging let go of a
+    /// finished torrent by removing it, and removing forgets its metadata. A move that then failed left a
+    /// torrent that could only be added back by asking its swarm again — and a swarm that has gone cannot
+    /// answer, so a download whole on disk was given up on. When the grab was done, nothing could name the
+    /// torrent's files, and the log said it "had written nothing to delete" of a torrent that had.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentLetGoOfIsStillKnownAndItsFilesAreDeletedLater()
+    {
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-let-go-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            Directory.CreateDirectory(folder);
+
+            ResumeKeeper keeping = new(folder, TimeSpan.FromSeconds(1), TimeProvider.System);
+            byte[] file = Fixture("archive-multifile.torrent");
+            TorrentMetadata torrent = TorrentMetadata.Read(file);
+
+            keeping.Remember(torrent.InfoHash, Info(file));
+
+            // One of its files, as a download leaves it.
+            string left = Path.Combine(folder, torrent.PathUnderFolder(torrent.Files[1]).Replace('/', Path.DirectorySeparatorChar));
+            Directory.CreateDirectory(Path.GetDirectoryName(left)!);
+            await File.WriteAllTextAsync(left, "bytes");
+
+            CapturingLogger log = new();
+
+            using BittorrentEngine engine = new(
+                0,
+                Timeout,
+                Stall,
+                Together,
+                Seeding,
+                0,
+                0,
+                null,
+                new ActivityJournal(),
+                log,
+                new SilentTrackers(),
+                new NoPeers(),
+                null,
+                keeping);
+
+            engine.Start();
+
+            await engine.AddAsync(
+                Request with { Source = $"magnet:?xt=urn:btih:{torrent.InfoHash}", DownloadFolder = folder },
+                CancellationToken.None);
+
+            await engine.ReleaseAsync(torrent.InfoHash, CancellationToken.None);
+
+            Assert.DoesNotContain(await engine.StatusAsync(CancellationToken.None), one => one.InfoHash == torrent.InfoHash);
+            Assert.True(File.Exists(left), "Letting go of a torrent deleted its files.");
+
+            // Still known, so it comes back without asking a swarm that may have gone.
+            Assert.NotNull(keeping.Recall(torrent.InfoHash));
+
+            // And its files can still be named when the grab is done with it.
+            await engine.RemoveAsync(torrent.InfoHash, deleteFiles: true, CancellationToken.None);
+
+            Assert.False(File.Exists(left), "A torrent let go of had its files left behind when it was removed.");
+            Assert.DoesNotContain(log.Lines, line => line.Contains("written nothing", StringComparison.Ordinal));
+        }
+        finally
+        {
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>A torrent the client is no longer holding still has files on
     /// disk.</strong> <c>RemoveAsync</c> began by taking the torrent out of the
     /// table and returning if it was not there — so a removal asked for after a

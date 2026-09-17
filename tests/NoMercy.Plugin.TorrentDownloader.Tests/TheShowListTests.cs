@@ -208,6 +208,30 @@ public sealed class TheShowListTests : IDisposable
         Assert.DoesNotContain(Rendered.All(page), component => component.Component == Ui.FormComponent);
     }
 
+    /// <remarks>
+    /// The missing column reads a show's files only to find an episode registered against another row, so
+    /// a show with no aired gap has nothing to look for there. Reading them for every show put a question
+    /// to the library for each of the owner's sixty-nine shows every time the overview was drawn.
+    /// </remarks>
+    [Fact]
+    public async Task AShowWithNoAiredGapHasItsFilesLeftUnread()
+    {
+        FakeLibraryQuery shelves = new FakeLibraryQuery()
+            .Library(Tv, "Series", "tv")
+            .Show(41, "Silo", Tv, year: 2023)
+            .Episode(41, 1, 1, airDate: Aired, hasFile: true)
+            .Episode(41, 1, 2, airDate: DateTime.UtcNow.AddMonths(1), hasFile: false);
+
+        using TorrentDownloaderPlugin plugin = new();
+
+        plugin.Initialize(new FakePluginContext { DataFolderPath = _folder, Shelves = shelves });
+
+        PluginView page = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+
+        Assert.Equal("0", Assert.IsType<string>(Rendered.ById(page, "show-41").Props["missing"]));
+        Assert.Equal(0, shelves.Files);
+    }
+
     public void Dispose()
     {
         TemporaryFolder.Forget(_folder);

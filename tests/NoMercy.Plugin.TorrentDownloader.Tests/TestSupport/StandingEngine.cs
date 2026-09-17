@@ -21,6 +21,9 @@ public sealed class StandingEngine : ITorrentEngine
     /// <summary>Every hash it was told to forget, and whether the files went too.</summary>
     public List<(string InfoHash, bool DeleteFiles)> Removed { get; } = [];
 
+    /// <summary>Every hash it was told to let go of, keeping what it knows.</summary>
+    public List<string> Released { get; } = [];
+
     /// <summary>Every hash it was told to pause.</summary>
     public List<string> Paused { get; } = [];
 
@@ -65,6 +68,14 @@ public sealed class StandingEngine : ITorrentEngine
     public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct)
     {
         Removed.Add((infoHash, deleteFiles));
+        _holding.Remove(infoHash);
+
+        return Task.CompletedTask;
+    }
+
+    public Task ReleaseAsync(string infoHash, CancellationToken ct)
+    {
+        Released.Add(infoHash);
         _holding.Remove(infoHash);
 
         return Task.CompletedTask;

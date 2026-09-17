@@ -69,6 +69,13 @@ public sealed class FakeTorrentEngine : ITorrentEngine
         return Task.CompletedTask;
     }
 
+    public Task ReleaseAsync(string infoHash, CancellationToken ct)
+    {
+        _states.Remove(infoHash);
+
+        return Task.CompletedTask;
+    }
+
     public Task<IReadOnlyList<TorrentFile>> FilesAsync(string infoHash, CancellationToken ct)
     {
         return Task.FromResult<IReadOnlyList<TorrentFile>>([]);

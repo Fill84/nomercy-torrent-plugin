@@ -3086,6 +3086,37 @@ as present. Specs: `run.md` § When a download finishes, `show-list.md`. Tests:
 `OnOneDiskAStagedFileIsMovedRatherThanCopied`, `AnEpisodeWhoseFileTheServerFiledUnderAnotherIsNotMissing`,
 `AnEpisodeWhoseFileIsFiledUnderAnotherIsNotCountedMissing`.
 
+## S13-19 · What S13-18 left open, found by reading it again
+
+**The owner's question of 17 September 2026** — "Zeker ben je ervan dat alles wat je gemaakt hebt
+klopt?" — and the six things reading `S13-18` again turned up, fixed on the owner's word ("1 tot en met 6").
+
+**As done.**
+
+1. A moved download that could not be put back was discarded as a part-copy: the only copy. `Stager` now
+   never discards a part that is the download.
+2. Staging let go of a torrent before knowing whether anything would move, by removing it, which forgets
+   its metadata. `ITorrentEngine.ReleaseAsync` lets go and keeps what the client knows; `Transfers` lets
+   go only when a video was chosen, holds the torrent again when nothing moved, and leaves a pack of
+   which part moved let go of (held again, the client would download the moved files a second time).
+3. A partly moved pack's leftovers could not be named when its grab was done; with the metadata kept,
+   `RemoveAsync` deletes them.
+4. A dispatched grab whose staged file had gone waited for ever. It now fails once every episode not yet
+   in the library has lost its file and no encode is said to be running — not on the first gone file of a
+   pack, which would sweep the files its other encodes still need (1 September 2026).
+5. "had written nothing to delete" was logged for a torrent whose files had already been moved; it came
+   from the forgotten metadata and is gone with (2).
+6. The overview read every show's files; it reads them only for a show with an aired gap.
+
+Tests: `ATorrentLetGoOfIsStillKnownAndItsFilesAreDeletedLater`, `AMoveThatCannotFinishPutsTheDownloadBack`,
+`AMovedDownloadThatCannotBePutBackIsNeverThrownAway` (Windows: a deny-create rule shuts the way back),
+`ATorrentWithNothingToStageIsNotLetGoOf`, `ATorrentWhoseFilesCouldNotBeMovedIsHeldAgain`,
+`APackOfWhichOnlyPartMovedIsNotHeldAgain`, `AFileThatGoesAfterItsEncodeWasAskedForIsLookedForAgain`,
+`AFileThatGoesWhileTheServerSaysItsEncodeIsRunningIsStillWaitedOn`,
+`APackWithOneFileGoneIsStillWaitedOnWhileAnotherIsThere`, `AShowWithNoAiredGapHasItsFilesLeftUnread`.
+Six seen red before the fix; the guards, and the seeding rule again, sabotaged and caught.
+`OneTickAsksForAShowsEpisodesOnceHoweverManyGrabsMentionIt` now puts its dispatched grab's file on disk.
+
 ## S13-12 · Released as v0.6.0
 
 **Steps**

@@ -2075,11 +2075,23 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 ShowSettings settings = saved.GetValueOrDefault(show.Id) ?? new ShowSettings(show.Id);
                 EffectiveSettings applied = EffectiveSettings.Of(settings, prefs);
 
+                IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
+
+                // Its files are read only to find an aired gap registered against
+                // another episode, so a show with no aired gap is not asked about:
+                // for every show it was one more question to the library for each
+                // of the owner's sixty-nine shows, every time this page was drawn.
+                bool gap = episodes.Any(one =>
+                    !one.HasFile
+                    && (!one.Key.IsSpecial || applied.Specials)
+                    && one.AirDate is DateOnly aired
+                    && aired <= today);
+
                 ShowFacts facts = ShowFacts.Of(
-                    await library.GetEpisodesAsync(show.Id, ct),
+                    episodes,
                     today,
                     applied.Specials,
-                    await library.GetFilesAsync(show.Id, ct));
+                    gap ? await library.GetFilesAsync(show.Id, ct) : []);
 
                 // Nothing of it on disk and nobody asked for it: a row the
                 // server wrote on a guess, and not the owner's show.

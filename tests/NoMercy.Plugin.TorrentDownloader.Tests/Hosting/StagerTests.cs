@@ -387,6 +387,99 @@ public class StagerTests : IDisposable
     }
 
     /// <remarks>
+    /// A move whose last step fails — here a folder already has the episode's name — puts the download back
+    /// where it was, whole, and leaves nothing under a name in the intake folder.
+    /// </remarks>
+    [Fact]
+    public async Task AMoveThatCannotFinishPutsTheDownloadBack()
+    {
+        byte[] content = Content(1024 * 1024);
+        string from = Folder("incomplete-back");
+        string into = Path.Combine(_root, "intake-back");
+        string path = Path.Combine(from, "Silo.S03E07.mkv");
+
+        await File.WriteAllBytesAsync(path, content);
+        Directory.CreateDirectory(Path.Combine(into, "Silo.S03E07.mkv"));
+
+        StagedResult result = Assert.Single(await new Stager(new ActivityJournal(), new CapturingLogger()).MoveAsync(
+            [new("Silo.S03E07.mkv", Episode(7), content.Length)],
+            from,
+            into,
+            // No release name, so the file keeps its own.
+            show: null,
+            resolution: null,
+            CancellationToken.None));
+
+        Assert.False(result.Moved);
+        Assert.Equal(content, await File.ReadAllBytesAsync(path));
+        Assert.Empty(Directory.EnumerateFiles(into));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A moved download that cannot be put back is never thrown away.</strong> Once the download is
+    /// moved to the part name, the part is the only copy there is. The clean-up that removes a part deleted
+    /// it whatever it was, so a move whose last step failed and whose way back was shut deleted the episode.
+    /// </para>
+    /// <para>
+    /// Windows only: the way back is shut by a rule that lets a file leave the download folder and nothing
+    /// enter it, which is a Windows access rule. On Linux leaving and entering a folder are the one
+    /// permission, and there is no such state to put the folder in.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AMovedDownloadThatCannotBePutBackIsNeverThrownAway()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        byte[] content = Content(1024 * 1024);
+        string from = Folder("incomplete-no-way-back");
+        string into = Path.Combine(_root, "intake-no-way-back");
+        string path = Path.Combine(from, "Silo.S03E07.mkv");
+
+        await File.WriteAllBytesAsync(path, content);
+
+        // The last step fails: a folder has the episode's name.
+        Directory.CreateDirectory(Path.Combine(into, "Silo.S03E07.mkv"));
+
+        // And the way back is shut: nothing may be added to the download folder.
+        DirectoryInfo shut = new(from);
+        System.Security.AccessControl.DirectorySecurity rules = shut.GetAccessControl();
+        System.Security.AccessControl.FileSystemAccessRule noAdding = new(
+            System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+            System.Security.AccessControl.FileSystemRights.CreateFiles,
+            System.Security.AccessControl.AccessControlType.Deny);
+
+        rules.AddAccessRule(noAdding);
+        shut.SetAccessControl(rules);
+
+        try
+        {
+            StagedResult result = Assert.Single(await new Stager(new ActivityJournal(), new CapturingLogger()).MoveAsync(
+                [new("Silo.S03E07.mkv", Episode(7), content.Length)],
+                from,
+                into,
+                // No release name, so the file keeps its own.
+                show: null,
+                resolution: null,
+                CancellationToken.None));
+
+            Assert.False(result.Moved);
+            Assert.Contains(
+                Directory.EnumerateFiles(from).Concat(Directory.EnumerateFiles(into)),
+                one => File.ReadAllBytes(one).AsSpan().SequenceEqual(content));
+        }
+        finally
+        {
+            rules.RemoveAccessRule(noAdding);
+            shut.SetAccessControl(rules);
+        }
+    }
+
+    /// <remarks>
     /// <para>
     /// <strong>The torrent client is still holding the file.</strong> It keeps
     /// every file of a running torrent open for reading and writing and shares

@@ -323,6 +323,11 @@ public class GrabTests
             return Task.CompletedTask;
         }
 
+        public Task ReleaseAsync(string infoHash, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+
         public Task<IReadOnlyList<TorrentFile>> FilesAsync(string infoHash, CancellationToken ct)
         {
             return Task.FromResult<IReadOnlyList<TorrentFile>>([]);
@@ -359,6 +364,11 @@ public class GrabTests
         }
 
         public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct)
+        {
+            return Task.CompletedTask;
+        }
+
+        public Task ReleaseAsync(string infoHash, CancellationToken ct)
         {
             return Task.CompletedTask;
         }

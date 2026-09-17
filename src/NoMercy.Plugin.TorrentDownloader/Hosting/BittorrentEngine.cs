@@ -823,25 +823,7 @@ public sealed class BittorrentEngine(
 
     public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct)
     {
-        Held? held;
-
-        lock (_lock)
-        {
-            _torrents.Remove(infoHash, out held);
-
-            // Its deadline goes with it. A timer left behind would wake for a
-            // torrent this client no longer holds, which Woke would find
-            // nothing for — and holding a disposed run's timer alive is a
-            // leak per removed torrent.
-            held?.Wake?.Dispose();
-
-            if (held is not null)
-            {
-                // A slot has come free for whatever the concurrency limit was
-                // keeping back.
-                Queue();
-            }
-        }
+        Held? held = Taken(infoHash);
 
         if (held is null)
         {
@@ -947,6 +929,57 @@ public sealed class BittorrentEngine(
         }
 
         return cleared;
+    }
+
+    public Task ReleaseAsync(string infoHash, CancellationToken ct)
+    {
+        if (Taken(infoHash) is not Held held)
+        {
+            return Task.CompletedTask;
+        }
+
+        // What it had verified, written before the run goes: a disposed run has
+        // nothing left to say, and this is what lets it be added back without
+        // every piece being read again. Its metadata stays where it was written
+        // when it was fetched, which is what RemoveAsync forgets and this does
+        // not — so a torrent let go of comes back without asking its swarm, and
+        // its files can still be named and deleted when its grab is done.
+        if (held.Run.Resuming() is ResumeData verified)
+        {
+            resume?.Stop([verified]);
+        }
+
+        // Closes every file it had open, which is the point: Windows moves no
+        // file that is open.
+        held.Run.Dispose();
+
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Takes a torrent out of the table, and answers what it was holding.</summary>
+    private Held? Taken(string infoHash)
+    {
+        Held? held;
+
+        lock (_lock)
+        {
+            _torrents.Remove(infoHash, out held);
+
+            // Its deadline goes with it. A timer left behind would wake for a
+            // torrent this client no longer holds, which Woke would find
+            // nothing for — and holding a disposed run's timer alive is a
+            // leak per removed torrent.
+            held?.Wake?.Dispose();
+
+            if (held is not null)
+            {
+                // A slot has come free for whatever the concurrency limit was
+                // keeping back.
+                Queue();
+            }
+        }
+
+        return held;
     }
 
     public Task<IReadOnlyList<TorrentFile>> FilesAsync(string infoHash, CancellationToken ct)

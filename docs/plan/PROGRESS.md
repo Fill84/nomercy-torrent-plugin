@@ -4,6 +4,13 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S13-19` is done: six faults in `S13-18`, found by reading it again at the owner's question.** A moved
+download is never thrown away; a torrent is let go of only when something will move, and the client keeps
+what it knows of it (`ReleaseAsync`), so it comes back without its swarm and its leftovers can be deleted
+later; a dispatched grab whose files have all gone is looked for again; the overview reads a show's files
+only where there is a gap. `S13-18`'s own claim that a partly moved pack "was cleaned up before" was only
+half true: a pack whose episodes never all land was never finished, before or since.
+
 **`S13-18` is done: a finished download is moved into the intake folder at once, and a skipped encode no
 longer hangs.** The owner saw South Park S15E12 finished and nothing moved: staging had copied 1.3 GB for
 thirty-five minutes on one disk, the client still held the file so the release stayed in the download

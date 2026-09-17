@@ -100,6 +100,12 @@ public class OneQuestionPerTickTests : IDisposable
         EpisodeKey dispatched = new(Silo, 3, 2);
 
         await Grabbed(grabs, dispatched, "Silo.S03E02.1080p.WEB.H264-CAKES", Hash(2));
+
+        // Its staged file really is in the intake folder: a dispatched grab whose
+        // file has gone is looked for again rather than waited on.
+        Directory.CreateDirectory(Intake);
+        await File.WriteAllBytesAsync(Staged(dispatched), new byte[2048]);
+
         await grabs.StagedAsync(Hash(2), [Staged(dispatched)], CancellationToken.None);
         await grabs.StateAsync(Hash(2), GrabState.Dispatched, CancellationToken.None);
 

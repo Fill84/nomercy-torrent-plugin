@@ -171,6 +171,17 @@ public interface ITorrentEngine
     Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct);
 
     /// <summary>
+    /// Stops holding it and closes its files, and keeps what the client knows of it.
+    /// </summary>
+    /// <remarks>
+    /// For a finished torrent whose files are about to be moved: Windows moves no file that is open, and
+    /// the client keeps every file of a torrent open for as long as it holds it. What it keeps is what
+    /// lets the torrent be added back without asking a swarm that may have gone, and its files be named
+    /// and deleted later by <see cref="RemoveAsync"/>.
+    /// </remarks>
+    Task ReleaseAsync(string infoHash, CancellationToken ct);
+
+    /// <summary>
     /// Every file in it, or nothing at all while the metadata has not arrived.
     /// </summary>
     /// <remarks>
