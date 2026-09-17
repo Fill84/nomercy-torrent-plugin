@@ -269,6 +269,37 @@ public sealed class NameJudgeTests
         return new(new(77, season, number), show, null, LibraryKind.Anime, null, new DateOnly(2026, 8, 1), EpisodeState.Missing, absolute);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A name that carries another year is another show.</strong> Two programmes are called Dark
+    /// Matter — one from 2015 and the owner's, from 2024 — and a name carries the year precisely to say which
+    /// it is. Before this, only a year's being there was checked, never which year, so a 2015 name was taken
+    /// for the 2024 show: the owner's report of 17 September 2026.
+    /// </para>
+    /// <para>
+    /// One year either way is allowed: the library's year is the first air date's, and a premiere in the
+    /// last days of a year can be named after the next.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ANameCarryingAnotherYearIsAnotherShow()
+    {
+        EffectiveSettings settings = Settings(quality: "1080p");
+        string named = Real("names-predbnet-search-dark-matter-2024-s02e03.xml", "rss", "Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES");
+
+        Verdict older = new NameJudge(settings).JudgeName(ReleaseName.Parse(named), DarkMatter(2015), Blacklist.None);
+
+        Assert.False(older.Accepted);
+        Assert.Contains("2015", older.Reason, StringComparison.Ordinal);
+
+        Assert.True(new NameJudge(settings).JudgeName(ReleaseName.Parse(named), DarkMatter(2024), Blacklist.None).Accepted);
+    }
+
+    private static TrackedEpisode DarkMatter(int year)
+    {
+        return new(new(196322, 2, 3), "Dark Matter", year, LibraryKind.Television, null, new DateOnly(2026, 9, 10), EpisodeState.Missing);
+    }
+
     private static Verdict Judge(EffectiveSettings settings, string name)
     {
         return new NameJudge(settings).JudgeName(ReleaseName.Parse(name), SiloSix, Blacklist.None);

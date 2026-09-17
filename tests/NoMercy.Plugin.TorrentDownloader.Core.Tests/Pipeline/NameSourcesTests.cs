@@ -38,6 +38,42 @@ public sealed class NameSourcesTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A name published before an episode aired is not a name for it.</strong> Asked about Dark Matter
+    /// S02E04, PreDB.net answers with every Dark Matter S02E04 it has: the 2015 programme's, published between
+    /// 2016 and 2023. The owner's Dark Matter is the 2024 one, whose S02E04 aired on 17 September 2026 — and
+    /// on that day <c>Dark.Matter.S02E04.1080p.WEB.x264-FaiLED</c>, from July 2016, was grabbed for it.
+    /// </para>
+    /// <para>
+    /// Every name the sources date is dated here, and a name more than a week older than the episode is left
+    /// out. The same answer, for the 2015 programme's S02E04 of 22 July 2016, keeps FaiLED's name.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ANamePublishedBeforeTheEpisodeAiredIsNotANameForIt()
+    {
+        const string asked = "https://api.predb.net/feed/?q=Dark+Matter+S02E04";
+
+        FakeFetch fetch = new FakeFetch()
+            .AnswersAnything(string.Empty)
+            .Answers(asked, Capture.Fixture("names-predbnet-search-dark-matter-s02e04.xml"));
+
+        TrackedEpisode theirs = Episode(196322, "Dark Matter", 2, 4, year: 2024) with { AirDate = new DateOnly(2026, 9, 17) };
+        TrackedEpisode older = Episode(61889, "Dark Matter", 2, 4, year: 2015) with { AirDate = new DateOnly(2016, 7, 22) };
+
+        NameSources sources = Over(fetch);
+        FeedNamesTaken taken = await sources.ReadFeedsAsync([], CancellationToken.None);
+
+        Assert.DoesNotContain(
+            await sources.NamesForAsync(theirs, taken, CancellationToken.None),
+            name => name.Title.StartsWith("Dark.Matter.S02E04", StringComparison.Ordinal));
+
+        Assert.Contains(
+            await Over(fetch).NamesForAsync(older, taken, CancellationToken.None),
+            name => name.Title == "Dark.Matter.S02E04.1080p.WEB.x264-FaiLED");
+    }
+
+    /// <remarks>
     /// <c>run.md</c>: a site that still gives no answer after its second attempt is left out of the rest of the
     /// run. srrDB's search does not answer about Silo S02E01, so it is not asked about Silo S02E02 either;
     /// the other three are.

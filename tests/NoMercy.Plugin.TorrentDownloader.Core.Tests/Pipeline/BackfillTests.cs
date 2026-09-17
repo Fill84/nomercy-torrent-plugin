@@ -28,7 +28,9 @@ public sealed class BackfillTests
     {
         FakeFetch fetch = new FakeFetch().AnsweringFeeds().AnsweringSiloSearches();
         NameSources sources = Over(fetch);
-        TrackedEpisode silo = Episode(41, "Silo", 2, 1, year: 2023);
+        // On the day it really aired: a name is judged against that date, and SceneSource's was published
+        // the same day.
+        TrackedEpisode silo = Episode(41, "Silo", 2, 1, year: 2023) with { AirDate = new DateOnly(2024, 11, 15) };
 
         FeedNamesTaken taken = await sources.ReadFeedsAsync([silo], CancellationToken.None);
 

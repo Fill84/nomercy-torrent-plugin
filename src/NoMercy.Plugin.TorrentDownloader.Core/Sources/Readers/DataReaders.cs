@@ -26,6 +26,10 @@ public sealed class RssNameReader : ISourceReader
         "<link>(.*?)</link>",
         RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
 
+    private static readonly Regex DateTag = new(
+        "<pubDate>(.*?)</pubDate>",
+        RegexOptions.Compiled | RegexOptions.Singleline | RegexOptions.IgnoreCase);
+
     public string Name => "rss";
 
     public IReadOnlyList<SourceRow> Read(string body, Uri from)
@@ -42,12 +46,27 @@ public sealed class RssNameReader : ISourceReader
             }
 
             Match link = LinkTag.Match(item.Groups[1].Value);
+            Match date = DateTag.Match(item.Groups[1].Value);
 
             rows.Add(new(
                 // Decoded, because srrDB writes every dash in a release name as
                 // an entity and a scene name is mostly dashes.
                 Html.Text(title.Groups[1].Value),
-                link.Success ? Html.Absolute(Html.Text(link.Groups[1].Value), from) : null));
+                link.Success ? Html.Absolute(Html.Text(link.Groups[1].Value), from) : null)
+            {
+                // When the name was published, which is what tells one programme's
+                // S02E04 from another of the same name years apart. PreDB.net writes
+                // the hour without its leading nought, which the invariant parse
+                // takes; a date it cannot read is no date rather than a wrong one.
+                Published = date.Success
+                            && DateTimeOffset.TryParse(
+                                Html.Text(date.Groups[1].Value),
+                                System.Globalization.CultureInfo.InvariantCulture,
+                                System.Globalization.DateTimeStyles.AssumeUniversal,
+                                out DateTimeOffset at)
+                    ? at
+                    : null,
+            });
         }
 
         return rows;

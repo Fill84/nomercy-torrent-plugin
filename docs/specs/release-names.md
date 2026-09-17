@@ -31,6 +31,10 @@
 
 - A release name names one episode of one show by its season and episode number. A release name
   without an episode number, such as a season pack, is not searched for.
+- A release name that carries a year after the show's title names the show of that year. It is not
+  searched for when that year is more than one year from the show's own.
+- A release name that its name source dates more than a week before the episode aired is not a name for
+  that episode: another programme of the same title answers the same search with older names.
 - A release name is judged against the settings of its show: its resolution is the show's quality,
   its codec is the show's codec, it carries every must tag and it carries no forbidden tag.
 - A release name that fails any of those is not searched for.

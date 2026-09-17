@@ -4,6 +4,15 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S13-22` is done: another programme of the same title is not taken for the owner's.** On 17 September 2026
+`Dark.Matter.S02E04.1080p.WEB.x264-FaiLED`, the 2015 programme's from July 2016, was grabbed for the 2024
+Dark Matter's S02E04, aired that day. A year alone cannot tell them apart — the indexers list the 2024 show's
+own releases without it (`Dark Matter S02E03 1080p WEB H264-CAKES`) — but when a name was published can:
+PreDB.net, srrDB and SceneSource date every name, the RSS reader now reads it, and a name dated more than a
+week before the episode aired is left out. A name that carries another year than the show's is refused. Open:
+a P2P title from the indexers' own episode search carries no date (`REMUX-FraMeSToR`, "We Were Family");
+whether a mismatched episode title may refuse it is the owner's to decide.
+
 **`S13-21` is done: a removed torrent lets go of its files.** On beast-unit on 17 September 2026 grab 73 (South
 Park S15E12) closed correctly under the new code — staged file deleted, torrent removed, grab done — and its
 files could not be deleted, "being used by another process", so the release stayed in the download folder.

@@ -105,6 +105,17 @@ public sealed class NameJudge(EffectiveSettings settings)
                 : Verdict.No($"'{name.Title}' is not a release of {episode.ShowTitle}.");
         }
 
+        if (episode.ShowYear is int year
+            && TitleMatcher.YearAfter(name.Title, episode.ShowTitle) is int named
+            && Math.Abs(named - year) > 1)
+        {
+            // A name carries a year to say which of two programmes of one title it is, so another year is
+            // another programme: the owner's report of 17 September 2026, Dark Matter from 2015 taken for the
+            // one from 2024. One year either way, because the library's year is the first air date's and a
+            // premiere at the end of a year can be named after the next.
+            return Verdict.No($"'{name.Original}' is the {episode.ShowTitle} of {named}, and this one is from {year}.");
+        }
+
         if (settings.Quality is not string quality)
         {
             // show-list.md: a show whose quality is set neither by the show nor by its library has nothing

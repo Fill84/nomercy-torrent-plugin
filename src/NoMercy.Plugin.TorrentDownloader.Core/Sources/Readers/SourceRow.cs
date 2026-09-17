@@ -53,6 +53,7 @@ public sealed record SignedClaim(string TorrentId, string PageToken, string Sess
 /// What this site must be asked before it will name the torrent, for a site
 /// that publishes neither a magnet nor a hash anywhere.
 /// </param>
+/// <param name="Published">When the source published it, where it says.</param>
 public sealed record SourceRow(
     string Title,
     Uri? DetailUrl = null,
@@ -61,7 +62,8 @@ public sealed record SourceRow(
     int? Seeders = null,
     int? Leechers = null,
     long? SizeBytes = null,
-    SignedClaim? Claim = null);
+    SignedClaim? Claim = null,
+    DateTimeOffset? Published = null);
 
 /// <summary>
 /// The small amount of HTML handling every reader needs.

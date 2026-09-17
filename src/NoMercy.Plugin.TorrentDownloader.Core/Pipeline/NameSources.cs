@@ -10,7 +10,32 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// <summary>A release name, and the name source that gave it.</summary>
 /// <param name="Title">The release name exactly as the source printed it.</param>
 /// <param name="Source">The catalogue entry that gave it, for the Activity page.</param>
-public sealed record SourceName(string Title, string Source);
+/// <param name="Published">When the source published it, where it says.</param>
+public sealed record SourceName(string Title, string Source, DateTimeOffset? Published = null)
+{
+    /// <summary>How long before an episode aired a name for it may be published.</summary>
+    /// <remarks>
+    /// A week, not a day: a library's air date is one country's, a release can be out a day or two before
+    /// another's, and what this is for is years — the 2015 Dark Matter's S02E04, published in July 2016, taken
+    /// for the 2024 programme's S02E04 of 17 September 2026.
+    /// </remarks>
+    public static readonly TimeSpan Before = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// Whether this name was published too long before the episode aired to be a name for it.
+    /// </summary>
+    /// <remarks>
+    /// Two programmes can share a title, and their release names differ by no more than the year one of them
+    /// carries — which an indexer then drops from its titles. When a name was published is what cannot be the
+    /// same. A name or an episode with no date is not judged by this.
+    /// </remarks>
+    public bool PublishedBeforeItAired(TrackedEpisode episode)
+    {
+        return Published is DateTimeOffset at
+               && episode.AirDate is DateOnly aired
+               && at < new DateTimeOffset(aired.ToDateTime(TimeOnly.MinValue), TimeSpan.Zero) - Before;
+    }
+}
 
 /// <summary>The feed release names a run took, per episode, and the name sources that failed in it.</summary>
 public sealed class FeedNamesTaken(IReadOnlyDictionary<EpisodeKey, IReadOnlyList<SourceName>> byEpisode)
@@ -136,7 +161,13 @@ public sealed class NameSources(
 
         foreach (TrackedEpisode episode in searched)
         {
-            SourceName[] named = [.. names.Where(name => EpisodeNaming.Names(ReleaseName.Parse(name.Title), episode.ShowTitle, episode.Key)).Distinct()];
+            SourceName[] named =
+            [
+                .. names
+                    .Where(name => EpisodeNaming.Names(ReleaseName.Parse(name.Title), episode.ShowTitle, episode.Key)
+                                   && !name.PublishedBeforeItAired(episode))
+                    .Distinct(),
+            ];
 
             if (named.Length > 0)
             {
@@ -176,7 +207,7 @@ public sealed class NameSources(
                 return ([], true);
             }
 
-            SourceName[] names = [.. reader.Read(result.Body!, new(feed.Url)).Select(row => new SourceName(row.Title, feed.Name))];
+            SourceName[] names = [.. reader.Read(result.Body!, new(feed.Url)).Select(row => new SourceName(row.Title, feed.Name, row.Published))];
 
             journal.Finished(ActivityStage.Harvest, feed.Name, $"{names.Length} names");
             await WroteAsync(feed, started, names.Length, null, ct);
@@ -256,12 +287,24 @@ public sealed class NameSources(
 
             // A search answers with whatever it thinks is near, other episodes included. Only what names
             // this episode is kept, exactly as for a feed.
-            SourceName[] names =
+            SourceName[] naming =
             [
                 .. reader.Read(result.Body!, address)
                     .Where(row => EpisodeNaming.Names(ReleaseName.Parse(row.Title), episode.ShowTitle, episode.Key))
-                    .Select(row => new SourceName(row.Title, search.Name)),
+                    .Select(row => new SourceName(row.Title, search.Name, row.Published)),
             ];
+
+            // And only what was published once it could be this episode: another programme of the same name
+            // answers the same search with names years older.
+            SourceName[] names = [.. naming.Where(name => !name.PublishedBeforeItAired(episode))];
+
+            if (names.Length < naming.Length)
+            {
+                journal.Noted(
+                    ActivityStage.Names,
+                    subject,
+                    $"{search.Name} · {naming.Length - names.Length} names published more than a week before it aired were left out: another programme of the same name");
+            }
 
             // What the source was asked and what it said, word for word, for the Activity page.
             journal.Noted(ActivityStage.Names, subject, Answered(search, term, names));

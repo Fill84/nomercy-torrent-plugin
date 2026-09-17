@@ -236,6 +236,31 @@ public static class TitleMatcher
                            || rest[0].StartsWith("20", StringComparison.Ordinal))));
     }
 
+    /// <summary>The year a release's title carries after the show's title, or null when it carries none.</summary>
+    /// <remarks>
+    /// Only in the place a year goes, straight after the show's own title: <c>Dark Matter 2024</c>. A year
+    /// anywhere else is part of a title — <c>1923</c>, <c>Blade Runner 2049</c> — and not a claim about which
+    /// programme this is.
+    /// </remarks>
+    public static int? YearAfter(string releaseTitle, string showTitle)
+    {
+        string[] release = Words(releaseTitle);
+        string[] show = Words(showTitle);
+
+        if (show.Length == 0
+            || release.Length != show.Length + 1
+            || !release.Take(show.Length).SequenceEqual(show, StringComparer.Ordinal))
+        {
+            return null;
+        }
+
+        string[] rest = [release[^1]];
+
+        return IsQualifier(rest) && rest[0].All(char.IsAsciiDigit)
+            ? int.Parse(rest[0], CultureInfo.InvariantCulture)
+            : null;
+    }
+
     /// <summary>
     /// A title as one string, normalised the same way a comparison normalises
     /// it.
