@@ -704,6 +704,32 @@ public class SettingsViewTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>Which version is running, at the foot of the page.</strong> The owner asked for it on
+    /// 18 September 2026: a plugin updates from the catalogue without a restart, and there was nowhere in the
+    /// plugin at all that said which copy answered — so "is the fix in?" could only be answered by watching
+    /// what it did.
+    /// </para>
+    /// <para>
+    /// From the running assembly's own identity, which is the only thing that can say. A number the page took
+    /// from the catalogue, or from the manifest on disk, would say what was installed rather than what is
+    /// answering, and those are the two that come apart.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheVersionThatIsAnsweringIsAtTheFootOfThePage()
+    {
+        PluginView view = SettingsView.Render(new(), [], []);
+
+        PluginComponent last = Assert.IsType<PluginComponent>((view.Components ?? [])[^1]);
+
+        string said = last.Props["value"]?.ToString() ?? string.Empty;
+
+        Assert.Contains(PluginIdentity.Name, said, StringComparison.Ordinal);
+        Assert.Contains(PluginIdentity.Version.ToString(3), said, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
     /// <c>docs/specs/show-list.md</c>: the plugin's settings page holds no quality, codec or tag setting,
     /// and no English-only setting. Those are set per show and per library on the overview.
     /// </remarks>

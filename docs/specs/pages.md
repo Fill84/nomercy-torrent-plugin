@@ -26,6 +26,8 @@
   and the advanced settings.
 - The run interval is chosen from every 15 minutes, every 30 minutes, every hour, every 6 hours,
   every 12 hours and once a day.
+- At the foot of the page it says which version of the plugin drew it — the copy that is answering,
+  not the one the catalogue installed, because an update without a restart can leave the two apart.
 
 ## Pages that stay as they are
 

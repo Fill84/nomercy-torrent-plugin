@@ -104,6 +104,7 @@ public static class SettingsView
             Port(settings, port),
             TrackerList(settings, present, privately),
             Running(),
+            Answering(),
         ];
 
         return new()
@@ -486,6 +487,27 @@ public static class SettingsView
                     "run-stop",
                     "Stop",
                     PluginActionIntent.CallPlugin(StopAction, null, PluginActionTransport.Rest))));
+    }
+
+    /// <summary>Which copy of the plugin drew this page.</summary>
+    /// <remarks>
+    /// <para>
+    /// At the foot of the page, and asked for on 18 September 2026: the plugin updates from the catalogue
+    /// without a restart, and nothing anywhere in it said which copy was answering. Whether a fix is in could
+    /// only be told from what the plugin did next.
+    /// </para>
+    /// <para>
+    /// The running assembly's own identity, never the manifest on disk and never the catalogue. Those two say
+    /// what is installed, and what is installed and what is answering are exactly the pair that come apart
+    /// after an update — which is the whole reason this is here.
+    /// </para>
+    /// </remarks>
+    private static PluginComponent Answering()
+    {
+        return Ui.Text(
+            "version",
+            $"{PluginIdentity.Name} {PluginIdentity.Version.ToString(3)}",
+            "caption");
     }
 
     /// <summary>Whether a secret is stored — never which one, and never what.</summary>
