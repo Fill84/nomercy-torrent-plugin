@@ -176,7 +176,7 @@ public class BrowserSolverTests
             clock.Advance(TimeSpan.FromSeconds(1));
         }
 
-        Assert.Null(await solving.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Null(await solving.WaitAsync(Hang.Limit));
         Assert.Equal(1, tabs.Tab("predb.me").Closed);
     }
 
@@ -222,7 +222,7 @@ public class BrowserSolverTests
         clock.Advance(TimeSpan.FromSeconds(1));
         clock.Advance(TimeSpan.FromSeconds(1));
 
-        Clearance? clearance = await solving.WaitAsync(TimeSpan.FromSeconds(5));
+        Clearance? clearance = await solving.WaitAsync(Hang.Limit);
 
         Assert.Equal("a cookie", clearance?.Cookie);
         Assert.Equal(0, tabs.Tab("predb.me").Reloads);
@@ -248,7 +248,7 @@ public class BrowserSolverTests
 
         clock.Advance(TimeSpan.FromSeconds(1));
 
-        Assert.Equal("<html><body>all of it</body></html>", await getting.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal("<html><body>all of it</body></html>", await getting.WaitAsync(Hang.Limit));
     }
 
     /// <remarks>
@@ -276,7 +276,7 @@ public class BrowserSolverTests
             clock.Advance(TimeSpan.FromSeconds(1));
         }
 
-        Assert.Null(await solving.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Null(await solving.WaitAsync(Hang.Limit));
 
         // Exactly one. A loop of reloads is how a site decides we are worth
         // blocking properly.
@@ -396,7 +396,7 @@ public class BrowserSolverTests
 
         Task<string?> first = solver.GetPageAsync(new("https://predb.me/?search=Silo+S03"), CancellationToken.None);
 
-        await tab.Entered.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+        await tab.Entered.WaitAsync(Hang.Limit, CancellationToken.None);
 
         Task<string?> second = solver.GetPageAsync(new("https://predb.me/?search=Lucky+S01"), CancellationToken.None);
 
@@ -407,7 +407,7 @@ public class BrowserSolverTests
 
         tab.LetGo();
 
-        await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+        await Task.WhenAll(first, second).WaitAsync(Hang.Limit, CancellationToken.None);
 
         Assert.Equal(2, tab.Navigations);
         Assert.False(tab.Overlapped);
@@ -432,16 +432,16 @@ public class BrowserSolverTests
 
         Task<string?> waiting = solver.GetPageAsync(new("https://predb.me/?search=Silo+S03"), CancellationToken.None);
 
-        await held.Entered.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+        await held.Entered.WaitAsync(Hang.Limit, CancellationToken.None);
 
         string? other = await solver
             .GetPageAsync(new("https://www.scnsrc.me/feed/?s=Silo+S03"), CancellationToken.None)
-            .WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+            .WaitAsync(Hang.Limit, CancellationToken.None);
 
         Assert.Contains("another feed", other!, StringComparison.Ordinal);
 
         held.LetGo();
-        await waiting.WaitAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+        await waiting.WaitAsync(Hang.Limit, CancellationToken.None);
     }
 
     private static BrowserSolver Solver(FakeTabs tabs, TimeProvider? clock = null)

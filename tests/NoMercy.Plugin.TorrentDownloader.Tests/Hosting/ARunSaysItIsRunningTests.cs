@@ -103,7 +103,7 @@ public class ARunSaysItIsRunningTests : IDisposable
         // is written down — on the CI runner of 14 September 2026, loaded by
         // every test project at once, opening a database alone took twelve
         // seconds and a ten-second bound failed with nothing wrong. A run that
-        // never stops still fails here, a minute later.
+        // never stops still fails here, once Hang.Limit has passed.
         await Until(() => !plugin.Running);
 
         Assert.False(plugin.Running);
@@ -154,10 +154,10 @@ public class ARunSaysItIsRunningTests : IDisposable
             bar);
     }
 
-    /// <summary>Waits for a condition, for at most a minute.</summary>
+    /// <summary>Waits for a condition, for at most <see cref="Hang.Limit"/>.</summary>
     private static async Task Until(Func<bool> done)
     {
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromMinutes(1);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
         while (!done() && DateTimeOffset.UtcNow < giveUpAt)
         {

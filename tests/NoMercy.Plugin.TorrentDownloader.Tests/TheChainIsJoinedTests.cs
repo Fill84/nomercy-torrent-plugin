@@ -86,7 +86,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         (string? hash, string? refusal) = await plugin.AddTorrentAsync(torrent, CancellationToken.None);
         Assert.True(hash is not null, refusal);
 
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
         while (Directory.GetFiles(intake).Length == 0 && DateTimeOffset.UtcNow < giveUpAt)
         {
@@ -149,7 +149,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
         GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
 
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         GrabState state = GrabState.Grabbed;
 
         while (state != GrabState.Failed && DateTimeOffset.UtcNow < giveUpAt)
@@ -244,7 +244,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             Version = "0.0.0",
         });
 
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
         while (Directory.GetFiles(intake).Length == 0 && DateTimeOffset.UtcNow < giveUpAt)
         {
@@ -345,7 +345,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         });
 
         CadenceRepository cadences = new(new Store(_folder));
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         bool finished = false;
 
         while (!finished && DateTimeOffset.UtcNow < giveUpAt)
@@ -429,7 +429,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             Duration = TimeSpan.FromMinutes(11),
         });
 
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         GrabState state = GrabState.Dispatched;
 
         while (state != GrabState.Done && DateTimeOffset.UtcNow < giveUpAt)
@@ -513,7 +513,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             Duration = TimeSpan.FromSeconds(2),
         });
 
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(30);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         GrabState state = GrabState.Dispatched;
 
         while (state != GrabState.Done && DateTimeOffset.UtcNow < giveUpAt)

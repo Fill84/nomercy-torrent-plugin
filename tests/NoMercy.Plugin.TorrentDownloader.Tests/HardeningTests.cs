@@ -195,11 +195,10 @@ public class HardeningTests : IDisposable
 
         await plugin.Settings.SaveAsync(settings, CancellationToken.None);
 
-        Task tick = plugin.RunCycleAsync(CancellationToken.None);
-
-        Assert.Same(tick, await Task.WhenAny(tick, Task.Delay(TimeSpan.FromSeconds(30))));
-
-        await tick;
+        // A tick that waits on itself never returns, and Hang.Limit catches that as
+        // a TimeoutException. Thirty seconds caught a busy machine instead: this
+        // whole cycle took 31 and 32 seconds on CI with nothing wrong.
+        await plugin.RunCycleAsync(CancellationToken.None).WaitAsync(Hang.Limit);
     }
 
     /// <summary>Every shipped source, by name, read from the catalogue that ships.</summary>

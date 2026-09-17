@@ -38,7 +38,7 @@ public class HeartbeatTests
             {
                 Interlocked.Increment(ref readings);
                 started.Set();
-                release.Wait(TimeSpan.FromSeconds(30));
+                release.Wait(Hang.Limit + Hang.Limit);
 
                 return "one torrent";
             },
@@ -60,7 +60,7 @@ public class HeartbeatTests
 
         release.Set();
 
-        Assert.True(moved.Wait(TimeSpan.FromSeconds(10)), "what the look found was never told to the pages.");
+        Assert.True(moved.Wait(Hang.Limit), "what the look found was never told to the pages.");
     }
 
     /// <remarks>
@@ -83,7 +83,7 @@ public class HeartbeatTests
             () =>
             {
                 started.Set();
-                release.Wait(TimeSpan.FromSeconds(30));
+                release.Wait(Hang.Limit + Hang.Limit);
 
                 return "one torrent";
             },
@@ -107,7 +107,7 @@ public class HeartbeatTests
 
         release.Set();
 
-        Assert.True(moved.Wait(TimeSpan.FromSeconds(10)), "what the look found was never told to the pages.");
+        Assert.True(moved.Wait(Hang.Limit), "what the look found was never told to the pages.");
         Assert.Single(log.Entries, entry => entry.Line.Contains("answered again", StringComparison.Ordinal));
     }
 
@@ -166,7 +166,7 @@ public class HeartbeatTests
 
         // Waited for: the look runs on a thread of its own, so advancing the
         // clock returns before it has been made.
-        Assert.True(looked.Wait(TimeSpan.FromSeconds(10)), "a held torrent was never looked at.");
+        Assert.True(looked.Wait(Hang.Limit), "a held torrent was never looked at.");
     }
 
     /// <remarks>
@@ -302,7 +302,7 @@ public class HeartbeatTests
         beat.Shown("twelve per cent at 280 kilobytes a second");
         beat.StartBeating();
 
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
         while (!told.IsSet && DateTimeOffset.UtcNow < giveUpAt)
         {
@@ -322,7 +322,7 @@ public class HeartbeatTests
     /// </remarks>
     private static bool BeatUntil(FakeTimeProvider clock, ManualResetEventSlim read)
     {
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
         while (!read.IsSet && DateTimeOffset.UtcNow < giveUpAt)
         {

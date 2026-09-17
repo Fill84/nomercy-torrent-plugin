@@ -156,7 +156,7 @@ public class BittorrentEngineTests : IDisposable
         engine.Start();
 
         await engine.AddAsync(Request, CancellationToken.None);
-        await trackers.Asked.WaitAsync(TimeSpan.FromSeconds(10));
+        await trackers.Asked.WaitAsync(Hang.Limit);
     }
 
     /// <remarks>
@@ -910,7 +910,7 @@ public class BittorrentEngineTests : IDisposable
                     folder),
                 CancellationToken.None);
 
-            await trackers.Asked.WaitAsync(TimeSpan.FromSeconds(20));
+            await trackers.Asked.WaitAsync(Hang.Limit);
 
             Assert.Contains(
                 trackers.Addresses,
@@ -1036,7 +1036,7 @@ public class BittorrentEngineTests : IDisposable
             // the refusal is a moment behind the add, and the status pass that
             // acts on it is asked until it has.
             TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))[0];
-            DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+            DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
             while (status.State != TorrentState.Error && DateTimeOffset.UtcNow < giveUpAt)
             {
@@ -1601,7 +1601,10 @@ public class BittorrentEngineTests : IDisposable
                 verify: (torrent, _) =>
                 {
                     verifying.Set();
-                    held.Wait(TimeSpan.FromSeconds(30));
+
+                    // Held past every bound below, so a client that waits on this
+                    // pass is caught rather than let through when the hold gives up.
+                    held.Wait(Hang.Limit + Hang.Limit);
 
                     return new(torrent.PieceCount);
                 });
@@ -1619,9 +1622,9 @@ public class BittorrentEngineTests : IDisposable
 
             Assert.Same(
                 adding,
-                await Task.WhenAny(adding, Task.Delay(TimeSpan.FromSeconds(5))));
+                await Task.WhenAny(adding, Task.Delay(Hang.Limit)));
 
-            Assert.True(verifying.Wait(TimeSpan.FromSeconds(10)), "the session was never opened.");
+            Assert.True(verifying.Wait(Hang.Limit), "the session was never opened.");
 
             // What the pages and the transfers tick ask the client, asked while
             // the disk is being read.
@@ -1634,7 +1637,7 @@ public class BittorrentEngineTests : IDisposable
 
             Assert.Same(
                 asking,
-                await Task.WhenAny(asking, Task.Delay(TimeSpan.FromSeconds(5))));
+                await Task.WhenAny(asking, Task.Delay(Hang.Limit)));
         }
         finally
         {
@@ -1687,7 +1690,7 @@ public class BittorrentEngineTests : IDisposable
     [Fact]
     public async Task APeerDiallingInFromThisMachineProvesNothing()
     {
-        using CancellationTokenSource giveUp = new(TimeSpan.FromSeconds(10));
+        using CancellationTokenSource giveUp = new(Hang.Limit);
         using BittorrentEngine engine = Started();
 
         Assert.Equal(PortState.Unknown, engine.PortCondition);
@@ -1774,7 +1777,7 @@ public class BittorrentEngineTests : IDisposable
             Request with { Source = file, DownloadFolder = _folder },
             CancellationToken.None);
 
-        Assert.Same(said.Task, await Task.WhenAny(said.Task, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Same(said.Task, await Task.WhenAny(said.Task, Task.Delay(Hang.Limit)));
         Assert.Equal(handle.InfoHash, await said.Task);
     }
 
@@ -1871,7 +1874,7 @@ public class BittorrentEngineTests : IDisposable
 
         clock.Advance(TimeSpan.FromMinutes(5));
 
-        Assert.Same(gaveUp.Task, await Task.WhenAny(gaveUp.Task, Task.Delay(TimeSpan.FromSeconds(30))));
+        Assert.Same(gaveUp.Task, await Task.WhenAny(gaveUp.Task, Task.Delay(Hang.Limit)));
         Assert.Equal("92D8A3F6864911EF292B4BE0DD5286406396D2B3", await gaveUp.Task, ignoreCase: true);
     }
 
@@ -1959,7 +1962,7 @@ public class BittorrentEngineTests : IDisposable
             Request with { Source = file, DownloadFolder = _folder },
             CancellationToken.None);
 
-        Assert.Same(stopped.Task, await Task.WhenAny(stopped.Task, Task.Delay(TimeSpan.FromSeconds(10))));
+        Assert.Same(stopped.Task, await Task.WhenAny(stopped.Task, Task.Delay(Hang.Limit)));
 
         // Read only after the fact, and it must already be true: the seeding
         // policy was applied when the torrent finished, not when this asked.
@@ -2024,7 +2027,7 @@ public class BittorrentEngineTests : IDisposable
     /// </remarks>
     private static async Task<TorrentStatus> Settles(BittorrentEngine engine, CancellationToken ct)
     {
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         TorrentStatus status = (await engine.StatusAsync(ct))[0];
 
         while (status.State != TorrentState.Error && DateTimeOffset.UtcNow < giveUpAt)
@@ -2046,7 +2049,7 @@ public class BittorrentEngineTests : IDisposable
     /// </remarks>
     private static async Task<string> Settled(BittorrentEngine engine, CancellationToken ct)
     {
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         string before = engine.Drawn;
 
         while (DateTimeOffset.UtcNow < giveUpAt)
@@ -2090,7 +2093,7 @@ public class BittorrentEngineTests : IDisposable
     /// </remarks>
     private static async Task<TorrentStatus> Decided(BittorrentEngine engine, Func<TorrentStatus, bool> done)
     {
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         TorrentStatus status = (await engine.StatusAsync(CancellationToken.None))[0];
 
         while (!done(status) && DateTimeOffset.UtcNow < giveUpAt)
@@ -2106,7 +2109,7 @@ public class BittorrentEngineTests : IDisposable
     /// <summary>Waits until the journal has said something, for the same reason as <see cref="Decided"/>.</summary>
     private static async Task Said(ActivityJournal journal, Func<ActivityEvent, bool> said)
     {
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
         while (!journal.Snapshot().History.Any(said) && DateTimeOffset.UtcNow < giveUpAt)
         {

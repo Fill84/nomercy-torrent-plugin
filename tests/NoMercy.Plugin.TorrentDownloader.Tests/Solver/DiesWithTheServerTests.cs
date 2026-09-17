@@ -67,7 +67,7 @@ public class DiesWithTheServerTests
             job.Dispose();
 
             Assert.True(
-                child.WaitForExit(TimeSpan.FromSeconds(10)),
+                child.WaitForExit(Hang.Limit),
                 "The process was still running after the job that held it was closed.");
         }
         finally

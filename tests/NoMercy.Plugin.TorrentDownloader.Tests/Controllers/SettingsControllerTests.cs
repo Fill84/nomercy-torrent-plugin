@@ -147,7 +147,7 @@ public class SettingsControllerTests
     /// <summary>Waits for something the plugin does on its own.</summary>
     private static async Task Until(Func<bool> what)
     {
-        using CancellationTokenSource giving = new(TimeSpan.FromSeconds(20));
+        using CancellationTokenSource giving = new(Hang.Limit);
 
         while (!what())
         {

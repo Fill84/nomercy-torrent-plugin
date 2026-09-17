@@ -190,10 +190,10 @@ public class BrowserTests : IDisposable
 
         // Both are now inside, one holding the download open. Letting it finish
         // is what lets the second discover the browser is already there.
-        await downloader.Started.WaitAsync(TimeSpan.FromSeconds(5));
+        await downloader.Started.WaitAsync(Hang.Limit);
         downloader.Finish();
 
-        IBrowserProcess?[] both = await Task.WhenAll(first, second).WaitAsync(TimeSpan.FromSeconds(5));
+        IBrowserProcess?[] both = await Task.WhenAll(first, second).WaitAsync(Hang.Limit);
 
         Assert.Same(both[0], both[1]);
         Assert.Equal(1, downloader.Downloads);
@@ -263,7 +263,14 @@ public class BrowserTests : IDisposable
     {
         log = new();
 
-        return new(new BrowserInstall(_folder, downloader, log), stages ?? new RecordingStages(), log);
+        // No real browser is started here, so nothing ever listens on the
+        // debugging port: waiting for one cost twenty seconds a start, which is
+        // most of what made these tests slow.
+        return new(
+            new BrowserInstall(_folder, downloader, log),
+            stages ?? new RecordingStages(),
+            log,
+            listeningWithin: TimeSpan.Zero);
     }
 
     public void Dispose()
