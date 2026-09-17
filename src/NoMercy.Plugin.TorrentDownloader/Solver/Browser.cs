@@ -244,7 +244,13 @@ public sealed class Browser(
         // Held, for the reason a stop is: a start still launching would
         // otherwise put a browser on a desktop already closed, and then release
         // a guard that no longer exists.
-        _starting.Wait();
+        //
+        // For a moment and no longer. A start can be a Chrome download that
+        // hangs, and the server's shutdown waits on this: waiting for ever kept
+        // the owner's server from stopping. Past that moment what there is is
+        // taken down anyway, and the guard is left undisposed for the start
+        // still holding it to release.
+        bool held = _starting.Wait(DisposeWaits);
 
         try
         {
@@ -252,9 +258,14 @@ public sealed class Browser(
         }
         finally
         {
-            _starting.Release();
+            if (held)
+            {
+                _starting.Release();
+                _starting.Dispose();
+            }
         }
-
-        _starting.Dispose();
     }
+
+    /// <summary>How long disposing waits for a start in flight.</summary>
+    private static readonly TimeSpan DisposeWaits = TimeSpan.FromSeconds(5);
 }

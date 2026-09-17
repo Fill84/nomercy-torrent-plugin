@@ -295,6 +295,33 @@ public class BrowserTests : IDisposable
             stages.Events);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Shutting down does not wait for ever on a browser still starting.</strong> Disposing waits for a
+    /// start in flight so the desktop is not closed under it — and a start can be a Chrome download, which can
+    /// hang. The server's own shutdown waits on this: a start that never finishes would keep the owner's server
+    /// from stopping at all.
+    /// </para>
+    /// <para>
+    /// So it waits a little and no longer, then takes down what there is.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task DisposingDoesNotWaitForEverOnAStartThatNeverFinishes()
+    {
+        TaskCompletionSource never = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        RecordingStages stages = new() { LaunchMayFinish = never.Task };
+
+        Browser browser = Build(new FakeBrowserDownloader(), out _, stages);
+
+        _ = browser.StartAsync(CancellationToken.None);
+        await stages.Launching.WaitAsync(Hang.Limit);
+
+        await Task.Run(browser.Dispose).WaitAsync(Hang.Limit);
+
+        never.SetResult();
+    }
+
     private Browser Build(
         FakeBrowserDownloader downloader,
         out CapturingLogger log,
