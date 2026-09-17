@@ -4,6 +4,19 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S13-23` is done: everything known to be open, fixed before one deploy** — the owner's word of 17 September
+2026, "zorg er eerst maar voor dat alles ook nu echt opgelost is". A metadata fetch and a peer's sends are safe
+from many threads (an encrypted connection's keystream was torn by concurrent sends); a browser stop can no
+longer land inside a start or a tab, and disposing waits five seconds for a start, not for ever; Stop ends the
+run Running reports, from Run until it closes; the episode search leaves out a result its indexer dates more
+than a week before the episode aired (The Pirate Bay, EZTV's endpoint, Nyaa, TorrentBay, Torrentz2, and 1337x
+where it writes the year — LimeTorrents, TorrentGalaxy, EZTV's listing and TorrentDownloads write no usable
+date); four more tests end on a fact rather than a clock, one of which no longer guarded its sweep and does
+again; and two real clients prove a finished download let go of is moved at once and a restart writes nothing
+to it. All 1,345 tests pass on Windows and in a Linux container. Still open: a scan or cadence trigger during a
+run's settling leaves the re-run flag set, so the next run searches twice; whether a mismatched episode title
+may refuse an undated indexer title is the owner's to decide.
+
 **`S13-22` is done: another programme of the same title is not taken for the owner's.** On 17 September 2026
 `Dark.Matter.S02E04.1080p.WEB.x264-FaiLED`, the 2015 programme's from July 2016, was grabbed for the 2024
 Dark Matter's S02E04, aired that day. A year alone cannot tell them apart — the indexers list the 2024 show's
