@@ -16,7 +16,7 @@ libraries → every show in every tv and anime library, listed on the overview
           → judge     keep the names that meet the show's settings, most wishes first
           → find      ask every indexer for those names, merge by info hash, most indexers wins
           → download  the plugin's own BitTorrent client
-          → staged    the finished episode, copied out for the encoder
+          → staged    the finished episode, moved out for the encoder
           → encode    queue an encode job; the server does the rest
 ```
 
