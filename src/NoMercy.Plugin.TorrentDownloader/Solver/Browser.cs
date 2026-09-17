@@ -56,21 +56,19 @@ public sealed class Browser(
             return null;
         }
 
-        if (_process is { IsRunning: true })
-        {
-            return _process;
-        }
-
+        // Asked only inside the guard. Read outside it, a stop could land
+        // between "it is running" and handing it out, and the answer would be a
+        // browser being killed — or, the field read a second time, null, which
+        // tells the caller this platform cannot hide a browser at all.
         await _starting.WaitAsync(ct);
 
         try
         {
-            // Checked again inside: a cycle and a page render can both
-            // arrive at a plugin that has just loaded, and two browsers would
-            // each solve every gate.
-            if (_process is { IsRunning: true })
+            // A cycle and a page render can both arrive at a plugin that has
+            // just loaded, and two browsers would each solve every gate.
+            if (_process is { IsRunning: true } running)
             {
-                return _process;
+                return running;
             }
 
             string executable = await install.EnsureAsync(ct);
@@ -86,11 +84,12 @@ public sealed class Browser(
                 _stage.Name,
                 port);
 
-            _process = await _stage.LaunchAsync(executable, Arguments(port), ct);
+            IBrowserProcess launched = await _stage.LaunchAsync(executable, Arguments(port), ct);
+            _process = launched;
 
             await ListeningAsync(ct);
 
-            return _process;
+            return launched;
         }
         finally
         {
@@ -137,8 +136,32 @@ public sealed class Browser(
     /// stopping costs the next challenge the seconds it takes to start one and
     /// nothing else.
     /// </para>
+    /// <para>
+    /// <strong>Under the same guard as a start, and after it.</strong> Without
+    /// it a stop could land half-way through a start: the desktop closed and
+    /// forgotten after it was made, and the start then launching a browser onto
+    /// it and handing that out as running — a process with nowhere to be. A stop
+    /// asked for during a start now waits for it and takes down what it started.
+    /// Awaited rather than blocked on, because a start can take as long as a
+    /// Chrome download, and a thread held for that is a thread the server lost.
+    /// </para>
     /// </remarks>
-    public void Stop()
+    public async Task StopAsync(CancellationToken ct)
+    {
+        await _starting.WaitAsync(ct);
+
+        try
+        {
+            StopHeld();
+        }
+        finally
+        {
+            _starting.Release();
+        }
+    }
+
+    /// <summary>Takes the browser and its stage down. Only with <c>_starting</c> held.</summary>
+    private void StopHeld()
     {
         // The process before the stage, always: closing the desktop out from
         // under a window that is still on it is the one order that can leave a
@@ -218,7 +241,19 @@ public sealed class Browser(
 
         _disposed = true;
 
-        Stop();
+        // Held, for the reason a stop is: a start still launching would
+        // otherwise put a browser on a desktop already closed, and then release
+        // a guard that no longer exists.
+        _starting.Wait();
+
+        try
+        {
+            StopHeld();
+        }
+        finally
+        {
+            _starting.Release();
+        }
 
         _starting.Dispose();
     }

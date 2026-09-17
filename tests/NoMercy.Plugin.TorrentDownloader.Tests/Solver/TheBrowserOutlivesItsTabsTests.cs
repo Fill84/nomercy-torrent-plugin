@@ -62,7 +62,7 @@ public class TheBrowserOutlivesItsTabsTests
 
         Assert.True(from > 0, "the tab no longer says when it closed");
 
-        string closing = tabs[from..tabs.IndexOf("private void CloseIfIdle", from, StringComparison.Ordinal)];
+        string closing = tabs[from..tabs.IndexOf("private async Task CloseIfIdleAsync", from, StringComparison.Ordinal)];
 
         // The last tab out asks for the close. Not the tab before it: a browser
         // taken down while another tab is reading a page is a solve that fails
@@ -73,7 +73,59 @@ public class TheBrowserOutlivesItsTabsTests
         // Two places, and only two: the last tab out, and the backstop for a run
         // that ended with something still open. A third would be somebody
         // stopping it for a reason nobody wrote down.
-        Assert.Equal(2, tabs.Split("_browser.Stop()").Length - 1);
+        Assert.Equal(2, tabs.Split("_browser.StopAsync(").Length - 1);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The browser is stopped while the guard a tab is handed out under is still held.</strong>
+    /// Both closes let go of it first and stopped the browser afterwards. A tab asked for in that gap found
+    /// the old process still reporting itself running, connected to it, opened a page — and the stop then
+    /// killed the browser underneath a solve that had only just begun.
+    /// </para>
+    /// <para>
+    /// Read from the source for the reason the class gives: the tabs are PuppeteerSharp's, and exercising
+    /// the gap would need Chrome and a hidden desktop.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheBrowserIsStoppedBeforeTheGuardATabIsHandedOutUnderIsLetGo()
+    {
+        string tabs = File.ReadAllText(Path.Combine(
+            RepositoryRoot(),
+            "src",
+            "NoMercy.Plugin.TorrentDownloader",
+            "Solver",
+            "PuppeteerTabs.cs"));
+
+        string[] closes =
+        [
+            Between(tabs, "public async Task CloseAllAsync", "public ValueTask DisposeAsync"),
+            Between(tabs, "private async Task CloseIfIdleAsync", "internal sealed class PuppeteerTab("),
+        ];
+
+        foreach (string close in closes)
+        {
+            int stopped = close.IndexOf("_browser.StopAsync(", StringComparison.Ordinal);
+            int released = close.IndexOf("_connecting.Release()", StringComparison.Ordinal);
+
+            Assert.True(stopped > 0, "a close no longer stops the browser");
+            Assert.True(released > 0, "a close no longer lets go of the guard");
+            Assert.True(stopped < released, "a close lets go of the guard before it stops the browser");
+        }
+    }
+
+    private static string Between(string text, string start, string end)
+    {
+        int from = text.IndexOf(start, StringComparison.Ordinal);
+
+        Assert.True(from >= 0, $"{start} is no longer there");
+
+        int to = text.IndexOf(end, from, StringComparison.Ordinal);
+
+        Assert.True(to > from, $"{end} no longer follows {start}");
+
+        return text[from..to];
     }
 
     /// <remarks>
@@ -116,7 +168,7 @@ public class TheBrowserOutlivesItsTabsTests
                 // The close the last tab asks for, and the backstop timer
                 // beside it. Its own test above says so.
                 .Where(file => Path.GetFileName(file) != "PuppeteerTabs.cs")
-                .Where(file => File.ReadAllText(file).Contains(".Stop();", StringComparison.Ordinal)),
+                .Where(file => File.ReadAllText(file).Contains(".StopAsync(", StringComparison.Ordinal)),
         ];
 
         Assert.Empty(elsewhere);

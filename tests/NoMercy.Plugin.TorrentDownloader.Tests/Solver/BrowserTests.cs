@@ -242,7 +242,7 @@ public class BrowserTests : IDisposable
 
         Assert.NotNull(first);
 
-        browser.Stop();
+        await browser.StopAsync(CancellationToken.None);
 
         Assert.Equal(
             ["stage created", "browser launched", "browser disposed", "stage disposed"],
@@ -254,6 +254,45 @@ public class BrowserTests : IDisposable
 
         Assert.NotNull(second);
         Assert.NotSame(first, second);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A stop asked for while the browser is starting comes after that start, never in the middle
+    /// of it.</strong> The stop took no guard, so it could land between the stage being made and the browser
+    /// being launched on it: the desktop was closed and forgotten, and the start went on to launch a browser
+    /// on it and hand that browser out as running — a process with nowhere to be, which the next stop would
+    /// not know how to take down with its stage.
+    /// </para>
+    /// <para>
+    /// The launch is held open so the stop is asked for exactly there. The only outcomes that make sense
+    /// are the ones where one of the two happened wholly before the other; this start began first, so the
+    /// browser it started is the one stopped, and the desktop goes after it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AStopAskedForWhileTheBrowserIsStartingWaitsForThatStart()
+    {
+        TaskCompletionSource launchMayFinish = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        RecordingStages stages = new() { LaunchMayFinish = launchMayFinish.Task };
+
+        using Browser browser = Build(new FakeBrowserDownloader(), out _, stages);
+
+        Task<IBrowserProcess?> starting = browser.StartAsync(CancellationToken.None);
+        await stages.Launching.WaitAsync(Hang.Limit);
+
+        Task stopping = browser.StopAsync(CancellationToken.None);
+
+        launchMayFinish.SetResult();
+
+        IBrowserProcess? started = await starting.WaitAsync(Hang.Limit);
+        await stopping.WaitAsync(Hang.Limit);
+
+        Assert.NotNull(started);
+        Assert.False(started.IsRunning, "the stop asked for during the start left the browser it started running");
+        Assert.Equal(
+            ["stage created", "browser launched", "browser disposed", "stage disposed"],
+            stages.Events);
     }
 
     private Browser Build(

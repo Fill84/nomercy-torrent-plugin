@@ -74,7 +74,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
         _idle = idle;
 
         _watching = _time.CreateTimer(
-            _ => CloseIfIdle(idle),
+            _ => _ = CloseIfIdleAsync(idle),
             null,
             IdleBrowser.Backstop,
             IdleBrowser.Backstop);
@@ -189,13 +189,18 @@ public sealed class PuppeteerTabs : IBrowserTabs
             _connected?.Disconnect();
             _connected?.Dispose();
             _connected = null;
+
+            // Stopped before the guard is let go, never after. In that gap a
+            // tab asked for found the old browser still running, connected and
+            // opened a page on it, and this stop then killed it underneath.
+            // Not the run's token: a close cancelled here would leave a browser
+            // running with nothing connected to it and nobody left to close it.
+            await _browser.StopAsync(CancellationToken.None);
         }
         finally
         {
             _connecting.Release();
         }
-
-        _browser.Stop();
     }
 
     /// <remarks>
@@ -244,7 +249,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
 
         if (open == 0)
         {
-            _ = Task.Run(() => CloseIfIdle(_idle));
+            _ = Task.Run(() => CloseIfIdleAsync(_idle));
         }
     }
 
@@ -258,7 +263,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
     /// by the next tab that is asked for, which pays one challenge on a gated
     /// source and nothing at all on any other.
     /// </remarks>
-    private void CloseIfIdle(TimeSpan idle)
+    private async Task CloseIfIdleAsync(TimeSpan idle)
     {
         // The same guard a tab is handed out under, and taken only if it is
         // free this instant. Waiting for it would be waiting to close a browser
@@ -288,15 +293,18 @@ public sealed class PuppeteerTabs : IBrowserTabs
             _connected?.Disconnect();
             _connected?.Dispose();
             _connected = null;
+
+            _logger.LogInformation("The browser had nothing left open, so it was closed.");
+
+            // Inside the guard, for the reason the backstop gives: stopped after
+            // letting go of it, a tab asked for in between was handed a browser
+            // this was about to kill.
+            await _browser.StopAsync(CancellationToken.None);
         }
         finally
         {
             _connecting.Release();
         }
-
-        _logger.LogInformation("The browser had nothing left open, so it was closed.");
-
-        _browser.Stop();
     }
 }
 

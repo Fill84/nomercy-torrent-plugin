@@ -18,6 +18,18 @@ public sealed class RecordingStages : IHiddenStageFactory
 
     public string? WhyNot { get; init; }
 
+    /// <summary>What a launch waits on before it finishes. Finished already, unless a test holds it.</summary>
+    /// <remarks>
+    /// Launching is the moment a start is half done — a stage made, no browser on it yet — and holding it
+    /// there is how a stop can be made to arrive in the middle without a sleep and without hoping about timing.
+    /// </remarks>
+    public Task LaunchMayFinish { get; init; } = Task.CompletedTask;
+
+    /// <summary>Completes once a launch has begun.</summary>
+    public Task Launching => _launching.Task;
+
+    private readonly TaskCompletionSource _launching = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public IHiddenStage Create()
     {
         if (!CanHideABrowser)
@@ -27,22 +39,27 @@ public sealed class RecordingStages : IHiddenStageFactory
 
         Events.Add("stage created");
 
-        return new RecordingStage(Events);
+        return new RecordingStage(Events, _launching, LaunchMayFinish);
     }
 }
 
-internal sealed class RecordingStage(List<string> events) : IHiddenStage
+internal sealed class RecordingStage(List<string> events, TaskCompletionSource launching, Task launchMayFinish)
+    : IHiddenStage
 {
     public string Name => "a recording stage";
 
-    public Task<IBrowserProcess> LaunchAsync(
+    public async Task<IBrowserProcess> LaunchAsync(
         string executable,
         IReadOnlyList<string> arguments,
         CancellationToken ct)
     {
+        launching.TrySetResult();
+
+        await launchMayFinish.WaitAsync(ct);
+
         events.Add("browser launched");
 
-        return Task.FromResult<IBrowserProcess>(new FakeBrowserProcess(events));
+        return new FakeBrowserProcess(events);
     }
 
     public void Dispose()
