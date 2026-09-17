@@ -152,6 +152,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <summary>A trigger arrived while they were, so they run once more.</summary>
     private bool _again;
 
+    /// <summary>The open run's own Stop, from the moment it is opened until it closes.</summary>
+    /// <remarks>
+    /// Made where the run is opened, not where its search begins. It used to be
+    /// made inside the search, so between Run and the search, and all the while a
+    /// run waited on its downloads and encodes, the plugin said a run was going
+    /// and Stop said there was nothing to stop.
+    /// </remarks>
+    private CancellationTokenSource? _stop;
+
+    /// <summary>The owner pressed Stop on the open run.</summary>
+    private bool _stopped;
+
     /// <summary>The cycle that is open, so a caller can wait for it.</summary>
     private Task? _cycling;
 
@@ -497,12 +509,29 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 return false;
             }
 
+            CancellationTokenSource stop;
+
+            try
+            {
+                stop = CancellationTokenSource.CreateLinkedTokenSource(Lifetime);
+            }
+            catch (ObjectDisposedException)
+            {
+                // The plugin has been disposed, and a cadence timer that was
+                // already firing got here anyway. Thrown from a timer callback
+                // this would take the whole server down; there is nothing left
+                // to run a cycle for.
+                return false;
+            }
+
             // Set on the caller's thread and before anything is started, so a
             // page drawn the instant the Run button is pressed already says the
             // cycle is running. It used to be claimed inside the task, and the
             // owner saw a Run button still enabled on a run they had started.
             _open = true;
             _finding = true;
+            _stop = stop;
+            _stopped = false;
 
             _context?.Logger.LogInformation("{Why}, so a cycle was started.", why);
 
@@ -511,7 +540,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // holding a cycle open threw away half an hour when a tab closed,
             // which is F1 - but RunCycleAsync does, and so does every test of
             // the chain.
-            _cycling = Task.Run(() => CycleThroughAsync(Lifetime), CancellationToken.None);
+            _cycling = Task.Run(() => CycleThroughAsync(stop.Token), CancellationToken.None);
         }
 
         return true;
@@ -572,11 +601,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// encoder telling each other what they have done — see
     /// <see cref="SettledAsync"/> for where it ends.
     /// </remarks>
-    private async Task CycleThroughAsync(CancellationToken ct)
+    private async Task CycleThroughAsync(CancellationToken stop)
     {
         try
         {
-            while (!ct.IsCancellationRequested)
+            // At least once, even when Stop came first. A run stopped before its
+            // search began is still a run the owner started and stopped, and the
+            // search is what says so: it clears what the run had in flight and
+            // writes down that it was stopped.
+            do
             {
                 // No harvest ahead of it any more: the search cycle reads every
                 // name source's feed itself, at its start (docs/specs/run.md).
@@ -584,7 +617,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 {
                     try
                     {
-                        await CycleAsync(ct, only: null, holding: true);
+                        await CycleAsync(stop, only: null, holding: true);
                     }
                     finally
                     {
@@ -602,6 +635,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     _again = false;
                 }
             }
+            while (!stop.IsCancellationRequested);
         }
         catch (OperationCanceledException)
         {
@@ -619,7 +653,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             }
         }
 
-        await SettledAsync(ct);
+        // On the plugin's lifetime, not the run's Stop: closing a stopped run is
+        // exactly what has to happen after Stop, and on a cancelled token its
+        // finish would never be written down nor the clock wound again.
+        await SettledAsync(Lifetime);
     }
 
     /// <summary>
@@ -645,6 +682,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// no grab answers for, and a sweep that runs while a download is in flight
     /// is a sweep that can take it.
     /// </para>
+    /// <para>
+    /// <strong>A stopped run does not wait.</strong> Stop ends the run, and what
+    /// it handed over carries on (docs/specs/run.md). So a stopped run closes
+    /// with work still in hand — and then skips maintenance, for the reason
+    /// above; the next run to close with nothing in hand does it.
+    /// </para>
     /// </remarks>
     private async Task SettledAsync(CancellationToken ct)
     {
@@ -656,35 +699,38 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             }
         }
 
-        if (await InHandAsync(ct))
-        {
-            return;
-        }
+        bool inHand = await InHandAsync(ct);
 
         lock (_cycleLock)
         {
-            // Read again now the slow part is over: a trigger or a transfers
-            // pass may have arrived while the store was being asked, and this
-            // is the only place a cycle is closed.
-            if (!_open || _finding)
+            // Read again now the slow part is over: a trigger, a transfers pass
+            // or Stop may have arrived while the store was being asked, and
+            // this is the only place a cycle is closed.
+            if (!_open || _finding || (inHand && !_stopped))
             {
                 return;
             }
 
             _open = false;
+            _stopped = false;
+            _stop?.Dispose();
+            _stop = null;
         }
 
-        try
+        if (!inHand)
         {
-            await MaintainAsync(ct);
-        }
-        catch (OperationCanceledException)
-        {
-            // Shutting down.
-        }
-        catch (Exception wrong)
-        {
-            _context?.Logger.LogWarning(wrong, "Maintenance failed: {Reason}", wrong.Message);
+            try
+            {
+                await MaintainAsync(ct);
+            }
+            catch (OperationCanceledException)
+            {
+                // Shutting down.
+            }
+            catch (Exception wrong)
+            {
+                _context?.Logger.LogWarning(wrong, "Maintenance failed: {Reason}", wrong.Message);
+            }
         }
 
         // Written down however it ended. The clock's record is of when a cycle
@@ -1215,6 +1261,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         try
         {
+            // Asked before anything else, so a run stopped before its search
+            // began searches nothing: not every step of a search checks the
+            // token before it does its work.
+            cycle.Token.ThrowIfCancellationRequested();
+
             await SearchAsync(cycle.Token, only);
         }
         catch (OperationCanceledException)
@@ -1332,43 +1383,92 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// Cancels the running cycle, leaving the transfers alone.
+    /// Ends the run that <see cref="Running"/> reports, leaving the transfers
+    /// alone.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// Stopping a search is not stopping a download: what has already been
     /// handed to the torrent client keeps going, which is what the owner
     /// expects and what docs/08-ui.md says.
+    /// </para>
+    /// <para>
+    /// <strong>Whenever Running says a run is going.</strong> Stop used to reach
+    /// only a search already under way, so Stop pressed straight after Run, or
+    /// while a run waited on its downloads and encodes, answered that there was
+    /// nothing to stop and the run went on.
+    /// </para>
     /// </remarks>
     /// <returns>Whether there was one to stop.</returns>
     public bool StopRun()
     {
-        CancellationTokenSource? cycle = _cycle;
+        // A search for one episode is not a run, and has its own source.
+        CancellationTokenSource? search = _cycle;
+        CancellationTokenSource? stop;
+        bool settling;
 
-        if (cycle is null)
+        lock (_cycleLock)
         {
-            return false;
+            if (!_open && search is null)
+            {
+                return false;
+            }
+
+            // And nothing more is added to it. A trigger that arrived while the
+            // owner was deciding to stop would otherwise start the search again
+            // the moment they did.
+            _again = false;
+
+            stop = _open ? _stop : null;
+            _stopped = _open;
+            settling = _open && !_finding;
         }
 
+        // Outside the lock: cancelling runs whatever was waiting on the token,
+        // on this thread, and some of that takes the lock itself.
+        CancelQuietly(stop);
+        CancelQuietly(search);
+
+        if (settling)
+        {
+            // Nothing else would close it. The search is over, so only a
+            // transfers pass asks again, and a run waiting on an encode may not
+            // see one for hours.
+            _ = Task.Run(() => SettledGuardedAsync(Lifetime), CancellationToken.None);
+        }
+
+        return true;
+    }
+
+    /// <summary>Cancels a source a run or a search may already have let go of.</summary>
+    private static void CancelQuietly(CancellationTokenSource? source)
+    {
         try
         {
-            cycle.Cancel();
+            source?.Cancel();
         }
         catch (ObjectDisposedException)
         {
             // It finished between the read and the cancel, which is a race a
-            // button really runs.
-            return false;
+            // button really runs. Finished is what Stop asked for.
         }
+    }
 
-        // And nothing more is added to it. A trigger that arrived while the
-        // owner was deciding to stop would otherwise start the search again the
-        // moment they did.
-        lock (_cycleLock)
+    /// <summary>Closes a stopped run, with nobody waiting to be told it failed.</summary>
+    private async Task SettledGuardedAsync(CancellationToken ct)
+    {
+        try
         {
-            _again = false;
+            await SettledAsync(ct);
         }
-
-        return true;
+        catch (OperationCanceledException)
+        {
+            // The plugin is shutting down.
+        }
+        catch (Exception wrong)
+        {
+            _context?.Logger.LogWarning(wrong, "Closing the stopped cycle failed: {Reason}", wrong.Message);
+        }
     }
 
     /// <summary>

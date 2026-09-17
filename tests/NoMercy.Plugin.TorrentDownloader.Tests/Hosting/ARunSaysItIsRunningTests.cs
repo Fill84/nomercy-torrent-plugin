@@ -1,4 +1,8 @@
+using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using Xunit;
 
@@ -152,6 +156,127 @@ public class ARunSaysItIsRunningTests : IDisposable
             bar.Contains("last run finished at", StringComparison.Ordinal)
             || bar.Contains("stopped at", StringComparison.Ordinal),
             bar);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Stop pressed straight after Run was ignored.</strong> The run said
+    /// it was running from the instant Run was pressed, but Stop only knew about
+    /// a run once its background task had reached the search. In between, Stop
+    /// answered that there was nothing to stop and the whole search went ahead.
+    /// </para>
+    /// <para>
+    /// Over an empty library a run that is not stopped finishes, so a status bar
+    /// that says "stopped at" is a run that searched nothing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task StopPressedTheMomentRunWasPressedStopsThatRun()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+
+        plugin.Initialize(new FakePluginContext
+        {
+            DataFolderPath = _folder,
+            Shelves = new(),
+        });
+
+        Assert.True(plugin.StartRun());
+
+        // No await in between: the background task has not run a line yet.
+        Assert.True(plugin.StopRun(), "Stop was refused on a run that said it was running.");
+
+        await Until(() => !plugin.Running);
+
+        Assert.False(plugin.Running);
+
+        string bar = string.Join(" ", Rendered.Words(await plugin.GetViewAsync(new() { Route = "/" }, CancellationToken.None)));
+
+        Assert.Contains("stopped at", bar, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Stop pressed while a run waits on what it started was ignored
+    /// too.</strong> Running is the whole cycle, downloads and encodes included,
+    /// but Stop only reached the search half. A run waiting on an encode said it
+    /// was running, and Stop answered that there was nothing to stop.
+    /// </para>
+    /// <para>
+    /// Stop ends the run; what was already handed over carries on
+    /// (docs/specs/run.md). So the run closes and the grab stays exactly where
+    /// it was.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task StopPressedWhileARunWaitsOnAnEncodeEndsTheRunAndLeavesTheGrab()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+
+        plugin.Initialize(new FakePluginContext
+        {
+            DataFolderPath = _folder,
+            Permits = new FakeGrants(),
+            Container = new FakeProvider(),
+        });
+
+        Settings settings = new() { IncompleteFolder = _folder, IntakeFolder = _folder };
+
+        // So the run asks nobody anything: what is under test is the stop.
+        foreach (string source in Shipped())
+        {
+            settings.DisabledDefaultSources.Add(source);
+        }
+
+        await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+
+        GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
+
+        // A grab already handed to the encoder, which holds the run open.
+        await grabs.RecordAsync(
+            Episode,
+            "Silo",
+            "Silo S03E06 1080p WEB H264-CAKES",
+            "1337x",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode],
+            DateTimeOffset.UtcNow,
+            CancellationToken.None);
+
+        await grabs.StateAsync(Hash, GrabState.Dispatched, CancellationToken.None);
+
+        await plugin.RunCycleAsync(CancellationToken.None);
+
+        // The search is over and the run is not: it is settling.
+        Assert.True(plugin.Running, "the run closed while an encode it asked for was still going");
+
+        Assert.True(plugin.StopRun(), "Stop was refused on a run that said it was running.");
+
+        await Until(() => !plugin.Running);
+
+        Assert.False(plugin.Running, "Stop did not end a run that was waiting on an encode");
+
+        // Stopping the run is not stopping what it handed over.
+        StoredDownload still = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.Equal(GrabState.Dispatched, still.State);
+    }
+
+    private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
+
+    private static EpisodeKey Episode => new(41, 3, 6);
+
+    /// <summary>Every shipped source, by name, read from the catalogue that ships.</summary>
+    private static IEnumerable<string> Shipped()
+    {
+        return System.Text.Json.JsonDocument
+            .Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources.json")))
+            .RootElement
+            .GetProperty("sources")
+            .EnumerateArray()
+            .Select(one => one.GetProperty("name").GetString()!)
+            .ToArray();
     }
 
     /// <summary>Waits for a condition, for at most <see cref="Hang.Limit"/>.</summary>
