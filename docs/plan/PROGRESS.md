@@ -4,6 +4,14 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S13-21` is done: a removed torrent lets go of its files.** On beast-unit on 17 September 2026 grab 73 (South
+Park S15E12) closed correctly under the new code — staged file deleted, torrent removed, grab done — and its
+files could not be deleted, "being used by another process", so the release stayed in the download folder.
+A closed `TorrentDisk` opened a file again for any read or write that came after it was closed, and a run
+disposed while its disk was being read went on to open a session and keep that disk. Both now stop: a closed
+disk throws, and a stopped run opens nothing. The same fault would have made the move of a finished download
+fail.
+
 **`S13-20` is done: two faults the Linux release build and a read of the client turned up.** A torrent still
 seeding is copied into the intake folder and its download is never moved or deleted (`Stager.CopyAsync`):
 Linux lets a held file be moved, and did. And a verified piece told to a peer whose connection had just

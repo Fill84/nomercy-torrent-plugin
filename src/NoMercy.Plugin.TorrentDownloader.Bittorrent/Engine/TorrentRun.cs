@@ -1474,6 +1474,13 @@ public sealed class TorrentRun : IDisposable
 
             lock (_lock)
             {
+                if (_disposed)
+                {
+                    // Stopped: a session opened now would hold its files open on a
+                    // run nothing will ever dispose again.
+                    return null;
+                }
+
                 if (_session is not null)
                 {
                     return _session;
@@ -1578,10 +1585,32 @@ public sealed class TorrentRun : IDisposable
                 // then makes them.
                 Bitfield have = (_verify ?? Verified)(torrent, disk);
 
+                lock (_lock)
+                {
+                    if (_disposed)
+                    {
+                        // Stopped while the disk was being read, which is done
+                        // without the lock. This went on to make the session and
+                        // keep the disk on a run already disposed, so the files
+                        // stayed open until the server stopped: a torrent removed
+                        // while a restart checked it could not be deleted or moved.
+                        disk.Dispose();
+
+                        return null;
+                    }
+                }
+
                 disk.Create();
 
                 lock (_lock)
                 {
+                    if (_disposed)
+                    {
+                        disk.Dispose();
+
+                        return null;
+                    }
+
                     _disk = disk;
 
                     if (_session is null)

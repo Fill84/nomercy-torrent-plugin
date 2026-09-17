@@ -24,6 +24,9 @@ public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDispo
     private readonly Dictionary<string, FileStream> _open = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _lock = new();
 
+    /// <summary>Whether this disk has been closed, after which it opens nothing.</summary>
+    private bool _closed;
+
     /// <summary>Where this torrent's files live.</summary>
     /// <remarks>
     /// A multi-file torrent goes in a folder of its own name; a single-file one
@@ -35,6 +38,11 @@ public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDispo
     /// <summary>Makes every file at full size, without writing its bytes.</summary>
     public void Create()
     {
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_closed, this);
+        }
+
         foreach (TorrentFileEntry file in torrent.Files)
         {
             string path = PathOf(file);
@@ -124,6 +132,8 @@ public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDispo
     {
         lock (_lock)
         {
+            _closed = true;
+
             foreach (FileStream stream in _open.Values)
             {
                 stream.Dispose();
@@ -143,6 +153,12 @@ public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDispo
     {
         lock (_lock)
         {
+            // Closed means closed. A read or a write that arrived after Dispose
+            // opened the file afresh and kept it, and nothing closes a disk twice:
+            // on 17 September 2026 a removed torrent's files stayed "in use by
+            // another process", so they could be neither deleted nor moved.
+            ObjectDisposedException.ThrowIf(_closed, this);
+
             if (!_open.TryGetValue(file.Path, out FileStream? stream))
             {
                 stream = new(PathOf(file), FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);

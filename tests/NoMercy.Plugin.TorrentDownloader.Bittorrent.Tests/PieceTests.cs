@@ -458,6 +458,31 @@ public class PieceTests : IDisposable
             "the block was not on the disk until the piece was finished");
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A disk that has been closed does not open its files again.</strong> Reading or writing a
+    /// closed disk opened the file afresh and kept it, and nothing would ever close it: on
+    /// 17 September 2026 South Park S15E12's torrent was removed at 03:14 and its files could not be
+    /// deleted, "being used by another process", and the whole release stayed in the download folder. A
+    /// move out of that folder fails the same way.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AClosedDiskDoesNotOpenItsFilesAgain()
+    {
+        TorrentMetadata torrent = Torrent();
+        TorrentDisk disk = Disk(torrent, "closed");
+
+        disk.Write(0, new byte[torrent.PieceLength]);
+        disk.Dispose();
+
+        Assert.Throws<ObjectDisposedException>(() => disk.Read(0));
+        Assert.Throws<ObjectDisposedException>(() => disk.Write(0, new byte[torrent.PieceLength]));
+
+        // And so nothing holds it: it can be deleted.
+        File.Delete(disk.PathOf(torrent.Files[0]));
+    }
+
     /// <summary>A disk of its own, under this test's folder.</summary>
     private TorrentDisk Disk(TorrentMetadata torrent, string name)
     {

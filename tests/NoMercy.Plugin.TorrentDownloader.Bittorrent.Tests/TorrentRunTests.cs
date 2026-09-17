@@ -673,6 +673,54 @@ public class TorrentRunTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>A run stopped while its session is opening does not open one afterwards.</strong> The
+    /// disk is read without the lock, and a run disposed in the meantime went on to make its session and
+    /// its disk once the reading was done — on a run nothing would ever dispose again, so its files stayed
+    /// open for as long as the server ran. A torrent removed while a restart was still checking its files
+    /// kept them from being deleted or moved.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ARunStoppedWhileItsSessionOpensDoesNotOpenOne()
+    {
+        TorrentMetadata torrent = TorrentMetadata.Read(Fixture("archive-multifile.torrent"));
+
+        using ManualResetEventSlim verifying = new(false);
+        using ManualResetEventSlim held = new(false);
+
+        TorrentRun run = new(
+            ArchiveHash,
+            [],
+            _folder,
+            new TrackerSet(new AnsweringTrackers(), TimeProvider.System),
+            new NobodyDials(),
+            Id("NM0001"),
+            listenPort: 51413,
+            TimeProvider.System,
+            torrent,
+            verify: (_, _) =>
+            {
+                verifying.Set();
+                held.Wait();
+
+                return new(torrent.PieceCount);
+            });
+
+        Task opening = Task.Run(() => run.OnceAsync(CancellationToken.None));
+
+        Assert.True(verifying.Wait(TimeSpan.FromMinutes(2)), "the session was never opened.");
+
+        run.Dispose();
+        held.Set();
+
+        await opening.ContinueWith(_ => { }, TaskScheduler.Default).WaitAsync(TimeSpan.FromMinutes(2));
+
+        // A session, with its disk, is what Resuming reads; a run that opened none has nothing to say.
+        Assert.Null(run.Resuming());
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>A peer that dials in while the session is opening holds nothing
     /// up.</strong> Taking a peer started its conversation from inside the
     /// run's lock, and the conversation's first act is to ask for the session
