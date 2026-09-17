@@ -822,10 +822,16 @@ public sealed class TorrentSession(
             {
                 await peer.SendAsync(PeerMessage.Have(piece), ct).ConfigureAwait(false);
             }
-            catch (IOException)
+            catch (Exception gone) when (gone is IOException or ObjectDisposedException)
             {
                 // A peer that has gone between one message and the next. Its
                 // own loop will notice and tidy up.
+                //
+                // Closed as well as broken: a connection its own loop has just
+                // disposed answers with ObjectDisposedException, and that went
+                // straight through here — out of the loop of the peer that
+                // delivered the piece, dropping it, and past the announcement,
+                // so a last piece never said the download was finished.
             }
         }
     }

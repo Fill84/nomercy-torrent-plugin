@@ -765,6 +765,125 @@ public class TorrentSessionTests : IDisposable
         Assert.Equal(1, times);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A peer that goes as the last piece arrives does not keep the download from saying it is
+    /// finished.</strong> A verified piece is told to every peer, and a peer whose connection has just been
+    /// closed answers a send with <c>ObjectDisposedException</c>, which is not an <c>IOException</c>. It
+    /// went straight through the telling, past the announcement: with the last piece, the session never said
+    /// it was finished, no piece would ever verify again to say it later, and nothing staged the download
+    /// until something else happened to start a pass. Public swarms lose peers every second.
+    /// </para>
+    /// <para>
+    /// Here the second peer's connection is closed for writing exactly when a piece is told to it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APeerThatGoesAsThePieceArrivesDoesNotSilenceTheFinish()
+    {
+        byte[] content = Fixture("ubuntu-desktop.torrent");
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768, secret: true);
+
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+
+        (Stream seeding, Stream leeching) = await LoopbackAsync(stopping.Token);
+        (Stream silent, Stream closing) = await LoopbackAsync(stopping.Token);
+
+        using TorrentSession seeder = Seeding(torrent, content);
+        using TorrentSession leecher = Fresh(torrent);
+
+        TaskCompletionSource said = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+        leecher.Finished += () => said.TrySetResult();
+
+        PeerConnection?[] both = await Task.WhenAll(
+            PeerConnection.IntroduceAsync(seeding, Hash(torrent), Id("SEED"), torrent.PieceCount, dialling: false, stopping.Token),
+            PeerConnection.IntroduceAsync(leeching, Hash(torrent), Id("LEECH"), torrent.PieceCount, dialling: true, stopping.Token));
+
+        // A peer that says nothing, reached through a connection that is closed by the time a piece is told.
+        PeerConnection?[] gone = await Task.WhenAll(
+            PeerConnection.IntroduceAsync(silent, Hash(torrent), Id("GONE"), torrent.PieceCount, dialling: false, stopping.Token),
+            PeerConnection.IntroduceAsync(new ClosedForHave(closing), Hash(torrent), Id("LEECH"), torrent.PieceCount, dialling: true, stopping.Token));
+
+        Task going = leecher.RunAsync(gone[1]!, stopping.Token);
+        Task serves = seeder.RunAsync(both[0]!, stopping.Token);
+        Task asks = leecher.RunAsync(both[1]!, stopping.Token);
+
+        await Task.WhenAny(Task.WhenAll(serves, asks), said.Task);
+
+        Assert.True(said.Task.IsCompletedSuccessfully, "the session never said it had finished.");
+
+        await stopping.CancelAsync();
+
+        await Task.WhenAll(
+            going.ContinueWith(_ => { }, TaskScheduler.Default),
+            serves.ContinueWith(_ => { }, TaskScheduler.Default),
+            asks.ContinueWith(_ => { }, TaskScheduler.Default));
+
+        gone[0]?.Dispose();
+    }
+
+    /// <summary>A connection that has been closed by the time a piece is told to it, and not before.</summary>
+    private sealed class ClosedForHave(Stream inner) : Stream
+    {
+        public override bool CanRead => inner.CanRead;
+
+        public override bool CanSeek => false;
+
+        public override bool CanWrite => inner.CanWrite;
+
+        public override long Length => throw new NotSupportedException();
+
+        public override long Position
+        {
+            get => throw new NotSupportedException();
+            set => throw new NotSupportedException();
+        }
+
+        public override void Flush() => inner.Flush();
+
+        public override Task FlushAsync(CancellationToken cancellationToken) => inner.FlushAsync(cancellationToken);
+
+        public override int Read(byte[] buffer, int offset, int count) => inner.Read(buffer, offset, count);
+
+        public override ValueTask<int> ReadAsync(Memory<byte> buffer, CancellationToken cancellationToken = default) =>
+            inner.ReadAsync(buffer, cancellationToken);
+
+        public override Task<int> ReadAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            inner.ReadAsync(buffer, offset, count, cancellationToken);
+
+        public override long Seek(long offset, SeekOrigin origin) => throw new NotSupportedException();
+
+        public override void SetLength(long value) => throw new NotSupportedException();
+
+        public override void Write(byte[] buffer, int offset, int count) =>
+            WriteAsync(buffer.AsMemory(offset, count)).AsTask().GetAwaiter().GetResult();
+
+        public override Task WriteAsync(byte[] buffer, int offset, int count, CancellationToken cancellationToken) =>
+            WriteAsync(buffer.AsMemory(offset, count), cancellationToken).AsTask();
+
+        public override ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
+        {
+            // A have is five bytes of length and id and four of piece index.
+            if (buffer.Length == 9 && buffer.Span[4] == (byte)PeerMessageId.Have)
+            {
+                throw new ObjectDisposedException(nameof(ClosedForHave));
+            }
+
+            return inner.WriteAsync(buffer, cancellationToken);
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                inner.Dispose();
+            }
+
+            base.Dispose(disposing);
+        }
+    }
+
     /// <summary>
     /// A torrent that is already whole when it is opened says so too.
     /// </summary>

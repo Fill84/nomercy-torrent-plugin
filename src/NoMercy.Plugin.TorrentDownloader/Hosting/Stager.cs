@@ -61,7 +61,38 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         {
             // Each file after its own episode, so a pack needs no special case:
             // its files differ by episode and therefore by name.
-            results.Add(await OneAsync(file, from, into, show, resolution, ct).ConfigureAwait(false));
+            results.Add(await OneAsync(file, from, into, show, resolution, seeding: false, ct).ConfigureAwait(false));
+        }
+
+        return results;
+    }
+
+    /// <summary>Copies what was chosen, and leaves every download exactly where it is.</summary>
+    /// <remarks>
+    /// <para>
+    /// For a torrent still seeding, which seeds out of the file it downloaded. Moving it, or deleting it after
+    /// the copy, takes that file away from the torrent.
+    /// </para>
+    /// <para>
+    /// Whether that could happen was left to the file system, and file systems differ: Windows refuses to move
+    /// or delete a file the client holds open, Linux refuses neither. On Linux a seeding torrent's file was
+    /// moved out from under it, which the release build caught on 17 September 2026. The torrent and its files
+    /// go once seeding is over and the library has the episode.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<StagedResult>> CopyAsync(
+        IReadOnlyList<Staged> staged,
+        string from,
+        string into,
+        Show? show,
+        string? resolution,
+        CancellationToken ct)
+    {
+        List<StagedResult> results = [];
+
+        foreach (Staged file in staged)
+        {
+            results.Add(await OneAsync(file, from, into, show, resolution, seeding: true, ct).ConfigureAwait(false));
         }
 
         return results;
@@ -123,6 +154,7 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         string into,
         Show? show,
         string? resolution,
+        bool seeding,
         CancellationToken ct)
     {
         string source = Path.Combine(from, file.Path.Replace('/', Path.DirectorySeparatorChar));
@@ -168,7 +200,7 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
             // Under the part's name too, so the episode's own name still appears
             // in one rename and never over a copy the file system is part way
             // through between two disks.
-            moved = Moved(source, part);
+            moved = !seeding && Moved(source, part);
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
         {
@@ -215,10 +247,20 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
             // this name.
             File.Move(part, destination, overwrite: true);
 
+            if (seeding)
+            {
+                journal.Finished(
+                    ActivityStage.Download,
+                    Path.GetFileName(source),
+                    $"copied into {into}; the download stays while the torrent seeds");
+
+                return new(file, destination, null);
+            }
+
             // The copy is the staging, and it is done. What happens to the
-            // download afterwards cannot undo it: the torrent client is still
-            // holding that file open and may still be seeding out of it, so
-            // deleting it is an attempt and never a condition.
+            // download afterwards cannot undo it: the torrent client may still
+            // be holding that file open, so deleting it is an attempt and never
+            // a condition.
             //
             // It used to be neither. The delete threw, the whole staging was
             // reported as a failure, and the episode sat in the intake folder

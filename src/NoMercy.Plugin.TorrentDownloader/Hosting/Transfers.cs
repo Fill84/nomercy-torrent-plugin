@@ -546,8 +546,11 @@ public sealed class Transfers(
                 await engine.ReleaseAsync(finished.InfoHash, ct);
             }
 
-            IReadOnlyList<StagedResult> moved =
-                await stager.MoveAsync(chosen, finished.Folder ?? incompleteFolder, intakeFolder, show, resolution, ct);
+            // A torrent still seeding keeps its files, so they are copied: moving
+            // them was left to whether the file system refuses, and Linux does not.
+            IReadOnlyList<StagedResult> moved = seeding
+                ? await stager.CopyAsync(chosen, finished.Folder ?? incompleteFolder, intakeFolder, show, resolution, ct)
+                : await stager.MoveAsync(chosen, finished.Folder ?? incompleteFolder, intakeFolder, show, resolution, ct);
 
             if (letGo && !moved.Any(one => one.Moved))
             {

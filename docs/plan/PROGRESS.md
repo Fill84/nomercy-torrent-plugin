@@ -4,6 +4,13 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S13-20` is done: two faults the Linux release build and a read of the client turned up.** A torrent still
+seeding is copied into the intake folder and its download is never moved or deleted (`Stager.CopyAsync`):
+Linux lets a held file be moved, and did. And a verified piece told to a peer whose connection had just
+closed threw `ObjectDisposedException` out of the telling — dropping the peer that delivered the piece and,
+with the last piece, the announcement that the download was finished, so nothing staged it. Every fixed
+wait in the shell tests is now `Hang.Limit` (two minutes), so a busy machine is not read as a hang.
+
 **`S13-19` is done: six faults in `S13-18`, found by reading it again at the owner's question.** A moved
 download is never thrown away; a torrent is let go of only when something will move, and the client keeps
 what it knows of it (`ReleaseAsync`), so it comes back without its swarm and its leftovers can be deleted

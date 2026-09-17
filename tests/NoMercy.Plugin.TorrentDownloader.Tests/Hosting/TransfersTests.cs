@@ -42,8 +42,9 @@ public class TransfersTests : IDisposable
 
         string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
 
+        // Done seeding, so its download is moved rather than copied and kept.
         StandingEngine engine = new StandingEngine().Holding(
-            Finished(),
+            Finished() with { State = TorrentState.Finished },
             new TorrentFile(Path.GetFileName(episode), 900_000_000));
 
         FakeProvider server = Server();
@@ -225,8 +226,9 @@ public class TransfersTests : IDisposable
         string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
         string staged = Staged;
 
+        // Done seeding, so its download is moved rather than copied and kept.
         StandingEngine engine = new StandingEngine().Holding(
-            Finished(),
+            Finished() with { State = TorrentState.Finished },
             new TorrentFile(Path.GetFileName(episode), 900_000_000));
 
         FakeProvider server = Server();
@@ -1655,6 +1657,33 @@ public class TransfersTests : IDisposable
 
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
         Assert.False(File.Exists(Staged), "The staged copy was left in the intake folder.");
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A download still seeding is never moved or deleted, whatever the file system would
+    /// allow.</strong> Windows refuses to move or delete a file the client holds open, so there a seeding
+    /// torrent's file was copied and stayed. Linux refuses neither: the file was moved out from under a
+    /// torrent still seeding from it, which the release build on Linux caught on 17 September 2026. Nothing
+    /// holds the file here, exactly as on Linux.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ADownloadStillSeedingIsCopiedEvenWhereNothingStopsAMove()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        await Transfers(engine, grabs, Server()).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "It was never staged.");
+        Assert.True(File.Exists(episode), "A download the client is still seeding from was taken away.");
     }
 
     /// <remarks>
