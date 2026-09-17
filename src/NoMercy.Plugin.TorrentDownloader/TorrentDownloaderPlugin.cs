@@ -503,8 +503,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     {
         lock (_cycleLock)
         {
-            if (_open)
+            if (_open && _finding)
             {
+                // Searching now: it searches once more when it is done.
                 _again = true;
 
                 _context?.Logger.LogInformation(
@@ -512,6 +513,27 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
                 return false;
             }
+
+            if (_open)
+            {
+                // Waiting on its downloads and encodes: the search is over, so the start is added to this run by
+                // searching again now. It used to be marked to search once more — but only a search reads that
+                // mark, so nothing searched, and the mark stayed until the next run, which then searched twice.
+                if (!_stopped && _stop is CancellationTokenSource open)
+                {
+                    _finding = true;
+
+                    _context?.Logger.LogInformation(
+                        "{Why}, and a cycle is waiting on its downloads, so it searches again.", why);
+
+                    _cycling = Task.Run(() => CycleThroughAsync(open.Token), CancellationToken.None);
+                }
+
+                return false;
+            }
+
+            // A new run carries nothing of the last one's.
+            _again = false;
 
             CancellationTokenSource stop;
 

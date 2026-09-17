@@ -263,6 +263,87 @@ public class ARunSaysItIsRunningTests : IDisposable
         Assert.Equal(GrabState.Dispatched, still.State);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A start that arrives while a run waits on its downloads is added to that run, once.</strong>
+    /// <c>docs/specs/run.md</c>: a start while a run is going is added to that run. While the run was searching,
+    /// that meant searching once more. While it waited on an encode, the start was marked and nothing searched —
+    /// and the mark stayed, so the next run searched twice over.
+    /// </para>
+    /// <para>
+    /// Here a run waits on an encode, a start arrives, and the grab is then over. The start searches again within
+    /// that run and the run closes; the next run searches exactly once. Every search writes one row to
+    /// <c>runs</c>, which is what is counted.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AStartWhileARunWaitsIsAddedToThatRunOnceAndTheNextRunSearchesOnce()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+
+        plugin.Initialize(new FakePluginContext
+        {
+            DataFolderPath = _folder,
+            Permits = new FakeGrants(),
+            Container = new FakeProvider(),
+        });
+
+        Settings settings = new() { IncompleteFolder = _folder, IntakeFolder = _folder };
+
+        foreach (string source in Shipped())
+        {
+            settings.DisabledDefaultSources.Add(source);
+        }
+
+        await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+
+        GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
+
+        await grabs.RecordAsync(
+            Episode,
+            "Silo",
+            "Silo S03E06 1080p WEB H264-CAKES",
+            "1337x",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode],
+            DateTimeOffset.UtcNow,
+            CancellationToken.None);
+
+        await grabs.StateAsync(Hash, GrabState.Dispatched, CancellationToken.None);
+
+        await plugin.RunCycleAsync(CancellationToken.None);
+
+        Assert.True(plugin.Running, "the run closed while an encode it asked for was still going");
+        Assert.Equal(1, await SearchesAsync());
+
+        // The encode lands, and a start arrives while the run is still open.
+        await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
+
+        Assert.False(plugin.StartRun(), "a start while a run was open started a second run beside it");
+
+        await Until(() => !plugin.Running);
+
+        Assert.Equal(2, await SearchesAsync());
+
+        // The next run searches once.
+        await plugin.RunCycleAsync(CancellationToken.None);
+        await Until(() => !plugin.Running);
+
+        Assert.Equal(3, await SearchesAsync());
+    }
+
+    /// <summary>How many searches have been written down.</summary>
+    private async Task<long> SearchesAsync()
+    {
+        await using Microsoft.Data.Sqlite.SqliteConnection connection = await new Store(_folder).OpenAsync(CancellationToken.None);
+        await using Microsoft.Data.Sqlite.SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText = "SELECT COUNT(*) FROM runs;";
+
+        return (long)(await command.ExecuteScalarAsync())!;
+    }
+
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
     private static EpisodeKey Episode => new(41, 3, 6);
