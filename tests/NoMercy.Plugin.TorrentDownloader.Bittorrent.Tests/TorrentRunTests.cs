@@ -208,35 +208,38 @@ public class TorrentRunTests : IDisposable
         // Meanwhile the metadata arrives from the other peer entirely.
         await run.OnceAsync(stopping.Token);
         await serving.ServeAsync(stopping.Token);
-        await run.Metadata.WaitAsync(TimeSpan.FromSeconds(10), stopping.Token);
+        await run.Metadata.WaitAsync(stopping.Token);
 
         // Interested is the session's word and nothing else sends it. Hearing
         // it is this peer being taken on as somebody to download from.
+        //
+        // Bounded by the test's own budget and nothing shorter: every step from
+        // the metadata arriving to Interested on the wire is a thread-pool
+        // continuation, and a ten-second window of its own was lost on a loaded
+        // runner with the behaviour intact.
         Task<bool> asked = Task.Run(
             async () =>
             {
-                while (!stopping.IsCancellationRequested)
+                try
                 {
-                    if (await quiet.NextAsync(stopping.Token).ConfigureAwait(false) is not PeerMessage message)
+                    while (await quiet.NextAsync(stopping.Token).ConfigureAwait(false) is PeerMessage message)
                     {
-                        return false;
+                        if (message.Id == PeerMessageId.Interested)
+                        {
+                            return true;
+                        }
                     }
-
-                    if (message.Id == PeerMessageId.Interested)
-                    {
-                        return true;
-                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    // The budget ran out with nothing said, which is the failure below.
                 }
 
                 return false;
             },
-            stopping.Token);
+            CancellationToken.None);
 
-        Task first = await Task.WhenAny(asked, Task.Delay(TimeSpan.FromSeconds(10), stopping.Token));
-
-        Assert.True(
-            first == asked && await asked,
-            "the peer that did not supply the metadata was never asked for anything");
+        Assert.True(await asked, "the peer that did not supply the metadata was never asked for anything");
     }
 
     /// <remarks>
@@ -316,7 +319,7 @@ public class TorrentRunTests : IDisposable
 
         await run.OnceAsync(stopping.Token);
         await peer.ServeAsync(stopping.Token);
-        await run.Metadata.WaitAsync(TimeSpan.FromSeconds(10), stopping.Token);
+        await run.Metadata.WaitAsync(stopping.Token);
 
         TorrentMetadata torrent = Assert.IsType<TorrentMetadata>(run.Torrent);
 
