@@ -316,6 +316,50 @@ public class TitleMatcherTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A name carrying two titles is asked about both.</strong> A fansub group publishes a season
+    /// under the romanised title and the English one together, the second in brackets, and the library holds
+    /// whichever of the two it holds. The real name of the batch that finished on another owner's server on
+    /// 18 September 2026 and was never moved, because the title the library has sits in the middle of it.
+    /// </para>
+    /// <para>
+    /// The leading bracket is the group and never a title, and everything else in brackets is asked about by
+    /// the same rule: a season, a resolution and a codec are titles no show has.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("Classroom of the Elite", true)]
+    [InlineData("Youkoso Jitsuryoku Shijou Shugi no Kyoushitsu e", true)]
+    [InlineData("Judas", false)]
+    [InlineData("Season", false)]
+
+    // By the trailing rule, which is how a franchise prefix is allowed: "Special Ops Lioness" is Lioness. A
+    // library holding both is why the folder is matched against the longest title it carries and not the
+    // first — see Staging.
+    [InlineData("Elite", true)]
+    public void ATitleInBracketsIsOneOfTheTitlesTheNameCarries(string show, bool carried)
+    {
+        Assert.Equal(
+            carried,
+            TitleMatcher.CarriesTitle(
+                "[Judas] Youkoso Jitsuryoku Shijou Shugi no Kyoushitsu e (Classroom of the Elite) (Season 04)"
+                + " [1080p][HEVC x265 10bit][Dual-Audio][Multi-Subs]",
+                show));
+    }
+
+    /// <remarks>
+    /// And it is no looser than <see cref="TitleMatcher.Matches"/> anywhere else: each title it finds is put
+    /// to the same rule, so a one-word show is no more a match here than there. This is the name that cost
+    /// the owner a hundred rows of five other programmes on 22 August 2026.
+    /// </remarks>
+    [Fact]
+    public void ATitleInTheMiddleOfAnOrdinaryNameIsStillNotAMatch()
+    {
+        Assert.False(TitleMatcher.CarriesTitle("We Were the Lucky Ones S01E01 1080p WEB H264-CAKES", "Lucky"));
+        Assert.False(TitleMatcher.CarriesTitle("A Bloody Lucky Day (2023) [1080p]", "Lucky"));
+    }
+
+    /// <remarks>
     /// Nothing matches nothing. A show with no title is a bug upstream, and
     /// answering true would put every release in the pool under it.
     /// </remarks>

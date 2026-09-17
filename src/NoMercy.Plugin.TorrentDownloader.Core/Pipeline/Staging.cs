@@ -233,11 +233,27 @@ public static partial class Staging
     /// dispatched.
     /// </para>
     /// <para>
-    /// It reads the file's own name, never the torrent's, and never its order.
-    /// A pack names its episodes in its files; the torrent's own name says only
-    /// that it is a season. Nothing is guessed: a video naming a show the owner
-    /// does not have, or naming no episode at all, yields nothing rather than
-    /// being placed somewhere plausible.
+    /// It reads which episode a file is for out of the file's own name, never
+    /// out of the torrent's, and never out of its order. A pack names its
+    /// episodes in its files; the torrent's own name says only that it is a
+    /// season. Nothing is guessed: a video naming no episode at all yields
+    /// nothing rather than being placed somewhere plausible.
+    /// </para>
+    /// <para>
+    /// <strong>Which show it is may be in the folder instead.</strong> On
+    /// 18 September 2026 a batch of <em>Classroom of the Elite</em> added by hand
+    /// finished and was never moved: a fansub group names its files after an
+    /// abbreviation — <c>[Judas] Youjitsu - S04E01v2.mkv</c> — and the owner's
+    /// library has no show of that name, so every one of the sixteen files was
+    /// passed over and 3.7 GB stayed in the download folder. The torrent's own
+    /// name carries both of the show's titles, and a multi-file torrent puts
+    /// every file under it, so the folder is asked where the file could not
+    /// answer.
+    /// </para>
+    /// <para>
+    /// The file first, always. A torrent whose folder names one show and whose
+    /// files name another the owner does have is placed by its files; only a
+    /// file naming no show the owner has is placed by the folder it is in.
     /// </para>
     /// </remarks>
     public static IReadOnlyList<EpisodeKey> Discover(IReadOnlyList<TorrentFile> files, IReadOnlyList<Show> shows)
@@ -259,7 +275,8 @@ public static partial class Staging
             // extension trailing behind the show — and a one-word show like
             // Silo is then refused, because what follows it is not a year or a
             // country.
-            Show? show = shows.FirstOrDefault(candidate => TitleMatcher.Matches(name.Title, candidate.Title));
+            Show? show = shows.FirstOrDefault(candidate => TitleMatcher.Matches(name.Title, candidate.Title))
+                         ?? Named(file.Path, shows);
 
             if (show is null)
             {
@@ -284,6 +301,35 @@ public static partial class Staging
         }
 
         return found;
+    }
+
+    /// <summary>
+    /// The show named by the folder a torrent downloads into, for a file that
+    /// names none the owner has.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The first segment of the path, which is the torrent's own name: a
+    /// multi-file torrent puts everything under it. A single file has no folder
+    /// and needs none — there the file's name <em>is</em> the torrent's.
+    /// </para>
+    /// <para>
+    /// The longest title of those that match, never the first. A name may end
+    /// in a show's title and still be another show's — <em>Classroom of the
+    /// Elite</em> ends in <em>Elite</em>, and both are real programmes — so a
+    /// library holding both would otherwise file a batch under whichever the
+    /// server happened to answer with first.
+    /// </para>
+    /// </remarks>
+    private static Show? Named(string path, IReadOnlyList<Show> shows)
+    {
+        string[] parts = path.Split(['/', '\\'], StringSplitOptions.RemoveEmptyEntries);
+
+        return parts.Length > 1
+            ? shows.Where(candidate => TitleMatcher.CarriesTitle(parts[0], candidate.Title))
+                .OrderByDescending(candidate => candidate.Title.Length)
+                .FirstOrDefault()
+            : null;
     }
 
     /// <summary>

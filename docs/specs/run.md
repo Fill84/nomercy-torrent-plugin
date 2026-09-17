@@ -40,6 +40,12 @@
   whole file is there.
 - A torrent let go of is still known to the client: it can be added back without asking its swarm, and
   its files can be named and deleted later.
+- A torrent added by hand covers no episode, so what it holds is read when it finishes. Which episode a
+  video is for comes from that video's own name. Which show it is comes from the same name, and where
+  that names no show in a library, from the folder the torrent downloads into — which is the torrent's
+  own name. A name carrying more than one title, as a fansub batch does, is matched on each of them, and
+  the longest title a library holds wins. A video naming no show a library holds and sitting in no folder
+  that does is left alone, and so is one naming no episode.
 - When every video moved, what else that torrent downloaded, and the folders it came in, are deleted from
   the download folder. When none moved, the client holds the torrent again. When only some moved, the
   rest stays until the grab is done, and is deleted then.

@@ -178,6 +178,64 @@ public static class TitleMatcher
     }
 
     /// <summary>
+    /// Whether any of the titles <paramref name="releaseTitle"/> carries is a
+    /// release of <paramref name="showTitle"/>.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A fansub group names a season pack under both titles, the second in
+    /// brackets: <c>[Judas] Youkoso Jitsuryoku Shijou Shugi no Kyoushitsu e
+    /// (Classroom of the Elite) (Season 04) [1080p]…</c>. The library has one of
+    /// the two, and which one is not something this plugin gets to choose —
+    /// asked about the whole name, <see cref="Matches"/> answers no, because the
+    /// library's title is in the middle of it.
+    /// </para>
+    /// <para>
+    /// Each title on its own, and each of them by the same rule as any other:
+    /// <em>Season 04</em>, <em>1080p</em> and <em>Batch</em> are titles this asks
+    /// about too, and a show is named by none of them. Nothing here is looser
+    /// than <see cref="Matches"/> — it is asked more than once.
+    /// </para>
+    /// </remarks>
+    public static bool CarriesTitle(string releaseTitle, string showTitle)
+    {
+        return Carried(releaseTitle).Any(one => Matches(one, showTitle));
+    }
+
+    /// <summary>A bracketed part of a name, in either of the two brackets a name uses.</summary>
+    private static readonly Regex Bracketed = new(
+        @"\(([^)]*)\)|\[([^\]]*)\]",
+        RegexOptions.Compiled);
+
+    /// <summary>
+    /// The titles a name carries: what it leads with, and every bracketed part
+    /// of it.
+    /// </summary>
+    /// <remarks>
+    /// The leading group is dropped rather than offered, because it is the one
+    /// bracket that is never a title: anime writes the release group there.
+    /// </remarks>
+    private static IEnumerable<string> Carried(string title)
+    {
+        string work = (title ?? string.Empty).Trim();
+        Match group = Bracketed.Match(work);
+
+        if (group.Success && group.Index == 0)
+        {
+            work = work[group.Length..].TrimStart();
+        }
+
+        int bracket = work.IndexOfAny(['(', '[']);
+
+        yield return bracket < 0 ? work : work[..bracket];
+
+        foreach (Match carried in Bracketed.Matches(work))
+        {
+            yield return carried.Groups[1].Success ? carried.Groups[1].Value : carried.Groups[2].Value;
+        }
+    }
+
+    /// <summary>
     /// Whether the show is named by a single ordinary word, which is a name
     /// many other programmes also begin with.
     /// </summary>
