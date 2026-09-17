@@ -232,6 +232,59 @@ public sealed class TheShowListTests : IDisposable
         Assert.Equal(0, shelves.Files);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Through the plugin, because that is where what is looked for is kept.</strong> The owner
+    /// asked for a search on 18 September 2026 with eight pages of anime and three of television in front
+    /// of them. The box posts, the plugin holds the term, and every page drawn after it is narrowed by it
+    /// until it is cleared.
+    /// </para>
+    /// <para>
+    /// A show that matches is listed whether it is switched on or off, and whether the library holds a file
+    /// of it or not: looking for a show the plugin is not yet downloading is the reason to look.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WhatIsLookedForNarrowsTheOverviewUntilItIsCleared()
+    {
+        using TorrentDownloaderPlugin plugin = Loaded();
+
+        await plugin.SwitchShowAsync(42, on: true, CancellationToken.None);
+
+        plugin.Find("brilliant");
+
+        PluginView narrowed = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+
+        Assert.Contains(Rendered.All(narrowed), one => one.Id == "show-42");
+        Assert.DoesNotContain(Rendered.All(narrowed), one => one.Id == "show-41");
+
+        plugin.Find(null);
+
+        PluginView whole = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+
+        Assert.Contains(Rendered.All(whole), one => one.Id == "show-41");
+        Assert.Contains(Rendered.All(whole), one => one.Id == "show-42");
+    }
+
+    /// <remarks>
+    /// An empty box is nothing to look for, not a search nothing matches: pressing Find on one puts the
+    /// whole list back rather than emptying the page.
+    /// </remarks>
+    [Fact]
+    public async Task AnEmptyBoxShowsEveryShowAgain()
+    {
+        using TorrentDownloaderPlugin plugin = Loaded();
+
+        plugin.Find("silo");
+        plugin.Find("   ");
+
+        Assert.Null(plugin.Finding);
+
+        PluginView page = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+
+        Assert.Contains(Rendered.All(page), one => one.Id == "show-41");
+    }
+
     public void Dispose()
     {
         TemporaryFolder.Forget(_folder);

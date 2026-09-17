@@ -199,6 +199,104 @@ public class OverviewViewTests
             one => one.Action?.Payload.GetValueOrDefault("method") as string == SettingsView.RunAction);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>Eight pages of anime and three of television is no way to find a show.</strong> The owner
+    /// asked for this on 18 September 2026, looking at exactly that. What is typed is matched against every
+    /// show of every library at once, so it does not matter which one it is in or which page it was on.
+    /// </para>
+    /// <para>
+    /// Part of a title is enough, and a library whose shows none of them match is still drawn — with its
+    /// heading and an empty table, which says where it was looked and found nothing.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ASearchListsOnlyTheShowsThatMatchWhicheverLibraryTheyAreIn()
+    {
+        PluginView page = OverviewView.Render(
+            Idle(),
+            [
+                Listing(Tv, "Series", LibraryKind.Television, Listed(41, "Silo", Tv), Listed(52, "Sugar", Tv)),
+                Listing(Anime, "Anime", LibraryKind.Anime, Listed(90, "Classroom of the Elite", Anime), Listed(91, "Frieren", Anime)),
+            ],
+            find: "elite");
+
+        Assert.Empty(Titles(page, Tv));
+        Assert.Equal(["Classroom of the Elite"], Titles(page, Anime));
+    }
+
+    /// <remarks>
+    /// Case, accents and the punctuation a library writes a title with are not things anybody types: the
+    /// owner's library holds <em>Pokémon Horizons: The Series</em>, and typing it exactly is the one way
+    /// nobody finds it.
+    /// </remarks>
+    [Theory]
+    [InlineData("pokemon")]
+    [InlineData("POKÉMON")]
+    [InlineData("horizons the series")]
+    [InlineData("mon hori")]
+    public void ASearchIgnoresCaseAccentsAndPunctuation(string typed)
+    {
+        PluginView page = OverviewView.Render(
+            Idle(),
+            [Listing(Anime, "Anime", LibraryKind.Anime, Listed(90, "Pokémon Horizons: The Series", Anime))],
+            find: typed);
+
+        Assert.Equal(["Pokémon Horizons: The Series"], Titles(page, Anime));
+    }
+
+    /// <remarks>
+    /// The box keeps what was typed, so it can be corrected rather than retyped, and there is a way back to
+    /// the whole list that is not the browser's Back.
+    /// </remarks>
+    [Fact]
+    public void TheSearchBoxKeepsWhatWasTypedAndOffersAWayBackToEveryShow()
+    {
+        PluginView searching = OverviewView.Render(
+            Idle(),
+            [Listing(Tv, "Series", LibraryKind.Television, Listed(41, "Silo", Tv))],
+            find: "sil");
+
+        IReadOnlyList<PluginFormField> fields = Assert.IsAssignableFrom<IReadOnlyList<PluginFormField>>(
+            Rendered.ById(searching, OverviewView.FindFormId).Props["fields"]);
+
+        Assert.Equal("sil", Assert.Single(fields).Value);
+        Assert.Contains(
+            Rendered.All(searching),
+            one => one.Action?.Payload.GetValueOrDefault("method") as string == OverviewView.ClearAction);
+
+        // And nothing to clear while nothing is being looked for.
+        PluginView whole = OverviewView.Render(
+            Idle(),
+            [Listing(Tv, "Series", LibraryKind.Television, Listed(41, "Silo", Tv))]);
+
+        Assert.DoesNotContain(
+            Rendered.All(whole),
+            one => one.Action?.Payload.GetValueOrDefault("method") as string == OverviewView.ClearAction);
+    }
+
+    /// <remarks>
+    /// A search is not a page of its own: it narrows the list, so the paging that is left is the paging of
+    /// what matched. Eight pages of anime answer one search on one page.
+    /// </remarks>
+    [Fact]
+    public void ASearchIsPagedByWhatMatchedAndNotByTheWholeLibrary()
+    {
+        ShowListing[] many =
+        [
+            .. Enumerable.Range(1, OverviewView.PageSize + 10).Select(number => Listed(number, $"Show {number}", Tv)),
+            Listed(9001, "Silo", Tv),
+        ];
+
+        PluginView page = OverviewView.Render(
+            Idle(),
+            [Listing(Tv, "Series", LibraryKind.Television, many)],
+            find: "silo");
+
+        Assert.Equal(["Silo"], Titles(page, Tv));
+        Assert.DoesNotContain(Rendered.All(page), one => one.Id == $"library-{Tv}-next");
+    }
+
     private static CycleStatus Idle()
     {
         return new(false, null, null);

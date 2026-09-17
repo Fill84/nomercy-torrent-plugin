@@ -56,6 +56,26 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return ShowAdvanced;
     }
 
+    /// <summary>
+    /// What the overview is being narrowed to, or null for every show.
+    /// </summary>
+    /// <remarks>
+    /// Display state and nothing else, held exactly as <see cref="ShowAdvanced"/> is and for the same
+    /// reason: it changes what is drawn and nothing about what the plugin does, so it has no business in
+    /// the file that decides everything. A restart shows the whole list again, which is the right way round.
+    /// </remarks>
+    public string? Finding { get; private set; }
+
+    /// <summary>Narrows the overview to the shows whose titles carry this, or widens it to all of them.</summary>
+    /// <remarks>
+    /// Blank is nothing to look for rather than a search nothing matches: a box submitted empty puts the
+    /// whole list back, which is what pressing Find on an empty box means.
+    /// </remarks>
+    public void Find(string? what)
+    {
+        Finding = string.IsNullOrWhiteSpace(what) ? null : what.Trim();
+    }
+
     /// <summary>Tells the open pages that a transfer has moved.</summary>
     /// <remarks>
     /// <para>
@@ -2254,7 +2274,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             listings.Add(new(shelf, prefs, rows));
         }
 
-        return OverviewView.Render(CurrentCycle(), listings, onlyLibraryId, page);
+        return OverviewView.Render(CurrentCycle(), listings, onlyLibraryId, page, Finding);
     }
 
     /// <summary>The settings form of one show, or a page saying there is no such show.</summary>

@@ -2,6 +2,10 @@
 
 ## The overview page
 
+- A box at the top of the page narrows the list to the shows whose titles carry what is typed, across
+  every library at once — it does not matter which library a show is in or which page it was on. Part
+  of a title is enough, and case, accents and punctuation are ignored. A button puts the whole list
+  back, the box keeps what was typed, and nothing about it is saved: a restart shows every show again.
 - The plugin's overview page lists every show of every `tv` library and every anime of every `anime`
   library, in one list per library.
 - A show or anime the library holds no video file of is not listed, unless it is switched on. The

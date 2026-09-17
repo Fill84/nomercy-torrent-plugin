@@ -1,6 +1,7 @@
 using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugins.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Views;
@@ -38,6 +39,15 @@ public static class OverviewView
 {
     public const int PageSize = 50;
 
+    /// <summary>The form that narrows the list to what is being looked for.</summary>
+    public const string FindFormId = "find";
+
+    /// <summary>What the box posts to.</summary>
+    public const string FindAction = "shows/find";
+
+    /// <summary>And what puts the whole list back.</summary>
+    public const string ClearAction = "shows/find/clear";
+
     /// <summary>The id of one library's table of shows.</summary>
     public static string TableId(string libraryId) => $"shows-{libraryId}";
 
@@ -45,13 +55,15 @@ public static class OverviewView
     /// <param name="libraries">Every tv and anime library, with its shows.</param>
     /// <param name="onlyLibraryId">One library's page of shows, or null for the overview of all of them.</param>
     /// <param name="page">Which page of that library's shows, counted from one.</param>
+    /// <param name="find">What is being looked for, or null for the whole list.</param>
     public static PluginView Render(
         CycleStatus cycle,
         IReadOnlyList<LibraryListing> libraries,
         string? onlyLibraryId = null,
-        int page = 1)
+        int page = 1,
+        string? find = null)
     {
-        List<PluginComponent> components = [RunStatusView.Line(cycle)];
+        List<PluginComponent> components = [RunStatusView.Line(cycle), .. Finder(find)];
 
         foreach (LibraryListing library in libraries)
         {
@@ -60,7 +72,7 @@ public static class OverviewView
                 continue;
             }
 
-            components.AddRange(Block(library, onlyLibraryId is null ? 1 : Math.Max(page, 1)));
+            components.AddRange(Block(library, onlyLibraryId is null ? 1 : Math.Max(page, 1), find));
         }
 
         return new()
@@ -70,8 +82,69 @@ public static class OverviewView
         };
     }
 
+    /// <summary>
+    /// The box that narrows the list, and a way back to the whole of it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <strong>Eight pages of anime and three of television is no way to find a show.</strong> The owner
+    /// asked for this on 18 September 2026, looking at exactly that: what is typed is matched against every
+    /// show of every library, so neither which library a show is in nor which page it was on matters.
+    /// </para>
+    /// <para>
+    /// What is looked for is held by the plugin and not carried in the address, for the reason the paging
+    /// above is in the path: the web app drops everything after a question mark, so a term in a query
+    /// string would never arrive. It is display state, like Show advanced on the settings page, and is
+    /// saved nowhere.
+    /// </para>
+    /// </remarks>
+    private static IEnumerable<PluginComponent> Finder(string? find)
+    {
+        yield return Ui.Form(
+            FindFormId,
+            "Find",
+            PluginActionIntent.CallPlugin(FindAction, null, PluginActionTransport.Rest),
+            new PluginFormField
+            {
+                Name = "find",
+                Label = "Find a show",
+                Type = PluginFormFieldType.Text,
+
+                // What was typed, so it can be corrected rather than typed again.
+                Value = find,
+                Placeholder = "part of a title",
+            });
+
+        if (find is not null)
+        {
+            yield return Ui.Row(
+                "find-clear",
+                Ui.Text("find-said", $"showing what matches '{find}'"),
+                Ui.Button(
+                    "find-clear-button",
+                    "Show every show",
+                    PluginActionIntent.CallPlugin(ClearAction, null, PluginActionTransport.Rest)));
+        }
+    }
+
+    /// <summary>
+    /// Whether a show is one of those being looked for.
+    /// </summary>
+    /// <remarks>
+    /// Part of a title is enough, and the folding is the one the rest of the plugin matches titles with:
+    /// case, accents and the punctuation a library writes a title with are not things anybody types. The
+    /// owner's library holds <em>Pokémon Horizons: The Series</em>, and typing that exactly is the one way
+    /// nobody finds it.
+    /// </remarks>
+    internal static bool Found(string? find, string title)
+    {
+        return string.IsNullOrWhiteSpace(find)
+               || TitleMatcher.Normalised(title)
+                   .Contains(TitleMatcher.Normalised(find), StringComparison.Ordinal);
+    }
+
     /// <summary>A library's heading, its preferences with an Edit button, its table and its paging.</summary>
-    private static IEnumerable<PluginComponent> Block(LibraryListing listing, int page)
+    private static IEnumerable<PluginComponent> Block(LibraryListing listing, int page, string? find)
     {
         string id = listing.Library.Id;
 
@@ -88,6 +161,7 @@ public static class OverviewView
         ShowListing[] ordered =
         [
             .. listing.Shows
+                .Where(one => Found(find, one.Show.Title))
                 .OrderByDescending(one => one.Settings.SwitchedOn)
                 .ThenBy(one => one.Show.Title, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(one => one.Show.Id),
@@ -109,7 +183,10 @@ public static class OverviewView
                 new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
             ],
             [.. ordered.Skip((shown - 1) * PageSize).Take(PageSize).Select(Row)],
-            "This library holds no show.");
+
+            // Which of the two nothings this is. "This library holds no show" under a search that found
+            // none says the library is empty, which is a different thing and not true.
+            find is null ? "This library holds no show." : $"No show here matches '{find}'.");
 
         if (pages > 1)
         {

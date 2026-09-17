@@ -41,6 +41,41 @@ public sealed class ShowsController(IPluginManager plugins) : PluginControllerBa
         return Switch(id, on: false, ct);
     }
 
+    /// <summary>
+    /// Narrows the overview to the shows whose titles carry what was typed.
+    /// </summary>
+    /// <remarks>
+    /// An endpoint rather than an address, because the web app drops everything after a question mark and
+    /// a term in the path would have to be escaped into one. Nothing is saved: it is display state the
+    /// plugin holds, exactly as Show advanced is, and the page is drawn again from it.
+    /// </remarks>
+    [HttpPost("shows/find")]
+    public IActionResult Find([FromBody] Dictionary<string, object?> fields)
+    {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound(Unreachable);
+        }
+
+        plugin.Find(PostedFields.AsText(fields).GetValueOrDefault("find"));
+
+        return Status(true, plugin.Finding is null ? "showing every show" : $"showing what matches '{plugin.Finding}'");
+    }
+
+    /// <summary>Puts the whole list back.</summary>
+    [HttpPost("shows/find/clear")]
+    public IActionResult Clear()
+    {
+        if (Live is not TorrentDownloaderPlugin plugin)
+        {
+            return NotFound(Unreachable);
+        }
+
+        plugin.Find(null);
+
+        return Status(true, "showing every show");
+    }
+
     [HttpPost("shows/{id:int}/settings")]
     public async Task<IActionResult> Settings(int id, [FromBody] Dictionary<string, object?> fields, CancellationToken ct)
     {
