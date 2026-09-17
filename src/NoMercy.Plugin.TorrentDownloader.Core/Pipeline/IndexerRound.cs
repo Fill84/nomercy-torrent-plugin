@@ -149,7 +149,16 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
     /// The episode whose air date a row is held against: a torrent uploaded long before it aired is another
     /// programme's, whatever its title says. Null holds a row to nothing but its title.
     /// </param>
-    private sealed record Question(string Text, Func<string, bool> Counts, Func<ReleaseCopy, string> NameOf, TrackedEpisode? Aired = null)
+    /// <param name="DatedOnly">
+    /// Whether a row must carry a date to count: so where another programme of the same title is known, whose
+    /// undated results cannot be told apart from this one's.
+    /// </param>
+    private sealed record Question(
+        string Text,
+        Func<string, bool> Counts,
+        Func<ReleaseCopy, string> NameOf,
+        TrackedEpisode? Aired = null,
+        bool DatedOnly = false)
     {
         /// <summary>Whether a row whose title counts was uploaded too long before the episode aired to be of it.</summary>
         public bool UploadedBeforeItAired(ReleaseCopy row)
@@ -160,7 +169,13 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         /// <summary>Whether a row counts for this question: its title, and when it was uploaded.</summary>
         public bool Takes(ReleaseCopy row)
         {
-            return Counts(row.Title) && !UploadedBeforeItAired(row);
+            return Counts(row.Title) && Dated(row);
+        }
+
+        /// <summary>Whether when it was uploaded lets it count: not too old, and dated where a date is needed.</summary>
+        public bool Dated(ReleaseCopy row)
+        {
+            return !UploadedBeforeItAired(row) && !(DatedOnly && row.Published is null);
         }
     }
 
@@ -204,14 +219,21 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
     /// <param name="blacklisted">Releases and hashes still refused, which take no part.</param>
     /// <param name="asked">What each indexer has already answered this run.</param>
     /// <param name="ct">The run's lifetime.</param>
+    /// <param name="datedOnly">
+    /// Whether only a dated result counts: the name sources answered this episode with an older programme's names
+    /// of the same title. On 17 September 2026 LimeTorrents listed the 2015 Dark Matter's
+    /// <c>Dark Matter S02E04 1080p WEB x264-FaiLED[PRiME]</c> with no date, and no indexer dated that torrent
+    /// either; nothing about it could say it was not the 2024 programme's S02E04.
+    /// </param>
     public Task<IReadOnlyList<RankedTorrent>> AskForEpisodeAsync(
         TrackedEpisode episode,
         Func<string, bool> meets,
         IReadOnlySet<string> blacklisted,
         AskedThisCycle asked,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool datedOnly = false)
     {
-        Question[] questions = [new($"{episode.ShowTitle} {episode.Key}", meets, row => row.Title, episode)];
+        Question[] questions = [new($"{episode.ShowTitle} {episode.Key}", meets, row => row.Title, episode, datedOnly)];
 
         return RoundAsync(questions, episode, blacklisted, asked, ct);
     }
@@ -227,23 +249,42 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         string about = $"{episode.ShowTitle} {episode.Key}";
         List<FoundRow> found = [];
 
+        // Every torrent some indexer dated too long before the episode aired, by hash and by title, from every
+        // indexer asked. Filled while they answer, some of them at once.
+        TooOld tooOld = new();
+
         for (int place = 0; place < order.Count; place++)
         {
             if (order[place].FirstChoice is not null)
             {
                 // One after another, and each finished before the next is asked.
-                found.AddRange(Placed(place, await IndexerAsync(order[place], names, asked, about, ct)));
+                found.AddRange(Placed(place, await IndexerAsync(order[place], names, asked, about, tooOld, ct)));
             }
         }
 
         int[] rest = [.. Enumerable.Range(0, order.Count).Where(place => order[place].FirstChoice is null)];
 
         (string Name, ReleaseCopy Row)[][] answers =
-            await Task.WhenAll(rest.Select(place => IndexerAsync(order[place], names, asked, about, ct)));
+            await Task.WhenAll(rest.Select(place => IndexerAsync(order[place], names, asked, about, tooOld, ct)));
 
         for (int at = 0; at < rest.Length; at++)
         {
             found.AddRange(Placed(rest[at], answers[at]));
+        }
+
+        // A torrent is uploaded once, so one indexer's date is the date of every listing of it. Judged listing by
+        // listing, LimeTorrents' undated copy of the 2015 Dark Matter's FraMeSToR remux was grabbed for the 2024
+        // programme on 17 September 2026 while The Pirate Bay dated the same torrent February 2026.
+        FoundRow[] older = [.. found.Where(one => tooOld.Has(one.Row))];
+
+        if (older.Length > 0)
+        {
+            found.RemoveAll(one => tooOld.Has(one.Row));
+
+            journal.Noted(
+                ActivityStage.Find,
+                about,
+                $"{older.Length} undated results left out: another indexer dates the same torrent more than a week before it aired");
         }
 
         foreach (FoundRow unreadable in found.Where(one => one.Row.InfoHash is null))
@@ -252,6 +293,40 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         }
 
         return Winner.Order(Merging.ByHash(found), blacklisted);
+    }
+
+    /// <summary>The torrents some indexer dated too long before the episode aired, by hash and by title.</summary>
+    /// <remarks>
+    /// By title as well as by hash, because a listing read without its hash — a site that names the torrent only
+    /// on its own page — is still the same release under the same title.
+    /// </remarks>
+    private sealed class TooOld
+    {
+        private readonly HashSet<string> _hashes = new(StringComparer.OrdinalIgnoreCase);
+        private readonly HashSet<string> _titles = new(StringComparer.Ordinal);
+        private readonly Lock _lock = new();
+
+        public void Add(ReleaseCopy row)
+        {
+            lock (_lock)
+            {
+                if (row.InfoHash is string hash)
+                {
+                    _hashes.Add(hash);
+                }
+
+                _titles.Add(TitleMatcher.Release(row.Title));
+            }
+        }
+
+        public bool Has(ReleaseCopy row)
+        {
+            lock (_lock)
+            {
+                return (row.InfoHash is string hash && _hashes.Contains(hash))
+                       || _titles.Contains(TitleMatcher.Release(row.Title));
+            }
+        }
     }
 
     private static IEnumerable<FoundRow> Placed(int place, (string Name, ReleaseCopy Row)[] rows)
@@ -265,6 +340,7 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         IReadOnlyList<Question> questions,
         AskedThisCycle asked,
         string about,
+        TooOld tooOld,
         CancellationToken ct)
     {
         List<(string Name, ReleaseCopy Row)> counted = [];
@@ -281,7 +357,20 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
 
                 ReleaseCopy[] rows = asked.Recall(indexer.Name, term) ?? await AskAsync(indexer, term, question, about, asked, ct);
                 ReleaseCopy[] titled = [.. rows.Where(row => question.Counts(row.Title))];
-                ReleaseCopy[] named = [.. titled.Where(row => !question.UploadedBeforeItAired(row))];
+                ReleaseCopy[] named = [.. titled.Where(question.Dated)];
+
+                if (question.DatedOnly && titled.Any(row => row.Published is null))
+                {
+                    journal.Noted(
+                        ActivityStage.Find,
+                        about,
+                        $"{indexer.Name} · {titled.Count(row => row.Published is null)} undated results left out: another programme of the same name is known, and an undated result cannot be told from its episodes");
+                }
+
+                foreach (ReleaseCopy older in titled.Where(question.UploadedBeforeItAired))
+                {
+                    tooOld.Add(older);
+                }
 
                 if (named.Length < titled.Length)
                 {

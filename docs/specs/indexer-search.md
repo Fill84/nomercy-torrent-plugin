@@ -43,9 +43,12 @@
 - A result counts only when its title names that show, that season and that episode and nothing more,
   and it meets the show's settings: quality, codec, English only, musts, forbidden and the refused
   releases.
-- A result that its indexer dates more than a week before the episode aired does not count: another
-  programme of the same title answers the same search with older results. A result with no date counts
-  as its title says.
+- A result that any indexer dates more than a week before the episode aired does not count, on any
+  indexer that lists the same torrent: another programme of the same title answers the same search with
+  older results.
+- Where the name sources answered the episode with release names published long before it aired, another
+  programme of the same title is known, and only a result with a date counts. Otherwise a result with no
+  date counts as its title says.
 - The results that count are merged by hash, grouped by the wishes they carry — the group carrying the
   most wishes first — and the winner of a group is chosen and handed over as for a release name.
 - A result's own title is the release name it is downloaded under.

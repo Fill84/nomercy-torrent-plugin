@@ -219,6 +219,112 @@ public class ByShowAndEpisodeTests
         Assert.All(fetch.Asked, address => Assert.Contains("/search", address.AbsolutePath, StringComparison.Ordinal));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent any indexer dates too old is left out wherever it is listed.</strong> On 17 September
+    /// 2026, with 0.6.2 in, LimeTorrents listed the 2015 Dark Matter's
+    /// <c>Dark Matter S02E04 We Were Family 1080p TrueHD 5 1 AVC REMUX-FraMeSToR</c> with no date, and it was
+    /// grabbed for the 2024 programme's S02E04 a third time. The Pirate Bay lists the same torrent — the same
+    /// info hash, <c>FD77A7E3…</c> — dated 6 February 2026.
+    /// </para>
+    /// <para>
+    /// A torrent is uploaded once. Any indexer that dates it is dating it for all of them.
+    /// </para>
+    /// <para>
+    /// <strong>And where another programme of the same name is known, an undated result is not taken.</strong>
+    /// The same LimeTorrents page lists <c>Dark Matter S02E04 1080p WEB x264-FaiLED[PRiME]</c>, another 2015
+    /// release, dated by no indexer at all. The name sources answered this episode with nothing but names from
+    /// 2016 to 2023: there is an older Dark Matter, and a result with no date cannot be told from its episodes.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentAnyIndexerDatesTooOldIsLeftOutWhereverItIsListed()
+    {
+        FakeFetch fetch = new FakeFetch()
+            .AnswersAnything(string.Empty)
+            .Answers("https://api.predb.net/feed/?q=Dark+Matter+S02E04", Capture.Fixture("names-predbnet-search-dark-matter-s02e04.xml"))
+            .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
+            .Answers(IndexerSites.Words(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
+            .Answers(IndexerSites.Exact(LimeTorrents, "Dark Matter S02E04"), Capture.Fixture("fallback-limetorrents-dark-matter-s02e04.html"))
+            .Answers(IndexerSites.Words(LimeTorrents, "Dark Matter S02E04"), Capture.Fixture("fallback-limetorrents-dark-matter-s02e04.html"));
+
+        ActivityJournal journal = new();
+        FakeTorrentEngine engine = new();
+
+        SearchCycle cycle = new(
+            NameSourceSites.Over(fetch, journal),
+            IndexerSites.Finding(fetch, sources: [LimeTorrents, IndexerSites.ThePirateBay], journal: journal),
+            journal,
+            new Grab(engine, new EndlessDisk(null), journal));
+
+        CycleReport report = await cycle.RunAsync(
+            [DarkMatter2024],
+            new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.False(outcome.HandedOver, outcome.Release);
+        Assert.Empty(engine.Taken);
+    }
+
+    /// <remarks>
+    /// The date one indexer gives a torrent holds for every listing of it, even with no name source to show
+    /// another programme of the title. With no names at all, LimeTorrents' undated listing of FraMeSToR's remux
+    /// is still left out, because The Pirate Bay dates the same info hash February 2026.
+    /// </remarks>
+    [Fact]
+    public async Task AnUndatedListingOfATorrentAnotherIndexerDatesTooOldIsLeftOut()
+    {
+        FakeFetch fetch = new FakeFetch()
+            .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
+            .Answers(IndexerSites.Words(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
+            .Answers(IndexerSites.Exact(LimeTorrents, "Dark Matter S02E04"), Capture.Fixture("fallback-limetorrents-dark-matter-s02e04.html"))
+            .Answers(IndexerSites.Words(LimeTorrents, "Dark Matter S02E04"), Capture.Fixture("fallback-limetorrents-dark-matter-s02e04.html"));
+
+        ActivityJournal journal = new();
+        FakeTorrentEngine engine = new();
+
+        SearchCycle cycle = new(
+            new FixedNames(),
+            IndexerSites.Finding(fetch, sources: [LimeTorrents, IndexerSites.ThePirateBay], journal: journal),
+            journal,
+            new Grab(engine, new EndlessDisk(null), journal));
+
+        await cycle.RunAsync([DarkMatter2024], new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"), CancellationToken.None);
+
+        Assert.DoesNotContain(engine.Taken, one => one.Source.Contains("FD77A7E3EE956D3D1DE9B3BBF0DE99D7047F6A24", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <remarks>
+    /// The other half: with no sign of another programme of the same name, an undated result counts as its
+    /// title says. LimeTorrents writes no dates, and South Park S15E12's CtrlHD was taken from it.
+    /// </remarks>
+    [Fact]
+    public async Task WithNoOtherProgrammeOfTheNameAnUndatedResultStillCounts()
+    {
+        FakeFetch fetch = new FakeFetch()
+            .AnswersAnything(string.Empty)
+            .Answers(IndexerSites.Exact(LimeTorrents, "South Park S15E12"), Capture.Fixture("fallback-limetorrents-south-park-s15e12.html"))
+            .Answers(IndexerSites.Words(LimeTorrents, "South Park S15E12"), Capture.Fixture("fallback-limetorrents-south-park-s15e12.html"));
+
+        ActivityJournal journal = new();
+        FakeTorrentEngine engine = new();
+
+        SearchCycle cycle = new(
+            NameSourceSites.Over(fetch, journal),
+            IndexerSites.Finding(fetch, sources: [LimeTorrents], journal: journal),
+            journal,
+            new Grab(engine, new EndlessDisk(null), journal));
+
+        CycleReport report = await cycle.RunAsync(
+            [SouthPark],
+            new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        Assert.True(Assert.Single(report.Outcomes).HandedOver);
+    }
+
     private static readonly TrackedEpisode DarkMatter2024 =
         new(new(196322, 2, 4), "Dark Matter", 2024, LibraryKind.Television, null, new DateOnly(2026, 9, 17), EpisodeState.Missing);
 

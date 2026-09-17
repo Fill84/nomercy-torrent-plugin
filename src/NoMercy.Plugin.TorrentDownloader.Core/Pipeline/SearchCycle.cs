@@ -204,6 +204,7 @@ public sealed class SearchCycle(
             EpisodeOutcome outcome = await LookAsync(
                 episode,
                 candidates,
+                taken.HasNamesake(episode.Key),
                 decisions,
                 options,
                 trackers,
@@ -235,6 +236,7 @@ public sealed class SearchCycle(
     private async Task<EpisodeOutcome> LookAsync(
         TrackedEpisode episode,
         IReadOnlyList<string> candidates,
+        bool namesake,
         Decisions decisions,
         CycleOptions options,
         List<string> trackers,
@@ -279,7 +281,7 @@ public sealed class SearchCycle(
 
             // indexer-search.md § When no release name gives a torrent: the show and
             // episode, and the best result that names it and meets the show's settings.
-            if (await ByEpisodeAsync(episode, decisions, options, subject, trackers, refused, asked, ct) is EpisodeOutcome found)
+            if (await ByEpisodeAsync(episode, namesake, decisions, options, subject, trackers, refused, asked, ct) is EpisodeOutcome found)
             {
                 return found;
             }
@@ -313,6 +315,7 @@ public sealed class SearchCycle(
     /// </remarks>
     private async Task<EpisodeOutcome?> ByEpisodeAsync(
         TrackedEpisode episode,
+        bool namesake,
         Decisions decisions,
         CycleOptions options,
         string subject,
@@ -328,7 +331,8 @@ public sealed class SearchCycle(
             title => decisions.JudgeName(ReleaseName.Parse(title), episode).Accepted,
             options.Blacklisted,
             asked,
-            ct);
+            ct,
+            datedOnly: namesake);
 
         trackers.AddRange(ranked.SelectMany(torrent => torrent.Torrent.Trackers));
 

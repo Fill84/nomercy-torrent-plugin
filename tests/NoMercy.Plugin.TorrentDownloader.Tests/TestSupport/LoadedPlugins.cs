@@ -30,9 +30,12 @@ public sealed class LoadedPlugins(IPlugin plugin) : IPluginManager
         return plugin is T only ? [only] : [];
     }
 
+    /// <summary>What the manager says is installed; nothing unless a test says otherwise.</summary>
+    public IReadOnlyList<PluginInfo> Installed { get; init; } = [];
+
     public IReadOnlyList<PluginInfo> GetInstalledPlugins()
     {
-        return [];
+        return Installed;
     }
 
     public Task InstallPluginAsync(string packageUrl, CancellationToken ct = default)

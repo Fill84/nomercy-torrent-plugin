@@ -64,6 +64,11 @@
 - A name source whose feed or search fails gives no release names in that run, and the run carries on.
 - Stop ends the run. Downloads already offered to the download client carry on.
 
+## After an update
+
+- When the plugin is updated through the catalogue while the server runs, the server serves the updated
+  plugin's endpoints, so every button on the plugin's pages keeps working without a restart.
+
 ## What the plugin deletes
 
 - The plugin deletes only files and folders it created itself.

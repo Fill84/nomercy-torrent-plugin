@@ -69,6 +69,25 @@ public sealed class FeedNamesTaken(IReadOnlyDictionary<EpisodeKey, IReadOnlyList
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _failed = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<EpisodeKey, bool> _namesakes = new();
+
+    /// <summary>Whether a name source answered this episode with names another programme of its title published.</summary>
+    /// <remarks>
+    /// Names published long before the episode aired are the proof that an older programme shares the title:
+    /// Dark Matter S02E04 is answered with the 2015 programme's names from 2016 to 2023. Where that is so, a
+    /// result that carries no date cannot be told apart from that programme's.
+    /// </remarks>
+    public bool HasNamesake(EpisodeKey episode)
+    {
+        return _namesakes.ContainsKey(episode);
+    }
+
+    /// <summary>Writes down that this episode's names include an older programme's of the same title.</summary>
+    public void Namesake(EpisodeKey episode)
+    {
+        _namesakes[episode] = true;
+    }
+
     /// <summary>No names, and nothing failed: a fresh one each time, because a run writes into it.</summary>
     public static FeedNamesTaken None => new(new Dictionary<EpisodeKey, IReadOnlyList<SourceName>>());
 
@@ -145,7 +164,13 @@ public sealed class NameSources(
         // is the only thing that slows anything, and it does that per host.
         (SourceName[] Names, bool Failed)[] read = await Task.WhenAll(feeds.Select(feed => ReadFeedAsync(feed, ct)));
 
-        FeedNamesTaken taken = new(Take([.. read.SelectMany(one => one.Names)], episodes));
+        HashSet<EpisodeKey> namesakes = [];
+        FeedNamesTaken taken = new(Take([.. read.SelectMany(one => one.Names)], episodes, namesakes));
+
+        foreach (EpisodeKey namesake in namesakes)
+        {
+            taken.Namesake(namesake);
+        }
 
         for (int at = 0; at < feeds.Length; at++)
         {
@@ -181,7 +206,8 @@ public sealed class NameSources(
     /// </remarks>
     private static Dictionary<EpisodeKey, IReadOnlyList<SourceName>> Take(
         IReadOnlyList<SourceName> names,
-        IReadOnlyList<TrackedEpisode> episodes)
+        IReadOnlyList<TrackedEpisode> episodes,
+        HashSet<EpisodeKey> namesakes)
     {
         TrackedEpisode[] searched = [.. episodes.Where(episode => episode.State == EpisodeState.Missing)];
         Dictionary<EpisodeKey, IReadOnlyList<SourceName>> taken = [];
@@ -197,6 +223,11 @@ public sealed class NameSources(
 
             IReadOnlySet<string> tooOld = SourceName.TooOld(naming, episode);
             SourceName[] named = [.. naming.Where(name => !tooOld.Contains(name.Title))];
+
+            if (tooOld.Count > 0)
+            {
+                namesakes.Add(episode.Key);
+            }
 
             if (named.Length > 0)
             {
@@ -280,6 +311,8 @@ public sealed class NameSources(
 
         if (tooOld.Count > 0)
         {
+            taken.Namesake(episode.Key);
+
             journal.Noted(
                 ActivityStage.Names,
                 subject,

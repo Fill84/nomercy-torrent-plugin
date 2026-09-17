@@ -347,6 +347,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             if (string.Equals(loaded.PluginId, PluginIdentity.IdText, StringComparison.OrdinalIgnoreCase))
             {
+                // Before anything else: the buttons. An update through the catalogue left the server serving
+                // the controllers of the copy it started with, and every button refused (see OwnEndpoints).
+                _ = Task.Run(ServeOwnEndpoints, CancellationToken.None);
+
                 _ = Task.Run(() => StartUpAsync(Lifetime), CancellationToken.None);
             }
 
@@ -1033,6 +1037,28 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private void StartTransfers()
     {
         _ = Task.Run(() => TransfersGuardedAsync(Lifetime), CancellationToken.None);
+    }
+
+    /// <summary>Has the server serve this copy's endpoints, and never takes the plugin down doing it.</summary>
+    /// <remarks>
+    /// A server that hands out no container — a test, or a host that never gives one — has nothing to do this
+    /// with, and the plugin works as it always did.
+    /// </remarks>
+    private void ServeOwnEndpoints()
+    {
+        if (_context is not IPluginContext context)
+        {
+            return;
+        }
+
+        try
+        {
+            new OwnEndpoints(context.Services, context.Logger).ServeCurrent(PluginIdentity.Id);
+        }
+        catch (Exception wrong)
+        {
+            context.Logger.LogDebug("The plugin's endpoints were not checked: {Reason}", wrong.Message);
+        }
     }
 
     /// <summary>
