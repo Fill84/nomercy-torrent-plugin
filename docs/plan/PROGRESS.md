@@ -2287,6 +2287,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 ## Decisions
 
+- **17 September 2026, the owner: CI runs for a release and for nothing else, and runs no tests.**
+  `.forgejo/workflows/build.yml` fires on a `v*` tag only — no push to master, no pull request, no
+  dispatch — and builds, checks the format, packages and publishes. Every test runs before each commit on
+  the developer's machine, as the working agreement already requires. The shared runner had failed
+  master runs on tests waiting on sockets and a browser under load, never on a fault in a release.
+
 Anything decided that the specs did not already say. If a decision contradicts a spec, fix the spec
 and note it here.
 

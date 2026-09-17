@@ -1,8 +1,8 @@
 name: build
 
-# Builds this plugin, runs every gate the working agreement names, packages a
-# folder that can be dropped into a server's plugins directory, and on a `v*`
-# tag publishes it to both forges.
+# Builds a release of this plugin, packages a folder that can be dropped into a
+# server's plugins directory, and publishes it to both forges. It runs for a `v*`
+# tag and for nothing else.
 #
 # Why a release is never made by hand: the two remotes are meant to be identical
 # and they drifted the moment a person was doing the publishing — 0.2.0 went to
@@ -10,29 +10,20 @@ name: build
 # the trigger and scripts/publish-release.sh is the only thing that publishes.
 
 on:
-  # Master and versions, and nothing else. A run costs two or three minutes of
-  # a machine somebody else may be waiting for, so a push that cannot break
-  # anything should not start one.
+  # **A release, and nothing else** — the owner's rule of 17 September 2026. A run
+  # on every push to master was ten to fifteen minutes of a shared machine for a commit
+  # nobody was releasing, and the tests are run before every commit on the
+  # developer's own machine, where the working agreement puts them.
   #
-  # **The branch list is named, never a glob.** `branches: ['**']` beside this
-  # same `tags:` line was accepted, ran on every branch push, and silently never
-  # fired for a tag — so a version could be pushed to both forges with CI green
-  # and no release built anywhere. The named form below is the one this runner
-  # has actually fired a tag from.
+  # **The tag list is named, never a glob of branches beside it.** `branches:
+  # ['**']` next to a `tags:` line was accepted, ran on every branch push, and
+  # silently never fired for a tag.
   #
   # **There are no `paths` filters and there must not be.** A path filter is
   # evaluated for a tag push too, so a release whose commit touched only
-  # documentation would be skipped without a word. To skip a run deliberately,
-  # put `[skip ci]` in the commit message — said out loud, in the commit, where
-  # the next reader sees it.
+  # documentation would be skipped without a word.
   push:
-    branches: [master]
     tags: ['v*']
-
-  # A branch that is not master is tested when it is proposed, not on every
-  # commit somebody saves.
-  pull_request:
-  workflow_dispatch:
 
 # No `permissions:` block. It is GitHub Actions syntax, Forgejo ignores it, and
 # it warns on every single run that it has — a warning that is always there is a
@@ -140,12 +131,15 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      # The three gates of the working agreement, in its own words and its own order.
+      # The build and the format gate, which answer the same on every machine.
+      #
+      # **No test step**, on the owner's word of 17 September 2026: every test is
+      # run before the commit that is tagged, on the developer's own machine. On
+      # this shared runner a test that waits on a network socket or a browser
+      # took thirty seconds where it takes one, and a release failed for a
+      # machine being busy rather than for anything in the release.
       - name: Build
         run: dotnet build -c Release -warnaserror --no-restore
-
-      - name: Test
-        run: dotnet test -c Release --no-build --logger "console;verbosity=normal"
 
       - name: Format
         run: dotnet format --verify-no-changes
