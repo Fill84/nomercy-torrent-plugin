@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.7.0",
+          "targetAbi": "12.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.7.0/NoMercy.Plugin.TorrentDownloader-0.7.0.zip",
+          "checksum": "ae24a10caa33c15392822c6b3a9a77701caa505893a214e0c1c5fc0bedfeabae",
+          "changelog": "The plugin loads again on the media server's plugin contract 12.",
+          "timestamp": "2026-09-22T13:49:15Z"
+        },
+        {
           "version": "0.6.6",
           "targetAbi": "10.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.6.6/NoMercy.Plugin.TorrentDownloader-0.6.6.zip",
