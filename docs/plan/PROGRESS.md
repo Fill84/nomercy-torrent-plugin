@@ -768,6 +768,11 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **FiLL/nomercy-torrent-plugin#1, 22 September 2026: no route into the server outside the SDK.** `OwnEndpoints`
+  and the container overload of `LivePlugin.Of` are removed; a stale controller now leaves the server's routes
+  alone and asks for a restart (`StaleControllerTests`, seen red first). Everything else #1 asked for landed in
+  0.7.0 (`3806748`, `47510cf`) and loads on beast-unit's server ABI 12.1.
+
 - **`S12-09` One Save, and a list that keeps what is stored.** The owner saw the page `S12-07` built
   and asked for one Save button for every setting. That reverses their own decision of the same
   week, so `docs/plan/DESIGN-2026-09-12-settings-and-pages.md` is corrected rather than
@@ -2323,6 +2328,16 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **22 September 2026, the owner: the plugin does not re-attach its own endpoints.** FiLL/nomercy-torrent-plugin#1
+  asks that every route a plugin has into the server be one the owner can see and revoke, and says a raw
+  container "hands out anything and shows the owner nothing". After contract 12 the stale controller still
+  took the server's `NoMercy.Api.Plugins.PluginApplicationPartRegistrar` — not an SDK type — out of
+  `HttpContext.RequestServices` by name and called `Detach` and `Attach` through reflection. The owner chose to
+  remove it (`OwnEndpoints` is gone) rather than keep it until media-server #60 is fixed. So point **(3)** of
+  the entry below is reversed: after an update while the server runs, every button answers "Restart the
+  server" until it is restarted (`docs/specs/run.md` § After an update). `IPluginManager` in the controllers
+  stays: it is in the SDK, and the server's own controllers reach a plugin the same way.
 
 - **22 September 2026: plugin contract 12, and what it took.** The media server renamed its SDK to
   `NoMercy.PluginSdk.*`, moved the contract to 12.0, and refuses every plugin under it — beast-unit's log

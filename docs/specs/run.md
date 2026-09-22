@@ -78,10 +78,11 @@
 ## After an update
 
 - When the plugin is updated through the catalogue while the server runs, the server goes on serving the
-  endpoints of the copy it started with (media-server #60). The first press of any button after the update
-  has the server serve the updated copy's endpoints and answers "press it again"; from the second press on,
-  every button works without a restart. The pages themselves are drawn by the updated copy from the first
-  fetch.
+  endpoints of the copy it started with (media-server #60). Until the server is restarted, every button
+  answers that the plugin was updated while the server ran and that a restart puts it right. The plugin
+  does not re-attach its endpoints itself: that reaches the server's own registrar outside the SDK, which
+  FiLL/nomercy-torrent-plugin#1 rules out. The pages themselves are drawn by the updated copy from the
+  first fetch.
 - An update whose manifest asks for more than the owner approved before — the encoder, from 0.7.0 — loads
   disabled until the owner approves it once more on the plugin's page. The server asks; the plugin cannot.
 

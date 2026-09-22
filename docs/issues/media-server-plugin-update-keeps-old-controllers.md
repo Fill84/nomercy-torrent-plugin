@@ -111,9 +111,10 @@ without one (`CarriesControllers`). The test assembly itself has one already (th
    "They are the same class from two load contexts, which is what an update loaded beside the old copy leaves
    behind". After the fix: it works, and the log shows "Attached controllers from plugin …" a second time.
 
-## Why the plugin works around it for now
+## The plugin no longer works around it
 
-Until this is in, the torrent plugin (from 0.6.4) does the same thing itself when it is loaded: it resolves
-`PluginApplicationPartRegistrar` from the container by name, and calls `Detach` and `Attach` when
-`OwnerOf(runningAssembly)` is not its own id (`src/NoMercy.Plugin.TorrentDownloader/Hosting/OwnEndpoints.cs`).
-That workaround becomes a no-op once the server does it, and can then be removed from the plugin.
+From 0.6.4 to 0.7.0 the torrent plugin did this itself: it resolved `PluginApplicationPartRegistrar` from the
+server's container by name and called `Detach` and `Attach` when `OwnerOf(runningAssembly)` was not its own
+id. On 22 September 2026 that was removed, because it is a route into the server outside the SDK that the
+owner can neither see nor revoke (FiLL/nomercy-torrent-plugin#1). Until this issue is fixed, a plugin
+updated while the server runs answers every button with "Restart the server", and a restart puts it right.

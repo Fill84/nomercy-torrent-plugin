@@ -68,7 +68,7 @@ gone:
 | `EncodingStarted/Completed/FailedEvent` on the bus | `Context.Jobs.StatusAsync(jobId)` on every transfers pass, by the id `EncodeAsync` handed back, kept with the grab (`encode_jobs`) |
 | `LibraryScanCompletedEvent` on the bus | Nothing. `Library.Watch` exists but is refused by name on an in-process plugin; the run interval covers a scan (`docs/specs/run.md`) |
 | `PluginLoadedEvent` on the bus | Nothing. The plugin starts itself off the `Initialize` thread and again when the folders are saved |
-| `PluginApplicationPartRegistrar` from the container, to re-attach the buttons after an update | The same registrar, from the request's own container, by the stale controller that meets the update (`LivePlugin`) |
+| `PluginApplicationPartRegistrar` from the container, to re-attach the buttons after an update | Nothing. Reaching the registrar at all is a route into the server outside the SDK (FiLL/nomercy-torrent-plugin#1); a stale controller answers that a restart puts it right (`LivePlugin`), until media-server #60 has the server attach an updated copy itself |
 | `IInboxMetadataProbe` and `ShowImportJob` from the container, to add a show the owner does not have | Nothing. A pack for such a show is left where it is and the History names the show to add |
 | `IPluginStorage.LocationsAsync` from the container, for the folder refusal | `Context.Server.GrantedPaths` |
 

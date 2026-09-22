@@ -78,7 +78,7 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
 
     private async Task<IActionResult> View(string route, CancellationToken ct)
     {
-        if (LivePlugin.Of(plugins, HttpContext.RequestServices, PluginId, out string refusal) is not TorrentDownloaderPlugin plugin)
+        if (LivePlugin.Of(plugins, PluginId, out string refusal) is not TorrentDownloaderPlugin plugin)
         {
             return NotFound(refusal);
         }

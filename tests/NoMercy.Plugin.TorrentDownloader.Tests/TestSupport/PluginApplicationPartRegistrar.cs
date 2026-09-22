@@ -1,8 +1,9 @@
 using System.Reflection;
 using NoMercy.PluginSdk.Abstractions;
 
-// The server's own name for it, because that is what the plugin looks it up by. Only the members the plugin
-// calls are here, with the server's signatures: OwnerOf, Attach and Detach.
+// The server's own name for it, so a container handing it to a stale controller hands over exactly what the
+// server's would, and a test can prove the plugin leaves it alone. Only the members a plugin could reach are
+// here, with the server's signatures: OwnerOf, Attach and Detach.
 namespace NoMercy.Api.Plugins;
 
 /// <summary>Stands in for the media server's registrar of plugin controllers.</summary>
