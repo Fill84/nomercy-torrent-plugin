@@ -2962,6 +2962,17 @@ and note it here.
 
 Kept here so no slice re-discovers them.
 
+- **Two tests still end on a clock, measured over five full runs on 22 September 2026.** Each failed once
+  and passed on every other run, and neither has anything to do with what the run was testing.
+  `ARunSaysItIsRunningTests.StopPressedTheMomentRunWasPressedStopsThatRun` presses Run and Stop with no
+  await between them; under load the background task is past
+  `cycle.Token.ThrowIfCancellationRequested()` before Stop cancels, the run ends Finished over the empty
+  library, and the bar says "last run finished at" rather than "stopped at" — the sister test at
+  `ARunSaysItIsRunningTests.cs:150` already accepts either. `DownloadsControllerTests.SearchingAnEpisodeItIsTrackingStartsAndDoesNotBelongToTheCaller`
+  answers "unknown" when the start `Settings.Saved` fires (`TorrentDownloaderPlugin.cs:379`, since
+  `47510cf`) is still running. Both are the test leaning on timing, not the plugin: a release is not held
+  for them, and the fix is to end each on a fact.
+
 - **Plugin contract 12, read at `origin/dev` `9643da457` on 22 September 2026.** `PluginAbi.Current`
   and `Oldest` are both 12.0; `IsCompatible` refuses any major under `Oldest` and any minor above
   `Current`, and a missing `targetAbi` passes. Verification runs ABI, checksum and signature stages; a
