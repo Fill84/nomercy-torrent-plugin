@@ -196,8 +196,11 @@ and a job that ends with nothing to encode: the library folder not found, no pre
 already encoded. Both read as Finished here, which is right — the library is the proof.
 
 So the library decides. A grab waiting on an encode is closed by the pass that finds its episode in the
-library; a pass runs on start, when the folders are saved, when a download finishes, and on the transfers
-cadence — and the encoder's word is what keeps a staged file the server is still reading from the sweep.
+library; a pass runs on start, when the folders are saved, when a download finishes, and — while any grab
+waits on an encode — every minute (`TorrentDownloaderPlugin.EncodeCheckInterval`). The encoder's word is
+what keeps a staged file the server is still reading from the sweep. Found on 22 September 2026: Lioness
+S03E08 registered at 12:41 and still "encoding" an hour on, because the first build on contract 12 had no
+pass come round on its own.
 It is never given up on by a clock and never asked for a second time — the owner's ruling of
 14 September 2026, replacing a six-hour give-up that put the episode back to missing and downloaded it
 again, and a re-dispatch after every restart that put a second job in a queue that had kept the first.

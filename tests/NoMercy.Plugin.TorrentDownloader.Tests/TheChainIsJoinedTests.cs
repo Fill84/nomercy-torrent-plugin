@@ -108,6 +108,16 @@ public sealed class TheChainIsJoinedTests : IDisposable
     /// <para>
     /// A book, whole on disk, so nothing is waited for but the refusal itself.
     /// </para>
+    /// <para>
+    /// <strong>And the refusal may come before the grab exists.</strong> The
+    /// client takes the torrent before the row is written, and a plugin on
+    /// contract 12 starts itself, so a pass can run in that gap: it finds a
+    /// torrent the store does not know, stops it, and the row written a moment
+    /// later answers for nothing the client holds. On 22 September 2026 this
+    /// test timed out that way under the full suite, once. Adding by hand asks
+    /// for a pass once the row is written, which puts the torrent back and lets
+    /// the refusal reach a grab that can take it.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task ATorrentTheClientGivesUpOnIsFailedWithoutAnythingAsking()
@@ -497,6 +507,98 @@ public sealed class TheChainIsJoinedTests : IDisposable
         Assert.True(saved.Saved, string.Join("; ", saved.Errors));
 
         Assert.Equal(GrabState.Done, await UntilDoneAsync(grabs, hash));
+        Assert.False(File.Exists(staged), "the copy the encoder had finished with was left in the intake folder.");
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A grab waiting on an encode is asked about again on its own.</strong>
+    /// On 22 September 2026 Lioness S03E08 was encoded, registered in the
+    /// library at 12:41 and still read "encoding" on the Downloads page an hour
+    /// later: a plugin on contract 12 hears no encode end, and nothing started a
+    /// pass — a pass ran when a download finished, on a start, and on nothing
+    /// else. So while a grab waits on an encode, a pass comes round by itself,
+    /// and the one that finds the episode in the library closes the grab.
+    /// </para>
+    /// <para>
+    /// Here the first pass finds the job running and the episode absent; then
+    /// the server says the job finished and the library has the episode, and
+    /// nobody presses anything.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AGrabWaitingOnAnEncodeIsAskedAboutAgainOnItsOwn()
+    {
+        string incomplete = Path.Combine(_folder, "incomplete");
+        string intake = Path.Combine(_folder, "intake");
+
+        Directory.CreateDirectory(incomplete);
+        Directory.CreateDirectory(intake);
+
+        string staged = Path.Combine(intake, "Silo.2023.S03E06.1080p.WEB.H264-CAKES.mkv");
+        await File.WriteAllTextAsync(staged, "the copy the encoder is reading");
+
+        const string hash = "0123456789ABCDEF0123456789ABCDEF01234567";
+        EpisodeKey episode = new(41, 3, 6);
+
+        Store database = new(_folder);
+        await database.MigrateAsync(CancellationToken.None);
+        GrabRepository grabs = new(database);
+
+        await grabs.RecordAsync(
+            episode, "Silo", "Silo.2023.S03E06.1080p.WEB.H264-CAKES", "1337x", hash,
+            $"magnet:?xt=urn:btih:{hash}", [episode], DateTimeOffset.UtcNow, CancellationToken.None);
+        await grabs.StagedAsync(hash, [staged], CancellationToken.None);
+        await grabs.EncodeAsync(hash, episode, "01KZGKX2G0966V80H26EKGG5T1", CancellationToken.None);
+        await grabs.StateAsync(hash, GrabState.Dispatched, CancellationToken.None);
+
+        FakeLibraryQuery shelves = new FakeLibraryQuery()
+            .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
+            .Show(41, "Silo", "01HQ5W4AVF30N10RT6XCF6AJHM", 2023, folder: "/Silo.(2023)")
+            .Episode(41, 3, 6, "The Getaway", new DateTime(2020, 1, 1), hasFile: false)
+            .Episode(41, 1, 1, "Freedom Day", new DateTime(2019, 1, 1), hasFile: true);
+
+        FakeJobs jobs = new FakeJobs().Says("01KZGKX2G0966V80H26EKGG5T1", PluginJobState.Running);
+
+        using TorrentDownloaderPlugin plugin = new()
+        {
+            // Seconds rather than the minute a server gets: what is under test
+            // is that a pass comes round at all, not how long the owner waits.
+            EncodeCheckInterval = TimeSpan.FromMilliseconds(200),
+        };
+
+        plugin.Initialize(new FakePluginContext
+        {
+            DataFolderPath = _folder,
+            Shelves = shelves,
+            Permits = new FakeGrants(),
+            Encodes = new FakeEncoder(),
+            Jobs = jobs,
+        });
+
+        Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
+        settings.Client.ListenPort = 0;
+
+        SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+        Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+
+        // The first pass asks and finds the job running; the grab waits.
+        DateTimeOffset askedBy = DateTimeOffset.UtcNow + Hang.Limit;
+
+        while (jobs.Asked.Count == 0 && DateTimeOffset.UtcNow < askedBy)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50));
+        }
+
+        Assert.NotEmpty(jobs.Asked);
+        Assert.Equal(GrabState.Dispatched, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+
+        // The encode ends and the library gains the episode. Nobody presses anything.
+        jobs.Says("01KZGKX2G0966V80H26EKGG5T1", PluginJobState.Finished);
+        shelves.Episode(41, 3, 6, "The Getaway", new DateTime(2020, 1, 1), hasFile: true);
+
+        Assert.Equal(GrabState.Done, await UntilDoneAsync(grabs, hash));
+        Assert.True(jobs.Asked.Count >= 2, "the grab was asked about once and never again.");
         Assert.False(File.Exists(staged), "the copy the encoder had finished with was left in the intake folder.");
     }
 

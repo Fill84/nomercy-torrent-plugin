@@ -58,6 +58,9 @@
 - An encode is asked for each staged video. The grab is done once the library has the episode, or holds
   a file named for the episode under another episode and the server has not said the encode is still
   running. The server says nothing about an encode it skips because every output already exists.
+- While a grab waits on an encode, the plugin looks every minute at what the server made of it and at
+  the library, and the look that finds the episode closes the grab. A plugin with nothing waiting looks
+  at nothing.
 - A grab whose staged files are gone for every episode not yet in the library, while the server does
   not say an encode is running, fails, and its episodes are searched for again.
 - An episode whose file is in the library under its own name is not missing, whichever episode the
