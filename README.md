@@ -157,18 +157,20 @@ dotnet test
 dotnet format --verify-no-changes
 ```
 
-`fetch-abstractions` clones the media server into `_server/` — shallow, sparse, branch **`master`** —
-and packs four projects into `_nupkgs/`: `NoMercy.Plugins.Abstractions`, `NoMercy.Plugins.Mvc`, and the
-`NoMercy.Design` and `NoMercy.Events` the first of those depends on. It clears their entries in the
-global NuGet cache first, because a repack of the same version number is otherwise ignored and nothing
-says so.
+`fetch-abstractions` clones the media server into `_server/` — shallow, sparse, branch **`dev`** — and
+packs the plugin contract into `_nupkgs/`: `NoMercy.PluginSdk.Abstractions` (which carries
+`NoMercy.Events` and `NoMercy.Design` inside it) and `NoMercy.PluginSdk.Mvc`, at the contract's own
+version, `12.x`. It clears their entries in the global NuGet cache first, because a repack of the same
+version number is otherwise ignored and nothing says so.
 
-**`master`, never `dev`.** `dev`'s version is pinned at `0.1.404` and never moves, so packing from it
-gives a contract older than released servers carry, and the build fails with a `CS0246` naming a type
-— which reads like a missing `using` and is really a server too old.
+**`dev`, since contract 12.** The contract is versioned on its own now (`PluginPackageVersion`), so the
+frozen server version that once made `dev` unusable for this no longer matters — and `master` sits on a
+release from August carrying ABI 11, which the servers this plugin is installed on refuse. The packages
+reach nuget.org with a server release, after which the script is a fallback.
 
-Run it again after the media server's contract moves; it prints the version it packed and warns if
-`NoMercyContractVersion` in `Directory.Build.props` still asks for another one.
+Run it again after the media server's contract moves; it prints the version it packed. The build asks
+for `12.*` (`NoMercyContractVersion` in `Directory.Build.props`), so a new minor is taken up on the next
+restore and a new major is refused until somebody reads what it changed.
 
 The version lives in `Directory.Build.props`, `plugin.json` and `PluginIdentity`, and a test holds the
 three together.

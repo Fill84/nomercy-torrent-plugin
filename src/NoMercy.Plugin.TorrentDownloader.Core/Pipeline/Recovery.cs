@@ -94,6 +94,22 @@ public sealed record StoredDownload(string InfoHash, string Magnet, string Relea
     public IReadOnlyList<string> StagedPaths { get; init; } = [];
 
     /// <summary>
+    /// What the server called the encode it queued for each episode, once one
+    /// has been asked for.
+    /// </summary>
+    /// <remarks>
+    /// The one handle a plugin on contract 12 has on what became of an encode:
+    /// <c>IPluginJobs</c> answers for this id and hears no event. Kept with the
+    /// grab because the case worth answering is the one memory cannot — the
+    /// plugin restarts, the grab is still dispatched, and nothing knows whether
+    /// the job it asked for is running or went with the queue. An episode with
+    /// no entry was dispatched by a server that named no job, or before this
+    /// was kept, and nothing can be asked about it.
+    /// </remarks>
+    public IReadOnlyDictionary<EpisodeKey, string> EncodeJobs { get; init; } =
+        new Dictionary<EpisodeKey, string>();
+
+    /// <summary>
     /// Where it downloads, when that is not the folder every torrent uses.
     /// </summary>
     /// <remarks>

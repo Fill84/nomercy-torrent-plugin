@@ -168,17 +168,25 @@ Three things a test must keep true, because each has broken before:
 
 ## Building against the contract
 
-`NoMercy.Plugins.Abstractions` is not on nuget.org. `scripts/fetch-abstractions.*` clones the media
-server (sparse, shallow, branch **`master`**) and packs the contract locally into `_nupkgs/`.
+The contract is `NoMercy.PluginSdk.Abstractions` and `NoMercy.PluginSdk.Mvc`, version `12.*` — the major
+pinned, the minor floating, as the server's own plugin template does. The server publishes them to
+nuget.org with a release; until one carrying the renamed contract has shipped, they are not there, and
+`scripts/fetch-abstractions.*` clones the media server (sparse, shallow, branch **`dev`**) and packs them
+locally into `_nupkgs/`.
 
-**`master`, never `dev`.** `dev` carries a fixed `0.1.404` that never moves, so packing from it gives
-a contract older than the one released servers ship — and the build then fails with a `CS0246` naming
-a type, which reads like a missing `using` and is really a server too old. This plugin is installed
-on servers running a release, so it compiles against what those servers carry. After
-repacking the same version number, clear that package's NuGet cache entry or the old one is used
-and nothing says so.
+**`dev`, since 22 September 2026.** The contract carries its own `<PluginPackageVersion>` (12.0.0 at the
+time of writing) rather than the server's version, so the reason these scripts refused `dev` — a
+`<Version>` frozen at `0.1.404` that NuGet took for "already have it" — is gone. `master` is where the
+contract is not: it sits on a release from August carrying ABI 11, and the servers the owner and Stoney
+run come from `dev` and refuse anything under 12. After repacking the same version number, the script
+clears that package's NuGet cache entry itself, or the old one is used and nothing says so.
 
-The full exported surface is in `docs/reference/plugin-abi-0.1.479.txt`.
+`NoMercy.Events` and `NoMercy.Design` ship as assemblies inside the Abstractions package and are not
+packed on their own. `NoMercy.PluginSdk.Analyzers` is not referenced: it bans the sockets, files and
+processes an in-process plugin still uses, and taking those behind the facades is work not yet done.
+
+The full exported surface of the previous contract is in `docs/reference/plugin-abi-0.1.479.txt`; what
+changed for this plugin at 12 is in `docs/09-host-contract.md`.
 
 ## Deploying
 

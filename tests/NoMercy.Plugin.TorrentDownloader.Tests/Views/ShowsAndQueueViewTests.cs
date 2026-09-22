@@ -2,7 +2,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Views;
@@ -214,7 +214,7 @@ public class ShowsAndQueueViewTests : IDisposable
 
     private static Task<PluginView> View(TorrentDownloaderPlugin plugin, string route)
     {
-        return plugin.GetViewAsync(new() { Route = route }, CancellationToken.None);
+        return plugin.GetViewAsync(Requests.View(route), CancellationToken.None);
     }
 
     private const string TvLibrary = "01HQ5W4AVF30N10RT6XCF6AJHM";

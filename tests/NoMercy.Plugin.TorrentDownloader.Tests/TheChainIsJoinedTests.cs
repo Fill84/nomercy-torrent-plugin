@@ -1,7 +1,4 @@
 using System.Security.Cryptography;
-using NoMercy.Events.Encoding;
-using NoMercy.Events.Library;
-using NoMercy.Events.Plugins;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
@@ -9,6 +6,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests;
@@ -72,7 +70,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             DataFolderPath = _folder,
             Shelves = shelves,
             Permits = new FakeGrants(),
-            Container = new FakeProvider(),
+            Encodes = new FakeEncoder(),
         });
 
         Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
@@ -135,7 +133,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             DataFolderPath = _folder,
             Shelves = new FakeLibraryQuery(),
             Permits = new FakeGrants(),
-            Container = new FakeProvider(),
+            Encodes = new FakeEncoder(),
         });
 
         Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
@@ -211,7 +209,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             DataFolderPath = _folder,
             Shelves = shelves,
             Permits = new FakeGrants(),
-            Container = new FakeProvider(),
+            Encodes = new FakeEncoder(),
         };
 
         plugin.Initialize(context);
@@ -236,14 +234,8 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
         Assert.Empty(Directory.GetFiles(intake));
 
-        // The server says the plugin has loaded. Nothing else happens.
-        await context.Bus.PublishAsync(new PluginLoadedEvent
-        {
-            PluginId = PluginIdentity.IdText,
-            PluginName = PluginIdentity.Name,
-            Version = "0.0.0",
-        });
-
+        // Nothing else happens: the plugin starts itself, and the client says
+        // the download is whole as it opens.
         DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
         while (Directory.GetFiles(intake).Length == 0 && DateTimeOffset.UtcNow < giveUpAt)
@@ -257,23 +249,38 @@ public sealed class TheChainIsJoinedTests : IDisposable
     }
 
     /// <remarks>
-    /// <c>Initialize</c> does no I/O, because the server is still coming up while
-    /// it runs. What a start owes waits for the server to say the plugin has
-    /// loaded — so nothing is on the disk, and nothing is said in the log,
-    /// until that is published.
+    /// <para>
+    /// <c>Initialize</c> does no I/O and never throws, because the server is still
+    /// coming up while it runs and an exception there marks the plugin
+    /// malfunctioned before it has a page on which to say why. What a start owes
+    /// runs off that thread, on its own — a plugin on contract 12 is told nothing
+    /// by the server once it is loaded, so there is nothing to wait for.
+    /// </para>
+    /// <para>
+    /// Proved on a plugin nobody has configured: <c>Initialize</c> returns, and
+    /// the start — which is what says that no folders are configured — is heard
+    /// from afterwards with nothing else having happened. Nothing is on the disk,
+    /// because a start with nowhere to put a download owes nothing yet.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task NothingIsStartedUntilTheServerSaysThePluginHasLoaded()
+    public async Task InitialiseReturnsAndTheStartRunsOnItsOwn()
     {
         using TorrentDownloaderPlugin plugin = new();
         FakePluginContext context = new() { DataFolderPath = _folder };
 
         plugin.Initialize(context);
 
-        await Task.Delay(TimeSpan.FromMilliseconds(500));
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
 
-        Assert.False(Directory.Exists(_folder), "the plugin touched the disk before the server said it had loaded.");
-        Assert.Empty(context.Log.Lines);
+        while (!context.Log.Lines.Any(line => line.Contains("No folders are configured", StringComparison.Ordinal))
+               && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(50));
+        }
+
+        Assert.Contains(context.Log.Lines, line => line.Contains("No folders are configured", StringComparison.Ordinal));
+        Assert.False(Directory.Exists(_folder), "a plugin with no folders configured touched the disk.");
     }
 
     /// <remarks>
@@ -305,7 +312,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             DataFolderPath = _folder,
             Shelves = shelves,
             Permits = new FakeGrants(),
-            Container = new FakeProvider(),
+            Encodes = new FakeEncoder(),
         };
 
         plugin.Initialize(context);
@@ -337,13 +344,6 @@ public sealed class TheChainIsJoinedTests : IDisposable
         // migration. Migrating starts no cycle.
         _ = await plugin.EpisodesAsync(CancellationToken.None);
 
-        await context.Bus.PublishAsync(new PluginLoadedEvent
-        {
-            PluginId = PluginIdentity.IdText,
-            PluginName = PluginIdentity.Name,
-            Version = "0.0.0",
-        });
-
         CadenceRepository cadences = new(new Store(_folder));
         DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         bool finished = false;
@@ -360,19 +360,22 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
     /// <remarks>
     /// <para>
-    /// <strong>The server saying an encode ended is what closes the grab.</strong>
-    /// The grab here was handed to the encoder; the episode is in the library now
-    /// and the server has said so. Nothing else happens — no tick, no page — and
-    /// the staged copy is taken away and the grab marked done.
+    /// <strong>A start closes a grab whose encode the server says finished.</strong>
+    /// What the store held when the server stopped: a grab handed to the
+    /// encoder, with the job the server named for it. The episode is in the
+    /// library now, and asked by that id the server says the job is done. The
+    /// plugin starts, its first pass asks, and the staged copy is taken away and
+    /// the grab marked done — with nobody pressing anything.
     /// </para>
     /// <para>
-    /// The test beside this one in <c>TorrentDownloaderPluginTests</c> proves the
-    /// pages are told. This proves the work is done, which is the half that
-    /// matters to the owner and the half a missing subscription would lose.
+    /// Asked, not heard: until contract 12 the server's own encoding event drove
+    /// this, and a plugin on 12 has no bus. The job id kept with the grab is the
+    /// one handle left, which is why it is written before the plugin starts here
+    /// — a restart is exactly when memory would have lost it.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task TheServerSayingAnEncodeEndedClosesTheGrab()
+    public async Task AStartClosesAGrabWhoseEncodeTheServerSaysFinished()
     {
         string incomplete = Path.Combine(_folder, "incomplete");
         string intake = Path.Combine(_folder, "intake");
@@ -382,6 +385,21 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
         string staged = Path.Combine(intake, "Silo.2023.S03E06.1080p.WEB.H264-CAKES.mkv");
         await File.WriteAllTextAsync(staged, "the copy the encoder read");
+
+        const string hash = "0123456789ABCDEF0123456789ABCDEF01234567";
+        EpisodeKey episode = new(41, 3, 6);
+
+        // What the store held when the server stopped.
+        Store database = new(_folder);
+        await database.MigrateAsync(CancellationToken.None);
+        GrabRepository grabs = new(database);
+
+        await grabs.RecordAsync(
+            episode, "Silo", "Silo.2023.S03E06.1080p.WEB.H264-CAKES", "1337x", hash,
+            $"magnet:?xt=urn:btih:{hash}", [episode], DateTimeOffset.UtcNow, CancellationToken.None);
+        await grabs.StagedAsync(hash, [staged], CancellationToken.None);
+        await grabs.EncodeAsync(hash, episode, "01KZGKX2G0966V80H26EKGG5T1", CancellationToken.None);
+        await grabs.StateAsync(hash, GrabState.Dispatched, CancellationToken.None);
 
         FakeLibraryQuery shelves = new FakeLibraryQuery()
             .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
@@ -398,7 +416,8 @@ public sealed class TheChainIsJoinedTests : IDisposable
             DataFolderPath = _folder,
             Shelves = shelves,
             Permits = new FakeGrants(),
-            Container = new FakeProvider(),
+            Encodes = new FakeEncoder(),
+            Jobs = new FakeJobs().Says("01KZGKX2G0966V80H26EKGG5T1", PluginJobState.Finished),
         };
 
         plugin.Initialize(context);
@@ -409,57 +428,27 @@ public sealed class TheChainIsJoinedTests : IDisposable
         SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
         Assert.True(saved.Saved, string.Join("; ", saved.Errors));
 
-        const string hash = "0123456789ABCDEF0123456789ABCDEF01234567";
-        EpisodeKey episode = new(41, 3, 6);
-
-        GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
-
-        await grabs.RecordAsync(
-            episode, "Silo", "Silo.2023.S03E06.1080p.WEB.H264-CAKES", "1337x", hash,
-            $"magnet:?xt=urn:btih:{hash}", [episode], DateTimeOffset.UtcNow, CancellationToken.None);
-        await grabs.StagedAsync(hash, [staged], CancellationToken.None);
-        await grabs.StateAsync(hash, GrabState.Dispatched, CancellationToken.None);
-
-        // The server's word, on its own bus, for the episode's row: show 41,
-        // season 3, episode 6 is 41306 as FakeLibraryQuery numbers them.
-        await context.Bus.PublishAsync(new EncodingCompletedEvent
-        {
-            JobId = 41306,
-            OutputPath = "/data/tv/Silo/Season 3/Silo.S03E06.mkv",
-            Duration = TimeSpan.FromMinutes(11),
-        });
-
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
-        GrabState state = GrabState.Dispatched;
-
-        while (state != GrabState.Done && DateTimeOffset.UtcNow < giveUpAt)
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(100));
-
-            state = (await grabs.EveryAsync(CancellationToken.None))
-                .Single(one => string.Equals(one.InfoHash, hash, StringComparison.OrdinalIgnoreCase))
-                .State;
-        }
-
-        Assert.Equal(GrabState.Done, state);
+        Assert.Equal(GrabState.Done, await UntilDoneAsync(grabs, hash));
         Assert.False(File.Exists(staged), "the copy the encoder had finished with was left in the intake folder.");
+        Assert.Contains("01KZGKX2G0966V80H26EKGG5T1", context.Jobs.Asked);
     }
 
     /// <remarks>
     /// <para>
-    /// <strong>The server finishing a scan closes a grab whose episode has
-    /// arrived.</strong> An encode taken out of the queue by hand, or one that
-    /// ends with nothing to encode, says nothing — so the grab waiting on it would
-    /// be waiting for ever. The owner's ruling of 14 September 2026 is that the
-    /// library decides, and a finished scan is the server saying the library has
-    /// just been read.
+    /// <strong>A start closes a grab whose episode has arrived, though nothing
+    /// can be asked.</strong> A grab dispatched by a server that named no job,
+    /// or before this plugin kept the id, has nothing to ask about — and an
+    /// encode taken out of the queue by hand, or one that ended with nothing to
+    /// encode, would have nothing to say. The owner's ruling of 14 September
+    /// 2026 is that the library decides: the episode is there, so the grab is
+    /// done.
     /// </para>
     /// <para>
-    /// No encode event here at all: only the scan, and the episode in the library.
+    /// No jobs facade here at all: only the start, and the episode in the library.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task TheServerFinishingAScanClosesAGrabWhoseEpisodeHasArrived()
+    public async Task AStartClosesAGrabWhoseEpisodeHasArrivedThoughNothingCanBeAsked()
     {
         string incomplete = Path.Combine(_folder, "incomplete");
         string intake = Path.Combine(_folder, "intake");
@@ -469,6 +458,19 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
         string staged = Path.Combine(intake, "Silo.2023.S03E06.1080p.WEB.H264-CAKES.mkv");
         await File.WriteAllTextAsync(staged, "the copy the encoder read");
+
+        const string hash = "0123456789ABCDEF0123456789ABCDEF01234567";
+        EpisodeKey episode = new(41, 3, 6);
+
+        Store database = new(_folder);
+        await database.MigrateAsync(CancellationToken.None);
+        GrabRepository grabs = new(database);
+
+        await grabs.RecordAsync(
+            episode, "Silo", "Silo.2023.S03E06.1080p.WEB.H264-CAKES", "1337x", hash,
+            $"magnet:?xt=urn:btih:{hash}", [episode], DateTimeOffset.UtcNow, CancellationToken.None);
+        await grabs.StagedAsync(hash, [staged], CancellationToken.None);
+        await grabs.StateAsync(hash, GrabState.Dispatched, CancellationToken.None);
 
         FakeLibraryQuery shelves = new FakeLibraryQuery()
             .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
@@ -483,7 +485,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             DataFolderPath = _folder,
             Shelves = shelves,
             Permits = new FakeGrants(),
-            Container = new FakeProvider(),
+            Encodes = new FakeEncoder(),
         };
 
         plugin.Initialize(context);
@@ -494,25 +496,13 @@ public sealed class TheChainIsJoinedTests : IDisposable
         SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
         Assert.True(saved.Saved, string.Join("; ", saved.Errors));
 
-        const string hash = "0123456789ABCDEF0123456789ABCDEF01234567";
-        EpisodeKey episode = new(41, 3, 6);
+        Assert.Equal(GrabState.Done, await UntilDoneAsync(grabs, hash));
+        Assert.False(File.Exists(staged), "the copy the encoder had finished with was left in the intake folder.");
+    }
 
-        GrabRepository grabs = await plugin.GrabsAsync(CancellationToken.None);
-
-        await grabs.RecordAsync(
-            episode, "Silo", "Silo.2023.S03E06.1080p.WEB.H264-CAKES", "1337x", hash,
-            $"magnet:?xt=urn:btih:{hash}", [episode], DateTimeOffset.UtcNow, CancellationToken.None);
-        await grabs.StagedAsync(hash, [staged], CancellationToken.None);
-        await grabs.StateAsync(hash, GrabState.Dispatched, CancellationToken.None);
-
-        await context.Bus.PublishAsync(new LibraryScanCompletedEvent
-        {
-            LibraryId = Ulid.Parse("01HQ5W4AVF30N10RT6XCF6AJHM"),
-            LibraryName = "Series",
-            ItemsFound = 1,
-            Duration = TimeSpan.FromSeconds(2),
-        });
-
+    /// <summary>The grab's state once it is done, or whatever it is when the limit runs out.</summary>
+    private static async Task<GrabState> UntilDoneAsync(GrabRepository grabs, string hash)
+    {
         DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         GrabState state = GrabState.Dispatched;
 
@@ -525,8 +515,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
                 .State;
         }
 
-        Assert.Equal(GrabState.Done, state);
-        Assert.False(File.Exists(staged), "the copy the encoder had finished with was left in the intake folder.");
+        return state;
     }
 
     /// <remarks>
@@ -550,7 +539,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
         plugin.Initialize(context);
 
-        _ = await plugin.GetViewAsync(new() { Route = "/downloads" }, CancellationToken.None);
+        _ = await plugin.GetViewAsync(Requests.View("/downloads"), CancellationToken.None);
 
         Assert.True(plugin.Watched);
 

@@ -1,18 +1,24 @@
 using Microsoft.Extensions.Logging;
-using NoMercy.Events;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 
 /// <summary>
-/// The host, as far as a test is concerned.
+/// The host's context, with a fake behind each part a test may need and a
+/// refusal that names the part behind every other.
 /// </summary>
 /// <remarks>
-/// Everything the plugin has not needed yet throws when it is touched, naming
-/// itself. A null would come back as a NullReferenceException three layers into
-/// the code under test, which says nothing about which part of the host was
-/// missing; a half-built stub is worse still, because the test then passes
-/// against behaviour the server does not have.
+/// <para>
+/// Only what <see cref="IPluginContext"/> makes a host answer is here. The
+/// facades the contract defaults — the encoder, the jobs, the server's own
+/// information — are null or refused exactly as a server that wires none
+/// leaves them, so a test that needs one says so by giving it.
+/// </para>
+/// <para>
+/// There is no container and no bus, because contract 12 gives a plugin
+/// neither: what a plugin used to reach through them it reaches through the
+/// facades here or not at all.
+/// </para>
 /// </remarks>
 public sealed class FakePluginContext : IPluginContext
 {
@@ -20,79 +26,96 @@ public sealed class FakePluginContext : IPluginContext
 
     public ILogger Logger => Log;
 
-    /// <summary>
-    /// Provided, unlike most of the host: the plugin reaches for the hub while
-    /// it initialises, so every test that initialises one needs it.
-    /// </summary>
     public FakeHub Pushes { get; } = new();
 
     public IPluginHubContext Hub => Pushes;
 
     public Ulid PluginId { get; init; } = PluginIdentity.Id;
 
-    /// <summary>
-    /// A path, not a folder: nothing here creates it, because the thing most
-    /// worth proving about <c>Initialize</c> is that it touches no disk.
-    /// </summary>
     public string DataFolderPath { get; init; } =
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
 
-    /// <summary>The settings blob, as JSON, so a test can ask what reached it.</summary>
-    /// <remarks>
-    /// Settable, so a second context can be given the first one's: a plugin
-    /// built over configuration that already exists is what a restart is, and
-    /// a cadence is read at startup and nowhere else.
-    /// </remarks>
     public FakeConfiguration Config { get; init; } = new();
 
     public IPluginConfiguration Configuration => Config;
 
-    /// <summary>Protected storage. Nothing a test asserts on may ever be here and on a page.</summary>
     public FakeSecretStore Secrets { get; } = new();
 
     IPluginSecretStore IPluginContext.Secrets => Secrets;
 
-    /// <summary>The server's own bus, which the plugin listens to for encoding events.</summary>
-    /// <remarks>
-    /// A real <c>InMemoryEventBus</c> and not a stand in for one: it is the
-    /// class the media server itself uses, so a test can publish what the
-    /// encoder publishes and the plugin hears exactly what it would hear.
-    /// </remarks>
-    public InMemoryEventBus Bus { get; } = new();
+    public FakeEvents Messages { get; } = new();
 
-    public IEventBus EventBus => Bus;
-
-    /// <summary>What the server would resolve types through, when a test provides one.</summary>
-    public IServiceProvider? Container { get; init; }
-
-    public IServiceProvider Services => Container ?? throw NotProvided(nameof(Services));
+    public IPluginEvents Events => Messages;
 
     public HttpClient HttpClient => throw NotProvided(nameof(HttpClient));
-    /// <summary>The server's library, when a test provides one.</summary>
+
     public FakeLibraryQuery? Shelves { get; init; }
 
     public IPluginLibraryQuery Library => Shelves ?? throw NotProvided(nameof(Library));
+
     public IPluginLibraryWriter? LibraryWriter => null;
-    /// <summary>
-    /// What the server has agreed to, when a test provides it.
-    /// </summary>
-    /// <remarks>
-    /// Null by default, like everything else the plugin has not needed: a test
-    /// that reaches for grants without meaning to gets a failure naming them
-    /// rather than a quiet yes it would then be judged against.
-    /// </remarks>
+
     public FakeGrants? Permits { get; init; }
 
     public IPluginGrants Grants => Permits ?? throw NotProvided(nameof(Grants));
 
+    /// <summary>The encoder the server hands a plugin whose manifest names the hook, or none.</summary>
+    public FakeEncoder? Encodes { get; init; }
+
+    public IPluginEncoder? Encoder => Encodes;
+
+    /// <summary>What the server says became of a job, or none.</summary>
+    public FakeJobs? Jobs { get; init; }
+
+    IPluginJobs? IPluginContext.Jobs => Jobs;
+
+    /// <summary>Where the server says it can write, or a facade that refuses as an unwired one does.</summary>
+    public IReadOnlyList<PluginStorageLocation>? GrantedPaths { get; init; }
+
+    public IPluginServerInfo Server => GrantedPaths is IReadOnlyList<PluginStorageLocation> granted
+        ? new ServerInfo(granted)
+        : throw new PluginRefusedException(PluginRefusalMessages.FacadeNotOnThisHost(PluginId.ToString(), "IPluginContext.Server"));
+
     public Task PublishAsync<T>(string name, T payload, CancellationToken ct = default)
     {
-        throw NotProvided(nameof(PublishAsync));
+        return Messages.PublishAsync(name, payload, ct);
     }
 
     private static NotSupportedException NotProvided(string member)
     {
         return new NotSupportedException(
             $"FakePluginContext does not provide {member}. Give it one in the test that needs it.");
+    }
+
+    private sealed class ServerInfo(IReadOnlyList<PluginStorageLocation> granted) : IPluginServerInfo
+    {
+        public Version Version => new(0, 0);
+
+        public string Platform => "test";
+
+        public IReadOnlyList<PluginStorageLocation> GrantedPaths => granted;
+
+        public Task<long> FreeSpaceBytesAsync(string folderId, CancellationToken ct = default)
+        {
+            return Task.FromResult(0L);
+        }
+    }
+}
+
+/// <summary>Plugin-to-plugin messages, kept rather than delivered: nothing in this plugin subscribes.</summary>
+public sealed class FakeEvents : IPluginEvents
+{
+    public List<(string Name, object? Payload)> Published { get; } = [];
+
+    public void Subscribe<T>(string topic, Func<T, CancellationToken, Task> handler)
+    {
+        throw new NotSupportedException("This plugin subscribes to no plugin message.");
+    }
+
+    public Task PublishAsync<T>(string name, T payload, CancellationToken ct = default)
+    {
+        Published.Add((name, payload));
+
+        return Task.CompletedTask;
     }
 }

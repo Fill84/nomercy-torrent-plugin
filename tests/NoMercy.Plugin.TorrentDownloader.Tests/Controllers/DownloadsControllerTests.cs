@@ -4,7 +4,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
-using NoMercy.Plugins.Mvc;
+using NoMercy.PluginSdk.Mvc;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Controllers;

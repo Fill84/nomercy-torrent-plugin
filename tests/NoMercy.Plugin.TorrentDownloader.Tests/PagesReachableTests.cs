@@ -1,7 +1,7 @@
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests;
@@ -199,7 +199,7 @@ public class PagesReachableTests
 
     private static async Task<string> Words(TorrentDownloaderPlugin plugin, string route)
     {
-        PluginView view = await plugin.GetViewAsync(new() { Route = route }, CancellationToken.None);
+        PluginView view = await plugin.GetViewAsync(Requests.View(route), CancellationToken.None);
 
         return string.Join(" ", Rendered.EveryValue(view));
     }

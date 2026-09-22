@@ -2,7 +2,7 @@ using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Views;
 

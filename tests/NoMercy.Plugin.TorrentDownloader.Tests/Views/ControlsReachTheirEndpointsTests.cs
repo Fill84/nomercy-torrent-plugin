@@ -9,8 +9,8 @@ using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
-using NoMercy.Plugins.Mvc;
+using NoMercy.PluginSdk.Abstractions;
+using NoMercy.PluginSdk.Mvc;
 
 using Xunit;
 

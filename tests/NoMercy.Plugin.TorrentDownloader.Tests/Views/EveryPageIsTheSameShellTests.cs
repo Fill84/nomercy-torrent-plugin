@@ -1,6 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 using Xunit;
 
@@ -78,7 +78,7 @@ public class EveryPageIsTheSameShellTests
 
         foreach (PluginRoute route in plugin.Routes.Routes)
         {
-            PluginView page = await plugin.GetViewAsync(new() { Route = SamplePaths.Of(route) }, CancellationToken.None);
+            PluginView page = await plugin.GetViewAsync(Requests.View(SamplePaths.Of(route)), CancellationToken.None);
 
             Assert.True(
                 page.Layout == PluginLayout.Wide,
@@ -118,7 +118,7 @@ public class EveryPageIsTheSameShellTests
 
         foreach (PluginRoute route in plugin.Routes.Routes)
         {
-            PluginView page = await plugin.GetViewAsync(new() { Route = SamplePaths.Of(route) }, CancellationToken.None);
+            PluginView page = await plugin.GetViewAsync(Requests.View(SamplePaths.Of(route)), CancellationToken.None);
 
             string[] inRows =
             [

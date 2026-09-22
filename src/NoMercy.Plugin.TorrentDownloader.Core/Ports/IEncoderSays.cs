@@ -27,36 +27,35 @@ public enum EncodeJobState
 public sealed record EncodeJob(EncodeJobState State, string? Failure);
 
 /// <summary>
-/// What the server has said about an encode, without having been asked.
+/// What the server says about an encode, asked by the id it handed back.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>This replaced a question asked once a job once a tick.</strong> The
-/// plugin held a job id for every episode it had dispatched and asked the
-/// server about each of them on every transfers pass — nine questions a minute
-/// for one season pack, for as long as its encodes took, and the cadence was a
-/// minute precisely so that a finished encode was not noticed much later than
-/// it happened. The server publishes what it is doing; there was never anything
-/// to ask.
+/// <strong>Asked, once a job once a pass — and this is the second time it has
+/// been that.</strong> The plugin asked this way first; then, on 14 September
+/// 2026, it heard the server's own encoding events instead, because those carry
+/// the media row an encode registers against and arrive the moment it ends. A
+/// plugin on contract 12 has no bus to hear them on. What it has is
+/// <c>IPluginJobs</c>, which answers for the job id <c>IPluginEncoder</c> hands
+/// back and for nothing else — so that id is kept with the grab, and this asks
+/// by it.
 /// </para>
 /// <para>
-/// <strong>Keyed by the media id, never by a job id.</strong> The id the plugin
-/// gets back when it asks for an encode is a hash of the job's payload — chosen
-/// deliberately, because a queue row id is not stable: a finished job is deleted
-/// and a failed one is rewritten under a new identity. What the server's own
-/// events carry is the row the encode registers its result against, which is
-/// the episode or film id the plugin named when it asked. That is the only
-/// thing the two ends have in common.
+/// <strong>And the answer is better than the events were.</strong> A failed
+/// event was not the end of a job: the server put it back with a back-off and
+/// said nothing when the last attempt moved it to the failed table. The queue's
+/// tables are what this reads, so a job is failed here only once the server has
+/// truly given it up, and its reason is the one written there.
 /// </para>
 /// <para>
-/// <strong>Null is not "finished".</strong> It means nothing has been said, and
-/// a plugin that read it as finished would delete a download the server was
-/// still reading. Where nothing has been said the library is the proof, and it
-/// is the stronger of the two.
+/// <strong>Null is not "finished".</strong> It means nothing can be said — no
+/// id was kept, or the server would not answer — and a plugin that read it as
+/// finished would delete a download the server was still reading. Where nothing
+/// can be said the library is the proof, and it is the stronger of the two.
 /// </para>
 /// </remarks>
 public interface IEncoderSays
 {
-    /// <summary>What has been said about the encode for one media row, or null.</summary>
-    EncodeJob? About(int mediaId);
+    /// <summary>Where the encode the server called <paramref name="jobId"/> stands, or null.</summary>
+    Task<EncodeJob?> AboutAsync(string jobId, CancellationToken ct);
 }

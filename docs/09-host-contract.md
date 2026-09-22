@@ -38,23 +38,53 @@ string ids, so every test agreed with the plugin instead of with the server.
 
 ## `IPluginContext`
 
+Contract 12 (`NoMercy.PluginSdk.Abstractions`, 22 September 2026). What the plugin reads:
+
 ```
 Ulid                  PluginId
 string                DataFolderPath
 ILogger               Logger
-IServiceProvider      Services
 HttpClient            HttpClient
 IPluginConfiguration  Configuration
 IPluginSecretStore    Secrets
 IPluginLibraryQuery   Library
 IPluginLibraryWriter  LibraryWriter        (not used — the plugin never writes to the library)
-IPluginSystem         System               (no server-side implementation on dev — not a route)
-IPluginPlayer         Player               (not used)
+IPluginEncoder?       Encoder              (null unless the manifest names the encoder hook)
+IPluginJobs?          Jobs                 (handed over with the encoder; what became of a job)
+IPluginServerInfo     Server               (GrantedPaths, for the folder refusal; throws where a host wired none)
 IPluginGrants         Grants
 IPluginHubContext     Hub
-IEventBus             EventBus
+IPluginEvents         Events               (plugin-to-plugin messages only; not used)
 Task PublishAsync<T>(string, T, CancellationToken)
 ```
+
+**What contract 12 took away, and what took its place.** `Services` (the server's container) and
+`EventBus` are gone from the context. Everything the plugin reached through them has a facade or has
+gone:
+
+| Reached through `Services` / `EventBus` until 11 | Now |
+| --- | --- |
+| `IPluginEncoder` from the container | `Context.Encoder`, handed over only when `plugin.json` names the `encoder` hook |
+| `EncodingStarted/Completed/FailedEvent` on the bus | `Context.Jobs.StatusAsync(jobId)` on every transfers pass, by the id `EncodeAsync` handed back, kept with the grab (`encode_jobs`) |
+| `LibraryScanCompletedEvent` on the bus | Nothing. `Library.Watch` exists but is refused by name on an in-process plugin; the run interval covers a scan (`docs/specs/run.md`) |
+| `PluginLoadedEvent` on the bus | Nothing. The plugin starts itself off the `Initialize` thread and again when the folders are saved |
+| `PluginApplicationPartRegistrar` from the container, to re-attach the buttons after an update | The same registrar, from the request's own container, by the stale controller that meets the update (`LivePlugin`) |
+| `IInboxMetadataProbe` and `ShowImportJob` from the container, to add a show the owner does not have | Nothing. A pack for such a show is left where it is and the History names the show to add |
+| `IPluginStorage.LocationsAsync` from the container, for the folder refusal | `Context.Server.GrantedPaths` |
+
+**The ABI is checked at load.** `plugin.json` carries `targetAbi`, `PluginAbi.IsCompatible` refuses a major
+under the server's oldest (12 refuses everything under 12), and a plugin that fails is marked malfunctioned
+with the reason in the server log: `ABI '10.0' is incompatible with server ABI 12.0.`
+
+**The encoder hook widens the manifest.** A plugin whose manifest names a hook the owner's recorded consent
+did not is loaded disabled, pending re-consent on the plugin's page (`PluginConsentService`,
+`PluginCapabilityGuard.HasWidened`). Updating from a manifest without the hook to one with it is exactly
+that, once.
+
+**In-process is the default.** `PluginRuntimeMode.Load()` answers `InProcess` unless `runtime-mode.json`
+in the plugin config folder says otherwise. The plugin's own sockets, files and processes work as they
+did; out of process they would be refused, and moving them behind `Context.Net`, `Context.Storage` and
+`Context.Process` is work not yet done.
 
 ## Live updates
 
@@ -141,27 +171,36 @@ import sits on the server's queue and a tick a minute later still finds the show
 
 ### What became of the job
 
-The server says it, on its own bus: `EncodingStartedEvent`, `EncodingCompletedEvent` and
-`EncodingFailedEvent`, the last with the server's own words. Each carries `JobId`, which is the media
-row the encode registers against — the episode id the plugin named when it asked — and that is what
-the plugin matches on. The job id `EncodeAsync` answers with is a hash of the job's payload and matches
-nothing, so it is not kept. `IPluginJobs.StatusAsync` (media-server #31) is no longer asked.
+Asked, on contract 12: `IPluginJobs.StatusAsync(jobId)`, with the id `EncodeAsync` handed back. That id
+is `QueuePayloadHash.For(payload)` — a hash of the job, chosen because a queue row id is not stable — and
+the server's own `PluginJobs` looks it up in the queue's tables by exactly that hash. The plugin keeps it
+with the grab, per episode (`grabs.encode_jobs`, migration 017), so a restart with a dispatched grab still
+knows what to ask about, and asks on every transfers pass (`EncoderSays`).
 
-**Two endings say nothing.** A job taken out of the queue by hand — the contract has no event for
-that — and a job that ends with nothing to encode: the library folder not found, no preset, or every
-preset already encoded. `VideoEncodeJob` returns from those without a completed or a failed event.
+**What the answer means.** In the queue and not reserved: Queued. Reserved: Running. In the failed table:
+Failed, with the exception the server wrote there. In neither: Finished — a plugin only holds an id the
+server handed it, so a row that is gone is a job that ran. Unknown, or a facade that refuses, is answered
+as nothing, and nothing is never "finished".
 
-**And a failed event is not the end of the job.** `VideoEncodeJob` publishes `EncodingFailedEvent`
-from every catch, a shutdown's cancellation included. `JobQueue.FailJob` then puts the job back with a
-back-off while `Attempts < maxAttempts` (three), and a stop releases the reservation without counting
-an attempt; only the last attempt moves it to `FailedJobs`, and that says nothing on the bus. The
-plugin therefore says the reason and closes nothing on it.
+**And that is a better answer than the events were.** Until contract 12 the plugin heard
+`EncodingStartedEvent`, `EncodingCompletedEvent` and `EncodingFailedEvent` on the server's bus, matched
+on the media row they carry. A failed event was not the end of the job: `JobQueue.FailJob` puts the job
+back with a back-off while `Attempts < maxAttempts` (three), and only the last attempt moves it to
+`FailedJobs`, which said nothing on the bus — so the plugin could never close on one. The failed table
+is what the facade reads, so a job is failed here only once the server has truly given it up. A plugin on
+contract 12 has no bus in any case: `IPluginEvents` relays plugin-to-plugin messages and nothing the
+server publishes.
+
+**Two endings still say nothing to the encoder's own record.** A job taken out of the queue by hand,
+and a job that ends with nothing to encode: the library folder not found, no preset, or every preset
+already encoded. Both read as Finished here, which is right — the library is the proof.
 
 So the library decides. A grab waiting on an encode is closed by the pass that finds its episode in the
-library; a pass runs on every encoding event, on `LibraryScanCompletedEvent` and on start. It is never
-given up on by a clock and never asked for a second time — the owner's ruling of 14 September 2026,
-replacing a six-hour give-up that put the episode back to missing and downloaded it again, and a
-re-dispatch after every restart that put a second job in a queue that had kept the first.
+library; a pass runs on start, when the folders are saved, when a download finishes, and on the transfers
+cadence — and the encoder's word is what keeps a staged file the server is still reading from the sweep.
+It is never given up on by a clock and never asked for a second time — the owner's ruling of
+14 September 2026, replacing a six-hour give-up that put the episode back to missing and downloaded it
+again, and a re-dispatch after every restart that put a second job in a queue that had kept the first.
 
 An implementation that refuses must say why in the log and the journal before it returns. The caller
 learns nothing but "not taken" and acts the same way whatever the reason — leave the file staged,

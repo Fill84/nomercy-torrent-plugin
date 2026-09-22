@@ -1,0 +1,21 @@
+-- The encode jobs a grab is waiting on, one per episode, back on the grab.
+--
+-- This column was here as encode_job (005) and was dropped (011) because the
+-- plugin heard the server's own encoding events instead: those carry the media
+-- row an encode registers against, and the id the server hands back when an
+-- encode is asked for -- a hash of the job's payload -- matched none of them.
+--
+-- Plugin contract 12 (22 September 2026) gives a plugin no bus to hear those
+-- events on. What it gives instead is IPluginJobs.StatusAsync, which answers
+-- for exactly the id the server handed back, read off the queue's own tables.
+-- So that id is the one handle left on what became of an encode, and it is
+-- kept here rather than in memory for the reason 005 gave: the plugin restarts,
+-- the grab is still dispatched, and nothing knows whether the job it asked for
+-- is running or went with the queue. Without it a restart takes every staged
+-- file of every dispatched grab for one nothing waits on.
+--
+-- Space-separated "showXseasonXnumber:job" entries, one per episode of the
+-- grab, so a pack's nine encodes are nine questions and one dead encode is laid
+-- at the episode it was for. Null until the first encode of the grab is asked
+-- for.
+ALTER TABLE grabs ADD COLUMN encode_jobs TEXT;

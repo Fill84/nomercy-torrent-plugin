@@ -1,21 +1,23 @@
 #!/usr/bin/env bash
 #
-# Packs NoMercy.Plugins.Abstractions and NoMercy.Plugins.Mvc out of the media
-# server into _nupkgs/, so this repository can build against the contract.
-# The PowerShell script beside this one does the same thing and explains why.
+# Packs NoMercy.PluginSdk.Abstractions and NoMercy.PluginSdk.Mvc out of the
+# media server into _nupkgs/, so this repository can build against the
+# contract. The PowerShell script beside this one does the same thing and
+# explains why.
 #
 # Usage: scripts/fetch-abstractions.sh [branch] [--fresh]
 
 set -euo pipefail
 
-# master, never dev — the PowerShell twin of this script has said so all along
-# and this one disagreed with it. dev's Directory.Build.props carries a fixed
-# <Version>0.1.404</Version> that never moves, so packing from it gives a
-# contract older than the one released servers ship. The build then fails with
-# CS0246 naming a type, which reads like a missing using and is really a server
-# too old. This plugin is installed on servers running a release, so the
-# contract it compiles against is the one those servers carry.
-branch="master"
+# dev, since 22 September 2026. The contract is versioned on its own now —
+# <PluginPackageVersion> in the server's Directory.Build.props, 12.0.0 at the
+# time of writing — rather than with the server, so the reason this script
+# refused dev (a <Version> frozen at 0.1.404 that NuGet took for "already
+# have it") is gone. And master is where the contract is not: it sits on a
+# release from August carrying ABI 11, while the servers the owner and Stoney
+# run come from dev and refuse anything under 12. The packages go to nuget.org
+# with the next server release; until they are there, this is the only feed.
+branch="dev"
 fresh=0
 for argument in "$@"; do
     case "$argument" in
@@ -39,9 +41,12 @@ else
     dotnet="dotnet"
 fi
 
+# The two packable projects, the two whose assemblies travel inside the first
+# of them, and the analyzer every project in that repository inherits through
+# its Directory.Build.props.
 sparse_paths=(
-    "src/NoMercy.Plugins.Abstractions"
-    "src/NoMercy.Plugins.Mvc"
+    "src/NoMercy.PluginSdk.Abstractions"
+    "src/NoMercy.PluginSdk.Mvc"
     "src/NoMercy.Events"
     "src/NoMercy.Design"
     "src/NoMercy.Analyzers"
@@ -80,31 +85,31 @@ msbuild_property() {
     sed -n "s:.*<$2>\(.*\)</$2>.*:\1:p" "$1" | head -n 1
 }
 
-version="$(msbuild_property "$server_path/Directory.Build.props" Version)"
+# The contract's own version, not the server's. Since the rename to
+# NoMercy.PluginSdk the packages carry PluginPackageVersion — the major is the
+# ABI a server refuses or accepts by, the minor moves when the contract gains a
+# member — and it is the number NuGet caches the package under below.
+version="$(msbuild_property "$server_path/Directory.Build.props" PluginPackageVersion)"
 if [[ -z "$version" ]]; then
-    echo "No <Version> in _server/Directory.Build.props. The media server changed how it versions itself." >&2
+    echo "No <PluginPackageVersion> in _server/Directory.Build.props. The media server changed how it versions the plugin contract." >&2
     exit 1
 fi
 
-echo "The media server on $branch is version $version."
+echo "The plugin contract on $branch is version $version (server $(msbuild_property "$server_path/Directory.Build.props" Version))."
 
-# Nothing to check it against. NoMercyContractVersion floats, so the build
-# takes whatever is packed below and there is no second number to keep in step.
-# The line above is what a build compiled against, and it is the only record of
-# it that a floating version leaves.
+# NoMercyContractVersion pins the major and floats the minor, so the build takes
+# whatever 12.x is packed below. The line above is what a build compiled
+# against, and it is the only record of it that a floating minor leaves.
 
 mkdir -p "$package_path"
 
-# All four, not just the two this repository names. NoMercy.Plugins.Abstractions
-# declares NoMercy.Design and NoMercy.Events as dependencies, so a restore needs
-# them in the feed even though nothing here references them directly — and the
-# PowerShell twin of this script has packed all four all along.
-#
-# Packing two was invisible on a developer's machine, where the other two were
-# already in _nupkgs from the last time the PowerShell script ran, and it broke
-# the first CI build there had ever been: NU1101, "no packages exist with this
-# id", naming a package nothing in this repository mentions.
-for project in NoMercy.Plugins.Abstractions NoMercy.Plugins.Mvc NoMercy.Design NoMercy.Events; do
+# Only the two. NoMercy.Events and NoMercy.Design used to be packages of their
+# own that the contract depended on, and this loop packed all four; since the
+# rename they ship as assemblies inside NoMercy.PluginSdk.Abstractions, are
+# IsPackable=false, and packing them produces nothing a restore needs. The
+# server's own release workflow packs exactly these two, plus Testing and
+# Analyzers, which this repository does not use.
+for project in NoMercy.PluginSdk.Abstractions NoMercy.PluginSdk.Mvc; do
     # The cache entry goes first. Restore prefers an already-extracted folder of
     # the same version over the file in _nupkgs, however new that file is.
     cached="$HOME/.nuget/packages/$(echo "$project" | tr '[:upper:]' '[:lower:]')/$version"

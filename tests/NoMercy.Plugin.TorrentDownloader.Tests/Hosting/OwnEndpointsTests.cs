@@ -1,8 +1,9 @@
+using Microsoft.AspNetCore.Mvc;
 using NoMercy.Api.Plugins;
-using NoMercy.Events.Plugins;
+using NoMercy.Plugin.TorrentDownloader.Controllers;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Hosting;
@@ -63,45 +64,54 @@ public sealed class OwnEndpointsTests
     }
 
     /// <remarks>
-    /// Done by the plugin itself, the moment the server says it has loaded: that is the one moment an update
-    /// can be told apart, and there is nobody else to do it.
+    /// <para>
+    /// <strong>Done by the controller an update left behind, on the first press.</strong> Until contract 12 the
+    /// plugin did this the moment the server said it had loaded; a plugin on 12 hears no such event and holds no
+    /// container. A controller does — the server's own container builds it, on a request — and the stale
+    /// controller is exactly the one the update leaves answering: it finds the running plugin to be a stranger, has
+    /// the server serve the running copy's controllers, and answers "press it again".
+    /// </para>
+    /// <para>
+    /// The stranger here is what the server holds after an update: an instance of another type under this
+    /// plugin's id, in the assembly the server will attach.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task WhenTheServerSaysThePluginHasLoadedTheRunningCopysEndpointsAreServed()
+    public void AStaleControllerHasTheRunningCopysEndpointsServedAndAsksForAnotherPress()
     {
-        string folder = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", "endpoints-" + Guid.NewGuid().ToString("n")[..8]);
-        using TorrentDownloaderPlugin running = new();
-        LoadedPlugins manager = new(running) { Installed = [Info()] };
+        Stranger updated = new();
+        LoadedPlugins manager = new(updated) { Installed = [Info()] };
 
         PluginApplicationPartRegistrar registrar = new();
         registrar.Attached[PluginIdentity.Id] = typeof(object).Assembly;
 
-        FakePluginContext context = new() { DataFolderPath = folder, Container = Services(manager, registrar) };
+        SettingsController stale = new SettingsController(manager).On(PluginIdentity.Id);
+        stale.HttpContext.RequestServices = Services(manager, registrar);
 
-        try
+        NotFoundObjectResult refused = Assert.IsType<NotFoundObjectResult>(stale.Advanced());
+
+        Assert.Contains("press it again", refused.Value?.ToString() ?? string.Empty, StringComparison.Ordinal);
+        Assert.Same(typeof(Stranger).Assembly, registrar.Attached[PluginIdentity.Id]);
+        Assert.Equal(1, registrar.Detached);
+    }
+
+    /// <summary>The plugin as the server holds it after an update: this id, another type.</summary>
+    private sealed class Stranger : IPlugin
+    {
+        public Ulid Id => PluginIdentity.Id;
+
+        public string Name => PluginIdentity.Name;
+
+        public string Description => PluginIdentity.Description;
+
+        public Version Version => PluginIdentity.Version;
+
+        public void Initialize(IPluginContext context)
         {
-            running.Initialize(context);
-
-            await context.Bus.PublishAsync(new PluginLoadedEvent
-            {
-                PluginId = PluginIdentity.IdText,
-                PluginName = PluginIdentity.Name,
-                Version = "0.0.0",
-            });
-
-            DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
-
-            while (!ReferenceEquals(registrar.Attached[PluginIdentity.Id], typeof(TorrentDownloaderPlugin).Assembly)
-                   && DateTimeOffset.UtcNow < giveUpAt)
-            {
-                await Task.Delay(TimeSpan.FromMilliseconds(20));
-            }
-
-            Assert.Same(typeof(TorrentDownloaderPlugin).Assembly, registrar.Attached[PluginIdentity.Id]);
         }
-        finally
+
+        public void Dispose()
         {
-            TemporaryFolder.Forget(folder);
         }
     }
 

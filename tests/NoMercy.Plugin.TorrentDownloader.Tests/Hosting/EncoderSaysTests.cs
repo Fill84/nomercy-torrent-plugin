@@ -1,62 +1,41 @@
-using NoMercy.Events;
-using NoMercy.Events.Encoding;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Hosting;
 
 /// <summary>
-/// What the server says about an encode, heard rather than asked for.
+/// What the server says about an encode, asked by the job id it handed back.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <strong>The plugin used to ask, once per job per tick.</strong>
-/// <c>Transfers.StandingAsync</c> called <c>IEncodeJobs.StatusAsync</c> for
-/// every job every grab was waiting on, every time the transfers cadence came
-/// round — nine questions a minute for one season pack, for as long as its
-/// encodes took. The media server has published <c>EncodingCompletedEvent</c>
-/// and <c>EncodingFailedEvent</c> all along.
+/// <strong>Asked, because on contract 12 there is nothing to hear.</strong> Until
+/// 22 September 2026 the plugin listened to the server's own encoding events;
+/// a plugin on contract 12 has no bus, and the one thing it can ask is
+/// <c>IPluginJobs.StatusAsync</c>, which reads the queue's own tables for the
+/// id <c>IPluginEncoder</c> handed back.
 /// </para>
 /// <para>
-/// <strong>Matched on the media id, and that took checking.</strong> The event's
-/// field is called <c>JobId</c> and is not one: <c>VideoEncodeJob</c> sets it
-/// from <c>fileMetadata.Id</c>, which is <c>movie?.Id ?? episode!.Id</c> — the
-/// row the encode registers against, and the same id this plugin hands over
-/// when it asks for the encode. The id the plugin gets back from
-/// <c>IPluginEncoder</c> is something else entirely: a hash of the job's
-/// payload, chosen because a queue row id is not stable. Matching on that one
-/// would never have found a single event.
-/// </para>
-/// <para>
-/// The bus here is the media server's own <c>InMemoryEventBus</c>, not a stand
-/// in for it.
+/// The mapping is the whole of what is under test, and each state is here
+/// because a wrong one costs something: a running encode read as finished is a
+/// download deleted under the server; a failure without its reason is a History
+/// line that says nothing; an answer the server refuses read as anything but
+/// unknown closes a grab on a guess.
 /// </para>
 /// </remarks>
 public class EncoderSaysTests
 {
     [Fact]
-    public async Task AFinishedEncodeIsHeardWithoutBeingAskedAbout()
+    public async Task AFinishedEncodeIsSaidToBeFinished()
     {
-        InMemoryEventBus bus = new();
+        FakeJobs jobs = new FakeJobs().Says("01KZGKX2G0966V80H26EKGG5T1", PluginJobState.Finished);
 
-        using EncoderSays says = new(bus, new CapturingLogger());
+        EncoderSays says = new(jobs, new CapturingLogger());
 
-        Assert.Null(says.About(153823));
-
-        await bus.PublishAsync(new EncodingCompletedEvent
-        {
-            JobId = 153823,
-            OutputPath = "/data/tv/South Park/Season 15/episode.mkv",
-            Duration = TimeSpan.FromMinutes(14),
-        });
-
-        Assert.Equal(EncodeJobState.Finished, says.About(153823)?.State);
-
-        // And nothing is claimed about an episode nobody said anything about.
-        // Null is not "finished": a pack is deleted on that answer.
-        Assert.Null(says.About(153824));
+        Assert.Equal(EncodeJobState.Finished, (await says.AboutAsync("01KZGKX2G0966V80H26EKGG5T1", CancellationToken.None))?.State);
+        Assert.Equal(["01KZGKX2G0966V80H26EKGG5T1"], jobs.Asked);
     }
 
     /// <remarks>
@@ -65,121 +44,77 @@ public class EncoderSaysTests
     /// than that" is what a grab used to be failed with.
     /// </remarks>
     [Fact]
-    public async Task AFailedEncodeIsHeardWithTheReasonItFailed()
+    public async Task AFailedEncodeIsSaidToHaveFailedWithTheReason()
     {
-        InMemoryEventBus bus = new();
+        FakeJobs jobs = new FakeJobs().Says("job-41", PluginJobState.Failed, "the source file has no audio stream");
 
-        using EncoderSays says = new(bus, new CapturingLogger());
+        EncoderSays says = new(jobs, new CapturingLogger());
 
-        await bus.PublishAsync(new EncodingFailedEvent
-        {
-            JobId = 41,
-            InputPath = "/intake/episode.mkv",
-            ErrorMessage = "the source file has no audio stream",
-        });
-
-        EncodeJob? standing = says.About(41);
+        EncodeJob? standing = await says.AboutAsync("job-41", CancellationToken.None);
 
         Assert.Equal(EncodeJobState.Failed, standing?.State);
         Assert.Equal("the source file has no audio stream", standing?.Failure);
     }
 
     /// <remarks>
-    /// <para>
-    /// An encode that has started and not finished is a file the server is
-    /// still reading. A download taken away under one is the fault that cost
-    /// the owner 36 GB on 31 August 2026, so this has to be sayable.
-    /// </para>
-    /// <para>
-    /// And a finish after a start replaces it rather than being ignored: the
-    /// two arrive in that order for every encode there is.
-    /// </para>
+    /// An encode that is queued or reserved is a file the server is still going
+    /// to read, or is reading. A download taken away under one is the fault that
+    /// cost the owner 36 GB on 31 August 2026, so neither may read as settled.
     /// </remarks>
-    [Fact]
-    public async Task AnEncodeStillRunningIsSaidToBeRunningUntilItIsNot()
+    [Theory]
+    [InlineData(PluginJobState.Queued, EncodeJobState.Queued)]
+    [InlineData(PluginJobState.Running, EncodeJobState.Running)]
+    public async Task AnEncodeNotYetDoneIsSaidToBeGoing(PluginJobState server, EncodeJobState expected)
     {
-        InMemoryEventBus bus = new();
+        FakeJobs jobs = new FakeJobs().Says("job-77", server);
 
-        using EncoderSays says = new(bus, new CapturingLogger());
+        EncoderSays says = new(jobs, new CapturingLogger());
 
-        await bus.PublishAsync(new EncodingStartedEvent
-        {
-            JobId = 77,
-            InputPath = "/intake/episode.mkv",
-            OutputPath = "/data/tv/episode.mkv",
-            ProfileName = "1080p",
-        });
-
-        Assert.Equal(EncodeJobState.Running, says.About(77)?.State);
-
-        await bus.PublishAsync(new EncodingCompletedEvent
-        {
-            JobId = 77,
-            OutputPath = "/data/tv/episode.mkv",
-            Duration = TimeSpan.FromMinutes(9),
-        });
-
-        Assert.Equal(EncodeJobState.Finished, says.About(77)?.State);
+        Assert.Equal(expected, (await says.AboutAsync("job-77", CancellationToken.None))?.State);
     }
 
     /// <remarks>
-    /// <strong>This is what starts the rest of the chain.</strong> Staging,
-    /// deleting the download and marking the grab done all used to wait for the
-    /// transfers cadence to come round; the point of hearing the encoder is
-    /// that the work happens when the encode really ended.
+    /// <para>
+    /// A server that will not say — the facade refuses by name, as one a host
+    /// did not wire does — is answered with nothing, and nothing is never
+    /// finished: Transfers leaves the staged file where it is and the library
+    /// decides.
+    /// </para>
+    /// <para>
+    /// Said once. Every pass asks about every job every grab waits on, and a
+    /// refusal that repeats a line a minute buries the one line that says why.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task TheEncoderSpeakingIsWhatSetsTheRestGoing()
+    public async Task AServerThatWillNotSayIsAnsweredWithNothingAndSaidOnce()
     {
-        InMemoryEventBus bus = new();
-
-        using EncoderSays says = new(bus, new CapturingLogger());
-
-        List<int> told = [];
-
-        says.Said += media => told.Add(media);
-
-        await bus.PublishAsync(new EncodingCompletedEvent
+        CapturingLogger log = new();
+        FakeJobs jobs = new()
         {
-            JobId = 153823,
-            OutputPath = "/data/tv/episode.mkv",
-            Duration = TimeSpan.Zero,
-        });
+            Refuses = new PluginRefusedException(
+                PluginRefusalMessages.FacadeNotOnThisHost(PluginIdentity.IdText, "IPluginContext.Jobs")),
+        };
 
-        await bus.PublishAsync(new EncodingFailedEvent
-        {
-            JobId = 41,
-            InputPath = "/intake/episode.mkv",
-            ErrorMessage = "no audio stream",
-        });
+        EncoderSays says = new(jobs, log);
 
-        Assert.Equal([153823, 41], told);
+        Assert.Null(await says.AboutAsync("job-1", CancellationToken.None));
+        Assert.Null(await says.AboutAsync("job-2", CancellationToken.None));
+
+        Assert.Single(log.Lines, line => line.Contains("would not say", StringComparison.Ordinal));
     }
 
     /// <remarks>
-    /// A server that runs for months encodes thousands of files, and this is
-    /// held in memory. What matters is the encodes a grab is still waiting on,
-    /// which are the most recent — so the oldest are forgotten and the client
-    /// falls back to the library, which is the stronger proof anyway.
+    /// The server's own word for a state it cannot place is Unknown, and this
+    /// plugin has no business turning that into anything: a grab is deleted on
+    /// "finished" and failed on "failed", and neither was said.
     /// </remarks>
     [Fact]
-    public async Task TheOldestAreForgottenRatherThanKeptForEver()
+    public async Task AnUnknownStateIsAnsweredWithNothing()
     {
-        InMemoryEventBus bus = new();
+        FakeJobs jobs = new FakeJobs().Says("job-9", PluginJobState.Unknown);
 
-        using EncoderSays says = new(bus, new CapturingLogger());
+        EncoderSays says = new(jobs, new CapturingLogger());
 
-        for (int media = 1; media <= EncoderSays.Most + 50; media++)
-        {
-            await bus.PublishAsync(new EncodingCompletedEvent
-            {
-                JobId = media,
-                OutputPath = "/data/tv/episode.mkv",
-                Duration = TimeSpan.Zero,
-            });
-        }
-
-        Assert.Null(says.About(1));
-        Assert.NotNull(says.About(EncoderSays.Most + 50));
+        Assert.Null(await says.AboutAsync("job-9", CancellationToken.None));
     }
 }

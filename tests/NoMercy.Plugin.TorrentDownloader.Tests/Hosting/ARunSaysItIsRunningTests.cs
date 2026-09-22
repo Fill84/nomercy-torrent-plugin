@@ -147,7 +147,7 @@ public class ARunSaysItIsRunningTests : IDisposable
             Shelves = new(),
         });
 
-        string bar = string.Join(" ", Rendered.Words(await after.GetViewAsync(new() { Route = "/" }, CancellationToken.None)));
+        string bar = string.Join(" ", Rendered.Words(await after.GetViewAsync(Requests.View("/"), CancellationToken.None)));
 
         // Finished or stopped: a run over an empty test library can be done
         // before the stop reaches it. Either way it is not "never".
@@ -190,7 +190,7 @@ public class ARunSaysItIsRunningTests : IDisposable
 
         Assert.False(plugin.Running);
 
-        string bar = string.Join(" ", Rendered.Words(await plugin.GetViewAsync(new() { Route = "/" }, CancellationToken.None)));
+        string bar = string.Join(" ", Rendered.Words(await plugin.GetViewAsync(Requests.View("/"), CancellationToken.None)));
 
         Assert.Contains("stopped at", bar, StringComparison.Ordinal);
     }
@@ -217,7 +217,7 @@ public class ARunSaysItIsRunningTests : IDisposable
         {
             DataFolderPath = _folder,
             Permits = new FakeGrants(),
-            Container = new FakeProvider(),
+            Encodes = new FakeEncoder(),
         });
 
         Settings settings = new() { IncompleteFolder = _folder, IntakeFolder = _folder };
@@ -285,7 +285,7 @@ public class ARunSaysItIsRunningTests : IDisposable
         {
             DataFolderPath = _folder,
             Permits = new FakeGrants(),
-            Container = new FakeProvider(),
+            Encodes = new FakeEncoder(),
         });
 
         Settings settings = new() { IncompleteFolder = _folder, IntakeFolder = _folder };
@@ -294,6 +294,14 @@ public class ARunSaysItIsRunningTests : IDisposable
         {
             settings.DisabledDefaultSources.Add(source);
         }
+
+        // A cycle finished a moment ago, written before the folders are: a
+        // plugin that has never run one is due at once, and its own cadence
+        // would start a run beside the ones this test starts by hand and
+        // counts. The database is made and migrated by the first thing that
+        // reads it, which has to be the plugin.
+        _ = await plugin.EpisodesAsync(CancellationToken.None);
+        await new CadenceRepository(new Store(_folder)).RecordFinishedAsync(JobNames.Cycle, DateTimeOffset.UtcNow, CancellationToken.None);
 
         await plugin.Settings.SaveAsync(settings, CancellationToken.None);
 

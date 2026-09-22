@@ -33,6 +33,6 @@ public sealed class RecordingEncoder : IEncodeGateway
     {
         Asked.Add((stagedFile, episode, show));
 
-        return Task.FromResult(Takes ? new EncodeAsk(true) : EncodeAsk.No);
+        return Task.FromResult(Takes ? new EncodeAsk(true, JobId) : EncodeAsk.No);
     }
 }

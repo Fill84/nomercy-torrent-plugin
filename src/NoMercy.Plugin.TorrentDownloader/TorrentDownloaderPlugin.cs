@@ -1,8 +1,6 @@
 using System.Globalization;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using NoMercy.Events.Library;
-using NoMercy.Events.Plugins;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
@@ -13,7 +11,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader;
 
@@ -96,12 +94,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private HttpClient? _trackerHttp;
     private Transfers? _transfers;
 
-    /// <summary>What the server has said about the encodes this plugin asked for.</summary>
-    /// <remarks>
-    /// Built once and kept, because it is only worth anything for having been
-    /// listening: one built per transfers pass would know nothing about an
-    /// encode that finished before it existed.
-    /// </remarks>
+    /// <summary>What the server says about the encodes this plugin asked for, asked by job id.</summary>
     private EncoderSays? _says;
     private int _settled;
     private SourceLedgerRepository? _ledger;
@@ -151,8 +144,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <summary>Whether a start has put back what the client held.</summary>
     private int _startedUp;
 
-    /// <summary>What the plugin hears the server say it has loaded through.</summary>
-    private IDisposable? _loaded;
 
     /// <summary>What the cycle's own state is read and written under.</summary>
     private readonly Lock _cycleLock = new();
@@ -195,8 +186,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private readonly Onlookers _onlookers = new();
 
-    /// <summary>What the plugin listens to the server's library scans through.</summary>
-    private IDisposable? _scanning;
 
     /// <summary>When the next cycle falls due, set to that moment and no sooner.</summary>
     /// <remarks>
@@ -310,8 +299,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             volumeOf: null,
 
             // Where the server says it can write, used only to make a refused
-            // folder something the owner can act on. media-server #32.
-            storage: () => context.Services.GetService(typeof(IPluginStorage)) as IPluginStorage);
+            // folder something the owner can act on. media-server #32. Read
+            // when a folder is refused and not before: on contract 12 the
+            // facade throws by name on a server that wired none, and a
+            // refusal that cannot be enriched is still a refusal.
+            places: () => GrantedPaths(context));
         _database = new(context.DataFolderPath);
         _episodes = new(_database);
         _grabs = new(_database);
@@ -335,56 +327,45 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // again, and the owner reported it before any test did.
         _journal.Recorded += Moved;
 
-        // The server finishing a library scan, which is one of the three things
-        // that start a cycle. The owner's own words on 13 September 2026: the
-        // same chain that Run starts should also be started "door de library
-        // update van de media-server zelf".
-        //
-        // The scan and not a file appearing. LibraryFileWatcher raises
-        // FileCreatedEvent live, and an encode this plugin asked for lands a
-        // file in the library — so a cycle hung on that would start itself, for
-        // ever.
-        _scanning = context.EventBus.Subscribe<LibraryScanCompletedEvent>((scan, _) =>
-        {
-            Trigger($"the server finished scanning {scan.LibraryName}");
-
-            // And a transfers pass, because a scan is the server saying the
-            // library has just been read — which is what closes a grab waiting
-            // on an encode the server never says anything about: one the owner
-            // took out of the queue by hand, or one that ended with nothing to
-            // encode. The owner's ruling of 14 September 2026 is that the
-            // library decides, not a clock.
-            StartTransfers();
-
-            return Task.CompletedTask;
-        });
-
         // And what a start owes — the torrents that were running, the clock —
-        // when the server says this plugin has loaded, which is after this
-        // method. Not here: this runs while the server is still coming up, and
-        // all of it is I/O.
-        _loaded = context.EventBus.Subscribe<PluginLoadedEvent>((loaded, publishing) =>
+        // off this thread, because this method runs while the server is still
+        // coming up and all of it is I/O. Until contract 12 the plugin waited
+        // for the server to say it had loaded: that event went with the bus,
+        // and nothing on IPluginContext says it now, so the start is its own.
+        //
+        // Nothing here listens for a library scan any more, and that is a
+        // change to what starts a run (docs/specs/run.md). Contract 12 gives a
+        // plugin no bus to hear the server's own events on, and the one facade
+        // made for it — Library.Watch — is refused by name on a server running
+        // the plugin in its own process; the run interval is what covers a scan
+        // now. Nor does anything here listen for an encode ending: what became
+        // of a job is asked of the server by the id it handed back, in
+        // Transfers, on every pass.
+        _ = Task.Run(() => StartUpAsync(Lifetime), CancellationToken.None);
+
+        // And again once the owner sets the folders, because a start with
+        // nowhere to put a download owes nothing yet: on a fresh install the
+        // folders are set after the plugin has started, and every part of a
+        // start remembers whether it has run, so the second is the first that
+        // does anything.
+        _settings.Saved += () => _ = Task.Run(() => StartUpAsync(Lifetime), CancellationToken.None);
+    }
+
+    /// <summary>Where the server says it can write, or nothing on a server that will not say.</summary>
+    /// <remarks>
+    /// <c>IPluginContext.Server</c> is a facade a host wires or refuses by name — it throws rather than
+    /// answering null — and a list read to enrich a refusal must never turn into a refusal of its own.
+    /// </remarks>
+    private static IReadOnlyList<PluginStorageLocation> GrantedPaths(IPluginContext context)
+    {
+        try
         {
-            if (string.Equals(loaded.PluginId, PluginIdentity.IdText, StringComparison.OrdinalIgnoreCase))
-            {
-                // Before anything else: the buttons. An update through the catalogue left the server serving
-                // the controllers of the copy it started with, and every button refused (see OwnEndpoints).
-                _ = Task.Run(ServeOwnEndpoints, CancellationToken.None);
-
-                _ = Task.Run(() => StartUpAsync(Lifetime), CancellationToken.None);
-            }
-
-            return Task.CompletedTask;
-        });
-
-        // And the server's own encoding events, listened to from the moment
-        // this plugin is loaded rather than from its first transfers pass.
-        // Built here because a listener is only worth anything for having been
-        // listening: one made later knows nothing about an encode that
-        // finished before it existed, and a restart during an encode is
-        // exactly when that matters. Subscribing is not I/O, so it breaks
-        // nothing this method promises.
-        _ = Says();
+            return context.Server.GrantedPaths;
+        }
+        catch (PluginRefusedException)
+        {
+            return [];
+        }
     }
 
     /// <summary>The database, migrated up to date before anything opens it.</summary>
@@ -931,10 +912,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             await AppliedAsync(ct),
             new Stager(_journal, Context.Logger),
 
-            // The contract where this server offers it, and the older way where
-            // it does not. media-server #30 and #35 are what made the first of
-            // those possible.
-            EncodeGateway.For(Context.Services, _journal, Context.Logger),
+            // The encoder facade the context carries, which the server hands
+            // over only to a plugin whose manifest names the encoder hook.
+            // media-server #30 and #35 are what made it possible.
+            EncodeGateway.For(Context.Encoder, _journal, Context.Logger),
             _journal,
             Context.Logger,
             time: null,
@@ -944,10 +925,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // waited on until the owner cancels it.
             says: Says(),
 
-            // What adds a show the owner does not have yet. Until this, a pack
-            // for one could not be dispatched at all: an encode is asked for by
-            // an episode id and a show with no row has none.
-            imports: Imports());
+            // Nothing adds a show the owner does not have any more. That went
+            // through the server's own parts by name, reached through a
+            // container contract 12 no longer hands a plugin; a pack for such a
+            // show is left where it is and the History names the show to add.
+            imports: null);
 
         await _transfers.TickAsync(
             settings.IncompleteFolder,
@@ -960,43 +942,39 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// What the server has said about this plugin's encodes, listening from the
-    /// first time it is wanted.
+    /// What the server says about this plugin's encodes, asked by the job id it
+    /// handed back — or nothing, on a server that offers no jobs facade.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>And its saying so is what sets the rest going.</strong> Staging
-    /// the next episode, deleting a download the encoder has finished with and
-    /// marking a grab done all used to wait for the transfers cadence to come
-    /// round, which is why that cadence was a minute. They happen when the
-    /// encode really ends now.
+    /// Asked on every transfers pass rather than heard as it happens. Until
+    /// contract 12 the plugin listened to the server's own encoding events and
+    /// a pass ran the moment one arrived; a plugin on contract 12 has no bus
+    /// to listen on, and what it has instead is <c>IPluginJobs</c>, which
+    /// answers for the id <c>IPluginEncoder</c> handed back. So an encode that
+    /// ends is noticed on the next pass, within the transfers cadence, and the
+    /// pages are drawn again by that pass.
     /// </para>
     /// <para>
-    /// The pass is started and not awaited, on the plugin's own lifetime: this
-    /// is called from the media server's event bus, which publishes to every
-    /// subscriber in turn, and a plugin that staged a file and asked for an
-    /// encode before returning would hold up everything else the server wanted
-    /// to tell about its own encode.
+    /// Null and not a facade that refuses: the server hands Jobs over only
+    /// with the encoder, and a plugin holding neither is not waiting on any
+    /// job. Transfers treats "nothing to ask" exactly as it treated "nothing
+    /// heard" — as no proof either way.
     /// </para>
     /// </remarks>
-    private EncoderSays Says()
+    private IEncoderSays? Says()
     {
         if (_says is not null)
         {
             return _says;
         }
 
-        _says = new(Context.EventBus, Context.Logger);
-
-        _says.Said += media =>
+        if (Context.Jobs is not IPluginJobs jobs)
         {
-            _context?.Logger.LogDebug("The server has spoken about encode {Media}.", media);
+            return null;
+        }
 
-            StartTransfers();
-
-            // And the pages, which draw what the History says about a dispatch.
-            Moved();
-        };
+        _says = new(jobs, Context.Logger);
 
         return _says;
     }
@@ -1079,28 +1057,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private void StartTransfers()
     {
         _ = Task.Run(() => TransfersGuardedAsync(Lifetime), CancellationToken.None);
-    }
-
-    /// <summary>Has the server serve this copy's endpoints, and never takes the plugin down doing it.</summary>
-    /// <remarks>
-    /// A server that hands out no container — a test, or a host that never gives one — has nothing to do this
-    /// with, and the plugin works as it always did.
-    /// </remarks>
-    private void ServeOwnEndpoints()
-    {
-        if (_context is not IPluginContext context)
-        {
-            return;
-        }
-
-        try
-        {
-            new OwnEndpoints(context.Services, context.Logger).ServeCurrent(PluginIdentity.Id);
-        }
-        catch (Exception wrong)
-        {
-            context.Logger.LogDebug("The plugin's endpoints were not checked: {Reason}", wrong.Message);
-        }
     }
 
     /// <summary>
@@ -2603,16 +2559,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _live?.Changed();
     }
 
-    /// <summary>What adds a show the owner does not have, having said whether it can.</summary>
-    private ShowImport Imports()
-    {
-        ShowImport imports = new(Context.Services, Context.Logger);
-
-        imports.Ready();
-
-        return imports;
-    }
-
     /// <summary>
     /// What the status bar says about the search cycle.
     /// </summary>
@@ -2660,9 +2606,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // Before the engine, which it reads on every tick.
         _heartbeat?.Dispose();
         _onlookers.Dispose();
-        _says?.Dispose();
-        _scanning?.Dispose();
-        _loaded?.Dispose();
 
         lock (_cycleLock)
         {

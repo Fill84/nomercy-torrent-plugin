@@ -85,17 +85,12 @@ public class HardeningTests : IDisposable
         // A different plugin over the same folder, which is what a restart is.
         using TorrentDownloaderPlugin after = Initialised();
 
-        IReadOnlyList<TrackedEpisode> tracked =
-            await (await after.EpisodesAsync(CancellationToken.None)).AllAsync(CancellationToken.None);
-
-        // Rows survive the restart exactly as they were: nothing re-derives
-        // them from the library here, so what was Missing stays Missing and
-        // what was waiting to air stays waiting.
-        Assert.Equal(EpisodeState.Missing, tracked.Single(one => one.Key == Taken).State);
-        Assert.Equal(EpisodeState.NotAired, tracked.Single(one => one.Key == Waiting).State);
-
-        // And the grab is still there for recovery to re-add rather than
-        // download all over again.
+        // The grab is still there for recovery to re-add rather than download
+        // all over again. Nothing is said about the episode rows: a plugin on
+        // contract 12 starts itself the moment it is initialised, and a start
+        // derives the rows from the library again — an empty one here — exactly
+        // as the host's first tick always did on a real server. Reading them
+        // back before or after that is a race, and the grab is the claim.
         Assert.Single(await (await after.GrabsAsync(CancellationToken.None)).OpenAsync(CancellationToken.None));
     }
 

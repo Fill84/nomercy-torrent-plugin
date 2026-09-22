@@ -1,6 +1,6 @@
 using System.Reflection;
 using Microsoft.Extensions.Logging;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
@@ -16,8 +16,14 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// <para>
 /// The media server is not this plugin's to change. What it offers is enough: the registrar is in the server's
 /// container, says which plugin an assembly's controllers belong to, and detaches and attaches them. Reached by
-/// name, as <see cref="ShowImport"/> reaches the parts that add a show, and a server without it is said, never
-/// thrown at.
+/// name, and a server without it is said, never thrown at.
+/// </para>
+/// <para>
+/// <strong>From a controller, on contract 12.</strong> The plugin used to do this the moment the server said it
+/// had loaded, through a container the context handed it; contract 12 hands a plugin neither the event nor the
+/// container. A controller still has both — it is built by the server's own container, on a request — and the
+/// controller that finds itself stale is exactly the one an update left behind. So <see cref="Controllers.LivePlugin"/>
+/// does it on the first press after an update, and answers that press with "press again".
 /// </para>
 /// </remarks>
 public sealed class OwnEndpoints(IServiceProvider services, ILogger logger)
@@ -75,6 +81,29 @@ public sealed class OwnEndpoints(IServiceProvider services, ILogger logger)
         {
             logger.LogWarning(wrong, "The plugin's endpoints could not be attached again: {Reason}", wrong.Message);
 
+            return false;
+        }
+    }
+
+    /// <summary>Whether the server already serves the running copy's controllers.</summary>
+    /// <remarks>
+    /// Asked by the controller that follows the one that re-attached them: two answers to one press read
+    /// the plugin twice, and the second must say the same thing as the first — press again — rather than
+    /// that the server needs a restart.
+    /// </remarks>
+    public bool IsServing(Ulid pluginId)
+    {
+        try
+        {
+            return services.GetService(typeof(IPluginManager)) is IPluginManager manager
+                   && Find(RegistrarType) is Type type
+                   && services.GetService(type) is object registrar
+                   && manager.GetPluginInstance(pluginId)?.GetType().Assembly is Assembly running
+                   && Method(type, "OwnerOf", 1)?.Invoke(registrar, [running]) is object owner
+                   && string.Equals(owner.ToString(), pluginId.ToString(), StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception wrong) when (wrong is TargetInvocationException or MemberAccessException or ArgumentException or InvalidOperationException)
+        {
             return false;
         }
     }

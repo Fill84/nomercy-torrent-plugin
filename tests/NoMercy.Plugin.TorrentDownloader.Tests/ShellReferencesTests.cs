@@ -38,8 +38,8 @@ public class ShellReferencesTests
 
         Assert.Contains("NoMercy.Plugin.TorrentDownloader.Core", references);
         Assert.Contains("NoMercy.Plugin.TorrentDownloader.Bittorrent", references);
-        Assert.Contains("NoMercy.Plugins.Abstractions", references);
-        Assert.Contains("NoMercy.Plugins.Mvc", references);
+        Assert.Contains("NoMercy.PluginSdk.Abstractions", references);
+        Assert.Contains("NoMercy.PluginSdk.Mvc", references);
     }
 
     /// <summary>

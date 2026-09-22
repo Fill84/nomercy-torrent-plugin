@@ -1,6 +1,6 @@
 using System.Globalization;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Views;
 

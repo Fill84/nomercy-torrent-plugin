@@ -45,12 +45,13 @@
 
   <ItemGroup>
     <!--
-      Not on nuget.org. scripts/fetch-abstractions packs both out of the media
-      server on branch dev into _nupkgs/. docs/01-plugin.md § Building against
-      the contract.
+      Not on nuget.org until a server release publishes them, and none with
+      the renamed contract has. scripts/fetch-abstractions packs both out of
+      the media server on branch dev into _nupkgs/. docs/01-plugin.md
+      § Building against the contract.
     -->
-    <PackageReference Include="NoMercy.Plugins.Abstractions" Version="$(NoMercyContractVersion)" />
-    <PackageReference Include="NoMercy.Plugins.Mvc" Version="$(NoMercyContractVersion)" />
+    <PackageReference Include="NoMercy.PluginSdk.Abstractions" Version="$(NoMercyContractVersion)" />
+    <PackageReference Include="NoMercy.PluginSdk.Mvc" Version="$(NoMercyContractVersion)" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,4 +1,7 @@
-using NoMercy.Plugins.Abstractions;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 
@@ -24,18 +27,41 @@ namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 /// The third is the one nobody guesses. A plugin updated while the server ran
 /// is loaded beside the old copy rather than over it, and a type from one load
 /// context is not the same type as the identically named one from another — so
-/// <c>as</c> answers null against an instance that is sitting right there. A
-/// restart settles it, and until now nothing said so.
+/// <c>as</c> answers null against an instance that is sitting right there.
 /// </para>
 /// <para>
-/// So the reason travels with the refusal. The status code stays what it was;
-/// what changes is that the answer says which of the three happened.
+/// <strong>And the third is put right by the controller that meets it.</strong>
+/// The server attaches a plugin's controllers once, when it first loads it, and
+/// goes on serving that copy's after an update (media-server #60). Until
+/// contract 12 the plugin re-attached its own the moment the server said it had
+/// loaded; a plugin on 12 hears no such event and holds no container. A
+/// controller does — it is built by the server's own container, on a request —
+/// and the stale controller is exactly the one an update leaves answering. So
+/// it has the server serve the running copy's controllers, and answers this one
+/// press with "press again": the route table is rebuilt behind it, and the next
+/// press reaches the copy that is running.
 /// </para>
 /// </remarks>
 internal static class LivePlugin
 {
     /// <summary>The plugin this request is for, or null with the reason.</summary>
     public static TorrentDownloaderPlugin? Of(IPluginManager plugins, Ulid id, out string refusal)
+    {
+        return Of(plugins, services: null, id, out refusal);
+    }
+
+    /// <summary>
+    /// The same, from a request whose container can put a stale controller
+    /// right.
+    /// </summary>
+    /// <param name="plugins">The server's plugin manager, which holds the running instance.</param>
+    /// <param name="services">
+    /// The request's own services — the server's container — or null where the
+    /// caller has none, in which case a stale controller is only named.
+    /// </param>
+    /// <param name="id">This plugin's id.</param>
+    /// <param name="refusal">Why the plugin could not be reached, or empty when it was.</param>
+    public static TorrentDownloaderPlugin? Of(IPluginManager plugins, IServiceProvider? services, Ulid id, out string refusal)
     {
         IPlugin? loaded = plugins.GetPluginInstance(id);
 
@@ -46,13 +72,55 @@ internal static class LivePlugin
             return plugin;
         }
 
-        refusal = loaded is null
-            ? $"The server has no running instance of {id}, so this plugin is installed and not loaded."
-            : $"The server holds a {loaded.GetType().FullName} for {id} and this endpoint was built "
-              + $"against {typeof(TorrentDownloaderPlugin).FullName}. They are the same class from two "
-              + "load contexts, which is what an update loaded beside the old copy leaves behind. "
-              + "Restart the server and it will be one again.";
+        if (loaded is null)
+        {
+            refusal = $"The server has no running instance of {id}, so this plugin is installed and not loaded.";
+
+            return null;
+        }
+
+        if (services is not null && Reattached(services, id))
+        {
+            refusal = "The plugin was updated while the server ran, and this button belonged to the copy it "
+                      + "replaced. The running copy's buttons have just been attached: press it again.";
+
+            return null;
+        }
+
+        refusal = $"The server holds a {loaded.GetType().FullName} for {id} and this endpoint was built "
+                  + $"against {typeof(TorrentDownloaderPlugin).FullName}. They are the same class from two "
+                  + "load contexts, which is what an update loaded beside the old copy leaves behind. "
+                  + "Restart the server and it will be one again.";
 
         return null;
+    }
+
+    /// <summary>
+    /// Has the server serve the running copy's controllers, or finds it already
+    /// does, and never takes the request down doing it.
+    /// </summary>
+    /// <remarks>
+    /// Already serving counts: a controller reads the plugin twice for one press
+    /// — once to reach it, once for the reason it could not — and the second read
+    /// finds the work of the first done. Both answers have to say "press again".
+    /// </remarks>
+    private static bool Reattached(IServiceProvider services, Ulid id)
+    {
+        ILogger logger = (services.GetService(typeof(ILoggerFactory)) as ILoggerFactory)
+            ?.CreateLogger(typeof(TorrentDownloaderPlugin).Namespace ?? nameof(NoMercy))
+            ?? NullLogger.Instance;
+
+        try
+        {
+            OwnEndpoints endpoints = new(services, logger);
+
+            return endpoints.ServeCurrent(id) || endpoints.IsServing(id);
+        }
+        catch (Exception wrong)
+        {
+            logger.LogDebug("The plugin's endpoints were not checked: {Reason}", wrong.Message);
+
+            return false;
+        }
     }
 }

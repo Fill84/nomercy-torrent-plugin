@@ -3,7 +3,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests;
@@ -40,7 +40,7 @@ public class SecretsNeverEscapeTests
 
         foreach (string route in Routes)
         {
-            PluginView view = await plugin.GetViewAsync(new() { Route = route }, CancellationToken.None);
+            PluginView view = await plugin.GetViewAsync(Requests.View(route), CancellationToken.None);
 
             string page = string.Join(" ", Rendered.Words(view));
 
@@ -171,7 +171,7 @@ public class SecretsNeverEscapeTests
 
         foreach (string route in Routes)
         {
-            await plugin.GetViewAsync(new() { Route = route }, CancellationToken.None);
+            await plugin.GetViewAsync(Requests.View(route), CancellationToken.None);
         }
 
         string log = string.Join(" ", context.Log.Lines);

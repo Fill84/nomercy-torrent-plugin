@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
@@ -14,7 +14,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// One line of composition, which is what <see cref="IEncodeGateway"/> was made
 /// a port for. There is one implementation now and it calls
 /// <see cref="IPluginEncoder"/>: no server type is named that does not come from
-/// <c>NoMercy.Plugins.Abstractions</c>, and there is no reflection anywhere in
+/// <c>NoMercy.PluginSdk.Abstractions</c>, and there is no reflection anywhere in
 /// this plugin.
 /// </para>
 /// <para>
@@ -33,9 +33,18 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 public static class EncodeGateway
 {
     /// <summary>The gateway for this server, or one that says why there is none.</summary>
-    public static IEncodeGateway For(IServiceProvider services, IActivityJournal journal, ILogger logger)
+    /// <param name="encoder">
+    /// <c>IPluginContext.Encoder</c>: the facade the server hands a plugin whose
+    /// manifest names the encoder hook, and null for one whose manifest does
+    /// not — or on a server that mediates no encoder at all. The context is
+    /// the only place a plugin on contract 12 gets it; there is no container to
+    /// ask.
+    /// </param>
+    /// <param name="journal">Where a refusal is said for the owner to read.</param>
+    /// <param name="logger">Where which gateway was chosen is said, once.</param>
+    public static IEncodeGateway For(IPluginEncoder? encoder, IActivityJournal journal, ILogger logger)
     {
-        if (services.GetService(typeof(IPluginEncoder)) is IPluginEncoder encoder)
+        if (encoder is not null)
         {
             // Said out loud, because which of the two was chosen decides
             // whether anything this plugin downloads is ever encoded, and a
@@ -53,8 +62,9 @@ public static class EncodeGateway
         // of them would sit in the intake folder waiting for an encode that
         // could never be asked for.
         logger.LogWarning(
-            "This server does not offer IPluginEncoder, so no encode can be asked for. "
-            + "The plugin needs a server carrying plugin contract 0.1.479 or newer.");
+            "This server handed the plugin no IPluginEncoder, so no encode can be asked for. "
+            + "The server hands it over only to a plugin whose manifest names the encoder hook, "
+            + "and only once the owner has approved that on the plugin's page.");
 
         return new NoEncoder(journal, logger);
     }
@@ -83,8 +93,8 @@ public static class EncodeGateway
         private Task<EncodeAsk> Refuse(string name)
         {
             const string Reason =
-                "this server does not offer IPluginEncoder, so no encode can be asked for; "
-                + "it needs plugin contract 0.1.479 or newer";
+                "this server handed the plugin no IPluginEncoder, so no encode can be asked for; "
+                + "the plugin's manifest names the encoder hook, and the owner approves it on the plugin's page";
 
             logger.LogWarning("No encode was dispatched for {File}: {Reason}.", name, Reason);
             journal.Failed(ActivityStage.Download, name, Reason);

@@ -1,6 +1,6 @@
 using System.Reflection;
 
-using NoMercy.Plugins.Mvc;
+using NoMercy.PluginSdk.Mvc;
 
 using Xunit;
 

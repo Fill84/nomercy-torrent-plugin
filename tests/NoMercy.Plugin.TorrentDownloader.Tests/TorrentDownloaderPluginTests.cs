@@ -1,5 +1,3 @@
-using NoMercy.Events.Encoding;
-using NoMercy.Events.Library;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
@@ -7,31 +5,13 @@ using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests;
 
 public class TorrentDownloaderPluginTests
 {
-    /// <remarks>
-    /// A plugin is constructed and initialised while the server is still coming
-    /// up. Anything slow here — opening the database, reading the catalogue,
-    /// reaching a tracker — delays the server, and anything that throws takes
-    /// the plugin out before it has a page on which to say why.
-    /// </remarks>
-    [Fact]
-    public void InitializeTouchesNoDisk()
-    {
-        using TorrentDownloaderPlugin plugin = new();
-        FakePluginContext context = new();
-
-        plugin.Initialize(context);
-
-        Assert.False(Directory.Exists(context.DataFolderPath));
-        Assert.Empty(context.Log.Lines);
-    }
-
     /// <remarks>
     /// <para>
     /// <strong>The host is told hourly, and that is not the owner's cadence.</strong>
@@ -157,7 +137,7 @@ public class TorrentDownloaderPluginTests
         plugin.Journal.Started(ActivityStage.Find, "Silo S03E06", "asking 1337x");
 
         PluginView view = await plugin.GetViewAsync(
-            new() { Route = Pages.ActivityRoute },
+            Requests.View(Pages.ActivityRoute),
             CancellationToken.None);
 
         Assert.Contains(Rendered.Words(view), word => word == "Silo S03E06");
@@ -194,7 +174,7 @@ public class TorrentDownloaderPluginTests
             CancellationToken.None);
 
         PluginView page = await plugin.GetViewAsync(
-            new() { Route = Pages.SettingsRoute },
+            Requests.View(Pages.SettingsRoute),
             CancellationToken.None);
 
         Assert.All(
@@ -264,7 +244,7 @@ public class TorrentDownloaderPluginTests
                 DataFolderPath = folder,
                 Shelves = shelves,
                 Permits = new FakeGrants(),
-                Container = new FakeProvider(),
+                Encodes = new FakeEncoder(),
             });
 
             Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
@@ -384,7 +364,7 @@ public class TorrentDownloaderPluginTests
                 DataFolderPath = folder,
                 Shelves = shelves,
                 Permits = new FakeGrants(),
-                Container = new FakeProvider(),
+                Encodes = new FakeEncoder(),
             });
 
             Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
@@ -424,126 +404,6 @@ public class TorrentDownloaderPluginTests
     }
 
     /// <summary>
-    /// The plugin hears the server's own encoding events, from the moment it is
-    /// loaded.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// <strong>From the moment it is loaded, and that is the whole of this
-    /// test.</strong> The listener was built on the first transfers pass at
-    /// first, which meant a plugin that had not ticked yet heard nothing — and
-    /// a restart part way through an encode is exactly when the event matters
-    /// and exactly when no pass has run. A listener is only worth anything for
-    /// having been listening.
-    /// </para>
-    /// <para>
-    /// What is asserted is that the pages are told, because that is the visible
-    /// end of the chain: the server says an encode finished, the plugin acts on
-    /// it, and every open page is pushed to. Until this the plugin learned of a
-    /// finished encode only by asking about every job it had dispatched, once a
-    /// job, on every tick of a cadence set to a minute for that reason.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public async Task TheServerSayingAnEncodeIsDoneReachesThePlugin()
-    {
-        using TorrentDownloaderPlugin plugin = new();
-        FakePluginContext context = new();
-
-        plugin.Initialize(context);
-
-        Assert.Empty(context.Pushes.Pushes);
-
-        await context.Bus.PublishAsync(new EncodingCompletedEvent
-        {
-            JobId = 153823,
-            OutputPath = "/data/tv/Silo/Season 3/Silo.S03E06.mkv",
-            Duration = TimeSpan.FromMinutes(11),
-        });
-
-        // Bounded rather than slept through: the push is coalesced by
-        // LiveSnapshot, so it follows within its own floor of a second rather
-        // than at once.
-        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(10);
-
-        while (context.Pushes.Pushes.Count == 0 && DateTimeOffset.UtcNow < giveUpAt)
-        {
-            await Task.Delay(TimeSpan.FromMilliseconds(50));
-        }
-
-        Assert.NotEmpty(context.Pushes.Pushes);
-    }
-
-    /// <summary>
-    /// The server finishing a library scan starts a cycle.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// One of the three things that start one — the owner's words on
-    /// 13 September 2026: the same chain Run starts should also be started
-    /// "door de library update van de media-server zelf".
-    /// </para>
-    /// <para>
-    /// <strong>The scan, and not a file appearing.</strong>
-    /// <c>LibraryFileWatcher</c> raises <c>FileCreatedEvent</c> live, and an
-    /// encode this plugin asked for lands a file in the library — so a cycle
-    /// hung on that would start itself, and then start itself again, for ever.
-    /// </para>
-    /// </remarks>
-    [Fact]
-    public async Task TheServerFinishingALibraryScanStartsACycle()
-    {
-        string folder = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
-        Directory.CreateDirectory(folder);
-
-        try
-        {
-            using TorrentDownloaderPlugin plugin = new();
-            FakePluginContext context = new()
-            {
-                DataFolderPath = folder,
-                Permits = new FakeGrants(),
-                Container = new FakeProvider(),
-            };
-
-            plugin.Initialize(context);
-
-            Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
-
-            DisableEveryShippedSource(settings);
-
-            await plugin.Settings.SaveAsync(settings, CancellationToken.None);
-
-            Assert.False(plugin.Running);
-
-            // The database is created and migrated on first use, and a test that
-            // reads it from the side has to wait for that rather than race it.
-            _ = await plugin.EpisodesAsync(CancellationToken.None);
-
-            await context.Bus.PublishAsync(new LibraryScanCompletedEvent
-            {
-                LibraryId = Ulid.NewUlid(),
-                LibraryName = "Series",
-                ItemsFound = 3,
-                Duration = TimeSpan.FromSeconds(2),
-            });
-
-            CadenceRepository cadences = new(new Store(folder));
-
-            IReadOnlyDictionary<string, DateTimeOffset> finished = await UntilAsync(
-                cadences,
-                done => done.ContainsKey(JobNames.Cycle),
-                TimeSpan.FromSeconds(20));
-
-            Assert.True(finished.ContainsKey(JobNames.Cycle), "a finished library scan started no cycle");
-        }
-        finally
-        {
-            TemporaryFolder.Forget(folder);
-        }
-    }
-
-    /// <summary>
     /// A cycle stays open while something it started is still in hand, and
     /// maintenance waits for it.
     /// </summary>
@@ -575,7 +435,7 @@ public class TorrentDownloaderPluginTests
             {
                 DataFolderPath = folder,
                 Permits = new FakeGrants(),
-                Container = new FakeProvider(),
+                Encodes = new FakeEncoder(),
             });
 
             Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
@@ -644,17 +504,12 @@ public class TorrentDownloaderPluginTests
 
         Assert.False(plugin.Watched, "a plugin nobody has opened said somebody was looking.");
 
-        // Something happening on the server is not somebody looking.
-        await context.Bus.PublishAsync(new EncodingCompletedEvent
-        {
-            JobId = 153823,
-            OutputPath = "/data/tv/Silo/Season 3/Silo.S03E06.mkv",
-            Duration = TimeSpan.FromMinutes(11),
-        });
+        // Something happening in the plugin is not somebody looking.
+        plugin.Journal.Failed(ActivityStage.Download, "Silo S03E06", "no peer served its metadata");
 
-        Assert.False(plugin.Watched, "the server doing its work was taken for somebody looking.");
+        Assert.False(plugin.Watched, "the plugin doing its work was taken for somebody looking.");
 
-        _ = await plugin.GetViewAsync(new() { Route = "/downloads" }, CancellationToken.None);
+        _ = await plugin.GetViewAsync(Requests.View("/downloads"), CancellationToken.None);
 
         Assert.True(plugin.Watched, "a page was fetched and nobody was said to be looking.");
     }

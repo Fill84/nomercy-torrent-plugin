@@ -464,35 +464,35 @@ public sealed class Transfers(
 
                 if (covers.Count == 0)
                 {
-                    // Nothing the owner has. The show is looked up and added,
-                    // which is the one thing that turns this into an ordinary
-                    // grab: once it is in a library it has episodes, and an
-                    // episode has the id an encode is asked for by.
+                    // Nothing the owner has. Where something can add the show,
+                    // it is looked up and added, which is the one thing that
+                    // turns this into an ordinary grab: once it is in a library
+                    // it has episodes, and an episode has the id an encode is
+                    // asked for by. Handing the files to the encoder without an
+                    // id does not: PluginEncoder writes the media id straight
+                    // into VideoEncodeJob.Id and that job resolves it against
+                    // Movies.Id or Episodes.Id and nothing else, so no id
+                    // resolves no row, the job returns having done no work, and
+                    // the queue records it finished. On 31 August 2026 that was
+                    // nine files, nine jobs finished inside two minutes, and
+                    // nothing written to the library.
                     //
-                    // It is the same call the dashboard's Add content makes —
-                    // DispatchJob<ShowImportJob>(id, libraryId) — and it is the
-                    // only thing that adds a show. Handing the files to the
-                    // encoder without an id does not: PluginEncoder writes the
-                    // media id straight into VideoEncodeJob.Id and that job
-                    // resolves it against Movies.Id or Episodes.Id and nothing
-                    // else, so no id resolves no row, the job returns having
-                    // done no work, and the queue records it finished. On 31
-                    // August 2026 that was nine files, nine jobs finished inside
-                    // two minutes, and nothing written to the library.
-                    //
-                    // Nothing else happens this tick. The import runs on the
-                    // server's own queue, and the tick after it lands sees this
-                    // like any other grab — matched by name, covered, staged,
-                    // dispatched by each episode's own id.
+                    // On contract 12 nothing can add the show: that went through
+                    // the server's own parts by name, reached through a
+                    // container the context no longer hands a plugin, and the
+                    // contract offers no facade that looks a programme up and
+                    // files it. The port stays, so the day one exists this is
+                    // one line where the plugin is composed; until then the
+                    // grab is handed on below and the History names the show.
                     if (await AddedAsync(files, thisTick, ct))
                     {
                         return [];
                     }
 
-                    // Only where that could not be done: no library of the kind
-                    // its files read as, no provider that knows the show, or a
-                    // server without the parts. Then it is named, said out loud,
-                    // and left exactly where the owner put it.
+                    // Only where that could not be done: nothing to add a show
+                    // with, no library of the kind its files read as, or no
+                    // provider that knows the show. Then it is named, said out
+                    // loud, and left exactly where the owner put it.
                     await UnplaceableAsync(finished, files, ct);
 
                     return [];
@@ -660,6 +660,14 @@ public sealed class Transfers(
             // a second time. An encode refused because the server could not yet
             // identify the file is refused for a reason that can change.
             return;
+        }
+
+        if (asked.JobId is string job)
+        {
+            // Written down before the state, so a grab that says it is dispatched
+            // always knows which job to ask about: the other way round leaves a
+            // restart between the two writes with a dispatched grab and no id.
+            await grabs.EncodeAsync(infoHash, episode, job, ct);
         }
 
         await grabs.DispatchedAsync(
@@ -860,7 +868,7 @@ public sealed class Transfers(
             // Whatever became of its grab, a file an encode is still reading stays. On 1 September 2026 a
             // pass deleted nine staged files a minute after one episode's encode died, and took episode
             // five's input away between its first bundle and its second.
-            if (await StandingAsync(stagedBy, thisTick, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
+            if (await StandingAsync(stagedBy, ct) is { State: EncodeJobState.Queued or EncodeJobState.Running })
             {
                 continue;
             }
@@ -969,7 +977,7 @@ public sealed class Transfers(
             // once and used twice: to read a file the encoder wrote but filed
             // against the wrong row, and to keep from deleting a download a job
             // is still reading.
-            EncodeJob? standing = await StandingAsync(sent, thisTick, ct);
+            EncodeJob? standing = await StandingAsync(sent, ct);
 
             // Nothing said is asked too. The server says nothing at all about an
             // encode it skips because every output is already there — South Park
@@ -1248,33 +1256,6 @@ public sealed class Transfers(
             + "so it was left where it is — add the show and it will be taken on";
     }
 
-    /// <summary>The job ids a grab is waiting on, or the ones for one episode of it.</summary>
-    /// <remarks>
-    /// A tagged id is <c>showXseasonXnumber:job</c>; an untagged one is from a
-    /// row written before a grab could hold more than one, and answers for
-    /// whatever it is asked about.
-    /// </remarks>
-    private static IEnumerable<string> Named(string column, EpisodeKey? episode)
-    {
-        foreach (string part in column.Split(' ', StringSplitOptions.RemoveEmptyEntries))
-        {
-            int colon = part.IndexOf(':', StringComparison.Ordinal);
-
-            if (colon < 0)
-            {
-                yield return part;
-
-                continue;
-            }
-
-            if (episode is null
-                || string.Equals(part[..colon], GrabRepository.Tag(episode.Value), StringComparison.Ordinal))
-            {
-                yield return part[(colon + 1)..];
-            }
-        }
-    }
-
     /// <summary>Which of a grab's staged files is the one for this episode.</summary>
     /// <remarks>
     /// By the numbers in its own name, which is what the stager wrote it under.
@@ -1342,7 +1323,7 @@ public sealed class Transfers(
 
         foreach (EpisodeKey episode in sent.Covers)
         {
-            if (await StandingAsync(sent, episode, thisTick, ct) is { State: EncodeJobState.Failed } dead)
+            if (await StandingAsync(sent, episode, ct) is { State: EncodeJobState.Failed } dead)
             {
                 failed.Add($"{episode}: {dead.Failure ?? "the server said no more than that"}");
             }
@@ -1384,37 +1365,31 @@ public sealed class Transfers(
     }
 
     /// <summary>
-    /// What the server has said about every encode a grab is waiting on, as one
+    /// What the server says about every encode a grab is waiting on, as one
     /// answer.
     /// </summary>
     /// <remarks>
     /// <para>
-    /// <strong>Nothing is asked here any more.</strong> This called
-    /// <c>IEncodeJobs.StatusAsync</c> once per job, per grab, on every transfers
-    /// tick — nine questions a minute for one season pack, for as long as its
-    /// encodes took, and the cadence was a minute so that a finished encode was
-    /// not noticed much later than it happened. The server says what it is doing
-    /// and <see cref="EncoderSays"/> listens.
-    /// </para>
-    /// <para>
-    /// <strong>Looked up by the media row, not by a job id.</strong> The job id
-    /// the plugin got back when it asked for the encode is a hash of the job's
-    /// payload, and the server's events carry the row the encode registers
-    /// against — the same episode id this plugin named when it asked. That is
-    /// the only thing the two ends have in common, so the stored job id is not
-    /// read at all now, and is not written either.
+    /// <strong>Asked, by the job id the server handed back, on every pass.</strong>
+    /// For a while nothing was asked here: the plugin heard the server's own
+    /// encoding events, which carry the media row an encode registers against
+    /// and arrive the moment it ends. A plugin on contract 12 has no bus to hear
+    /// them on, and what it has instead — <c>IPluginJobs</c> — answers for the
+    /// id <c>IPluginEncoder</c> handed back and for nothing else. So the id is
+    /// written down with the grab when the encode is asked for, and read back
+    /// here.
     /// </para>
     /// <para>
     /// Failed if any failed, because one dead encode is the answer whatever the
     /// others are doing; otherwise still going if any is; finished only when
-    /// every one of them is. Null where nothing can be said — no server to
-    /// listen to, no row for the episode, or nothing said about it yet — and
+    /// every one of them is. Null where nothing can be said — no server to ask,
+    /// no id kept for the episode, or a server that would not answer — and
     /// null is never "finished": a pack is deleted on that answer.
     /// </para>
     /// </remarks>
-    private Task<EncodeJob?> StandingAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
+    private Task<EncodeJob?> StandingAsync(StoredDownload sent, CancellationToken ct)
     {
-        return StandingAsync(sent, episode: null, thisTick, ct);
+        return StandingAsync(sent, episode: null, ct);
     }
 
     /// <summary>
@@ -1429,7 +1404,6 @@ public sealed class Transfers(
     private async Task<EncodeJob?> StandingAsync(
         StoredDownload sent,
         EpisodeKey? episode,
-        LibraryThisTick thisTick,
         CancellationToken ct)
     {
         if (says is null)
@@ -1444,18 +1418,19 @@ public sealed class Transfers(
 
         foreach (EpisodeKey one in these)
         {
-            if (await MediaAsync(one, thisTick, ct) is not int media)
+            if (!sent.EncodeJobs.TryGetValue(one, out string? job))
             {
-                // The server lists no row for it, so there is nothing an encode
-                // could have registered against and nothing to be said.
+                // No id was kept for it — dispatched before this plugin kept
+                // one, or by a server that named none — so nothing can be
+                // asked and nothing can be said.
                 return null;
             }
 
             any = true;
 
-            if (says.About(media) is not EncodeJob standing)
+            if (await says.AboutAsync(job, ct) is not EncodeJob standing)
             {
-                // Nothing said about this one. Unknown, never finished.
+                // The server would not say. Unknown, never finished.
                 return null;
             }
 
@@ -1471,23 +1446,6 @@ public sealed class Transfers(
         }
 
         return any ? going ?? new EncodeJob(EncodeJobState.Finished, null) : null;
-    }
-
-    /// <summary>The server's own id for one episode, or null where it names none.</summary>
-    /// <remarks>
-    /// Read off the rows this tick already has rather than asked for: the
-    /// library is asked once a pass and every step reads that one answer, which
-    /// is what <see cref="LibraryThisTick"/> is for.
-    /// </remarks>
-    private static async Task<int?> MediaAsync(
-        EpisodeKey episode,
-        LibraryThisTick thisTick,
-        CancellationToken ct)
-    {
-        Episode? row = (await thisTick.GetEpisodesAsync(episode.ShowId, ct))
-            .FirstOrDefault(one => one.Season == episode.Season && one.Number == episode.Number);
-
-        return row is null || row.ServerId == 0 ? null : row.ServerId;
     }
 
     /// <summary>Takes a file away, and never takes the caller down with it.</summary>

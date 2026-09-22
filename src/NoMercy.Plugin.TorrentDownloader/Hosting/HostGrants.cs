@@ -1,6 +1,6 @@
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 

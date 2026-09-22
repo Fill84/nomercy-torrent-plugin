@@ -166,5 +166,5 @@ scripts/
   deploy-to-server.*      copies a build onto a stopped server, verifies every hash
 ```
 
-`Core` references neither `NoMercy.Plugins.Abstractions` nor the Bittorrent project. That is what
+`Core` references neither `NoMercy.PluginSdk.Abstractions` nor the Bittorrent project. That is what
 makes the pipeline testable without a server and without a swarm.

@@ -1,37 +1,40 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Packs NoMercy.Plugins.Abstractions and NoMercy.Plugins.Mvc out of the media
-    server into _nupkgs/, so this repository can build against the contract.
+    Packs NoMercy.PluginSdk.Abstractions and NoMercy.PluginSdk.Mvc out of the
+    media server into _nupkgs/, so this repository can build against the
+    contract.
 
 .DESCRIPTION
-    Neither package is published anywhere, and the alternative — copying a DLL
-    out of somebody's build — is how a plugin ends up compiled against a
-    contract nobody can name. So the media server is cloned (shallow, sparse,
-    branch master) into _server/ and the two projects are packed locally.
+    The packages reach nuget.org only with a server release, and none carrying
+    the renamed contract has shipped yet; the alternative — copying a DLL out
+    of somebody's build — is how a plugin ends up compiled against a contract
+    nobody can name. So the media server is cloned (shallow, sparse, branch
+    dev) into _server/ and the two projects are packed locally.
 
-    Only five projects are checked out: the two packable ones, the two they
-    reference, and the analyzer every project in that repository inherits.
+    Only five projects are checked out: the two packable ones, the two whose
+    assemblies travel inside the first of them, and the analyzer every project
+    in that repository inherits.
 
-    The packed version is the media server's own. When it has not moved since
-    the last run, NuGet keeps serving the copy already in the global cache
-    however new the .nupkg is, and nothing says so — the build simply goes on
-    compiling against yesterday's contract. So the cache entry is deleted every
-    time.
+    The packed version is the contract's own, PluginPackageVersion. When it has
+    not moved since the last run, NuGet keeps serving the copy already in the
+    global cache however new the .nupkg is, and nothing says so — the build
+    simply goes on compiling against yesterday's contract. So the cache entry
+    is deleted every time.
 #>
 [CmdletBinding()]
 param(
-    # Branch of the media server to pack from. master, always, unless somebody
-    # is testing against something else.
+    # Branch of the media server to pack from.
     #
-    # Never dev. Its Directory.Build.props carries a fixed <Version>0.1.404</Version>
-    # that has not moved since July and never will, so packing from it produces
-    # a package NuGet believes it already has however much the contract changed.
-    # This repository sat on 0.1.404 while the server shipped 0.1.478, and every
-    # contract added in between was invisible here — the table action cell among
-    # them, which is why the Downloads page still drew its buttons in a second
-    # list under the table.
-    [string] $Branch = 'master',
+    # dev, since 22 September 2026. This script refused dev for as long as the
+    # contract was versioned with the server: dev's <Version> is frozen at
+    # 0.1.404, so every pack from it produced a package NuGet believed it
+    # already had. Since the rename to NoMercy.PluginSdk the contract carries
+    # its own <PluginPackageVersion>, 12.0.0 at the time of writing, and that
+    # objection is gone. master is where the contract is not: it sits on a
+    # release from August carrying ABI 11, while the servers the owner and
+    # Stoney run come from dev and refuse anything under 12.
+    [string] $Branch = 'dev',
 
     # Throw away _server/ and clone again.
     [switch] $Fresh
@@ -75,8 +78,8 @@ function Get-MsBuildProperty {
 }
 
 $sparsePaths = @(
-    'src/NoMercy.Plugins.Abstractions'
-    'src/NoMercy.Plugins.Mvc'
+    'src/NoMercy.PluginSdk.Abstractions'
+    'src/NoMercy.PluginSdk.Mvc'
     'src/NoMercy.Events'
     'src/NoMercy.Design'
     'src/NoMercy.Analyzers'
@@ -109,30 +112,30 @@ else {
 }
 
 $serverProps = Join-Path $serverPath 'Directory.Build.props'
-$version = Get-MsBuildProperty -Path $serverProps -Name 'Version'
+
+# The contract's own version, not the server's: the major is the ABI a server
+# refuses or accepts by, the minor moves when the contract gains a member, and
+# it is the number NuGet caches the package under below.
+$version = Get-MsBuildProperty -Path $serverProps -Name 'PluginPackageVersion'
 if (-not $version) {
-    throw "No <Version> in $serverProps. The media server changed how it versions itself."
+    throw "No <PluginPackageVersion> in $serverProps. The media server changed how it versions the plugin contract."
 }
 
-Write-Host "The media server on $Branch is version $version."
+Write-Host "The plugin contract on $Branch is version $version (server $(Get-MsBuildProperty -Path $serverProps -Name 'Version'))."
 
-# Nothing to check it against. NoMercyContractVersion floats, so the build
-# takes whatever is packed below and there is no second number to keep in step.
-# The line above is what a build compiled against, and it is the only record of
-# it that a floating version leaves.
+# NoMercyContractVersion pins the major and floats the minor, so the build takes
+# whatever 12.x is packed below. The line above is what a build compiled
+# against, and it is the only record of it that a floating minor leaves.
 
 New-Item -ItemType Directory -Force -Path $packagePath | Out-Null
 
-# All four, because the two packable ones declare the other two as package
-# dependencies rather than carrying their types. Packing only the first two
-# left a restore that could resolve the contract and nothing it referenced —
-# it worked for as long as the global cache still had yesterday's copies, and
-# stopped the moment the version moved.
+# Only the two. NoMercy.Events and NoMercy.Design used to be packages of their
+# own that the contract depended on, and this loop packed all four; since the
+# rename they ship as assemblies inside NoMercy.PluginSdk.Abstractions, are
+# IsPackable=false, and packing them produces nothing a restore needs.
 foreach ($project in @(
-    'NoMercy.Plugins.Abstractions',
-    'NoMercy.Plugins.Mvc',
-    'NoMercy.Design',
-    'NoMercy.Events')) {
+    'NoMercy.PluginSdk.Abstractions',
+    'NoMercy.PluginSdk.Mvc')) {
     # The cache entry goes first. Restore prefers an already-extracted folder of
     # the same version over the file in _nupkgs, however new that file is.
     $cached = Join-Path $HOME ".nuget/packages/$($project.ToLowerInvariant())/$version"

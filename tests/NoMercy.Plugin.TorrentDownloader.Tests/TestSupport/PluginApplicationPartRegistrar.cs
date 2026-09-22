@@ -1,5 +1,5 @@
 using System.Reflection;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 // The server's own name for it, because that is what the plugin looks it up by. Only the members the plugin
 // calls are here, with the server's signatures: OwnerOf, Attach and Detach.

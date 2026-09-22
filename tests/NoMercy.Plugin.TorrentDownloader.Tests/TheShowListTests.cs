@@ -1,6 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests;
@@ -54,7 +54,7 @@ public sealed class TheShowListTests : IDisposable
         Assert.Empty(refused);
         Assert.Equal("On", await StateOf(plugin, 41));
 
-        PluginView page = await plugin.GetViewAsync(new() { Route = "/shows/41" }, CancellationToken.None);
+        PluginView page = await plugin.GetViewAsync(Requests.View("/shows/41"), CancellationToken.None);
         IReadOnlyList<PluginFormField> fields = Assert.IsAssignableFrom<IReadOnlyList<PluginFormField>>(
             Rendered.ById(page, ShowSettingsView.FormId).Props["fields"]);
 
@@ -133,14 +133,14 @@ public sealed class TheShowListTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = Loaded();
 
-        PluginView before = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+        PluginView before = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
 
         Assert.Contains(Rendered.All(before), one => one.Id == "show-41");
         Assert.DoesNotContain(Rendered.All(before), one => one.Id == "show-42");
 
         await plugin.SwitchShowAsync(42, on: true, CancellationToken.None);
 
-        PluginView after = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+        PluginView after = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
 
         Assert.Contains(Rendered.All(after), one => one.Id == "show-42");
     }
@@ -186,7 +186,7 @@ public sealed class TheShowListTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = Loaded();
 
-        PluginView page = await plugin.GetViewAsync(new() { Route = "/shows/41" }, CancellationToken.None);
+        PluginView page = await plugin.GetViewAsync(Requests.View("/shows/41"), CancellationToken.None);
         IReadOnlyList<PluginFormField> fields = Assert.IsAssignableFrom<IReadOnlyList<PluginFormField>>(
             Rendered.ById(page, ShowSettingsView.FormId).Props["fields"]);
 
@@ -202,7 +202,7 @@ public sealed class TheShowListTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = Loaded();
 
-        PluginView page = await plugin.GetViewAsync(new() { Route = "/shows/999" }, CancellationToken.None);
+        PluginView page = await plugin.GetViewAsync(Requests.View("/shows/999"), CancellationToken.None);
 
         Assert.Contains(Rendered.Words(page), word => word.Contains("999", StringComparison.Ordinal));
         Assert.DoesNotContain(Rendered.All(page), component => component.Component == Ui.FormComponent);
@@ -226,7 +226,7 @@ public sealed class TheShowListTests : IDisposable
 
         plugin.Initialize(new FakePluginContext { DataFolderPath = _folder, Shelves = shelves });
 
-        PluginView page = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+        PluginView page = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
 
         Assert.Equal("0", Assert.IsType<string>(Rendered.ById(page, "show-41").Props["missing"]));
         Assert.Equal(0, shelves.Files);
@@ -253,14 +253,14 @@ public sealed class TheShowListTests : IDisposable
 
         plugin.Find("brilliant");
 
-        PluginView narrowed = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+        PluginView narrowed = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
 
         Assert.Contains(Rendered.All(narrowed), one => one.Id == "show-42");
         Assert.DoesNotContain(Rendered.All(narrowed), one => one.Id == "show-41");
 
         plugin.Find(null);
 
-        PluginView whole = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+        PluginView whole = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
 
         Assert.Contains(Rendered.All(whole), one => one.Id == "show-41");
         Assert.Contains(Rendered.All(whole), one => one.Id == "show-42");
@@ -280,7 +280,7 @@ public sealed class TheShowListTests : IDisposable
 
         Assert.Null(plugin.Finding);
 
-        PluginView page = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+        PluginView page = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
 
         Assert.Contains(Rendered.All(page), one => one.Id == "show-41");
     }
@@ -318,7 +318,7 @@ public sealed class TheShowListTests : IDisposable
     /// <summary>What applies to a show, read off its own settings page.</summary>
     private static async Task<bool> AppliedEnglishOnly(TorrentDownloaderPlugin plugin, int showId)
     {
-        PluginView page = await plugin.GetViewAsync(new() { Route = $"/shows/{showId}" }, CancellationToken.None);
+        PluginView page = await plugin.GetViewAsync(Requests.View($"/shows/{showId}"), CancellationToken.None);
         string applied = Assert.IsType<string>(Rendered.ById(page, ShowSettingsView.AppliedId).Props["value"]);
 
         return applied.Contains("English only on", StringComparison.Ordinal);
@@ -331,7 +331,7 @@ public sealed class TheShowListTests : IDisposable
 
     private static async Task<string> CellOf(TorrentDownloaderPlugin plugin, int showId, string key)
     {
-        PluginView page = await plugin.GetViewAsync(new() { Route = Pages.OverviewRoute }, CancellationToken.None);
+        PluginView page = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
 
         return Assert.IsType<string>(Rendered.ById(page, $"show-{showId}").Props[key]);
     }

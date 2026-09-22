@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
-using NoMercy.Plugins.Abstractions;
-using NoMercy.Plugins.Mvc;
+using NoMercy.PluginSdk.Abstractions;
+using NoMercy.PluginSdk.Mvc;
 
 namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 
@@ -44,14 +44,14 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
     /// The reason matters as much as the refusal: an empty 404 reads exactly
     /// like a route that was never registered. See <see cref="LivePlugin"/>.
     /// </remarks>
-    private TorrentDownloaderPlugin? Live => LivePlugin.Of(plugins, PluginId, out _);
+    private TorrentDownloaderPlugin? Live => LivePlugin.Of(plugins, HttpContext.RequestServices, PluginId, out _);
 
     /// <summary>Why the plugin could not be reached, for the answer to carry.</summary>
     private string Unreachable
     {
         get
         {
-            _ = LivePlugin.Of(plugins, PluginId, out string refusal);
+            _ = LivePlugin.Of(plugins, HttpContext.RequestServices, PluginId, out string refusal);
 
             return refusal;
         }

@@ -2,7 +2,7 @@ using System.Reflection;
 
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 using Xunit;
 
@@ -46,7 +46,7 @@ public class EveryComponentIsOneTheClientDrawsTests
         foreach (PluginRoute route in plugin.Routes.Routes)
         {
             PluginView page = await plugin.GetViewAsync(
-                new() { Route = SamplePaths.Of(route) },
+                Requests.View(SamplePaths.Of(route)),
                 CancellationToken.None);
 
             foreach (PluginComponent component in Rendered.All(page))

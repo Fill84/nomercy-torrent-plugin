@@ -2324,6 +2324,25 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 ## Decisions
 
+- **22 September 2026: plugin contract 12, and what it took.** The media server renamed its SDK to
+  `NoMercy.PluginSdk.*`, moved the contract to 12.0, and refuses every plugin under it — beast-unit's log
+  on 22 September: `Plugin Torrent Downloader failed verification and was marked malfunctioned: ABI '10.0'
+  is incompatible with server ABI 12.0.` The plugin now compiles against 12 (packed from `dev`, where
+  the contract lives; nuget.org gets it with the next server release) and declares `targetAbi` 12.0.
+  `IPluginContext` lost `Services` and `EventBus`, and with them everything this plugin reached through
+  the server's container and bus. Three things changed for the owner, each written into the specs:
+  **(1)** a library scan no longer starts a run (`docs/specs/run.md`) — the run interval covers it;
+  **(2)** a show the owner does not have is no longer added for a pack added by hand — the History names
+  the show to add (`docs/specs/run.md` § When a download finishes stands); **(3)** after an update the
+  first press of a button re-attaches the endpoints and asks for a second press, because the plugin can
+  no longer hear that it was loaded (`docs/specs/run.md` § After an update). What became of an encode is
+  asked of `IPluginJobs` by the id the server handed back, kept with the grab (migration 017) — the
+  events that made that id useless are unreachable now, and the queue's tables answer better than they
+  did (`docs/09-host-contract.md` § What became of the job). The manifest names the encoder hook, which
+  the server treats as a widening: the owner approves the plugin once more after installing 0.7.0. The
+  plugin's own sockets, files and processes stay: in-process is the server's default, and moving them
+  behind `Context.Net`, `Context.Storage` and `Context.Process` is work not yet done.
+
 - **17 September 2026, the owner: CI runs for a release and for nothing else, and runs no tests.**
   `.forgejo/workflows/build.yml` fires on a `v*` tag only — no push to master, no pull request, no
   dispatch — and builds, checks the format, packages and publishes. Every test runs before each commit on
@@ -2927,6 +2946,28 @@ and note it here.
 ## Facts, measured
 
 Kept here so no slice re-discovers them.
+
+- **Plugin contract 12, read at `origin/dev` `9643da457` on 22 September 2026.** `PluginAbi.Current`
+  and `Oldest` are both 12.0; `IsCompatible` refuses any major under `Oldest` and any minor above
+  `Current`, and a missing `targetAbi` passes. Verification runs ABI, checksum and signature stages; a
+  plugin installed from the catalogue is refused by the ABI stage alone (the signature stage answers
+  Trust while the server holds no publisher keys). `PluginRuntimeMode.Load()` reads
+  `runtime-mode.json` in the plugin config folder and defaults to `InProcess`. `IPluginContext` on 12
+  has no `Services` and no `EventBus`; `Encoder` and `Jobs` are handed over together, only when the
+  manifest's `hooks` names `encoder` (`PluginContextFactory`); `Server`, `Net`, `Storage`, `Process`
+  throw `PluginRefusedException` by name on a host that wired none. `Library.Watch` is implemented
+  only by the out-of-process `RemoteLibrary`; the in-process `PluginLibraryQuery` leaves the default,
+  which refuses. `IPluginEvents` relays `PluginMessageEvent` only — nothing the server publishes.
+  `PluginJobs.StatusAsync(id)` looks the id up as a payload hash: in the queue and unreserved is Queued,
+  reserved is Running, in the failed table is Failed with the exception, in neither is Finished.
+  `PluginCapabilityGuard.HasWidened` counts a new hook, `rest`, `ws`, `restAnonymous`, a top-level
+  mount and a new network host; a widened manifest loads Disabled and publishes
+  `PluginConsentRequiredEvent`. `PluginApplicationPartRegistrar.AttachPart` still returns at once for
+  an attached id (media-server #60 is open); `OwnerOf`, `Attach(PluginInfo, IPluginManager)` and
+  `Detach(Ulid)` keep their shapes. The server's `PluginUiController` builds the view request's
+  `PluginCaller` from the `NameIdentifier`, `Role` and `name` claims. The packages go to nuget.org from
+  `ci-cd-pipeline.yml` job `publish_plugin_packages` on a deploying release; none carrying the renamed
+  contract has shipped.
 
 - **What the web app calls "the server disconnecting", and how to measure the server instead.**
   `nomercy-app-web` asks `GET /api/v1/setup/server-info` every thirty seconds with a five-second

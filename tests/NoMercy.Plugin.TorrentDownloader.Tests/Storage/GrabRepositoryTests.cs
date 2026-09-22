@@ -416,6 +416,60 @@ public class GrabRepositoryTests : IDisposable
         Assert.Contains("open.example", again.Magnet);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>The job the server named is kept with the grab, per episode.</strong>
+    /// A plugin on contract 12 learns what became of an encode only by asking
+    /// <c>IPluginJobs</c> for the id <c>IPluginEncoder</c> handed back, and the
+    /// case that matters is the one memory cannot hold: the plugin restarts with
+    /// the grab still dispatched. Written before the plugin starts and read by
+    /// both queries — the sweep reads every grab, recovery the open ones, and a
+    /// column one of them did not read would have the sweep take a staged file
+    /// the other knew was still being encoded.
+    /// </para>
+    /// <para>
+    /// A pack's episodes are dispatched one after another, each with a job of
+    /// its own, so a second id joins the first rather than replacing it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheEncodeJobTheServerNamedIsKeptPerEpisodeAndReadBackByBothQueries()
+    {
+        GrabRepository grabs = Repository();
+
+        await grabs.RecordAsync(
+            Episode(1),
+            "Silo",
+            "Silo S03 1080p WEB H264-CAKES",
+            "1337x",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode(1), Episode(2)],
+            When,
+            CancellationToken.None);
+
+        await grabs.EncodeAsync(Hash, Episode(1), "01KZGKX2G0966V80H26EKGG5T1", CancellationToken.None);
+        await grabs.EncodeAsync(Hash, Episode(2), "01KZGKX2G0966V80H26EKGG5T2", CancellationToken.None);
+
+        StoredDownload open = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+        StoredDownload every = Assert.Single(await grabs.EveryAsync(CancellationToken.None));
+
+        foreach (StoredDownload read in new[] { open, every })
+        {
+            Assert.Equal("01KZGKX2G0966V80H26EKGG5T1", read.EncodeJobs[Episode(1)]);
+            Assert.Equal("01KZGKX2G0966V80H26EKGG5T2", read.EncodeJobs[Episode(2)]);
+        }
+
+        // Asked for again — a refused ask retried — the later job is the one the
+        // server is running, so it is the one kept.
+        await grabs.EncodeAsync(Hash, Episode(1), "01KZGKX2G0966V80H26EKGG5T3", CancellationToken.None);
+
+        StoredDownload again = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.Equal("01KZGKX2G0966V80H26EKGG5T3", again.EncodeJobs[Episode(1)]);
+        Assert.Equal("01KZGKX2G0966V80H26EKGG5T2", again.EncodeJobs[Episode(2)]);
+    }
+
     private const string Hash = "92D8A3F6864911EF292B4BE0DD5286406396D2B3";
 
     /// <summary>A second torrent, so a clean-up cannot pass by taking everything.</summary>

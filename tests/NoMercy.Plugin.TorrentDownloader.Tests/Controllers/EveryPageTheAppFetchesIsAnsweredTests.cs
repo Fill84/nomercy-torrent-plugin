@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Mvc;
+using NoMercy.PluginSdk.Mvc;
 
 using Xunit;
 

@@ -1,6 +1,7 @@
+using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
-using NoMercy.Plugins.Abstractions;
-using NoMercy.Plugins.Mvc;
+using NoMercy.PluginSdk.Abstractions;
+using NoMercy.PluginSdk.Mvc;
 
 namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 
@@ -77,11 +78,55 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
 
     private async Task<IActionResult> View(string route, CancellationToken ct)
     {
-        if (LivePlugin.Of(plugins, PluginId, out string refusal) is not TorrentDownloaderPlugin plugin)
+        if (LivePlugin.Of(plugins, HttpContext.RequestServices, PluginId, out string refusal) is not TorrentDownloaderPlugin plugin)
         {
             return NotFound(refusal);
         }
 
-        return Data(await plugin.GetViewAsync(new() { Route = route }, ct));
+        return Data(await plugin.GetViewAsync(new() { Route = route, Caller = Whoever() }, ct));
+    }
+
+    /// <summary>
+    /// Who is asking, as the server resolved them — or, on these addresses, as the
+    /// request's own claims say.
+    /// </summary>
+    /// <remarks>
+    /// A view request on contract 12 carries its caller, and the server writes one
+    /// onto every request under the plugin's own route prefix. These addresses
+    /// are not under it — they are the ones the web app fetches a page's own
+    /// address by, on the owner's decision — so the server leaves nothing there,
+    /// and the caller is read off the same claims the server's own view endpoint
+    /// reads it off: the name identifier, the role and the name. The pages draw
+    /// the same thing whoever asks; what the caller decides is only whether an
+    /// owner-only route is admitted, and this plugin marks none.
+    /// </remarks>
+    private PluginCaller Whoever()
+    {
+        if (HttpContext.Items[CallerItemKey] is PluginCaller resolved)
+        {
+            return resolved;
+        }
+
+        ClaimsPrincipal user = HttpContext.User;
+
+        UserId id = UserId.TryParse(user.FindFirst(ClaimTypes.NameIdentifier)?.Value, out UserId parsed)
+            ? parsed
+            : UserId.Empty;
+
+        string name = user.FindFirst("name")?.Value
+                      ?? string.Join(
+                          ' ',
+                          new[] { user.FindFirst(ClaimTypes.GivenName)?.Value, user.FindFirst(ClaimTypes.Surname)?.Value }
+                              .Where(part => !string.IsNullOrWhiteSpace(part)));
+
+        return new(
+            id,
+            name,
+            string.Equals(user.FindFirst(ClaimTypes.Role)?.Value, "owner", StringComparison.OrdinalIgnoreCase)
+                ? PluginRole.Owner
+                : PluginRole.Member,
+            PluginAccess.Owned,
+            Request.Headers.AcceptLanguage.ToString() is { Length: > 0 } locale ? locale : "en",
+            PluginSurface.Web);
     }
 }

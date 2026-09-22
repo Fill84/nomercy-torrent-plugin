@@ -2,9 +2,11 @@
 
 ## What starts a run
 
-- A run starts when the owner presses Run, when the server finishes a library scan, and when the run
-  interval comes round.
+- A run starts when the owner presses Run and when the run interval comes round.
 - A start that arrives while a run is going is added to that run.
+- A library scan no longer starts a run. It did until plugin contract 12 (22 September 2026), which gives
+  a plugin no way to hear the server finish one: the bus is gone from the context, and the facade made for
+  it is refused on a plugin running in the server's own process. The run interval covers it.
 
 ## The order of a run
 
@@ -72,8 +74,13 @@
 
 ## After an update
 
-- When the plugin is updated through the catalogue while the server runs, the server serves the updated
-  plugin's endpoints, so every button on the plugin's pages keeps working without a restart.
+- When the plugin is updated through the catalogue while the server runs, the server goes on serving the
+  endpoints of the copy it started with (media-server #60). The first press of any button after the update
+  has the server serve the updated copy's endpoints and answers "press it again"; from the second press on,
+  every button works without a restart. The pages themselves are drawn by the updated copy from the first
+  fetch.
+- An update whose manifest asks for more than the owner approved before — the encoder, from 0.7.0 — loads
+  disabled until the owner approves it once more on the plugin's page. The server asks; the plugin cannot.
 
 ## What the plugin deletes
 

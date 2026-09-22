@@ -1,6 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 using Xunit;
 
@@ -40,7 +40,7 @@ public class EveryPageCanBeLeftTests
 
         foreach (string route in plugin.Routes.Routes.Select(SamplePaths.Of))
         {
-            PluginView page = await plugin.GetViewAsync(new() { Route = route }, CancellationToken.None);
+            PluginView page = await plugin.GetViewAsync(Requests.View(route), CancellationToken.None);
 
             IReadOnlyList<string> reachable = [.. Destinations(page)];
 
@@ -65,7 +65,7 @@ public class EveryPageCanBeLeftTests
         plugin.Initialize(new FakePluginContext());
 
         PluginView page = await plugin.GetViewAsync(
-            new() { Route = Pages.OverviewRoute },
+            Requests.View(Pages.OverviewRoute),
             CancellationToken.None);
 
         foreach (PluginRoute route in Pages.Navigable)

@@ -1,4 +1,5 @@
-using NoMercy.Plugins.Abstractions;
+using System.Text.Json.Nodes;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 
@@ -44,4 +45,12 @@ public sealed class FakeHub : IPluginHubContext
     {
         return PushAsync(type, payload);
     }
+
+    /// <summary>Kept, as the server's hub keeps them; nothing in this plugin registers one.</summary>
+    public void Handle(string method, Func<PluginCaller, JsonNode?, CancellationToken, Task<object?>> handler)
+    {
+        Handlers[method] = handler;
+    }
+
+    public Dictionary<string, Func<PluginCaller, JsonNode?, CancellationToken, Task<object?>>> Handlers { get; } = [];
 }

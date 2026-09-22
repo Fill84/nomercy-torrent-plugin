@@ -4,16 +4,29 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
 /// <summary>What came of asking for an encode.</summary>
 /// <remarks>
-/// <strong>It used to carry the job id the server named, and that is gone on
-/// purpose.</strong> Nothing read it: what the server's own encoding events
-/// carry is the media row the encode registers against — the episode id this
-/// plugin named when it asked — and the id handed back here is something else,
-/// a hash of the job's payload, chosen because a queue row id is not stable.
-/// Kept, it would be a field nobody read that looks exactly like the one to
-/// match an event on, and matching on it would find nothing, quietly, for ever.
+/// <para>
+/// <strong>The job id is back, and for a reason that is the reverse of the one
+/// it left for.</strong> It went on 14 September 2026 because nothing read it:
+/// the plugin heard the server's own encoding events, those carry the media row
+/// the encode registers against, and the id handed back here — a hash of the
+/// job's payload, chosen because a queue row id is not stable — matched none of
+/// them. On contract 12 a plugin has no bus to hear those events on. What it has
+/// is <c>IPluginJobs.StatusAsync</c>, which answers for exactly this id and
+/// nothing else, so this is now the only handle on what became of the encode.
+/// </para>
+/// <para>
+/// Written down with the grab (<c>encode_jobs</c>), because the case worth
+/// answering is the one memory cannot: the plugin restarts, the grab is still
+/// dispatched, and nothing knows whether the job it asked for is running or was
+/// thrown away with the queue.
+/// </para>
 /// </remarks>
 /// <param name="Taken">Whether the server took it. False leaves the file staged.</param>
-public sealed record EncodeAsk(bool Taken)
+/// <param name="JobId">
+/// What the server called the job it queued, or null where it took the ask
+/// without naming one. Asked about by <c>IEncoderSays</c> on every pass after.
+/// </param>
+public sealed record EncodeAsk(bool Taken, string? JobId = null)
 {
     /// <summary>Refused, with the reason already said out loud by whoever refused it.</summary>
     public static EncodeAsk No { get; } = new(false);

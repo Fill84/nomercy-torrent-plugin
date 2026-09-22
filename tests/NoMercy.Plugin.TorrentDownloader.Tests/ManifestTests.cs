@@ -1,6 +1,6 @@
 using System.Text.Json;
 using NoMercy.Plugin.TorrentDownloader.Views;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests;
@@ -77,7 +77,7 @@ public class ManifestTests
     public void TheManifestKeepsTheIdFromTheVersionItReplaces()
     {
         Assert.Equal("1SBQT26FHF98EBRPYVRGD92CZF", Manifest().Id.ToString());
-        Assert.Equal(PluginIdentity.Id, Manifest().Id);
+        Assert.Equal(PluginIdentity.Id.ToString(), Manifest().Id.ToString());
     }
 
     /// <remarks>
@@ -156,6 +156,29 @@ public class ManifestTests
         Assert.True(
             PluginAbi.IsCompatible(targetAbi),
             $"targetAbi '{targetAbi}' is refused by a server on ABI {PluginAbi.Current}.");
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>The encoder is a hook the manifest has to name.</strong> On
+    /// contract 12 the server hands a plugin <c>IPluginContext.Encoder</c> — and
+    /// with it Jobs, which says what became of an encode — only when the
+    /// manifest declares the encoder hook. Left out, every download would stage
+    /// and sit in the intake folder for an encode that could never be asked for,
+    /// and the only sign would be one warning in the log.
+    /// </para>
+    /// <para>
+    /// Asked of the contract's own constant rather than the word written here,
+    /// because the server compares the manifest against that constant.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheManifestNamesTheEncoderHook()
+    {
+        Assert.Contains(
+            PluginHookCapability.Encoder,
+            Manifest().Capabilities?.Hooks ?? [],
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <remarks>

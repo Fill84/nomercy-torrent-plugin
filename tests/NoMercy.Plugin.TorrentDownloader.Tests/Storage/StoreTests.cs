@@ -129,6 +129,15 @@ public class StoreTests : IDisposable
                 PRAGMA user_version=15;
                 """;
             await seed.ExecuteNonQueryAsync(CancellationToken.None);
+
+            // Rolling the pragma back does not undo what the migrations did,
+            // so every one after 015 runs a second time — and 017 adds a column
+            // the first run has already added. SQLite has no ADD COLUMN IF NOT
+            // EXISTS, so the state this test is pretending to be in has to lack
+            // it.
+            await using SqliteCommand notYet = connection.CreateCommand();
+            notYet.CommandText = "ALTER TABLE grabs DROP COLUMN encode_jobs;";
+            await notYet.ExecuteNonQueryAsync(CancellationToken.None);
         }
 
         await database.MigrateAsync(CancellationToken.None);
@@ -247,6 +256,13 @@ public class StoreTests : IDisposable
             await using SqliteCommand back = connection.CreateCommand();
             back.CommandText = "ALTER TABLE grabs ADD COLUMN encode_job TEXT;";
             await back.ExecuteNonQueryAsync(CancellationToken.None);
+
+            // And the column 017 adds, taken away for the same reason in the
+            // other direction: the second run adds it again, and SQLite has no
+            // ADD COLUMN IF NOT EXISTS either.
+            await using SqliteCommand notYet = connection.CreateCommand();
+            notYet.CommandText = "ALTER TABLE grabs DROP COLUMN encode_jobs;";
+            await notYet.ExecuteNonQueryAsync(CancellationToken.None);
 
             // And the other way about for 015, which adds two columns: they are
             // there already, and SQLite has no ADD COLUMN IF NOT EXISTS either,

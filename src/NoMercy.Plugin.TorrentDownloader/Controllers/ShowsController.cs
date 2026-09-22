@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
-using NoMercy.Plugins.Abstractions;
-using NoMercy.Plugins.Mvc;
+using NoMercy.PluginSdk.Abstractions;
+using NoMercy.PluginSdk.Mvc;
 
 namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 
@@ -17,13 +17,13 @@ namespace NoMercy.Plugin.TorrentDownloader.Controllers;
 /// </remarks>
 public sealed class ShowsController(IPluginManager plugins) : PluginControllerBase
 {
-    private TorrentDownloaderPlugin? Live => LivePlugin.Of(plugins, PluginId, out _);
+    private TorrentDownloaderPlugin? Live => LivePlugin.Of(plugins, HttpContext.RequestServices, PluginId, out _);
 
     private string Unreachable
     {
         get
         {
-            _ = LivePlugin.Of(plugins, PluginId, out string refusal);
+            _ = LivePlugin.Of(plugins, HttpContext.RequestServices, PluginId, out string refusal);
 
             return refusal;
         }

@@ -1,7 +1,7 @@
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Configuration;
@@ -33,7 +33,7 @@ public class SettingsStoreTests : IDisposable
             context.Config,
             context.Secrets,
             volumeOf: _ => @"C:\",
-            storage: () => new TwoPlaces());
+            places: () => TwoPlaces);
 
         Settings settings = new()
         {
@@ -53,23 +53,12 @@ public class SettingsStoreTests : IDisposable
         Assert.DoesNotContain(result.Errors, one => one.Contains("Archive", StringComparison.Ordinal));
     }
 
-    /// <summary>A server with one place it can write and one it cannot.</summary>
-    private sealed class TwoPlaces : IPluginStorage
-    {
-        public Task<IReadOnlyList<PluginStorageLocation>> LocationsAsync(CancellationToken ct = default)
-        {
-            return Task.FromResult<IReadOnlyList<PluginStorageLocation>>(
-            [
-                new("01", "Media", "local", Writable: true),
-                new("02", "Archive", "s3", Writable: false),
-            ]);
-        }
-
-        public Task<IPluginStorageScope?> OpenAsync(string locationId, CancellationToken ct = default)
-        {
-            return Task.FromResult<IPluginStorageScope?>(null);
-        }
-    }
+    /// <summary>A server with one place it can write and one it cannot, as <c>IPluginServerInfo.GrantedPaths</c> lists them.</summary>
+    private static IReadOnlyList<PluginStorageLocation> TwoPlaces =>
+    [
+        new("01", "Media", "local", Writable: true),
+        new("02", "Archive", "s3", Writable: false),
+    ];
 
     private readonly List<string> _folders = [];
 

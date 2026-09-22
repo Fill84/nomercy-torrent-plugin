@@ -2,8 +2,8 @@ using Microsoft.AspNetCore.Mvc;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Controllers;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
-using NoMercy.Plugins.Abstractions;
-using NoMercy.Plugins.Mvc;
+using NoMercy.PluginSdk.Abstractions;
+using NoMercy.PluginSdk.Mvc;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Controllers;

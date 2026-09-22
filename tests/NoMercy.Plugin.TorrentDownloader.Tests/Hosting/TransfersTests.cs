@@ -1223,6 +1223,8 @@ public class TransfersTests : IDisposable
 
         await grabs.CoversAsync(Hash, [new(41, 3, 6), new(41, 3, 7)], CancellationToken.None);
         await grabs.StagedAsync(Hash, [first, second], CancellationToken.None);
+        await grabs.EncodeAsync(Hash, new(41, 3, 6), "job-for-s03e06", CancellationToken.None);
+        await grabs.EncodeAsync(Hash, new(41, 3, 7), "job-for-s03e07", CancellationToken.None);
         await grabs.StateAsync(Hash, GrabState.Dispatched, CancellationToken.None);
 
         FakeProvider server = Server();
@@ -1244,11 +1246,11 @@ public class TransfersTests : IDisposable
             server.Journal,
             server.Log,
             TimeProvider.System,
-            new SaidPerEpisode(new()
+            new SaidPerJob(new()
             {
-                // S03E06 and S03E07, as the server numbers them.
-                [41306] = new(EncodeJobState.Failed, "the source has no audio stream"),
-                [41307] = new(EncodeJobState.Running, null),
+                // By the job the server named for each, which the grab kept.
+                ["job-for-s03e06"] = new(EncodeJobState.Failed, "the source has no audio stream"),
+                ["job-for-s03e07"] = new(EncodeJobState.Running, null),
             }));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
@@ -1288,6 +1290,9 @@ public class TransfersTests : IDisposable
         await grabs.CoversAsync(Hash, [new(41, 3, 6)], CancellationToken.None);
         await grabs.StagedAsync(Hash, [encoding], CancellationToken.None);
 
+        // The job the server named, which is what the sweep asks about.
+        await grabs.EncodeAsync(Hash, new(41, 3, 6), "job-still-running", CancellationToken.None);
+
         // Finished with, as far as the grab goes — which is exactly the state
         // that used to make the sweep take the file.
         await grabs.StateAsync(Hash, GrabState.Done, CancellationToken.None);
@@ -1308,26 +1313,25 @@ public class TransfersTests : IDisposable
     /// <summary>A server that answers about each job by name.</summary>
     /// <summary>A server that has said a different thing about each media row.</summary>
     /// <remarks>
-    /// Keyed by the media id, because that is what the server's own encoding
-    /// events carry — the row the encode registers against, which is the
-    /// episode id this plugin named when it asked. <c>FakeLibraryQuery</c>
-    /// numbers an episode <c>show * 1000 + season * 100 + number</c>, so
-    /// Silo S03E06 is 41306.
+    /// Keyed by the job id, because that is what the server answers for: the id
+    /// <c>IPluginEncoder</c> handed back when the encode was asked for, which
+    /// the grab keeps per episode. A job the server was not asked about is
+    /// unknown, which is never finished.
     /// </remarks>
-    private sealed class SaidPerEpisode(Dictionary<int, EncodeJob> said) : IEncoderSays
+    private sealed class SaidPerJob(Dictionary<string, EncodeJob> said) : IEncoderSays
     {
-        public EncodeJob? About(int mediaId)
+        public Task<EncodeJob?> AboutAsync(string jobId, CancellationToken ct)
         {
-            return said.GetValueOrDefault(mediaId);
+            return Task.FromResult(said.GetValueOrDefault(jobId));
         }
     }
 
-    /// <summary>A server that has said the same thing about every encode.</summary>
+    /// <summary>A server that says the same thing about every encode.</summary>
     private sealed class SaidOfEverything(EncodeJob said) : IEncoderSays
     {
-        public EncodeJob? About(int mediaId)
+        public Task<EncodeJob?> AboutAsync(string jobId, CancellationToken ct)
         {
-            return said;
+            return Task.FromResult<EncodeJob?>(said);
         }
     }
 
@@ -1650,7 +1654,7 @@ public class TransfersTests : IDisposable
             server.Journal,
             server.Log,
             TimeProvider.System,
-            new SaidPerEpisode([]));
+            new SaidPerJob([]));
 
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
         await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
@@ -2070,7 +2074,7 @@ public class TransfersTests : IDisposable
             new HostLibrary(query),
             searched ? AppliedToEveryShow.Searched : AppliedToEveryShow.NotSearched,
             new Stager(server.Journal, server.Log),
-            encoder ?? EncodeGateway.For(server, server.Journal, server.Log),
+            encoder ?? EncodeGateway.For(server.Encoder, server.Journal, server.Log),
             server.Journal,
             server.Log,
             clock ?? TimeProvider.System,

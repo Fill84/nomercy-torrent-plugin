@@ -151,7 +151,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed', 'lost');
             """;
 
@@ -161,16 +161,7 @@ public sealed class GrabRepository(Store database)
 
         while (await reader.ReadAsync(ct))
         {
-            open.Add(new(
-                reader.GetString(0),
-                reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
-                reader.GetString(2),
-                Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState state) ? state : GrabState.Grabbed)
-            {
-                Covers = Covered(reader.GetString(4)),
-                StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
-                Folder = reader.IsDBNull(6) ? null : reader.GetString(6),
-            });
+            open.Add(Row(reader, out GrabState _));
         }
 
         return open;
@@ -192,7 +183,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs FROM grabs
             WHERE info_hash IS NOT NULL;
             """;
 
@@ -202,19 +193,102 @@ public sealed class GrabRepository(Store database)
 
         while (await reader.ReadAsync(ct))
         {
-            all.Add(new(
-                reader.GetString(0),
-                reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
-                reader.GetString(2),
-                Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState state) ? state : GrabState.Grabbed)
-            {
-                Covers = Covered(reader.GetString(4)),
-                StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
-                Folder = reader.IsDBNull(6) ? null : reader.GetString(6),
-            });
+            all.Add(Row(reader, out GrabState _));
         }
 
         return all;
+    }
+
+    /// <summary>One grab, as the two queries above select it.</summary>
+    /// <remarks>
+    /// One reader for both, so a column added to the row is added to every
+    /// answer: the encode jobs were read by one query and not the other for a
+    /// morning, and the sweep — which reads all of them — took a staged file the
+    /// other query knew was still being encoded.
+    /// </remarks>
+    private static StoredDownload Row(SqliteDataReader reader, out GrabState state)
+    {
+        state = Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState parsed) ? parsed : GrabState.Grabbed;
+
+        return new(
+            reader.GetString(0),
+            reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
+            reader.GetString(2),
+            state)
+        {
+            Covers = Covered(reader.GetString(4)),
+            StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
+            Folder = reader.IsDBNull(6) ? null : reader.GetString(6),
+            EncodeJobs = reader.IsDBNull(7) ? new Dictionary<EpisodeKey, string>() : Jobs(reader.GetString(7)),
+        };
+    }
+
+    /// <summary>
+    /// Writes down what the server called the encode it queued for one episode
+    /// of a grab.
+    /// </summary>
+    /// <remarks>
+    /// Appended, never replaced: a pack's episodes are dispatched one after
+    /// another and each has a job of its own. An episode asked for twice keeps
+    /// the later id, because that is the job the server is running.
+    /// </remarks>
+    public async Task EncodeAsync(string infoHash, EpisodeKey episode, string jobId, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand read = connection.CreateCommand();
+
+        read.CommandText = "SELECT encode_jobs FROM grabs WHERE info_hash = $hash;";
+        read.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+
+        Dictionary<EpisodeKey, string> jobs = await read.ExecuteScalarAsync(ct) is string held
+            ? new(Jobs(held))
+            : [];
+
+        jobs[episode] = jobId;
+
+        await using SqliteCommand write = connection.CreateCommand();
+
+        write.CommandText = "UPDATE grabs SET encode_jobs = $jobs WHERE info_hash = $hash;";
+        write.Parameters.AddWithValue(
+            "$jobs",
+            string.Join(' ', jobs.Select(one => $"{Tag(one.Key)}:{one.Value}")));
+        write.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+
+        await write.ExecuteNonQueryAsync(ct);
+    }
+
+    /// <summary>The encode jobs of a grab, as the column holds them.</summary>
+    /// <remarks>
+    /// Space-separated <c>showXseasonXnumber:job</c>, the shape the column had
+    /// the first time it existed (005). A part that does not read as one is
+    /// skipped rather than thrown over: a column this plugin cannot read must
+    /// not stop a grab from being recovered at all.
+    /// </remarks>
+    private static IReadOnlyDictionary<EpisodeKey, string> Jobs(string column)
+    {
+        Dictionary<EpisodeKey, string> jobs = [];
+
+        foreach (string part in column.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            int colon = part.IndexOf(':', StringComparison.Ordinal);
+
+            if (colon <= 0 || colon == part.Length - 1)
+            {
+                continue;
+            }
+
+            string[] numbers = part[..colon].Split('x');
+
+            if (numbers.Length == 3
+                && int.TryParse(numbers[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int show)
+                && int.TryParse(numbers[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int season)
+                && int.TryParse(numbers[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int number))
+            {
+                jobs[new(show, season, number)] = part[(colon + 1)..];
+            }
+        }
+
+        return jobs;
     }
 
     /// <summary>Writes down which episodes a grab turned out to answer for.</summary>
@@ -251,7 +325,7 @@ public sealed class GrabRepository(Store database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    /// <summary>How an episode is spelled inside the encode-job column.</summary>
+    /// <summary>How an episode is spelled inside the encode-jobs column.</summary>
     public static string Tag(EpisodeKey episode)
     {
         return string.Create(

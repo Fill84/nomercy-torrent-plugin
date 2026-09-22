@@ -1,161 +1,72 @@
 using Microsoft.Extensions.Logging;
-using NoMercy.Events;
-using NoMercy.Events.Encoding;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
 /// <summary>
-/// Listens to the server's own encoding events and remembers what it heard.
+/// What the server says about an encode, asked through <see cref="IPluginJobs"/>
+/// by the id it handed back.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The media server has published <see cref="EncodingStartedEvent"/>,
-/// <see cref="EncodingCompletedEvent"/> and <see cref="EncodingFailedEvent"/>
-/// all along, and this plugin asked instead — once per job per grab per
-/// transfers tick. Nothing had to.
+/// <strong>Asked, because there is nothing to hear.</strong> Until contract 12
+/// this listened to the server's own encoding events and a transfers pass ran
+/// the moment one arrived. A plugin on contract 12 has no bus: the context
+/// carries <see cref="IPluginJobs"/>, which reads the queue's own tables for the
+/// job id <see cref="IPluginEncoder"/> handed back, and that is what this asks.
 /// </para>
 /// <para>
-/// Held in memory and not written down. A restart loses it, and that is
-/// correct: what a restart then reads is null, which means "nothing has been
-/// said" rather than "finished", and the library decides — exactly as it did
-/// for a job the server no longer knew.
+/// <strong>And what it reads is the better answer.</strong> A failed event was
+/// not the end of a job — the server put it back with a back-off and said
+/// nothing when the last attempt moved it to the failed table — so the plugin
+/// could never close on one. The failed table is what the facade reads, so a
+/// job is failed here only once the server has truly given it up, with the
+/// reason written there. A job in neither table ran and was cleared, which the
+/// server says as Finished; one still queued or reserved is not settled.
+/// </para>
+/// <para>
+/// A facade that refuses — a server that mediates no jobs after all, or one that
+/// took the encoder hook back — answers null, said once in the log. Null is not
+/// "finished": Transfers reads it as no proof either way and leaves the staged
+/// file where it is.
 /// </para>
 /// </remarks>
-public sealed class EncoderSays : IEncoderSays, IDisposable
+public sealed class EncoderSays(IPluginJobs jobs, ILogger logger) : IEncoderSays
 {
-    /// <summary>How many encodes are remembered at once.</summary>
-    /// <remarks>
-    /// A server that runs for months encodes thousands of files and this is all
-    /// in memory. What a grab can still be waiting on is among the most recent,
-    /// so the oldest are forgotten; forgetting one costs nothing, because the
-    /// library is the stronger proof and is what answers when nothing has been
-    /// said.
-    /// </remarks>
-    public const int Most = 512;
+    private int _refused;
 
-    private readonly ILogger _logger;
-    private readonly TimeProvider _time;
-    private readonly Lock _lock = new();
-    private readonly Dictionary<int, Word> _said = [];
-    private readonly List<IDisposable> _listening = [];
-
-    /// <summary>Which media row the server has just said something about.</summary>
-    /// <remarks>
-    /// What sets the rest of the chain going. Staging, deleting the download
-    /// and marking the grab done all waited for the transfers cadence to come
-    /// round; the whole point of hearing the encoder is that they happen when
-    /// the encode really ended.
-    /// </remarks>
-    public event Action<int>? Said;
-
-    public EncoderSays(IEventBus bus, ILogger logger, TimeProvider? time = null)
-    {
-        _logger = logger;
-        _time = time ?? TimeProvider.System;
-
-        _listening.Add(bus.Subscribe<EncodingStartedEvent>((started, _) =>
-        {
-            // A file the server is still reading. A download taken away under
-            // one of these is the fault that cost the owner 36 GB on
-            // 31 August 2026.
-            Heard(started.JobId, new(EncodeJobState.Running, null));
-
-            return Task.CompletedTask;
-        }));
-
-        _listening.Add(bus.Subscribe<EncodingCompletedEvent>((done, _) =>
-        {
-            Heard(done.JobId, new(EncodeJobState.Finished, null));
-
-            return Task.CompletedTask;
-        }));
-
-        _listening.Add(bus.Subscribe<EncodingFailedEvent>((wrong, _) =>
-        {
-            // The reason, because it is what the owner reads on the History
-            // page. Without it a grab is failed with "the server gave up and
-            // said no more than that".
-            Heard(wrong.JobId, new(EncodeJobState.Failed, wrong.ErrorMessage));
-
-            return Task.CompletedTask;
-        }));
-    }
-
-    public EncodeJob? About(int mediaId)
-    {
-        lock (_lock)
-        {
-            return _said.TryGetValue(mediaId, out Word word) ? word.Job : null;
-        }
-    }
-
-    public void Dispose()
-    {
-        foreach (IDisposable one in _listening)
-        {
-            one.Dispose();
-        }
-
-        _listening.Clear();
-    }
-
-    /// <summary>Writes down what was said, and tells whoever is waiting on it.</summary>
-    private void Heard(int mediaId, EncodeJob job)
-    {
-        lock (_lock)
-        {
-            _said[mediaId] = new(job, _time.GetUtcNow());
-
-            Forget();
-        }
-
-        // Outside the lock. A handler runs a whole transfers pass — staging,
-        // deleting downloads, asking the server for things — and none of that
-        // has any business holding this.
-        Told(mediaId);
-    }
-
-    /// <summary>Drops the oldest once there are too many. Called under the lock.</summary>
-    private void Forget()
-    {
-        if (_said.Count <= Most)
-        {
-            return;
-        }
-
-        foreach (int old in _said
-                     .OrderBy(one => one.Value.At)
-                     .Take(_said.Count - Most)
-                     .Select(one => one.Key)
-                     .ToArray())
-        {
-            _said.Remove(old);
-        }
-    }
-
-    /// <summary>Raises <see cref="Said"/> without letting a handler take the server down.</summary>
-    /// <remarks>
-    /// This runs on the server's own event bus, which publishes to every
-    /// subscriber in turn: an exception escaping here is this plugin stopping
-    /// the rest of the server hearing about its own encodes.
-    /// </remarks>
-    private void Told(int mediaId)
+    public async Task<EncodeJob?> AboutAsync(string jobId, CancellationToken ct)
     {
         try
         {
-            Said?.Invoke(mediaId);
+            PluginJobStatus? status = await jobs.StatusAsync(jobId, ct).ConfigureAwait(false);
+
+            return status?.State switch
+            {
+                PluginJobState.Queued => new(EncodeJobState.Queued, null),
+                PluginJobState.Running => new(EncodeJobState.Running, null),
+                PluginJobState.Finished => new(EncodeJobState.Finished, null),
+                PluginJobState.Failed => new(EncodeJobState.Failed, status.Failure),
+
+                // Unknown, or no answer at all: nothing can be said, and saying
+                // "finished" instead is how a download the server is still
+                // reading gets deleted.
+                _ => null,
+            };
         }
-        catch (Exception wrong)
+        catch (PluginRefusedException refused)
         {
-            _logger.LogWarning(
-                wrong,
-                "The server said something about encode {Media} and acting on it went wrong: {Reason}",
-                mediaId,
-                wrong.Message);
+            // Once. Every pass asks about every job a grab waits on, and a refusal
+            // that repeats a line a minute buries the one line that says why.
+            if (Interlocked.Exchange(ref _refused, 1) == 0)
+            {
+                logger.LogWarning(
+                    "The server would not say what became of an encode: {Reason} No encode is closed on that, and the library decides.",
+                    refused.Message);
+            }
+
+            return null;
         }
     }
-
-    /// <summary>One thing said, and when.</summary>
-    private readonly record struct Word(EncodeJob Job, DateTimeOffset At);
 }

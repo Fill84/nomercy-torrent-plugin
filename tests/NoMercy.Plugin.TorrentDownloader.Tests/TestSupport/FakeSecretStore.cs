@@ -1,4 +1,4 @@
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 
@@ -27,5 +27,23 @@ public sealed class FakeSecretStore : IPluginSecretStore
     public Task<IReadOnlyList<string>> KeysAsync(CancellationToken ct = default)
     {
         return Task.FromResult<IReadOnlyList<string>>([.. _secrets.Keys]);
+    }
+
+    // Per-user secrets, which contract 12 added and this plugin keeps none of:
+    // a passkey and an API key belong to the server's owner, not to whoever is
+    // looking at the page.
+    public Task<string?> GetForUserAsync(string key, CancellationToken ct = default)
+    {
+        return Task.FromResult<string?>(null);
+    }
+
+    public Task SetForUserAsync(string key, string value, CancellationToken ct = default)
+    {
+        throw new NotSupportedException("This plugin keeps no per-user secret.");
+    }
+
+    public Task DeleteForUserAsync(string key, CancellationToken ct = default)
+    {
+        return Task.CompletedTask;
     }
 }

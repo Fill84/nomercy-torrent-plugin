@@ -1,7 +1,7 @@
 using System.Text.Json;
 
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 
@@ -50,38 +50,39 @@ public sealed class SettingsStore
     /// test that passes or fails on how many drives the machine running it
     /// happens to have.
     /// </param>
-    /// <param name="storage">
+    /// <param name="places">
     /// The server's own list of places it can write. media-server #32, which
     /// this plugin opened, names this exact case: the intake folder is a string
-    /// the owner typed, on whatever machine the server happens to be. The
-    /// facade cannot replace <see cref="CheckFolder"/> — that one creates the
-    /// folder and writes a real file into it, which proves more than any list
-    /// can — but it can say where the server <em>can</em> write when the typed
-    /// path turns out to be somewhere it cannot. A refusal the owner can act on
+    /// the owner typed, on whatever machine the server happens to be. The list
+    /// cannot replace <see cref="CheckFolder"/> — that one creates the folder
+    /// and writes a real file into it, which proves more than any list can —
+    /// but it can say where the server <em>can</em> write when the typed path
+    /// turns out to be somewhere it cannot. A refusal the owner can act on
     /// rather than one they can only read.
     ///
-    /// Null on a server that offers no storage facade, and the refusal is then
-    /// what it always was.
+    /// On contract 12 it is <c>IPluginServerInfo.GrantedPaths</c>, read by the
+    /// caller at the moment it is wanted; a server that wires no server-info
+    /// facade answers nothing, and the refusal is then what it always was.
     /// </param>
     public SettingsStore(
         IPluginConfiguration configuration,
         IPluginSecretStore secrets,
         Func<string, string?>? volumeOf = null,
-        Func<IPluginStorage?>? storage = null)
+        Func<IReadOnlyList<PluginStorageLocation>>? places = null)
     {
         _configuration = configuration;
         _secrets = secrets;
         _volumeOf = volumeOf ?? Path.GetPathRoot;
-        _storage = storage;
+        _places = places;
     }
 
     /// <summary>How to reach the server's own list of places it can write.</summary>
     /// <remarks>
     /// Asked for at the moment it is wanted, which is only ever a folder that
     /// was refused. Resolved when the plugin starts instead, it would make
-    /// every start depend on a service the server need not offer at all.
+    /// every start depend on a facade the server need not wire at all.
     /// </remarks>
-    private readonly Func<IPluginStorage?>? _storage;
+    private readonly Func<IReadOnlyList<PluginStorageLocation>>? _places;
 
     /// <summary>Where an indexer's API key is kept.</summary>
     public static string IndexerApiKey(string indexerId)
@@ -162,7 +163,7 @@ public sealed class SettingsStore
         CheckFolder("incomplete", settings.IncompleteFolder, errors);
         CheckFolder("intake", settings.IntakeFolder, errors);
 
-        if (errors.Count > before && await WhereItCanWriteAsync(ct).ConfigureAwait(false) is { Length: > 0 } places)
+        if (errors.Count > before && WhereItCanWrite() is { Length: > 0 } places)
         {
             for (int at = before; at < errors.Count; at++)
             {
@@ -194,8 +195,21 @@ public sealed class SettingsStore
         Interlocked.Increment(ref _saves);
         _asRead = null;
 
+        // After the store has forgotten, so a listener that reads the settings
+        // back reads what was just written.
+        Saved?.Invoke();
+
         return new(true, errors, warnings);
     }
+
+    /// <summary>Raised after a save the store accepted, and never after one it refused.</summary>
+    /// <remarks>
+    /// What a start owes — the torrents that were running, the clock — needs
+    /// folders to owe it to, and on a fresh install they are set after the plugin
+    /// has started. Until contract 12 the host's own tick brought the start round
+    /// again; a plugin that is told nothing once it is loaded has to hear it here.
+    /// </remarks>
+    public event Action? Saved;
 
     /// <summary>Stores a secret. It never travels through <see cref="Settings"/>.</summary>
     public Task SetSecretAsync(string key, string value, CancellationToken ct)
@@ -235,18 +249,18 @@ public sealed class SettingsStore
     }
 
     /// <summary>Where the server says it can write, named as the owner sees them.</summary>
-    private async Task<string> WhereItCanWriteAsync(CancellationToken ct)
+    private string WhereItCanWrite()
     {
         try
         {
-            if (_storage?.Invoke() is not IPluginStorage storage)
+            if (_places?.Invoke() is not IReadOnlyList<PluginStorageLocation> granted)
             {
                 return string.Empty;
             }
 
             string[] places =
             [
-                .. (await storage.LocationsAsync(ct).ConfigureAwait(false))
+                .. granted
                     .Where(one => one.Writable)
                     .Select(one => $"{one.Name} ({one.Kind})"),
             ];
@@ -255,7 +269,7 @@ public sealed class SettingsStore
                 ? string.Empty
                 : $" The server can write to: {string.Join(", ", places)}.";
         }
-        catch (Exception quiet) when (quiet is not OperationCanceledException)
+        catch (Exception)
         {
             // A refusal that cannot be enriched is still a refusal. Failing to
             // list the places must never turn a bad folder into a saved one, or

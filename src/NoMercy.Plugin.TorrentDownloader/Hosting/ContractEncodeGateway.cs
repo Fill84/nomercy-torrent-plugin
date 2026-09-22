@@ -3,7 +3,7 @@ using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 
@@ -84,10 +84,10 @@ public sealed class ContractEncodeGateway(
 
             journal.Finished(ActivityStage.Download, name, $"encode dispatched to library {show.LibraryId}");
 
-            // With the job it queued, which is what makes a failed encode
-            // something the plugin can be told about rather than something it
-            // waits six hours to infer.
-            return new(true);
+            // With the job it queued, which is the one handle the plugin has on
+            // what becomes of the encode: IPluginJobs answers for this id and
+            // for nothing else, and a plugin on contract 12 hears no event.
+            return new(true, answer.JobId);
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {

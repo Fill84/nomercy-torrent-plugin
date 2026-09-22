@@ -3,7 +3,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
-using NoMercy.Plugins.Abstractions;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Hosting;
@@ -111,28 +111,29 @@ public class TheContractEncoderTests
 
     /// <remarks>
     /// <para>
-    /// A server that offers <c>IPluginEncoder</c> is asked through it, and
-    /// there is no other way to ask any more: <c>EncodeDispatch</c> is deleted
-    /// and with it the last reflection in this plugin.
+    /// A server that hands the plugin <c>IPluginEncoder</c> is asked through it,
+    /// and there is no other way to ask any more: <c>EncodeDispatch</c> is
+    /// deleted and with it the last reflection in this plugin.
     /// </para>
     /// <para>
-    /// A server too old to offer it is told so rather than guessed at. Left to
-    /// return nothing, downloads would go on finishing and staging and every
-    /// one of them would wait in the intake folder for an encode that could
-    /// never be asked for — which is the shape of failure this plugin exists
-    /// not to have.
+    /// A server that hands it none — the manifest did not name the encoder hook,
+    /// or the owner has not approved it yet — is told so rather than guessed at.
+    /// Left to return nothing, downloads would go on finishing and staging and
+    /// every one of them would wait in the intake folder for an encode that
+    /// could never be asked for — which is the shape of failure this plugin
+    /// exists not to have.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AServerWithoutTheContractIsToldSoRatherThanGuessedAt()
+    public async Task AServerThatHandsOverNoEncoderIsToldSoRatherThanGuessedAt()
     {
         FakeProvider server = new();
 
         Assert.IsType<ContractEncodeGateway>(
-            EncodeGateway.For(new Offering(new RecordingPluginEncoder()), server.Journal, server.Log));
+            EncodeGateway.For(new RecordingPluginEncoder(), server.Journal, server.Log));
 
-        // Nothing at all on offer, which is every server before 0.1.479.
-        IEncodeGateway none = EncodeGateway.For(new Offering(null), server.Journal, server.Log);
+        // Nothing at all on offer: the context's Encoder is null.
+        IEncodeGateway none = EncodeGateway.For(null, server.Journal, server.Log);
 
         EncodeAsk ask = await none.DispatchAsync(
             @"D:\intake\Silo.mkv",
@@ -145,15 +146,6 @@ public class TheContractEncoderTests
             server.Journal.Snapshot().History,
             one => one.Outcome == ActivityOutcome.Failed
                    && (one.Detail ?? string.Empty).Contains("IPluginEncoder", StringComparison.Ordinal));
-    }
-
-    /// <summary>A server that offers the encoder, or one that offers nothing.</summary>
-    private sealed class Offering(IPluginEncoder? encoder) : IServiceProvider
-    {
-        public object? GetService(Type serviceType)
-        {
-            return serviceType == typeof(IPluginEncoder) ? encoder : null;
-        }
     }
 
     private static ContractEncodeGateway Gateway(IPluginEncoder encoder, FakeProvider server)
