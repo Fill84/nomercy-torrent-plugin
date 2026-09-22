@@ -20,12 +20,12 @@ libraries → every show in every tv and anime library, listed on the overview
           → encode    queue an encode job; the server does the rest
 ```
 
-**One cycle, and each step starts the next.** A cycle is started by the Run button, by the server
-finishing a library scan, or by the owner's interval — hourly by default, every 15 minutes at most. A
-download is staged the moment it finishes, the encode is asked for straight after, and the server's
-own encoding events close it. The library having the episode is what says an encode arrived; nothing
-is asked for twice and no clock gives up on it. Maintenance runs once nothing is left in hand. A
-trigger during a cycle is added to it, never run beside it. Nothing in the chain polls.
+**One cycle, and each step starts the next.** A cycle is started by the Run button or by the owner's
+interval — hourly by default, every 15 minutes at most. A download is staged the moment it finishes,
+the encode is asked for straight after, and what became of that encode is asked of the server's own
+job queue by the id it handed back. The library having the episode is what says an encode arrived;
+nothing is asked for twice and no clock gives up on it. Maintenance runs once nothing is left in hand.
+A trigger during a cycle is added to it, never run beside it.
 
 **The owner switches shows on, one by one.** The overview lists every tv and anime library's shows
 that have a video file on disk or are switched on, with how many aired episodes each is missing. A
@@ -111,10 +111,14 @@ again.
 
 ## Requirements
 
-- A NoMercy media server carrying plugin contract **`0.1.479` or newer**. That is the release where
-  `IPluginEncoder` and `PluginLibraryEpisode.Id` landed, and an encode is asked for through them and no
-  other way. On an older server the plugin loads, downloads and stages, and says once — in the log and
-  on the History page — that the server cannot be asked for an encode.
+- A NoMercy media server on **plugin contract 12**. The server checks this as it loads a plugin and
+  refuses anything under its own major outright: a plugin built against an older contract is marked
+  malfunctioned with the reason in the log (`ABI '10.0' is incompatible with server ABI 12.0`) and
+  appears on no client. An encode is asked for through `IPluginEncoder`, handed over only because the
+  manifest names the `encoder` hook, and what became of it is read from the server's job queue.
+- **After installing an update while the server runs, restart the server once.** The server serves the
+  controllers of the copy it loaded first (media-server #60), so until it is restarted every button
+  answers that a restart puts it right. The pages themselves are drawn by the new copy at once.
 - A forwarded port for the torrent client, if you want peers to be able to reach you.
 
 ## Installing

@@ -4,6 +4,23 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
+**0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
+installed on beast-unit, where it has been loaded and running without a warning since 18:04Z. No slice
+is open and nothing is known to be broken. What is left is not code:
+
+1. Three acceptances written to be watched on the owner's own library and never watched — see
+   **Blocked**. Each needs the owner to start the server and look; the dry run over the anime library
+   is the safest to watch first.
+2. One decision that is the owner's: whether a mismatched episode title may refuse an indexer title
+   that carries no date (`S13-22`, `REMUX-FraMeSToR` "We Were Family").
+3. Two faults that belong to other repositories, both filed and neither ours to fix:
+   media-server #60 (a plugin updated while the server runs keeps serving the old copy's controllers,
+   so this plugin now asks for a restart) and nomercy-app-web#36 (a toggle on a plugin form draws no
+   switch at all) — both in `SPRINTS.md` § What is not this repository's.
+
+The owner's word on 22 September 2026, asked what to do next: leave it be until they say otherwise.
+
 **`S13-24` is done: the two tests that ended on a clock end on a fact.** Each had failed once over five
 full runs on 22 September 2026 and passed in the other four, and the plugin was right both times.
 `StopPressedTheMomentRunWasPressedStopsThatRun` asked for the word "stopped at" on a run that can be
@@ -794,7 +811,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 - **FiLL/nomercy-torrent-plugin#1, 22 September 2026: no route into the server outside the SDK.** `OwnEndpoints`
   and the container overload of `LivePlugin.Of` are removed; a stale controller now leaves the server's routes
   alone and asks for a restart (`StaleControllerTests`, seen red first). Everything else #1 asked for landed in
-  0.7.0 (`3806748`, `47510cf`) and loads on beast-unit's server ABI 12.1.
+  0.7.0 (`3806748`, `47510cf`). Released as **v0.7.1** and the issue closed with what was done where. The
+  owner installed it the same evening: beast-unit's log has the plugin loaded at 18:04Z on server ABI 12.1,
+  the client listening on 51413, a cycle started, and no warning of any kind since. No restart was needed for
+  this one — the 0.7.0 copy still in the process re-attached the new copy's buttons as its last act, which is
+  the very code this removes. From 0.7.1 on, an update while the server runs wants a restart.
 
 - **`S12-09` One Save, and a list that keeps what is stored.** The owner saw the page `S12-07` built
   and asked for one Save button for every setting. That reverses their own decision of the same
@@ -2984,6 +3005,15 @@ and note it here.
 ## Facts, measured
 
 Kept here so no slice re-discovers them.
+
+- **A release reaches the owner's catalogue in two hops, and the second one is not ours.** The tag's
+  workflow publishes the zip and commits `repository.json` in this repository, which is this plugin's
+  own index. The dashboard's catalogue reads `index.json` of `NoMercy-Entertainment/nomercy-plugins`,
+  and that repository rebuilds it from every submitted `repository.json` on a schedule — `catalogue.yml`,
+  `cron: 0 */6 * * *`, so up to six hours later. On 22 September 2026 the owner saw 0.7.0 in the
+  catalogue an hour after 0.7.1 was released, and nothing was wrong: the rebuild had last run before the
+  release. `gh workflow run catalogue.yml -R NoMercy-Entertainment/nomercy-plugins` publishes it at once
+  (the owner's account is an admin there), and GitHub's raw CDN then takes a few minutes to catch up.
 
 - **A plugin that has never run opens a cycle the moment its folders are saved.** `Clock.NextAsync`
   works the next cycle out from when the last one finished, and with no row in `cadences` that is

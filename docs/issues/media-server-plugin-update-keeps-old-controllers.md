@@ -111,6 +111,13 @@ without one (`CarriesControllers`). The test assembly itself has one already (th
    "They are the same class from two load contexts, which is what an update loaded beside the old copy leaves
    behind". After the fix: it works, and the log shows "Attached controllers from plugin …" a second time.
 
+## Filed twice, from two plugins
+
+It is **media-server #60** (this analysis, from the torrent plugin) and **media-server #71**, filed on
+v0.1.526 after installing Automix 0.1.3 over 0.1.2 from the dashboard. Same cause, named at the same
+line, and the same fix shape: on `PluginLoadedEvent`, detach the part when `_attached` holds the id
+against a different assembly. Both were open on 22 September 2026; neither needs another issue.
+
 ## The plugin no longer works around it
 
 From 0.6.4 to 0.7.0 the torrent plugin did this itself: it resolved `PluginApplicationPartRegistrar` from the

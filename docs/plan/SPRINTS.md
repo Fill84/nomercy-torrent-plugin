@@ -3180,7 +3180,16 @@ of a run never written down. The build, the format check and five full runs of t
 
 ## What is not this repository's, and is written down so it is not looked for here again
 
-Both were found while doing the above and neither has a fix that belongs in this plugin.
+None of these has a fix that belongs in this plugin.
+
+- **A toggle field on a plugin form draws no switch at all**, in `nomercy-app-web`, since
+  `bfc06ac79` of 18 September 2026. `.nm-plugin-shell form.grid label span { width: fit-content }`
+  in `FormLabel/formLabel.css` is meant for the label's own text, but `NMToggle` draws its track and
+  its knob as `<span>`s inside that label, so both collapse to 0 px; a switch that is on shows only
+  the 8 × 32 px hover halo. Measured against a production build of app-web's `master` on
+  22 September 2026 and filed with the fix (child combinators) as
+  NoMercy-Entertainment/nomercy-app-web#36. The owner's rule stands — the app is not this plugin's to
+  change — so it is written down and filed rather than fixed here.
 
 - **A toggle's label is drawn twice** on every plugin form, in `nomercy-app-web`. `PluginForm.vue`
   passes `:label-text="field.label"` to `NMToggle` and then draws `<span>{{ field.label }}</span>`

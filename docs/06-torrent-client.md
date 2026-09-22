@@ -351,9 +351,10 @@ whether any peer has ever arrived on the listening socket. Nothing else may set 
 **An idle server reads *not known yet*, and that is the honest answer.** `Shut` is built and set by
 nobody: `INetworkDiscovery.IsPortOpenAsync()` exists on the host but is wired to the server's own
 external web port. **media-server #52** asks for an overload taking a port and **#53** for the seam
-a plugin reaches it through. When #52 lands the plugin resolves `INetworkDiscovery` through
-`IPluginContext.Services` — the path `Hosting/ShowImport.cs` already uses — checks the real port,
-and the warning starts appearing when it is earned.
+a plugin reaches it through. #53 is the one that matters now: contract 12 hands a plugin no container,
+so the check has to arrive as a facade on `IPluginContext` — the plugin no longer has, and must not
+take, a way to resolve the server's own services. Until both land the port says "not known yet", which
+is the honest answer.
 
 ## Private torrents
 

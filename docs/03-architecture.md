@@ -58,14 +58,17 @@ events ──────────▶│ 7 Watch      │  completion, failur
                   └──────┬───────┘
                          ▼
                   ┌──────────────┐
-events ──────────▶│ 9 Close      │  the server says the encode ended; nothing
-                  │              │  left in hand, so maintenance, and the cycle ends
+asked ───────────▶│ 9 Close      │  the server's job queue says what became of the
+                  │              │  encode; nothing left in hand, so maintenance,
+                  │              │  and the cycle ends
                   └──────────────┘
 ```
 
-A trigger is the Run button, a finished library scan or the owner's cadence. Every arrow after it is
-an event or a completed task, and nothing on the line is a clock — see `docs/01-plugin.md` § One
-cycle, driven by events.
+A trigger is the Run button or the owner's cadence; a finished library scan was the third until
+contract 12, which says nothing about one. Every arrow after it is something finishing rather than a
+clock — the one exception is what became of an encode, which contract 12 has the plugin ask the
+server's job queue on each pass instead of being told. See `docs/01-plugin.md` § One cycle, driven by
+what finishes.
 
 Stages 2–6 run one episode at a time, in order of show, season and episode, and an episode's winner
 is offered to the client before the next episode is worked on (`docs/specs/run.md`). Stage 1 fans out

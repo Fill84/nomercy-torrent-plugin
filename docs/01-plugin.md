@@ -31,13 +31,18 @@ keeps the same data folder, the same grants and the same settings location.
 | `IScheduledTaskPlugin` | registers its one job and calls `ExecuteAsync(jobName, ct)` |
 | `IUiPlugin` | asks it for pages via `GetViewAsync(PluginViewRequest, ct)` and mounts its nav entries |
 
-Plus its own REST endpoints through `NoMercy.Plugins.Mvc`, and live pushes through
+Plus its own REST endpoints through `NoMercy.PluginSdk.Mvc`, and live pushes through
 `IPluginHubContext`.
 
-## One cycle, driven by events
+## One cycle, driven by what finishes
 
 Decided with the owner on 13 September 2026. The full design and the evidence for every decision in it
 is `docs/plan/DESIGN-2026-09-13-one-cycle-driven-by-events.md`.
+
+**Contract 12 took the server's events away** (22 September 2026), and this section is what is left
+once they are gone. The chain is unchanged and still driven by what finishes; what the server used to
+say on a bus is now either asked of it or covered by the cadence. Each place is named below, and
+`docs/09-host-contract.md` § What contract 12 took away has the whole table.
 
 There are no cadences for the work. There is **one cycle**, and each step is started by the last one
 finishing:
@@ -47,13 +52,15 @@ feed → search → the torrent client → a download finishes → staged → en
      → the server says the encode ended → nothing left in hand → maintenance
 ```
 
-**Three things start a cycle**, all through one door (`Trigger`):
+**Two things start a cycle**, both through one door (`Trigger`):
 
 | Trigger | |
 | --- | --- |
 | The **Run** button | the owner |
-| `LibraryScanCompletedEvent` | the server finished a library scan — not `FileCreatedEvent`, which an encode this plugin asked for raises, so a cycle hung on it would start itself for ever |
 | The owner's cadence | one setting, **hourly** by default, and **never more often than every 15 minutes** (`docs/specs/release-names.md`) |
+
+A library scan was the third until contract 12. Nothing on 12 says a scan finished — `Library.Watch`
+is refused by name on an in-process plugin — so the run interval covers it (`docs/specs/run.md`).
 
 **A trigger during an open cycle is added to it**, never run beside it and never dropped. What the
 open cycle has already taken is written down as it takes it, so the feed and search it runs again
@@ -68,24 +75,26 @@ not hold a cycle open.
 the last piece verifies. A torrent the client gives up on — its metadata never came, it stalled, it
 holds no video, it will not fit — is `BittorrentEngine.GaveUp`, and the pass it starts is what fails
 the grab and takes the torrent out of the client; without it a dropped torrent was held for ever and
-the cycle with it. An ended encode is `EncodingCompletedEvent` or `EncodingFailedEvent`, matched
-on the media id the plugin named when it asked. A transfers pass runs on either, and every pass asks
-whether the cycle can close.
+the cycle with it. What became of an encode is asked of `Context.Jobs` by the id `EncodeAsync` handed
+back, kept with the grab, on every transfers pass — the events that said so are gone with contract 12,
+and a pass runs every minute while a grab waits on one. Every pass asks whether the cycle can close.
 
 **The library decides when an encode has arrived; no clock decides it is lost.** The server says
 nothing about a job the owner takes out of the queue by hand, or one that ends with nothing to encode,
-so a grab waiting on one of those waits until a pass finds its episode in the library — and
-`LibraryScanCompletedEvent` starts a transfers pass as well as a cycle, for exactly that. Or until the
-owner cancels it on the Downloads page. An encode is never asked for a second time, a restart
+so a grab waiting on one of those waits until a pass finds its episode in the library — which is why a
+grab waiting on an encode is passed over every minute rather than only when something else happens.
+Or until the owner cancels it on the Downloads page. An encode is never asked for a second time, a restart
 included: the server's queue outlives a restart and the job says what became of it when it runs. The
 owner's ruling of 14 September 2026; it replaced a six-hour give-up that put the episode back to
 missing and downloaded it again.
 
-**A failed attempt closes nothing either.** `EncodingFailedEvent` is published for every exception
-an encode meets, a server stop included, and the server's queue then tries the job again — up to
-three attempts, a stop not counted. So the reason is said once, on the History page and beside
-"encoding" on the Downloads row, and the grab keeps its episodes and its staged file for the next
-attempt. The same ruling, the same day.
+**A failed attempt closes nothing either.** The server's queue tries a failed job again — up to three
+attempts, a stop not counted — so a grab is failed only once `Context.Jobs` says the server has truly
+given the job up, with the reason the server wrote. The reason is said once, on the History page and
+beside "encoding" on the Downloads row, and the grab keeps its episodes and its staged file for the
+next attempt. The same ruling, the same day; on contract 12 the answer comes from the queue's own
+tables rather than from an event, which is the better of the two — an event fired on a failure the
+server was about to retry.
 
 **The owner's cadence is kept by the plugin's own clock**, set to the moment the next cycle is due
 rather than woken to ask whether one is, and wound again when a cycle closes. A saved cadence takes
@@ -117,8 +126,13 @@ EF context, and no reference to the server's assemblies.
 | `Grants` | asking the owner for network access to hosts the owner configured |
 | `Hub` | pushing the live snapshot to every open page |
 | `Logger` | the server's log |
-| `Services` | reaching the encode dispatcher by name — see `docs/09-host-contract.md` |
+| `Encoder` | asking for an encode; handed over only because `plugin.json` names the `encoder` hook |
+| `Jobs` | what became of an encode, by the job id `EncodeAsync` handed back |
+| `Server` | `GrantedPaths`, the places a folder may be chosen from |
 | `HttpClient` | outbound requests |
+
+`Services` — the server's own container — was here until contract 12 took it away on 22 September
+2026. Nothing reaches into the server outside this contract any more; see `docs/09-host-contract.md`.
 
 ## Where it lives on disk
 
@@ -142,12 +156,15 @@ perfectly healthy. That happened, for a day.
   "name": "Torrent Downloader",
   // Required by PluginManifest, so a manifest without one fails to deserialise.
   "description": "Downloads every episode missing from a TV or anime library and hands it to the encoder.",
-  "version": "0.4.0",
-  "targetAbi": "10.0",
+  "version": "0.7.1",
+  "targetAbi": "12.0",
   "assembly": "NoMercy.Plugin.TorrentDownloader.dll",
   "autoEnabled": true,
   "capabilities": {
-    "hooks": ["scheduledTask", "ui"],
+    // "encoder" since 0.7.0: on contract 12 the encoder is handed over only to a manifest that names
+    // it, and naming a hook the owner's consent did not widens the manifest — the server then loads
+    // the update disabled until they approve it once more.
+    "hooks": ["scheduledTask", "ui", "encoder"],
     "rest": true,
     "ws": false,
     "network": { "hosts": [ /* every host in sources.json */ ] },

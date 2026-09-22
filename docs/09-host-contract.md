@@ -7,7 +7,8 @@ its own identity (`docs/01-plugin.md`).
 edited. If something the plugin needs is not in the contract, note it under **Blocked** in
 `PROGRESS.md` and ask — do not work around it and do not change the server.
 
-The full exported surface is in `docs/reference/plugin-abi-0.1.479.txt`.
+The full exported surface of the contract as it stood before 12 is in
+`docs/reference/plugin-abi-0.1.479.txt`; what changed at 12 is § `IPluginContext` below.
 
 ## The file listing is a task
 
@@ -143,8 +144,9 @@ taken and which job was queued. It names no type from this page.
 staged file, the show's library and the server's own id for the episode — `PluginLibraryEpisode.Id`
 — and asks for no folder at all: a server holding the episode row knows where that show's files are
 better than this plugin does. It reflects nothing and names no server type that is not in
-`NoMercy.Plugins.Abstractions`. media-server #30 and #35, both closed on 30 August 2026, are what
-made it possible; contract `0.1.479` is the first release carrying them.
+`NoMercy.PluginSdk.Abstractions` — named `NoMercy.Plugins.Abstractions` until the rename of
+22 September 2026. media-server #30 and #35, both closed on 30 August 2026, are what made it
+possible; contract `0.1.479` is the first release carrying them.
 
 **An episode the plugin cannot name an id for is not asked for at all.** Read the server's own
 source rather than the doc comment on `mediaId`: `PluginEncoder` puts the id verbatim into
@@ -159,15 +161,13 @@ So the gateway has no second method and the plugin has no way to hand a file ove
 `EncodeGateway.For` composes the one implementation, and there is nothing else for it to compose:
 the reflecting implementation is gone.
 
-**A show that is in no library is added first, with the server's own import job.** That is what makes
-an id exist to dispatch by. `Hosting/ShowImport.cs` asks `IInboxMetadataProbe.SearchTvAsync` which
-show the files name and then dispatches `DispatchJob<ShowImportJob>(id, libraryId)` — the same call
-the dashboard's *Add content* makes, and the only thing anywhere that puts a show in a library. The
-tick after the import lands sees an ordinary grab.
-
-It is the only reflection left in the plugin, and it is there because the contract offers no way to
-ask a provider anything or to queue one of the server's own jobs. Asked once per run per show: the
-import sits on the server's queue and a tick a minute later still finds the show missing.
+**A show that is in no library is no longer added, and its pack is left where it is.** Until
+22 September 2026 `Hosting/ShowImport.cs` asked `IInboxMetadataProbe.SearchTvAsync` which show the
+files named and then dispatched `DispatchJob<ShowImportJob>(id, libraryId)` — the same call the
+dashboard's *Add content* makes — both taken out of `Context.Services` by name. Contract 12 hands a
+plugin no container and offers nothing in its place, so that file is gone: a pack for a show the owner
+does not have stays in the download folder and the History page names the show to add. The owner adds
+it in the dashboard, and the next run grabs for it like any other show.
 
 ### What became of the job
 
@@ -221,14 +221,18 @@ and return without a word.
 
 It is deleted. Those four are why media-server #30 and #35 were opened, and the file went the day
 they closed. **Nothing on the way to an encode reflects any more**, and no server type is named on
-that path that does not come from `NoMercy.Plugins.Abstractions`.
+that path that does not come from `NoMercy.PluginSdk.Abstractions`.
 
-**One file still reflects, and it is `Hosting/ShowImport.cs`.** It asks
-`IInboxMetadataProbe.SearchTvAsync` which show a torrent names and dispatches the server's own
-`ShowImportJob` for it, because the contract offers no way to ask a provider anything or to queue one
-of the server's jobs. Every step is guarded: a server that renames one of those three types says so,
-once, and a pack for a show in no library is left where it is with its show named on the History
-page.
+**And now nothing reflects at all.** `Hosting/ShowImport.cs` was the last file that did: it asked
+`IInboxMetadataProbe.SearchTvAsync` which show a torrent names and dispatched the server's own
+`ShowImportJob`, both resolved by name out of `Context.Services`. Contract 12 took the container away
+and offers nothing in its place, so the file went with it on 22 September 2026 and a pack for a show
+the owner does not have is left where it is, with the show named on the History page.
+
+The port it implemented, `Core/Ports/IShowImport.cs`, is still there and nothing in `src/` hands one
+to `Transfers` any more — only a test's `RecordingImport` does. It is kept for the day the contract
+offers a way to ask a provider anything; a reader who wonders which live code path uses it should know
+the answer is none.
 
 A server that does not offer `IPluginEncoder` is told so — once, in the log and the journal — rather
 than guessed at. It needs plugin contract `0.1.479` or newer.
