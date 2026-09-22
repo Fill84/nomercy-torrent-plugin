@@ -3128,6 +3128,56 @@ Six seen red before the fix; the guards, and the seeding rule again, sabotaged a
 
 **Done when** v0.6.0 is on both forges and in the index.
 
+## S13-24 · The two tests that end on a clock end on a fact
+
+**Read first:** `tests/NoMercy.Plugin.TorrentDownloader.Tests/Hosting/ARunSaysItIsRunningTests.cs`,
+`tests/NoMercy.Plugin.TorrentDownloader.Tests/Controllers/DownloadsControllerTests.cs`,
+`src/NoMercy.Plugin.TorrentDownloader/Hosting/Clock.cs`.
+
+**What was measured.** Over five full runs on 22 September 2026 two tests each failed once and passed
+in every other run. Neither is about what it failed on, and the plugin is right in both:
+
+1. `StopPressedTheMomentRunWasPressedStopsThatRun` ends on the status bar saying "stopped at".
+   `RunEnd.Stopped` is written only where the cycle sees the cancellation
+   (`TorrentDownloaderPlugin.cs:1373`); over the empty test library a run can be over before Stop
+   reaches it, and then it ended "Finished". Proven by putting 250 ms between Run and Stop: the bar
+   says "last run finished at". The sister test twelve lines above already accepts either word.
+2. `SearchingAnEpisodeItIsTrackingStartsAndDoesNotBelongToTheCaller` ends on `StartSearchAsync`
+   answering "started", which it does not while a cycle is open. `Clock.NextAsync` reads when the
+   cycle last finished; with no row it is `MinValue`, so the next cycle is already due and saving the
+   folders winds the timer to nought. Proven: after `Settings.SaveAsync` the log says "the owner's
+   cadence came round, so a cycle was started", `Running` is true and the search answers "unknown".
+   Its neighbour `SearchingAnEpisodeThisPluginIsNotTrackingSaysSo` expects "unknown", which is also
+   what an open cycle answers, so it can pass for the wrong reason.
+
+**Steps**
+
+1. `ARunSaysItIsRunningTests.StopPressedTheMomentRunWasPressedStopsThatRun` keeps what the product
+   really promises and what the fault of 11 September 2026 was: Stop pressed the instant after Run is
+   accepted rather than refused, the run ends, and the bar then says how it ended — never "never run".
+   Which of the two words it is belongs to the race, so both are accepted, as the sister test does.
+   The wording of a stopped run stays covered by `ActivityViewTests`, which draws one.
+2. `DownloadsControllerTests` writes down one fact before it configures the plugin: the cycle finished
+   a moment ago, through `CadenceRepository.RecordFinishedAsync` over its own `Store`. Then nothing is
+   due, no cycle starts, and the search test measures the search. The same precondition goes to
+   `SearchingAnEpisodeThisPluginIsNotTrackingSaysSo`, which must answer "unknown" because the episode
+   is unknown, not because a cycle happened to be open.
+3. Nothing in `src/` changes. Both faults are in what the tests lean on.
+
+**Tests.** The three changed tests, each seen to fail with its guard taken out of the plugin: Stop
+refused on a run that has not reached its search; `_running.Busy` gone from `StartSearchAsync`; the
+refusal of an untracked episode gone.
+
+**Done when** the three are green with the guards back, `dotnet build -c Release -warnaserror`,
+`dotnet test` and `dotnet format --verify-no-changes` are clean, and the whole suite has been run five
+times over without a failure — these two fail only under load, so one green run proves nothing.
+
+**As done.** The three tests changed and nothing in `src/`. Four sabotages, each seen to fail the test
+it belongs to: Stop knowing a run only once its search holds a token (the fault of 11 September 2026),
+the search never started for a tracked episode, the refusal of an untracked episode deleted, and the end
+of a run never written down. The build, the format check and five full runs of the suite are clean:
+1,374 tests a run, 22 September 2026.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 Both were found while doing the above and neither has a fix that belongs in this plugin.

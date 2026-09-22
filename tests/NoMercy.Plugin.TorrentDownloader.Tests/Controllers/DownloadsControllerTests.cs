@@ -151,6 +151,9 @@ public class DownloadsControllerTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = Initialised(out FakePluginContext context);
 
+        // Or the refusal below could be the one an open cycle gives, and this would
+        // pass whether or not an unknown episode is refused at all.
+        await JustRan();
         await Configure(plugin);
 
         DownloadsController controller = For(plugin);
@@ -173,6 +176,9 @@ public class DownloadsControllerTests : IDisposable
     {
         using TorrentDownloaderPlugin plugin = Initialised(out FakePluginContext context);
 
+        // A search is refused while a cycle is open, and a plugin that has never run
+        // opens one the moment the folders are saved. This test is about the button.
+        await JustRan();
         await Configure(plugin);
         await (await plugin.EpisodesAsync(CancellationToken.None)).ReplaceAsync(
             [
@@ -205,6 +211,24 @@ public class DownloadsControllerTests : IDisposable
         plugin.Initialize(context);
 
         return plugin;
+    }
+
+    /// <summary>Writes down that the cycle has just run, so none is due while this test presses a button.</summary>
+    /// <remarks>
+    /// <strong>Otherwise the plugin starts one for itself.</strong> <c>Clock.NextAsync</c> reads when
+    /// the cycle last finished, and with no row that is <c>MinValue</c>, so the next one is already
+    /// due: saving the folders winds the timer to nought and a cycle opens. <c>StartSearchAsync</c>
+    /// refuses while one is open, so the Search test read "unknown" whenever the start won the race —
+    /// measured on 22 September 2026. Written before the folders are saved, because that save is what
+    /// winds it.
+    /// </remarks>
+    private async Task JustRan()
+    {
+        Store database = new(_folder);
+
+        await database.MigrateAsync(CancellationToken.None);
+        await new CadenceRepository(database).RecordFinishedAsync(
+            Cadences.Name, DateTimeOffset.UtcNow, CancellationToken.None);
     }
 
     private async Task Configure(TorrentDownloaderPlugin plugin)

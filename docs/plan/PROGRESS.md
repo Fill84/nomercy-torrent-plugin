@@ -4,6 +4,16 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**`S13-24` is done: the two tests that ended on a clock end on a fact.** Each had failed once over five
+full runs on 22 September 2026 and passed in the other four, and the plugin was right both times.
+`StopPressedTheMomentRunWasPressedStopsThatRun` asked for the word "stopped at" on a run that can be
+over before Stop reaches it; it now holds what the fault of 11 September 2026 was — Stop is accepted,
+the run ends, and the bar says how, never "never run". `SearchingAnEpisodeItIsTrackingStartsAndDoesNotBelongToTheCaller`
+pressed Search while the cycle the plugin opens for itself was still running; it and its neighbour now
+write down that the cycle has just run, so none is due. Nothing in `src/` changed. Each of the three was
+seen to fail with its guard taken out of the plugin, and the whole suite ran five times over, green
+every time: 1,374 tests a run.
+
 **`S13-23` is done: everything known to be open, fixed before one deploy** — the owner's word of 17 September
 2026, "zorg er eerst maar voor dat alles ook nu echt opgelost is". A metadata fetch and a peer's sends are safe
 from many threads (an encrypted connection's keystream was torn by concurrent sends); a browser stop can no
@@ -767,6 +777,16 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S13-24` The two tests that ended on a clock end on a fact.** The stop test holds that Stop pressed
+  the instant after Run is accepted, that the run ends and that the bar says how it ended; which of
+  "stopped at" and "last run finished at" it says belongs to the race, and the wording of a stopped run
+  is drawn and asserted in `ActivityViewTests`. Both search tests write down that the cycle has just run
+  before they configure the plugin, or the cycle a never-run plugin opens for itself answers for them —
+  the neighbour expecting "unknown" could pass with the refusal of an untracked episode deleted. Four
+  sabotages, each seen to fail the right test: Stop refused on a run that has not reached its search,
+  the search never started for a tracked episode, the untracked refusal gone, and the end of a run not
+  written down. Five full green runs.
 
 - **FiLL/nomercy-torrent-plugin#1, 22 September 2026: no route into the server outside the SDK.** `OwnEndpoints`
   and the container overload of `LivePlugin.Of` are removed; a stale controller now leaves the server's routes
@@ -2962,16 +2982,20 @@ and note it here.
 
 Kept here so no slice re-discovers them.
 
-- **Two tests still end on a clock, measured over five full runs on 22 September 2026.** Each failed once
-  and passed on every other run, and neither has anything to do with what the run was testing.
-  `ARunSaysItIsRunningTests.StopPressedTheMomentRunWasPressedStopsThatRun` presses Run and Stop with no
-  await between them; under load the background task is past
-  `cycle.Token.ThrowIfCancellationRequested()` before Stop cancels, the run ends Finished over the empty
-  library, and the bar says "last run finished at" rather than "stopped at" — the sister test at
-  `ARunSaysItIsRunningTests.cs:150` already accepts either. `DownloadsControllerTests.SearchingAnEpisodeItIsTrackingStartsAndDoesNotBelongToTheCaller`
-  answers "unknown" when the start `Settings.Saved` fires (`TorrentDownloaderPlugin.cs:379`, since
-  `47510cf`) is still running. Both are the test leaning on timing, not the plugin: a release is not held
-  for them, and the fix is to end each on a fact.
+- **A plugin that has never run opens a cycle the moment its folders are saved.** `Clock.NextAsync`
+  works the next cycle out from when the last one finished, and with no row in `cadences` that is
+  `DateTimeOffset.MinValue`, so the next is already due and `WindAsync` winds the timer to nought.
+  Saving the folders raises `Settings.Saved`, which starts up again (`TorrentDownloaderPlugin.cs:379`),
+  and the log says "the owner's cadence came round, so a cycle was started". Right on a real install,
+  and the reason a test that presses a button straight after configuring must first write down that the
+  cycle has just run — `CadenceRepository.RecordFinishedAsync(Cadences.Name, …)` — or `StartSearchAsync`
+  refuses, because a search is refused while a cycle is open. Measured 22 September 2026 (`S13-24`).
+
+- **`RunEnd.Stopped` is written only where the cycle sees the cancellation** (`TorrentDownloaderPlugin.cs:1373`).
+  A run over an empty library can be finished before Stop reaches it, and then the bar says "last run
+  finished at" however promptly Stop was pressed: with 250 ms between the two presses it says so every
+  time. Which word appears is therefore not a fact a test can hold; that Stop is accepted, and that the
+  run ends and says how, is. Measured 22 September 2026 (`S13-24`).
 
 - **Plugin contract 12, read at `origin/dev` `9643da457` on 22 September 2026.** `PluginAbi.Current`
   and `Oldest` are both 12.0; `IsCompatible` refuses any major under `Oldest` and any minor above

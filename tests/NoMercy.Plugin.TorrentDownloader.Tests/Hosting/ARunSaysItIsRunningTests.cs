@@ -166,8 +166,15 @@ public class ARunSaysItIsRunningTests : IDisposable
     /// answered that there was nothing to stop and the whole search went ahead.
     /// </para>
     /// <para>
-    /// Over an empty library a run that is not stopped finishes, so a status bar
-    /// that says "stopped at" is a run that searched nothing.
+    /// <strong>Which word the bar ends on belongs to the race, so it is not
+    /// asked for.</strong> <c>RunEnd.Stopped</c> is written where the cycle sees
+    /// the cancellation, and over the empty test library the run can be over
+    /// before Stop reaches it — measured on 22 September 2026, with 250 ms
+    /// between the two presses the bar says "last run finished at". What is
+    /// held here is what the fault of 11 September 2026 was: Stop answered that
+    /// there was nothing to stop. So Stop is accepted, the run ends, and the bar
+    /// then says how it ended rather than "never run". The wording of a stopped
+    /// run is drawn and asserted in <c>ActivityViewTests</c>.
     /// </para>
     /// </remarks>
     [Fact]
@@ -192,7 +199,13 @@ public class ARunSaysItIsRunningTests : IDisposable
 
         string bar = string.Join(" ", Rendered.Words(await plugin.GetViewAsync(Requests.View("/"), CancellationToken.None)));
 
-        Assert.Contains("stopped at", bar, StringComparison.Ordinal);
+        // It ran, and it is over: neither "never run" nor still running.
+        Assert.DoesNotContain("never run", bar, StringComparison.Ordinal);
+        Assert.DoesNotContain("running since", bar, StringComparison.Ordinal);
+        Assert.True(
+            bar.Contains("stopped at", StringComparison.Ordinal)
+            || bar.Contains("last run finished at", StringComparison.Ordinal),
+            bar);
     }
 
     /// <remarks>
