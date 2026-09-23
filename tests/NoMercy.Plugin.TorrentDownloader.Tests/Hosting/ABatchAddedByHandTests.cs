@@ -221,7 +221,6 @@ public sealed class ABatchAddedByHandTests : IDisposable
             server.Journal,
             server.Log,
             TimeProvider.System,
-            null,
             null);
     }
 

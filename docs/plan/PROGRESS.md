@@ -798,6 +798,16 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **23 September 2026: the path that added a show is gone, not dormant.** Contract 12 deleted its
+  implementation and left the seam behind — `IShowImport`, `Transfers.AddedAsync` with its `imports`
+  parameter, `Staging.Claims`, `Staging.Reads` — with `TorrentDownloaderPlugin` passing `imports: null`
+  and three tests exercising it through a fake nothing in `src/` could be. Those three proved behaviour
+  the plugin no longer has, which is the kind of test this repository does not keep. All of it is
+  removed; `OnAServerThatCannotAddAShowThePackIsSaidOnceAndLeftAlone` is what holds what the plugin
+  really does — the pack is left where it is and the History names the show to add — and it was seen to
+  fail with that path taken out before any of this was deleted. The owner's word: do it as long as no
+  release is needed for it. 1,371 tests, three full runs green.
+
 - **`S13-24` The two tests that ended on a clock end on a fact.** The stop test holds that Stop pressed
   the instant after Run is accepted, that the run ends and that the bar says how it ended; which of
   "stopped at" and "last run finished at" it says belongs to the race, and the wording of a stopped run

@@ -229,10 +229,10 @@ that path that does not come from `NoMercy.PluginSdk.Abstractions`.
 and offers nothing in its place, so the file went with it on 22 September 2026 and a pack for a show
 the owner does not have is left where it is, with the show named on the History page.
 
-The port it implemented, `Core/Ports/IShowImport.cs`, is still there and nothing in `src/` hands one
-to `Transfers` any more — only a test's `RecordingImport` does. It is kept for the day the contract
-offers a way to ask a provider anything; a reader who wonders which live code path uses it should know
-the answer is none.
+The port it implemented went with it on 23 September 2026, and so did what only it used: `IShowImport`,
+`Transfers.AddedAsync` and its `imports` parameter, and `Staging.Claims` and `Staging.Reads`. Nothing
+was left behind for a contract that might one day offer this — the day it does, the thing to write is
+what that contract actually gives, not what a container gave.
 
 A server that does not offer `IPluginEncoder` is told so — once, in the log and the journal — rather
 than guessed at. It needs plugin contract `0.1.479` or newer.

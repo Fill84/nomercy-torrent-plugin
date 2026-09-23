@@ -36,8 +36,7 @@ public sealed class Transfers(
     IActivityJournal journal,
     ILogger logger,
     TimeProvider? time = null,
-    IEncoderSays? says = null,
-    IShowImport? imports = null)
+    IEncoderSays? says = null)
 {
     /// <summary>What the server last said went wrong with a grab's encode, or null.</summary>
     /// <remarks>
@@ -477,22 +476,15 @@ public sealed class Transfers(
                     // nine files, nine jobs finished inside two minutes, and
                     // nothing written to the library.
                     //
-                    // On contract 12 nothing can add the show: that went through
-                    // the server's own parts by name, reached through a
-                    // container the context no longer hands a plugin, and the
-                    // contract offers no facade that looks a programme up and
-                    // files it. The port stays, so the day one exists this is
-                    // one line where the plugin is composed; until then the
-                    // grab is handed on below and the History names the show.
-                    if (await AddedAsync(files, thisTick, ct))
-                    {
-                        return [];
-                    }
-
-                    // Only where that could not be done: nothing to add a show
-                    // with, no library of the kind its files read as, or no
-                    // provider that knows the show. Then it is named, said out
-                    // loud, and left exactly where the owner put it.
+                    // On contract 12 nothing here can add the show. Until
+                    // 22 September 2026 this asked the server's own metadata
+                    // providers and queued its import job, both reached by name
+                    // out of a container the context no longer hands a plugin,
+                    // and the contract offers no facade that looks a programme
+                    // up and files it. So the pack is named, said out loud, and
+                    // left exactly where the owner put it; they add the show in
+                    // the dashboard and the next pass takes it on as an
+                    // ordinary grab.
                     await UnplaceableAsync(finished, files, ct);
 
                     return [];
@@ -1046,85 +1038,6 @@ public sealed class Transfers(
             journal.Finished(ActivityStage.Dispatch, sent.ReleaseTitle, "encoded into the library, and the copies deleted");
         }
     }
-
-    /// <summary>
-    /// Adds the show a torrent names, so its episodes can be dispatched.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// An encode is asked for by the server's own episode id, and a show that
-    /// is in no library has no episodes and no ids — so a pack for one could
-    /// not be dispatched at all, however plainly its files named it. This looks
-    /// the show up with the server's own metadata providers and imports it into
-    /// the library its files read as, which is exactly what the dashboard does
-    /// when a person adds content.
-    /// </para>
-    /// <para>
-    /// <strong>Asked once per run.</strong> The import runs on the server's own
-    /// queue and a show does not appear the moment it is dispatched, so a tick a
-    /// minute later still finds it in no library — and without this that
-    /// dispatched the same import again, and again, for as long as the queue
-    /// took.
-    /// </para>
-    /// <para>
-    /// False where there is no library of that kind, where the plugin cannot
-    /// reach the server's providers, or where no provider knows the show. The
-    /// caller then says which show it holds and leaves it alone.
-    /// </para>
-    /// </remarks>
-    private async Task<bool> AddedAsync(
-        IReadOnlyList<TorrentFile> files,
-        LibraryThisTick thisTick,
-        CancellationToken ct)
-    {
-        if (imports is null || Staging.Claims(files) is not { } claimed)
-        {
-            return false;
-        }
-
-        if (!_added.Add(claimed.Title))
-        {
-            return true;
-        }
-
-        LibraryKind kind = Staging.Reads(files);
-
-        Library? into = (await thisTick.GetLibrariesAsync(ct)).FirstOrDefault(one => one.Kind == kind);
-
-        if (into is null)
-        {
-            // Asked for again on the next run rather than remembered as done:
-            // there is nothing to wait for, and the answer changes the day the
-            // owner makes a library of that kind.
-            _added.Remove(claimed.Title);
-
-            return false;
-        }
-
-        if (await imports.AddAsync(claimed.Title, claimed.Year, into, ct) is not string added)
-        {
-            _added.Remove(claimed.Title);
-
-            return false;
-        }
-
-        journal.Finished(
-            ActivityStage.Download,
-            claimed.Title,
-            $"was in no library, so it was looked up and added to {into.Name} as {added}; "
-            + "its episodes are dispatched on the next pass");
-
-        return true;
-    }
-
-    /// <summary>Shows this run has already asked the server to add.</summary>
-    /// <remarks>
-    /// Held rather than written down: a restart is a good enough reason to ask
-    /// again, and by then either the import finished — in which case the show
-    /// is in a library and this is never reached — or it did not, and asking
-    /// once more is the right thing.
-    /// </remarks>
-    private readonly HashSet<string> _added = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Whether a finished encode arrived under a row that is not the episode's.

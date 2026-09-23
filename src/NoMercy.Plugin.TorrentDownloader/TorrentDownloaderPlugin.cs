@@ -952,13 +952,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // Where the server says what became of an encode. Without it a
             // failed job and a slow one look the same, and a failed one is
             // waited on until the owner cancels it.
-            says: Says(),
-
-            // Nothing adds a show the owner does not have any more. That went
-            // through the server's own parts by name, reached through a
-            // container contract 12 no longer hands a plugin; a pack for such a
-            // show is left where it is and the History names the show to add.
-            imports: null);
+            says: Says());
 
         await _transfers.TickAsync(
             settings.IncompleteFolder,
