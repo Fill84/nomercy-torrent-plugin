@@ -46,11 +46,12 @@ Show.Title.S02E13.1080p.WEB.x264-GROUP         ← scene-styled anime, also vali
 | Codec | `H264`, `x264`, `H.264`, `AVC` | same | accept `264`/`265` without a prefix; `H.265` has a dot inside |
 | Group | after the last `-` | inside the leading `[...]` | a scene title is full of dashes; the group is after the *last* one and contains no dots |
 | Language | `MULTi`, `VOSTFR`, `Dual.Audio`, and the languages the captures name outright — `GERMAN`, `ITA`, `TRUEFRENCH`, `SPANISH`, `RUS`, `POLISH`, `SWESUB`, `JAP`, `ENG` | `[Multiple Subtitle]`, `Dual Audio` | never `Greek`, which is a programme; and never a three-letter abbreviation out of a subtitle list, which is short enough to be something else |
-| Pack | `S01` with no `E` | `01~12`, `Batch`, `Complete` | a pack names no episode, so it is not searched for |
+| Pack | `S01` with no `E` | `01~12`, `Batch`, `Complete` | a pack names no episode, so it is never an episode's name; the scene `S01` form is the season's pack, searched for when the season has several gaps (§ Season packs); the anime forms name no season and are not searched for |
 
-**A release name names one episode of one show by its season and episode number**
-(`docs/specs/release-names.md`). A season pack, a run of episodes and an absolute-numbered anime post
-name no episode, and a run does not search for them.
+**A release name for an episode names one episode of one show by its season and episode number**
+(`docs/specs/release-names.md`). A run of episodes and an absolute-numbered anime post name no episode,
+and a run does not search for them. A season pack (`Show.S03.…`) names no episode either, and is
+searched for as the pack of its season (§ Season packs).
 
 `TitleMatcher.Matches`: normalise both sides (lowercase, **accents folded**, punctuation to spaces,
 collapse), then the release title must **begin with** the show title and the slot must match.
@@ -157,11 +158,35 @@ behaves as a downgrade, because the 720p copy is usually posted first.
 
 ## Season packs
 
-A release name without an episode number, such as a season pack, is not searched for
-(`docs/specs/release-names.md`).
+**A season with several gaps takes a pack.** GitHub issue #1, on the owner's word of 14 October 2026 to
+fix it, which replaced the rule below (`docs/specs/release-names.md` § Season packs):
 
-From the owner's rule of 12 September 2026 until 15 September 2026, a pack was an ordinary copy:
-judged by the same rules as a single episode, with no threshold and no switch to refuse it outright,
+1. When two or more aired episodes of one season of a show are being searched for in a run — missing, the
+   show switched on with a quality, and no open grab answering for them — a pack of that season is looked
+   for first, when the run reaches the season's first such episode: the feeds' pack names (`Show.S03.…`,
+   no episode), or else every name source's search for `Show S03`, judged against the show's settings
+   exactly as an episode's name is, and searched on the indexers exactly as an episode's name is — exact
+   name, then without punctuation, merged by hash, the torrent on the most indexers winning, the seeder
+   gate applying.
+2. A pack that gives a torrent wins over the season's single episodes: it is one grab covering every
+   episode of the season being searched for, and none of them is searched for singly in that run.
+3. Once its metadata is in, the client downloads only the video files whose own name names an episode the
+   grab covers, through the same piece mask that leaves out a torrent's other files; an episode with a file
+   in the library is not covered, so it is not downloaded again. An episode the pack turns out not to hold
+   is released from the grab and searched for singly by the next run.
+4. No pack found, no pack giving a torrent, or only one episode of the season missing: the single
+   episodes, as before.
+5. A pack name is dated by the same one-week rule as an episode's name, against the latest-aired episode of
+   the season it would cover.
+
+A pack is the scene `Sxx` form with no episode number, for television and anime alike. The anime batch
+forms — `01~12`, `Batch`, `Complete` with no season — name no season to hold them to, and are still not
+searched for. The search for the show and episode when no release name gives a torrent stays an
+episode's; no `Show S03` is put to the indexers.
+
+*Replaced, 14 October 2026:* **a release name without an episode number was not searched for**, the owner's
+rule of 15 September 2026. Before that, from the owner's rule of 12 September 2026, a pack was an ordinary
+copy: judged by the same rules as a single episode, with no threshold and no switch to refuse it outright,
 and a pack that was taken answered for every gap in the season it covered.
 
 ## Settings

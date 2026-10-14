@@ -8,7 +8,7 @@ Read this first, update it last. Nothing else decides what happens next.
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
-`S14-07` (#5, sort, filter and paging). `S14-01` to `S14-04` are done (see **Log**). **Current: `S14-05`.**
+`S14-07` (#5, sort, filter and paging). `S14-01` to `S14-05` are done (see **Log**). **Current: `S14-06`.**
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
@@ -805,13 +805,30 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S14-02` No Xvfb, no browser, one warning (#6)
 - [x] `S14-03` A log level the owner sets, and a log file that holds it (#7)
 - [x] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
-- [ ] `S14-05` A season with several gaps takes a pack (#1)
+- [x] `S14-05` A season with several gaps takes a pack (#1)
 - [ ] `S14-06` A page with two or more tables shows them as tabs (#4)
 - [ ] `S14-07` Every table answers sort, filter and paging (#5)
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S14-05` A season with several gaps takes a pack (#1).** `SeasonPacks.WithSeveralGaps` (two or more
+  searched episodes of one season) decides which seasons look for a pack; `ReleaseName.IsSeasonPack` and
+  `EpisodeNaming.NamesSeason` say what a pack is (the `Sxx` form, no episode; anime batches are not).
+  `NameSources.ReadFeedsAsync` takes feed packs per season (`FeedNamesTaken.PacksFor`), and
+  `PackNamesForAsync` asks every name source `Show Sxx` when no feed named one; `NameJudge.JudgePack` holds a
+  pack to the show's settings, dated against `SeasonPacks.Latest`. `SearchCycle.PackAsync` runs when the run
+  reaches a season's first searched episode: wish groups, `IndexerRound.AskAsync` against the latest-aired
+  episode, then `TakeAsync` with the seeder gate; a pack taken settles every searched episode of the season
+  (`Decisions.SettledBy` names it), a pack that gives nothing hands back to the singles. The grab passes
+  its covers as `TorrentRequest.Episodes`, `BittorrentEngine` narrows the piece mask to
+  `Staging.ForEpisodes`, `Transfers.NarrowedAsync` releases what the files do not hold
+  (`GrabRepository.NarrowAsync`) and re-adds a pack with its episodes. `Staging.Choose` with one cover now
+  takes the file naming the episode before the largest. Captures of 14 October 2026: the four name
+  sources asked `Adolescence S01` (FLUX's pack is on SceneSource only), srrDB `adolescence-s01e01`, and
+  LimeTorrents and The Pirate Bay asked FLUX's pack and SuccessfulCrab's S01E01. The 42-episode
+  `SearchCycleTests` count now includes one pack question a season. For S14-06: nothing here touches a page.
 
 - **`S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2).** The gate:
   `RankedTorrent.NobodySeeds` is true when every result of the merged hash reports nought (a result with
@@ -2474,6 +2491,22 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **14 October 2026, GitHub issue #1 replaced the owner's rule of 15 September 2026 that a pack is not
+  searched for.** The owner's word that day was to fix the seven issues, and fixing #1 is the decision to
+  reverse it (`docs/04-domain.md` § Season packs). The controller's rulings for `S14-05`, applied as given:
+  *several* is two or more aired episodes of one season searched for in the run (missing, show switched on
+  with a quality, not covered by an open grab); a pack is the `Sxx` form with no episode, for tv and anime
+  alike, and anime batches (`01~12`, `Batch`, `Complete`) stay not searched for; the pack is looked for when
+  the run reaches the season's first searched episode, through the feeds and the name sources' `Show Sxx`
+  search, judged and asked of the indexers exactly as an episode's name, and a pack that wins is one grab
+  covering every searched episode of the season, which are then not searched singly; the
+  show-and-episode fallback stays per episode, with no `Show Sxx` asked of the indexers; once the metadata
+  is in only the videos naming a covered episode are downloaded (the existing piece mask), and an episode
+  the pack does not hold is released from the grab; a pack name is dated by the one-week rule against the
+  latest-aired episode it would cover. Found on the way: `Staging.Choose` with one cover took the largest
+  video, which for a pack narrowed to one episode is whichever equal-sized episode the torrent lists first
+  and not the one downloaded — it now takes the file naming the episode first.
 
 - **14 October 2026, GitHub issue #2 replaced the owner's rule of 12 September 2026 that there is no
   seeder gate.** The owner's word that day was to fix the seven issues, and fixing #2 is the decision to

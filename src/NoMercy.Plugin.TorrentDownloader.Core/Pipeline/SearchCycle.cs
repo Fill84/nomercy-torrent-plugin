@@ -343,8 +343,8 @@ public sealed class SearchCycle(
     /// <remarks>
     /// <para>
     /// <c>docs/specs/release-names.md</c> § Season packs — GitHub issue #1, on the owner's word of
-    /// 14 October 2026, which replaced the owner's rule of 15 September 2026 that a pack is not searched for. A
-    /// season of seven missing episodes was seven searches and seven grabs where one pack would do.
+    /// 14 October 2026, which replaced the owner's rule of 15 September 2026 that a pack is not searched for. In
+    /// the issue's words, a pack that covers the wanted episodes wins over grabbing them one by one.
     /// </para>
     /// <para>
     /// The pack's names are judged, grouped by wishes and put to the indexers exactly as an episode's are —

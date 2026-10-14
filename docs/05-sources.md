@@ -58,7 +58,17 @@ runs — the name pool is gone (migration `014`).
    it. A season pack, a run of episodes, an absolute-numbered anime post and a film name no episode.
 2. An episode no feed named is looked up in every name source's search at once, asked `Show SxxEyy` —
    no quality, no year, no absolute number. What the search answers for another episode is left.
-3. A feed or a search that fails gives nothing that run; the others are read all the same.
+3. Since 14 October 2026 (GitHub issue #1), a season with two or more episodes being searched for takes
+   the feed names that are a pack of that season (`EpisodeNaming.NamesSeason`), and with none is looked up
+   in every name source's search asked `Show Sxx`; only that season's packs are kept from the answer
+   (`docs/04-domain.md` § Season packs).
+4. A feed or a search that fails gives nothing that run; the others are read all the same.
+
+**Measured on 14 October 2026**, saved as `tests/fixtures/names-*-search-adolescence-s01.*`: asked
+`Adolescence S01`, SceneSource answered with FLUX's 1080p pack and nothing else, srrDB with two
+HiggsBoson DIRFIX packs among the season's single episodes, and PreDB and PreDB.net with single episodes
+only. Asked the same that day for Silo S02, Dark Matter S01, The Bear S03 and Slow Horses S04, srrDB and
+PreDB.net named no pack at all; the packs SceneSource carries are P2P groups' (FLUX, TBN).
 
 **Measured on 15 September 2026** through the plugin's own fetch, and saved as `tests/fixtures/names-*`:
 the four feeds answered 40 (PreDB), 100 (srrDB), 20 (PreDB.net) and 40 (SceneSource) items. PreDB, srrDB

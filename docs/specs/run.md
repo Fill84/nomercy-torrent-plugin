@@ -18,6 +18,13 @@
   those of an episode being searched for. Every other feed release name is left.
 - The episodes are worked on one at a time, and an episode's winning torrent is offered to the
   download client before the next episode is worked on.
+- When the run reaches the first episode of a season with several gaps, it looks for that season's pack
+  first (`release-names.md` § Season packs): the feed season packs taken for it, or else the search of
+  every name source for the show and the season, then the indexers as for an episode's release names.
+- A season pack that gives a torrent is offered to the download client before the next episode is worked
+  on, and the season's other episodes being searched for are not worked on again in that run.
+- When no season pack gives a torrent, the episode the run reached and every later episode of that season
+  are worked on one by one.
 - For an episode, the release names are the feed release names taken for it. An episode with no feed
   release name is looked up in the search of every name source.
 - For an episode, the indexers are asked for one wish group at a time, starting with the group
@@ -33,6 +40,16 @@
   and History pages, and is searched for again on the next run.
 - When nothing a run started is still downloading, staged or waiting on an encode, maintenance runs
   and the run ends.
+
+## While a season pack downloads
+
+- A season pack downloads only the video files whose own name names an episode it was offered for. An
+  episode with a video file in the library is not one of them, so its file in the pack is not downloaded.
+- A season pack added back to the download client downloads the same video files.
+- Once the download client knows a season pack's files, an episode it was offered for and holds no video
+  file of is no longer answered for by it, and the next run searches for that episode.
+- A season pack that holds no video file of any episode it was offered for is refused by the download
+  client, and every one of those episodes is searched for again.
 
 ## When a download finishes
 

@@ -14,6 +14,10 @@
 - A title is the release name when the two are the same letters and digits in the same order, with
   case, punctuation and the site's own tag on the title set aside.
 - An indexer result is not judged against the show's quality, codec, wishes, musts or forbidden.
+- A season pack is asked of the indexers, merged and its winner chosen exactly as a release name for an
+  episode, with the latest-aired episode it would cover as the episode a result is dated against
+  (`release-names.md` § Season packs). When no merged torrent of it can be offered, the season's episodes
+  are searched for one by one.
 
 ## Merging by hash
 
