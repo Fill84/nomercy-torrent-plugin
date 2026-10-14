@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -255,7 +257,7 @@ public class StagerTests : IDisposable
     [Fact]
     public async Task StagingAcrossVolumesWorks()
     {
-        string across = Path.Combine(AnotherVolume(), "nomercy-staging-" + Guid.NewGuid().ToString("n")[..8]);
+        string across = Path.Combine(Volumes.Another(), "nomercy-staging-" + Guid.NewGuid().ToString("n")[..8]);
 
         Directory.CreateDirectory(across);
 
@@ -285,56 +287,6 @@ public class StagerTests : IDisposable
         {
             Directory.Delete(across, recursive: true);
         }
-    }
-
-    /// <summary>
-    /// Somewhere on a different device from the intake folder.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A volume is not a drive letter everywhere. On Windows it is: the drive
-    /// this repository is on and the drive the temporary folder is on are two
-    /// devices, and comparing path roots finds them. On Linux every absolute
-    /// path roots at <c>/</c> however many devices are mounted, so that
-    /// comparison finds nothing and the test failed on the first CI build there
-    /// had ever been — for want of a second drive letter on a machine with
-    /// several file systems.
-    /// </para>
-    /// <para>
-    /// <c>/dev/shm</c> is the one that is always there and always its own:
-    /// it is a tmpfs, so a move out of it is a copy exactly as a move between
-    /// two disks is.
-    /// </para>
-    /// <para>
-    /// If no second device can be found this says so and fails, rather than
-    /// passing quietly. A cross-volume staging that has never run is one nobody
-    /// knows about until the owner's server has two disks.
-    /// </para>
-    /// </remarks>
-    private static string AnotherVolume()
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            string here = Path.GetPathRoot(Path.GetFullPath(AppContext.BaseDirectory))!;
-            string temp = Path.GetPathRoot(Path.GetFullPath(Path.GetTempPath()))!;
-
-            Assert.NotEqual(here, temp);
-
-            return here;
-        }
-
-        foreach (string candidate in new[] { "/dev/shm", "/run/shm" })
-        {
-            if (Directory.Exists(candidate))
-            {
-                return candidate;
-            }
-        }
-
-        throw new InvalidOperationException(
-            "No second device to stage across: neither /dev/shm nor /run/shm is mounted, and every "
-            + "path here roots at /. Cross-volume staging is what turns a move into a copy, and it "
-            + "is not being tested on this machine.");
     }
 
     public void Dispose()
@@ -413,6 +365,93 @@ public class StagerTests : IDisposable
         Assert.False(result.Moved);
         Assert.Equal(content, await File.ReadAllBytesAsync(path));
         Assert.Empty(Directory.EnumerateFiles(into));
+    }
+
+    /// <remarks>
+    /// <strong>A move that fails says so, at Warning, with the path and the reason.</strong> GitHub issue #3:
+    /// a finished download never reached the intake folder, and nothing in the log said where or why. The
+    /// line named the file and not the folder it was in, and a server with two download folders cannot be
+    /// told apart by a file name.
+    /// </remarks>
+    [Fact]
+    public async Task AMoveThatFailsSaysWhereAndWhyAtWarning()
+    {
+        byte[] content = Content(1024 * 1024);
+        string from = Folder("incomplete-said");
+        string into = Path.Combine(_root, "intake-said");
+        string path = Path.Combine(from, "Silo.S03E07.mkv");
+
+        await File.WriteAllBytesAsync(path, content);
+        Directory.CreateDirectory(Path.Combine(into, "Silo.S03E07.mkv"));
+
+        CapturingLogger log = new();
+
+        StagedResult result = Assert.Single(await new Stager(new ActivityJournal(), log).MoveAsync(
+            [new("Silo.S03E07.mkv", Episode(7), content.Length)],
+            from,
+            into,
+            // No release name, so the file keeps its own.
+            show: null,
+            resolution: null,
+            CancellationToken.None));
+
+        Assert.False(result.Moved);
+        Assert.Contains(
+            log.Entries,
+            entry => entry.Level == LogLevel.Warning
+                     && Regex.IsMatch(
+                         entry.Line,
+                         $"^{Regex.Escape(path)} could not be staged into {Regex.Escape(into)}: .+"));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A move the file system refuses says so before the file is copied.</strong> The copy that
+    /// follows is the slow path — a whole episode read and written byte by byte — and without a line the
+    /// owner sees only that staging took half an hour.
+    /// </para>
+    /// <para>
+    /// Windows only: a file held open without leave to delete it cannot be moved there, which is the refusal
+    /// under test. On Linux a held file moves.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AMoveTheFileSystemRefusesIsSaidBeforeTheCopy()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        byte[] content = Content(1024 * 1024);
+        string from = Folder("incomplete-refused");
+        string into = Path.Combine(_root, "intake-refused");
+        string path = Path.Combine(from, "Silo.S03E07.mkv");
+
+        await File.WriteAllBytesAsync(path, content);
+
+        CapturingLogger log = new();
+
+        await using (FileStream held = new(path, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+        {
+            StagedResult result = Assert.Single(await new Stager(new ActivityJournal(), log).MoveAsync(
+                [new("Silo.S03E07.mkv", Episode(7), content.Length)],
+                from,
+                into,
+                // No release name, so the file keeps its own.
+                show: null,
+                resolution: null,
+                CancellationToken.None));
+
+            Assert.True(result.Moved, result.Reason);
+        }
+
+        Assert.Contains(
+            log.Entries,
+            entry => entry.Level == LogLevel.Warning
+                     && Regex.IsMatch(
+                         entry.Line,
+                         $"^{Regex.Escape(path)} could not be moved into {Regex.Escape(into)}, so it is copied: .+"));
     }
 
     /// <remarks>

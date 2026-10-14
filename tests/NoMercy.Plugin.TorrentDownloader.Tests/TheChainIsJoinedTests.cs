@@ -1,8 +1,10 @@
 using System.Security.Cryptography;
+using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
@@ -564,7 +566,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         {
             // Seconds rather than the minute a server gets: what is under test
             // is that a pass comes round at all, not how long the owner waits.
-            EncodeCheckInterval = TimeSpan.FromMilliseconds(200),
+            LookAgainInterval = TimeSpan.FromMilliseconds(200),
         };
 
         plugin.Initialize(new FakePluginContext
@@ -600,6 +602,305 @@ public sealed class TheChainIsJoinedTests : IDisposable
         Assert.Equal(GrabState.Done, await UntilDoneAsync(grabs, hash));
         Assert.True(jobs.Asked.Count >= 2, "the grab was asked about once and never again.");
         Assert.False(File.Exists(staged), "the copy the encoder had finished with was left in the intake folder.");
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A finished download whose staging failed is looked at again by itself.</strong> GitHub issue
+    /// #3: a download completed and never reached the intake folder. The client says a download finished
+    /// once, and a pass ran on that and on nothing else that was still to come — so a staging that failed on
+    /// that pass, for a reason that went away a moment later, left the download in the incomplete folder until
+    /// something unrelated started a pass.
+    /// </para>
+    /// <para>
+    /// Here the first staging is refused — a folder in the intake folder carries the episode's name — and then
+    /// the folder goes. Nothing else happens: no completion, no run, no page. The pass that comes round while
+    /// a finished download waits to be staged is what stages it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFinishedDownloadWhoseStagingFailedIsStagedAgainWithoutAnythingAsking()
+    {
+        (TorrentDownloaderPlugin plugin, string staged) = await AStagingThatFailsAsync(
+
+            // Seconds rather than the minute a server gets: what is under test is that a pass comes round
+            // at all, not how long the owner waits.
+            TimeSpan.FromMilliseconds(200));
+
+        using (plugin)
+        {
+            // What was in the way is gone. Nobody presses anything.
+            Directory.Delete(staged);
+
+            Assert.True(
+                await UntilAsync(() => File.Exists(staged)),
+                "a finished download's staging failed once and nothing ever looked at it again.");
+        }
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A run looks at what the client holds before it does anything else.</strong> The cadence is the
+    /// safety net under every event: whatever a lost or failed pass left behind, the next run's start finds.
+    /// </para>
+    /// <para>
+    /// The pass that comes round by itself is put out of reach here — an hour away — so what stages the
+    /// download is the run the owner starts, and nothing else.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ARunStagesAFinishedDownloadWhoseStagingFailedBefore()
+    {
+        (TorrentDownloaderPlugin plugin, string staged) = await AStagingThatFailsAsync(TimeSpan.FromHours(1));
+
+        using (plugin)
+        {
+            Directory.Delete(staged);
+
+            await plugin.RunCycleAsync(CancellationToken.None);
+
+            Assert.True(
+                await UntilAsync(() => File.Exists(staged)),
+                "a run started and the finished download waiting to be staged was not looked at.");
+        }
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>On one volume a finished download is moved into the intake folder.</strong> GitHub issue #3
+    /// asks for a finished download to reach the intake folder on the same volume and on another. Here,
+    /// through the plugin and a real client, on one: the episode arrives whole, the download is gone, and the
+    /// file is the file it was — a copy is made now, a moved file keeps the moment it was made.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFinishedDownloadOnTheSameVolumeIsMovedIntoTheIntakeFolder()
+    {
+        DateTime made = new(2001, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        (string download, string staged, byte[] content) =
+            await FinishThroughThePluginAsync(Path.Combine(_folder, "incomplete"), made);
+
+        Assert.Equal(content, await File.ReadAllBytesAsync(staged));
+        Assert.False(File.Exists(download), "the download was left in the incomplete folder.");
+        Assert.Equal(made, File.GetCreationTimeUtc(staged));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>On another volume a finished download reaches the intake folder too.</strong> The download
+    /// folder and the intake folder are often two disks — the download lands on the fast one, the library
+    /// lives on the big one — and a move between two file systems is a copy the file system makes. Here the
+    /// incomplete folder is on a second file system for real: another drive on Windows, <c>/dev/shm</c> on
+    /// Linux, which is a tmpfs.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AFinishedDownloadOnAnotherVolumeReachesTheIntakeFolder()
+    {
+        string incomplete = Path.Combine(Volumes.Another(), "nomercy-chain-" + Guid.NewGuid().ToString("n")[..8]);
+
+        try
+        {
+            (string download, string staged, byte[] content) = await FinishThroughThePluginAsync(incomplete, made: null);
+
+            Assert.Equal(content, await File.ReadAllBytesAsync(staged));
+            Assert.False(File.Exists(download), "the download was left in the incomplete folder.");
+        }
+        finally
+        {
+            TemporaryFolder.Forget(incomplete);
+        }
+    }
+
+    /// <summary>
+    /// A download added by hand, whole on disk in <paramref name="incomplete"/>, taken through the plugin and a
+    /// real client until the episode is in the intake folder.
+    /// </summary>
+    /// <param name="incomplete">The incomplete folder, on whichever volume the test wants.</param>
+    /// <param name="made">When the download says it was made, so a test can tell a move from a copy.</param>
+    /// <returns>Where the download was, where the episode is, and its bytes.</returns>
+    private async Task<(string Download, string Staged, byte[] Content)> FinishThroughThePluginAsync(
+        string incomplete,
+        DateTime? made)
+    {
+        string intake = Path.Combine(_folder, "intake");
+
+        Directory.CreateDirectory(incomplete);
+        Directory.CreateDirectory(intake);
+
+        const string name = "Silo.2023.S03E06.1080p.WEB.H264-CAKES.mkv";
+
+        byte[] content = RandomNumberGenerator.GetBytes(64 * 1024);
+        string download = Path.Combine(incomplete, name);
+        await File.WriteAllBytesAsync(download, content);
+
+        if (made is DateTime moment)
+        {
+            File.SetCreationTimeUtc(download, moment);
+        }
+
+        string torrent = Path.Combine(_folder, "episode.torrent");
+        await File.WriteAllBytesAsync(torrent, Torrent(name, content, pieceLength: 16 * 1024));
+
+        FakeLibraryQuery shelves = new FakeLibraryQuery()
+            .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
+            .Show(41, "Silo", "01HQ5W4AVF30N10RT6XCF6AJHM", 2023, folder: "/Silo.(2023)")
+            .Episode(41, 3, 6, "The Getaway", new DateTime(2020, 1, 1), hasFile: false)
+            .Episode(41, 1, 1, "Freedom Day", new DateTime(2019, 1, 1), hasFile: true);
+
+        string staged = Path.Combine(
+            intake,
+            EpisodeName.For("Silo", 2023, new(41, 3, 6), ReleaseName.Parse(name).Resolution, ".mkv"));
+
+        using (TorrentDownloaderPlugin plugin = new())
+        {
+            plugin.Initialize(new FakePluginContext
+            {
+                DataFolderPath = _folder,
+                Shelves = shelves,
+                Permits = new FakeGrants(),
+                Encodes = new FakeEncoder(),
+            });
+
+            // A cycle finished a moment ago, so the cadence starts none and nothing here reads a site.
+            _ = await plugin.EpisodesAsync(CancellationToken.None);
+            await new CadenceRepository(new Store(_folder)).RecordFinishedAsync(
+                JobNames.Cycle, DateTimeOffset.UtcNow, CancellationToken.None);
+
+            Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
+            settings.Client.ListenPort = 0;
+
+            SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+            Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+
+            (string? hash, string? refusal) = await plugin.AddTorrentAsync(torrent, CancellationToken.None);
+            Assert.True(hash is not null, refusal);
+
+            Assert.True(
+                await UntilAsync(() => File.Exists(staged)),
+                "the client said the download finished and it never reached the intake folder.");
+        }
+
+        return (download, staged, content);
+    }
+
+    /// <summary>
+    /// A plugin holding a finished download whose first staging was refused, and where the episode would go.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// What the store held when the server stopped: a grab of a private torrent, whole on disk. The plugin
+    /// starts, puts the torrent back in the client, and the client says it is finished. Private, so it seeds
+    /// and is copied rather than let go of: a torrent let go of whose staging fails is added back to the
+    /// client, which says once more that it is finished, and that is a second look of its own.
+    /// </para>
+    /// <para>
+    /// The staging is refused because a folder carries the episode's name. A cycle finished a moment ago is
+    /// written down first, so the cadence starts none, and the show is switched on before the folders are set,
+    /// because a pass cancels a grab whose show is off.
+    /// </para>
+    /// </remarks>
+    /// <param name="lookAgain">How long until the pass comes round by itself while something waits.</param>
+    private async Task<(TorrentDownloaderPlugin Plugin, string Staged)> AStagingThatFailsAsync(TimeSpan lookAgain)
+    {
+        string incomplete = Path.Combine(_folder, "incomplete");
+        string intake = Path.Combine(_folder, "intake");
+
+        Directory.CreateDirectory(incomplete);
+        Directory.CreateDirectory(intake);
+
+        const string name = "Silo.2023.S03E06.1080p.WEB.H264-CAKES.mkv";
+        EpisodeKey episode = new(41, 3, 6);
+
+        byte[] content = RandomNumberGenerator.GetBytes(64 * 1024);
+        await File.WriteAllBytesAsync(Path.Combine(incomplete, name), content);
+
+        byte[] file = Torrent(name, content, pieceLength: 16 * 1024, isPrivate: true);
+        string torrent = Path.Combine(_folder, "episode.torrent");
+        await File.WriteAllBytesAsync(torrent, file);
+
+        FakeLibraryQuery shelves = new FakeLibraryQuery()
+            .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
+            .Show(41, "Silo", "01HQ5W4AVF30N10RT6XCF6AJHM", 2023, folder: "/Silo.(2023)")
+            .Episode(41, 3, 6, "The Getaway", new DateTime(2020, 1, 1), hasFile: false)
+            .Episode(41, 1, 1, "Freedom Day", new DateTime(2019, 1, 1), hasFile: true);
+
+        TorrentDownloaderPlugin plugin = new() { LookAgainInterval = lookAgain };
+
+        FakePluginContext context = new()
+        {
+            DataFolderPath = _folder,
+            Shelves = shelves,
+            Permits = new FakeGrants(),
+            Encodes = new FakeEncoder(),
+        };
+
+        plugin.Initialize(context);
+
+        _ = await plugin.EpisodesAsync(CancellationToken.None);
+        await new CadenceRepository(new Store(_folder)).RecordFinishedAsync(
+            JobNames.Cycle, DateTimeOffset.UtcNow, CancellationToken.None);
+
+        Assert.Empty(await plugin.SaveShowSettingsAsync(
+            41,
+            new Dictionary<string, string?> { ["switchedOn"] = "true", ["quality"] = "1080p" },
+            CancellationToken.None));
+
+        await (await plugin.GrabsAsync(CancellationToken.None)).RecordAsync(
+            episode,
+            "Silo",
+            name,
+            "1337x",
+            TorrentMetadata.Read(file).InfoHash,
+            torrent,
+            [episode],
+            DateTimeOffset.UtcNow,
+            CancellationToken.None);
+
+        // Where the episode goes, taken by a folder: the copy cannot be given the episode's name.
+        string staged = Path.Combine(
+            intake,
+            EpisodeName.For("Silo", 2023, episode, ReleaseName.Parse(name).Resolution, ".mkv"));
+
+        Directory.CreateDirectory(staged);
+
+        Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
+        settings.Client.ListenPort = 0;
+
+        // So a run reads nobody: this touches no network.
+        foreach (string source in System.Text.Json.JsonDocument
+                     .Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources.json")))
+                     .RootElement.GetProperty("sources").EnumerateArray()
+                     .Select(one => one.GetProperty("name").GetString()!))
+        {
+            settings.DisabledDefaultSources.Add(source);
+        }
+
+        SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+        Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+
+        Assert.True(
+            await UntilAsync(() => context.Log.Entries.Any(entry =>
+                entry.Level == LogLevel.Warning && entry.Line.Contains("could not be staged", StringComparison.Ordinal))),
+            "the first staging was never tried, so nothing here was refused.");
+
+        Assert.False(File.Exists(staged));
+
+        return (plugin, staged);
+    }
+
+    /// <summary>Whether a condition came true before <see cref="Hang.Limit"/> ran out.</summary>
+    private static async Task<bool> UntilAsync(Func<bool> done)
+    {
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
+
+        while (!done() && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
+
+        return done();
     }
 
     /// <summary>The grab's state once it is done, or whatever it is when the limit runs out.</summary>
@@ -674,7 +975,14 @@ public sealed class TheChainIsJoinedTests : IDisposable
     }
 
     /// <summary>A real single-file torrent over real bytes.</summary>
-    private static byte[] Torrent(string name, byte[] content, long pieceLength)
+    /// <param name="name">What the torrent calls its one file.</param>
+    /// <param name="content">The file's bytes.</param>
+    /// <param name="pieceLength">How the bytes are cut into pieces.</param>
+    /// <param name="isPrivate">
+    /// A private torrent seeds until its own rules are met, so a finished one is copied and stays with the
+    /// client rather than being let go of.
+    /// </param>
+    private static byte[] Torrent(string name, byte[] content, long pieceLength, bool isPrivate = false)
     {
         List<byte> hashes = [];
 
@@ -683,17 +991,22 @@ public sealed class TheChainIsJoinedTests : IDisposable
             hashes.AddRange(SHA1.HashData(content.AsSpan(at, Math.Min((int)pieceLength, content.Length - at))));
         }
 
+        List<BencodeEntry> info =
+        [
+            new("length"u8.ToArray(), new BencodeInteger(content.Length)),
+            new("name"u8.ToArray(), new BencodeBytes(System.Text.Encoding.UTF8.GetBytes(name))),
+            new("piece length"u8.ToArray(), new BencodeInteger(pieceLength)),
+            new("pieces"u8.ToArray(), new BencodeBytes([.. hashes])),
+        ];
+
+        if (isPrivate)
+        {
+            info.Add(new("private"u8.ToArray(), new BencodeInteger(1)));
+        }
+
         return Bencode.Write(new BencodeDictionary(
         [
-            new(
-                "info"u8.ToArray(),
-                new BencodeDictionary(
-                [
-                    new("length"u8.ToArray(), new BencodeInteger(content.Length)),
-                    new("name"u8.ToArray(), new BencodeBytes(System.Text.Encoding.UTF8.GetBytes(name))),
-                    new("piece length"u8.ToArray(), new BencodeInteger(pieceLength)),
-                    new("pieces"u8.ToArray(), new BencodeBytes([.. hashes])),
-                ])),
+            new("info"u8.ToArray(), new BencodeDictionary(info)),
         ]));
     }
 }

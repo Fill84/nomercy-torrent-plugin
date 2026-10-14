@@ -58,9 +58,18 @@
 - An encode is asked for each staged video. The grab is done once the library has the episode, or holds
   a file named for the episode under another episode and the server has not said the encode is still
   running. The server says nothing about an encode it skips because every output already exists.
-- While a grab waits on an encode, the plugin looks every minute at what the server made of it and at
-  the library, and the look that finds the episode closes the grab. A plugin with nothing waiting looks
-  at nothing.
+- The plugin looks at what the download client holds when the client says a download finished, at the
+  start of every run, and every minute while a finished download waits to be staged or a grab waits on
+  an encode. A plugin with nothing waiting looks at nothing between runs.
+- A download that finishes while the plugin is looking is looked at again before that look ends.
+- A finished download whose staging fails stays where it is and is staged by a later look, with nothing
+  else happening.
+- While a grab waits on an encode, each look reads what the server made of it and the library, and the
+  look that finds the episode closes the grab.
+- A move or a copy into the intake folder that fails is written to the server's log as a warning naming
+  the file's path, the intake folder and the reason. A staging that fails for any other reason is a
+  warning naming the download folder and the reason, and a look that fails is a warning naming the
+  reason.
 - A grab whose staged files are gone for every episode not yet in the library, while the server does
   not say an encode is running, fails, and its episodes are searched for again.
 - An episode whose file is in the library under its own name is not missing, whichever episode the

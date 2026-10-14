@@ -1448,6 +1448,106 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A download that finishes while a pass is finishing is staged.</strong> GitHub issue #3: a
+    /// download completed and never reached the intake folder. The client says a download finished once, and
+    /// the pass that saying starts is refused while another pass runs. The refused caller wrote its wish for
+    /// another pass only after the refusal — so when the running pass read the wish, let go of its turn and
+    /// read it again all before that write, the wish landed with nobody left to act on it, and the download
+    /// sat in the incomplete folder until something unrelated started a pass.
+    /// </para>
+    /// <para>
+    /// The interleaving is held, not hoped for: the first pass reads the client while the download is still
+    /// running and waits; the download finishes; the completion is refused, and it is held at the refusal
+    /// until the first pass has finished completely. Whatever is then staged was staged by that pass going
+    /// round once more.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ADownloadThatFinishesWhileAPassIsFinishingIsStaged()
+    {
+        using CancellationTokenSource stopping = new(Hang.Limit);
+
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        TorrentFile file = new(Path.GetFileName(episode), 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Downloading, BytesDone = 450_000_000 },
+            file);
+
+        Transfers transfers = Transfers(engine, grabs, Server());
+
+        TaskCompletionSource firstPassRead = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        TaskCompletionSource firstPassMayFinish = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        int passes = 0;
+        Task<bool>? running = null;
+
+        TransfersTurn turn = new(
+            async ct =>
+            {
+                await transfers.TickAsync(Incomplete, Intake, ct);
+
+                if (Interlocked.Increment(ref passes) == 1)
+                {
+                    firstPassRead.SetResult();
+
+                    await firstPassMayFinish.Task;
+                }
+            },
+            refused: async () =>
+            {
+                // The completion has been refused. The first pass now finishes all the way — its last look
+                // at the wish, its turn given back, its look after that — before this caller goes on.
+                firstPassMayFinish.SetResult();
+
+                await running!;
+            });
+
+        running = Task.Run(() => turn.RunAsync(stopping.Token), CancellationToken.None);
+
+        await firstPassRead.Task.WaitAsync(stopping.Token);
+
+        // The download finishes while the first pass is finishing, and the client says so.
+        engine.Holding(Finished() with { State = TorrentState.Finished }, file);
+
+        Assert.False(await turn.RunAsync(stopping.Token), "the completion was not refused, so nothing was raced");
+
+        await running.WaitAsync(stopping.Token);
+
+        Assert.True(File.Exists(Staged), "a download finished while a pass was finishing and was never staged.");
+    }
+
+    /// <remarks>
+    /// <strong>A staging that fails says which folder and why, at Warning.</strong> GitHub issue #3: a
+    /// finished download never reached the intake folder and the log named only the release, which does not
+    /// say where its files were. Here the client cannot say what the torrent's files are, which fails that one
+    /// torrent's staging and nothing else.
+    /// </remarks>
+    [Fact]
+    public async Task AStagingThatFailsSaysWhichFolderAndWhyAtWarning()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        NoFileList engine = new(new StandingEngine().Holding(Finished() with { State = TorrentState.Finished }));
+        FakeProvider server = Server();
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.False(File.Exists(Staged));
+        Assert.Contains(
+            server.Log.Entries,
+            entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Warning
+                     && entry.Line.Contains(Incomplete, StringComparison.Ordinal)
+                     && entry.Line.Contains(NoFileList.Reason, StringComparison.Ordinal));
+    }
+
+    /// <remarks>
     /// The other half. A torrent still seeding owes the swarm what its seeding rules say, and it seeds out of
     /// the file it downloaded: that file is copied into the intake folder and left with the client, and the
     /// torrent is not let go of.
@@ -1800,6 +1900,28 @@ public class TransfersTests : IDisposable
 
             _open.Clear();
         }
+    }
+
+    /// <summary>A client that holds what it is told to and cannot say what any torrent's files are.</summary>
+    private sealed class NoFileList(StandingEngine engine) : ITorrentEngine
+    {
+        public const string Reason = "the client could not read the torrent's file list";
+
+        public Task<TorrentHandle> AddAsync(TorrentRequest request, CancellationToken ct) => engine.AddAsync(request, ct);
+
+        public Task<IReadOnlyList<TorrentStatus>> StatusAsync(CancellationToken ct) => engine.StatusAsync(ct);
+
+        public Task PauseAsync(string infoHash, CancellationToken ct) => engine.PauseAsync(infoHash, ct);
+
+        public Task ResumeAsync(string infoHash, CancellationToken ct) => engine.ResumeAsync(infoHash, ct);
+
+        public Task<IReadOnlyList<TorrentFile>> FilesAsync(string infoHash, CancellationToken ct) =>
+            throw new IOException(Reason);
+
+        public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct) =>
+            engine.RemoveAsync(infoHash, deleteFiles, ct);
+
+        public Task ReleaseAsync(string infoHash, CancellationToken ct) => engine.ReleaseAsync(infoHash, ct);
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";

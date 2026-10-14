@@ -8,7 +8,7 @@ Read this first, update it last. Nothing else decides what happens next.
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
-`S14-07` (#5, sort, filter and paging). **Current: `S14-01`.**
+`S14-07` (#5, sort, filter and paging). `S14-01` is done (see **Log**). **Current: `S14-02`.**
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
@@ -801,7 +801,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [ ] `S12-10` A finished download says so, instead of being found by a sweep
 
 ### Sprint 14 — The seven GitHub issues of 13 October 2026
-- [ ] `S14-01` A finished download always reaches the intake folder (#3)
+- [x] `S14-01` A finished download always reaches the intake folder (#3)
 - [ ] `S14-02` No Xvfb, no browser, one warning (#6)
 - [ ] `S14-03` A log level the owner sets, and a log file that holds it (#7)
 - [ ] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
@@ -812,6 +812,22 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S14-01` A finished download always reaches the intake folder (#3).** Two faults. The lost wake-up:
+  a pass refused while another ran wrote its wish only after the refusal, so the running pass could read
+  it, give its turn back and read it again first; the guard is now `Hosting/TransfersTurn`, which writes
+  the wish before it tries the turn, and `ADownloadThatFinishesWhileAPassIsFinishingIsStaged` holds the
+  exact interleaving rather than hoping for it. No second look: a pass now runs at the start of every
+  cycle, and the timer that came round only while a grab waited on an encode (`LookAgainInterval`, was
+  `EncodeCheckInterval`) also comes round while a finished download waits to be staged, judged by
+  `Recovery.Plan`'s own rule. A failed move or copy logs a Warning with the file's path, the intake folder
+  and the reason; a failed staging names its download folder. A finished download reaches the intake
+  folder through the plugin and a real client on one volume (moved) and on another (`/dev/shm` on Linux,
+  the repository's drive on Windows). For the next slices: a torrent let go of whose staging fails is
+  added back and the client says it finished again, so it is retried at once and repeatedly while the
+  cause lasts, a Warning each time — S14-03's log levels will make that loud; and a pass cancels a grab
+  whose show is off, which now reaches a hand-added torrent whose covers were written before its staging
+  failed, within a minute. 1,379 tests, all green.
 
 - **23 September 2026: the path that added a show is gone, not dormant.** Contract 12 deleted its
   implementation and left the seam behind — `IShowImport`, `Transfers.AddedAsync` with its `imports`

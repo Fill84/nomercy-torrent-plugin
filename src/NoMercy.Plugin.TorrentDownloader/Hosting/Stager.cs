@@ -314,7 +314,11 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
     {
         string reason = $"{Path.GetFileName(source)} could not be staged into {into}: {refused.Message}";
 
-        logger.LogWarning("{Reason}", reason);
+        // The whole path in the log, where the page is given the file's name: a
+        // server with more than one download folder cannot be told apart by a
+        // file name, and GitHub issue #3 was a download that never arrived with
+        // nothing in the log to say where it was.
+        logger.LogWarning("{Source} could not be staged into {Into}: {Reason}", source, into, refused.Message);
         journal.Failed(ActivityStage.Download, Path.GetFileName(source), reason);
 
         return new(file, null, reason);
@@ -322,11 +326,12 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
 
     /// <summary>Moves the download to the part, where nothing holds it open.</summary>
     /// <remarks>
-    /// False where the move is refused, which is the ordinary answer for a
-    /// torrent still seeding: the client holds the file, and the caller copies
-    /// it instead.
+    /// False where the move is refused, and the caller copies it instead. Said
+    /// at Warning, because a torrent is let go of before it is moved, so a
+    /// refusal here is something still holding the file — and the copy that
+    /// follows is the slow path, an episode read and written byte by byte.
     /// </remarks>
-    private static bool Moved(string source, string part)
+    private bool Moved(string source, string part)
     {
         try
         {
@@ -336,6 +341,12 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         }
         catch (Exception held) when (held is IOException or UnauthorizedAccessException)
         {
+            logger.LogWarning(
+                "{Source} could not be moved into {Into}, so it is copied: {Reason}",
+                source,
+                Path.GetDirectoryName(part),
+                held.Message);
+
             return false;
         }
     }

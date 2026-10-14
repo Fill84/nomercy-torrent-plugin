@@ -593,7 +593,13 @@ public sealed class Transfers(
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            logger.LogWarning("{Release} could not be staged: {Reason}", finished.ReleaseTitle, wrong.Message);
+            // With the folder its files are in: the release alone does not say
+            // where a download that never arrived is (GitHub issue #3).
+            logger.LogWarning(
+                "{Release} could not be staged from {Folder}: {Reason}",
+                finished.ReleaseTitle,
+                finished.Folder ?? incompleteFolder,
+                wrong.Message);
             journal.Failed(ActivityStage.Download, finished.ReleaseTitle, wrong.Message);
 
             return [];

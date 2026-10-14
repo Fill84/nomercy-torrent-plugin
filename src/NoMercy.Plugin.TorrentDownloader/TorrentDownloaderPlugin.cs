@@ -33,6 +33,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private Chain? _chain;
     private BittorrentEngine? _engine;
 
+    /// <summary>Objects only, as the server builds it: nothing here does I/O.</summary>
+    public TorrentDownloaderPlugin()
+    {
+        _transfersTurn = new(OnePassAsync);
+    }
+
     /// <summary>
     /// Whether the advanced blocks are drawn on the settings page.
     /// </summary>
@@ -55,7 +61,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     }
 
     /// <summary>
-    /// How often a grab waiting on an encode is asked about, while one is.
+    /// How often a pass comes round by itself, while a grab waits on an encode
+    /// or a finished download waits to be staged.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -70,14 +77,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// Only while something waits. On 22 September 2026 Lioness S03E08 was
     /// registered in the library at 12:41 and read "encoding" an hour later,
     /// because a pass ran when a download finished, on a start, and on nothing
-    /// else. A plugin with no grab waiting on an encode asks nothing.
+    /// else. A plugin with nothing waiting looks at nothing.
     /// </para>
     /// <para>
     /// Settable so a test can prove the pass comes round without waiting a
     /// minute for it; nothing on a server sets it.
     /// </para>
     /// </remarks>
-    public TimeSpan EncodeCheckInterval { get; init; } = TimeSpan.FromMinutes(1);
+    public TimeSpan LookAgainInterval { get; init; } = TimeSpan.FromMinutes(1);
 
     /// <summary>
     /// What the overview is being narrowed to, or null for every show.
@@ -160,11 +167,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     private readonly OneAtATime _running = new();
 
 
-    /// <summary>Keeps two transfers passes from staging the same file twice.</summary>
-    private readonly OneAtATime _transfersRunning = new();
-
-    /// <summary>A pass was asked for while one ran, so that one goes round again.</summary>
-    private int _transfersAgain;
+    /// <summary>One transfers pass at a time, and none asked for and lost.</summary>
+    private readonly TransfersTurn _transfersTurn;
 
     /// <summary>Whether a start has put back what the client held.</summary>
     private int _startedUp;
@@ -220,8 +224,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private ITimer? _due;
 
-    /// <summary>The next look at what the server made of an encode, while a grab waits on one.</summary>
-    private ITimer? _encodeCheck;
+    /// <summary>
+    /// The next pass, while a grab waits on an encode or a finished download waits to be staged.
+    /// </summary>
+    private ITimer? _nextLook;
 
     private int _unconfigured;
     private int _overlapping;
@@ -596,6 +602,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // which is F1 - but RunCycleAsync does, and so does every test of
             // the chain.
             _cycling = Task.Run(() => CycleThroughAsync(stop.Token), CancellationToken.None);
+
+            // And a look at what the client holds. Every other pass is started
+            // by an event, and an event that was lost or a pass that failed left
+            // a finished download in the incomplete folder until something
+            // unrelated started another (GitHub issue #3). The cadence is the
+            // net under all of them.
+            StartTransfers();
         }
 
         return true;
@@ -723,9 +736,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <strong>Called where work might have ended, never on a clock of its
     /// own.</strong> That is after the searching half of a cycle, and after
     /// every transfers pass — and a transfers pass runs when a download
-    /// finishes, on a start, and every <see cref="EncodeCheckInterval"/> while
-    /// a grab waits on an encode, so this is asked exactly when the answer can
-    /// have changed.
+    /// finishes, on a start, when a cycle starts, and every
+    /// <see cref="LookAgainInterval"/> while a grab waits on an encode or a
+    /// finished download waits to be staged, so this is asked exactly when the
+    /// answer can have changed.
     /// </para>
     /// <para>
     /// <strong>In hand</strong> is what the client is really holding and what is
@@ -916,9 +930,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// One pass over everything the torrent client is holding.
     /// </summary>
     /// <remarks>
-    /// Run when a download finishes, when the server says something about an
-    /// encode and when it says a library scan finished, because a completion
-    /// nobody notices is an episode nobody gets.
+    /// Run when a download finishes, on a start, when a cycle starts, and every
+    /// <see cref="LookAgainInterval"/> while something waits, because a
+    /// completion nobody notices is an episode nobody gets.
     /// It runs on a plugin that has folders and does nothing at
     /// all on one that does not: there is nowhere to stage to, so noticing a
     /// completion could only end in a file thrown away.
@@ -976,7 +990,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// to listen on, and what it has instead is <c>IPluginJobs</c>, which
     /// answers for the id <c>IPluginEncoder</c> handed back. So an encode that
     /// ends is noticed on the next pass — which, while a grab waits on one,
-    /// comes round every <see cref="EncodeCheckInterval"/> — and the pages are
+    /// comes round every <see cref="LookAgainInterval"/> — and the pages are
     /// drawn again by that pass.
     /// </para>
     /// <para>
@@ -1003,59 +1017,54 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         return _says;
     }
 
+    /// <summary>One pass, its failure said rather than thrown.</summary>
+    /// <remarks>
+    /// Caught here, inside the turn, and not around it: a pass that threw out
+    /// of the turn would end it, and a download that finished while that pass
+    /// ran would wait for whatever next started one.
+    /// </remarks>
+    private async Task OnePassAsync(CancellationToken ct)
+    {
+        try
+        {
+            await TransfersAsync(ct);
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            _context?.Logger.LogWarning(wrong, "A transfers pass failed: {Reason}", wrong.Message);
+        }
+    }
+
     /// <summary>
     /// One transfers pass, with nothing left to escape it and never two at once.
     /// </summary>
     /// <remarks>
     /// Started from an event rather than from a caller, so there is nobody to
     /// throw to: an exception escaping would be an unobserved task exception,
-    /// which is a fault with no line in this plugin's own log at all. Dropped
-    /// rather than queued when one is already running — the pass reads
-    /// everything fresh, so the one in flight covers whatever this one would
-    /// have.
+    /// which is a fault with no line in this plugin's own log at all. Not
+    /// dropped when one is already running: the pass that is running read the
+    /// client before this was asked for, so a download that finished a moment
+    /// ago is one it may not have seen, and it goes round once more for it.
     /// </remarks>
     private async Task TransfersGuardedAsync(CancellationToken ct)
     {
-        if (!_transfersRunning.TryEnter())
-        {
-            // Not dropped. The pass that is running read the client before this
-            // was asked for, so a download that finished a moment ago is one it
-            // may not have seen — dropped here, it would sit in the incomplete
-            // folder until something else happened to start another pass. The
-            // one running goes round once more instead.
-            Volatile.Write(ref _transfersAgain, 1);
-
-            return;
-        }
-
         try
         {
-            do
+            if (!await _transfersTurn.RunAsync(ct))
             {
-                Volatile.Write(ref _transfersAgain, 0);
-
-                await TransfersAsync(ct);
+                // The pass that is running goes round for this one, and settles
+                // the cycle and sets the next look once it has.
+                return;
             }
-            while (Volatile.Read(ref _transfersAgain) != 0 && !ct.IsCancellationRequested);
         }
         catch (OperationCanceledException)
         {
             // The plugin is shutting down.
+            return;
         }
         catch (Exception wrong)
         {
             _context?.Logger.LogWarning(wrong, "A transfers pass failed: {Reason}", wrong.Message);
-        }
-        finally
-        {
-            _transfersRunning.Leave();
-        }
-
-        // Asked for while the guard was being let go: nobody is left to go round
-        // for it, so it is taken on here rather than lost in the gap.
-        if (Volatile.Read(ref _transfersAgain) != 0 && !ct.IsCancellationRequested)
-        {
-            StartTransfers();
         }
 
         // A pass is what turns a finished download into a staged file and a
@@ -1072,46 +1081,65 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         try
         {
-            await ArmEncodeCheckAsync(ct);
+            await ArmNextLookAsync(ct);
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            _context?.Logger.LogWarning(wrong, "The next look at the encodes could not be set: {Reason}", wrong.Message);
+            _context?.Logger.LogWarning(wrong, "The next look at the transfers could not be set: {Reason}", wrong.Message);
         }
     }
 
     /// <summary>
-    /// Sets the next pass for as long as a grab waits on an encode, and nothing
-    /// otherwise.
+    /// Sets the next pass for as long as a grab waits on an encode or a finished
+    /// download waits to be staged, and nothing otherwise.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// After the pass, not before it: the pass is what finds out whether anything
     /// still waits, and one that closed the last grab arms nothing. One timer,
     /// replaced each time, so two passes close together set one look and not two.
+    /// </para>
+    /// <para>
+    /// <strong>A finished download waiting to be staged is waiting too.</strong>
+    /// The client says a download finished once. A staging that failed on the
+    /// pass that saying started — the intake folder refused the copy, the library
+    /// did not answer — left the download in the incomplete folder until something
+    /// unrelated started a pass: GitHub issue #3.
+    /// </para>
     /// </remarks>
-    private async Task ArmEncodeCheckAsync(CancellationToken ct)
+    private async Task ArmNextLookAsync(CancellationToken ct)
     {
         if (ct.IsCancellationRequested || _grabs is null)
         {
             return;
         }
 
-        bool waiting = (await (await GrabsAsync(ct)).OpenAsync(ct)).Any(one => one.State == GrabState.Dispatched);
+        IReadOnlyList<StoredDownload> open = await (await GrabsAsync(ct)).OpenAsync(ct);
+
+        bool waiting = open.Any(one => one.State == GrabState.Dispatched);
+
+        // Read off a client that exists and never by building one: a plugin that
+        // has not needed a client yet holds no finished download.
+        if (!waiting && _engine is BittorrentEngine client)
+        {
+            // What the pass itself would stage, decided by the same rule.
+            waiting = Recovery.Plan(open, await client.StatusAsync(ct)).Stage.Count > 0;
+        }
 
         lock (_cycleLock)
         {
-            _encodeCheck?.Dispose();
-            _encodeCheck = null;
+            _nextLook?.Dispose();
+            _nextLook = null;
 
             if (!waiting || _disposed)
             {
                 return;
             }
 
-            _encodeCheck = TimeProvider.System.CreateTimer(
+            _nextLook = TimeProvider.System.CreateTimer(
                 _ => StartTransfers(),
                 null,
-                EncodeCheckInterval,
+                LookAgainInterval,
                 Timeout.InfiniteTimeSpan);
         }
     }
@@ -1119,8 +1147,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <summary>Starts a transfers pass on the plugin's own lifetime, and answers at once.</summary>
     /// <remarks>
     /// The one door into a pass for everything that is not a caller waiting on
-    /// it: a download finishing, the server saying something about an encode, a
-    /// start. Each of those is an event with nobody to hand a task back to.
+    /// it: a download finishing, a start, a cycle starting, the next look coming
+    /// round. Each of those is an event with nobody to hand a task back to.
     /// </remarks>
     private void StartTransfers()
     {
@@ -2691,8 +2719,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             _due?.Dispose();
             _due = null;
-            _encodeCheck?.Dispose();
-            _encodeCheck = null;
+            _nextLook?.Dispose();
+            _nextLook = null;
         }
 
         // Before the chain, because the client holds the listening sockets and
