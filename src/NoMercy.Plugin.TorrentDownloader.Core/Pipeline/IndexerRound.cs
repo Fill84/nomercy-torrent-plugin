@@ -19,7 +19,16 @@ public sealed record FoundRow(ReleaseCopy Row, string Name, int FoundAt);
 /// <param name="Torrent">The torrent, carrying every tracker and every indexer's route.</param>
 /// <param name="Indexers">Every indexer that listed it, each once, in the order they were asked.</param>
 /// <param name="FoundAt">Where the first of its rows was found.</param>
-public sealed record RankedTorrent(ReleaseCopy Torrent, IReadOnlyList<string> Indexers, int FoundAt);
+public sealed record RankedTorrent(ReleaseCopy Torrent, IReadOnlyList<string> Indexers, int FoundAt)
+{
+    /// <summary>Whether every indexer result of it reports nought seeders.</summary>
+    /// <remarks>
+    /// Every result, and a result with no count is not nought: a site that prints no seeder column has said
+    /// nothing about the swarm. Kept apart from <see cref="ReleaseCopy.Seeders"/>, which is the highest count any
+    /// result gave and reads nought for one result of nought beside one of nobody-knows.
+    /// </remarks>
+    public bool NobodySeeds { get; init; }
+}
 
 /// <summary>Rows of one info hash as one torrent.</summary>
 /// <remarks>
@@ -74,7 +83,10 @@ public static class Merging
             ],
         };
 
-        return new(torrent, [.. rows.Select(one => one.Row.Source).Distinct(StringComparer.OrdinalIgnoreCase)], first.FoundAt);
+        return new(torrent, [.. rows.Select(one => one.Row.Source).Distinct(StringComparer.OrdinalIgnoreCase)], first.FoundAt)
+        {
+            NobodySeeds = rows.All(one => one.Row.Seeders == 0),
+        };
     }
 }
 
@@ -92,7 +104,8 @@ public static class Merging
 /// </para>
 /// <para>
 /// A release or hash the download client failed and that is still refused takes no part. Seeders and a
-/// site's rating decide nothing any more.
+/// site's rating do not order anything: a torrent nobody seeds keeps its place here, and is passed over only
+/// when it comes to be offered (<c>SearchCycle</c>), where the reason can be said.
 /// </para>
 /// </remarks>
 public static class Winner

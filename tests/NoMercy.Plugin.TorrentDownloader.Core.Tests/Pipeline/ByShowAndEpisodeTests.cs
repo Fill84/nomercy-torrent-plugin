@@ -1,5 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
@@ -160,36 +161,45 @@ public class ByShowAndEpisodeTests
     }
 
     /// <remarks>
+    /// <para>
     /// The same answer for the 2015 programme's S02E04, which aired on 22 July 2016: MeGusta's 720p x265,
-    /// uploaded the next day, is taken for it — and not for the 2024 programme's S02E04, ten years later.
+    /// uploaded the next day, wins the search for it — and takes no part in the 2024 programme's S02E04, ten
+    /// years later.
+    /// </para>
+    /// <para>
+    /// Asked of the round rather than of the whole cycle since GitHub issue #2: The Pirate Bay reports nought
+    /// seeders for every 720p x265 copy of the episode, so the cycle no longer starts any of them
+    /// (<c>NoSeedersTests</c>), and which copy the dates leave standing is the round's answer.
+    /// </para>
     /// </remarks>
     [Fact]
     public async Task AResultUploadedAsTheEpisodeAiredIsTakenForIt()
     {
         SettingsByShow h265At720 = SettingsByShow.Every(new() { Quality = "720p", Codec = "h265", EnglishOnly = true, Searched = true });
 
-        FakeTorrentEngine older = new();
+        IReadOnlyList<RankedTorrent> older = await DarkMatterRound(DarkMatter2015, h265At720);
 
-        CycleReport olderReport = await DarkMatterCycle(older).RunAsync(
-            [DarkMatter2015],
-            new(h265At720, Blacklist.None, DryRun: false, @"C:\downloads"),
+        Assert.Equal("FE037FFB0951D1ED1442B0CCF6197902C642FEA1", older[0].Torrent.InfoHash);
+        Assert.Equal("Dark.Matter.S02E04.720p.HEVC.x265-MeGusta", older[0].Torrent.Title);
+
+        Assert.Empty(await DarkMatterRound(DarkMatter2024, h265At720));
+    }
+
+    /// <summary>The Pirate Bay's answer to <c>Dark Matter S02E04</c>, as the episode search puts it to the round.</summary>
+    private static Task<IReadOnlyList<RankedTorrent>> DarkMatterRound(TrackedEpisode episode, SettingsByShow settings)
+    {
+        FakeFetch fetch = new FakeFetch()
+            .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
+            .Answers(IndexerSites.Words(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"));
+
+        Decisions decisions = new(settings, Blacklist.None);
+
+        return IndexerSites.Round(fetch, [IndexerSites.ThePirateBay]).AskForEpisodeAsync(
+            episode,
+            title => decisions.JudgeName(ReleaseName.Parse(title), episode).Accepted,
+            Blacklist.None,
+            new(),
             CancellationToken.None);
-
-        EpisodeOutcome taken = Assert.Single(olderReport.Outcomes);
-
-        Assert.True(taken.HandedOver, taken.Detail);
-        Assert.Equal("FE037FFB0951D1ED1442B0CCF6197902C642FEA1", taken.InfoHash);
-        Assert.Equal("Dark.Matter.S02E04.720p.HEVC.x265-MeGusta", taken.Release);
-
-        FakeTorrentEngine theirs = new();
-
-        CycleReport theirReport = await DarkMatterCycle(theirs).RunAsync(
-            [DarkMatter2024],
-            new(h265At720, Blacklist.None, DryRun: false, @"C:\downloads"),
-            CancellationToken.None);
-
-        Assert.False(Assert.Single(theirReport.Outcomes).HandedOver);
-        Assert.Empty(theirs.Taken);
     }
 
     /// <remarks>

@@ -1924,6 +1924,134 @@ public class BittorrentEngineTests : IDisposable
     }
 
     /// <summary>
+    /// A download no connected peer can finish is stopped after <c>StallMinutes</c>, and says it cannot complete.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GitHub issue #2: a torrent with peers that hold none of what it still needs — swarm availability below
+    /// one — can never finish, and the stall rule never ends it, because that rule wants no peers at all. It
+    /// sat on the Downloads page while the episode waited behind it. Now it is stopped once that has lasted
+    /// <c>StallMinutes</c>, its reason says "cannot complete", and the client says it gave up on it, which is
+    /// what has a transfers pass refuse its hash and put the episode back to missing. Refused like any failed
+    /// download, so for a time and not for ever: the swarm may have the pieces tomorrow.
+    /// </para>
+    /// <para>
+    /// The peer is a real connection on this machine, dialled in by this client's own dialler, that has
+    /// nothing of the torrent — a leecher at nought per cent.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ADownloadNoConnectedPeerCanFinishIsStoppedAfterStallMinutes()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero));
+
+        using BittorrentEngine engine = new(
+            0, TimeSpan.FromHours(12), TimeSpan.FromMinutes(30), Together, Seeding, 0, 0, null,
+            new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+
+        TaskCompletionSource<string> gaveUp = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        engine.GaveUp += hash => gaveUp.TrySetResult(hash);
+
+        engine.Start();
+
+        TorrentHandle handle = await AddEpisodeAsync(engine);
+
+        using PeerConnection leecher = await DialInAsync(engine, handle, stopping.Token);
+
+        await Until(async () => (await engine.StatusAsync(stopping.Token))[0].Peers == 1, stopping.Token);
+
+        clock.Advance(TimeSpan.FromMinutes(30));
+
+        TorrentStatus given = await Decided(engine, one => one.State == TorrentState.Error);
+
+        Assert.Equal(TorrentState.Error, given.State);
+        Assert.Contains("cannot complete", given.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("30 minutes", given.Error!, StringComparison.Ordinal);
+        Assert.False(given.ErrorIsTheRelease);
+        Assert.Same(gaveUp.Task, await Task.WhenAny(gaveUp.Task, Task.Delay(Hang.Limit)));
+        Assert.Equal(handle.InfoHash, await gaveUp.Task, ignoreCase: true);
+    }
+
+    /// <summary>
+    /// A peer holding what is missing turns up inside the window, and the download carries on.
+    /// </summary>
+    /// <remarks>
+    /// The window is <c>StallMinutes</c> because a peer with the missing pieces may still come. Twenty minutes
+    /// in, a seed dials in; at thirty nothing is stopped, and at an hour, with the seed still there, nothing is
+    /// either. Watched for two seconds after the clock has passed both deadlines rather than read once: a
+    /// deadline can be decided on another thread (see <see cref="Decided"/>), and without the rule that a
+    /// holder resets the window the stop lands within milliseconds of the first one.
+    /// </remarks>
+    [Fact]
+    public async Task ADownloadAPeerWithTheMissingPiecesReachesInTimeCarriesOn()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero));
+
+        using BittorrentEngine engine = new(
+            0, TimeSpan.FromHours(12), TimeSpan.FromMinutes(30), Together, Seeding, 0, 0, null,
+            new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+
+        engine.Start();
+
+        TorrentHandle handle = await AddEpisodeAsync(engine);
+
+        using PeerConnection leecher = await DialInAsync(engine, handle, stopping.Token);
+
+        await Until(async () => (await engine.StatusAsync(stopping.Token))[0].Peers == 1, stopping.Token);
+
+        clock.Advance(TimeSpan.FromMinutes(20));
+
+        using PeerConnection seed = await DialInAsync(engine, handle, stopping.Token);
+
+        await seed.SendAsync(new(PeerMessageId.Bitfield, Whole(EpisodePieces).Write()), stopping.Token);
+        await Until(async () => (await engine.StatusAsync(stopping.Token))[0].Seeds == 1, stopping.Token);
+
+        clock.Advance(TimeSpan.FromMinutes(11));
+        clock.Advance(TimeSpan.FromMinutes(31));
+
+        DateTimeOffset watchUntil = DateTimeOffset.UtcNow.AddSeconds(2);
+
+        while (DateTimeOffset.UtcNow < watchUntil)
+        {
+            TorrentStatus status = (await engine.StatusAsync(stopping.Token))[0];
+
+            Assert.Null(status.Error);
+            Assert.Equal(TorrentState.Downloading, status.State);
+
+            await Task.Delay(TimeSpan.FromMilliseconds(20), stopping.Token);
+        }
+    }
+
+    /// <summary>How many pieces <see cref="Episode"/> of eight mebibytes has: a quarter of a mebibyte each.</summary>
+    private const int EpisodePieces = 32;
+
+    /// <summary>An eight-mebibyte episode added from its <c>.torrent</c>, so the client knows its pieces at once.</summary>
+    private async Task<TorrentHandle> AddEpisodeAsync(BittorrentEngine engine)
+    {
+        Directory.CreateDirectory(_folder);
+
+        string file = Path.Combine(_folder, "episode.torrent");
+        File.WriteAllBytes(file, Episode(EpisodePieces * 262144L));
+
+        return await engine.AddAsync(Request with { Source = file, DownloadFolder = _folder }, CancellationToken.None);
+    }
+
+    /// <summary>A peer on this machine dialling in to the client for one torrent, with nothing said beyond the handshake.</summary>
+    private static async Task<PeerConnection> DialInAsync(BittorrentEngine engine, TorrentHandle handle, CancellationToken ct)
+    {
+        PeerConnection? dialled = await new SocketPeerDialler(TimeSpan.FromSeconds(20)).DialAsync(
+            new(IPAddress.Loopback, engine.Port!.Value),
+            Convert.FromHexString(handle.InfoHash),
+            PeerIdentity.New(),
+            pieces: EpisodePieces,
+            ct);
+
+        return dialled ?? throw new InvalidOperationException("the client did not take the connection.");
+    }
+
+    /// <summary>
     /// A finished public torrent stops seeding at once, and nothing asked.
     /// </summary>
     /// <remarks>

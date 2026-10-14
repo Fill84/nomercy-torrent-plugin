@@ -554,6 +554,13 @@ public sealed class BittorrentEngine(
         // much sooner the owner's stall limit came round.
         DateTimeOffset stall = (held.Stall.StuckSince ?? now) + stallLimit;
 
+        // And a download no connected peer can finish owes its answer the same limit after that began
+        // (CannotFinish), whether or not anything is arriving meanwhile.
+        if (held.UnheldSince is DateTimeOffset unheld)
+        {
+            stall = Earlier(stall, unheld + stallLimit);
+        }
+
         DateTimeOffset first = held.Run.Torrent is null
             ? Earlier(held.Since + metadataTimeout, stall)
             : stall;
@@ -586,6 +593,9 @@ public sealed class BittorrentEngine(
 
             Expire(held, now);
             Stalled(held);
+
+            // After the stall rule: a torrent with no peer at all is that rule's, under its own reason.
+            CannotFinish(held);
             Seeded(held, now);
             Queue();
             Rearm(infoHash, held);
@@ -694,6 +704,10 @@ public sealed class BittorrentEngine(
             Refuse(held);
             Cramped(held);
             Queue();
+
+            // The first moment the wanted pieces are known, so the first moment it can be asked whether the
+            // peers hold them: the window starts here when they do not.
+            CannotFinish(held);
             Rearm(infoHash, held);
 
             // What the disk pass just found, written down. This is the first
@@ -821,6 +835,9 @@ public sealed class BittorrentEngine(
                 // without a single peer having been asked.
                 held.Since = _time.GetUtcNow();
                 held.Error = null;
+
+                // Its window too: the time it stood stopped is not time a peer could have turned up in.
+                held.UnheldSince = null;
 
                 Queue();
                 Rearm(infoHash, held);
@@ -1881,6 +1898,77 @@ public sealed class BittorrentEngine(
     }
 
     /// <summary>
+    /// Gives up on a download the connected peers cannot finish.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GitHub issue #2: a piece it still needs that no connected peer holds — swarm availability below one —
+    /// for <c>StallMinutes</c> on end. The stall rule never ended such a torrent, because it has peers, and it
+    /// sat on the Downloads page with its episode waiting behind it. Stopped, its reason says it cannot
+    /// complete, and the client gives up on it like any failed download: refused for a time, the episode
+    /// searched for again.
+    /// </para>
+    /// <para>
+    /// <c>StallMinutes</c> because a peer holding the missing pieces may still turn up, and one that does
+    /// starts the window again. A moment with no peer at all counts — no peer holds anything then either —
+    /// but a torrent that never had one is the stall rule's, which runs first and gives its own reason.
+    /// </para>
+    /// <para>
+    /// Read at the client's own moments — the session opening, and each deadline — like the stall rule's
+    /// readings, and not per message: it walks every piece against every peer.
+    /// </para>
+    /// </remarks>
+    private void CannotFinish(Held held)
+    {
+        if (held.Error is not null || held.Run.Paused || held.Run.Unheld() is not int unheld)
+        {
+            return;
+        }
+
+        string name = held.Run.Torrent?.Name ?? held.Name ?? "a torrent";
+        DateTimeOffset now = _time.GetUtcNow();
+
+        if (unheld == 0)
+        {
+            if (held.UnheldSince is not null)
+            {
+                logger.LogDebug("{Name}: a connected peer holds every piece it still needs again, so it carries on.", name);
+            }
+
+            held.UnheldSince = null;
+
+            return;
+        }
+
+        if (held.UnheldSince is not DateTimeOffset since)
+        {
+            held.UnheldSince = now;
+
+            logger.LogDebug(
+                "{Name}: {Unheld} pieces it still needs are held by no connected peer; it is stopped after {Minutes} minutes unless a peer that has them turns up.",
+                name,
+                unheld,
+                stallLimit.TotalMinutes);
+
+            return;
+        }
+
+        if (now - since < stallLimit)
+        {
+            return;
+        }
+
+        // Its own words, naming the limit, as the stall rule does: it is the same setting.
+        held.Error =
+            $"Cannot complete: {unheld} pieces it still needs were held by no connected peer for {stallLimit.TotalMinutes:0.#} minutes.";
+
+        held.Run.Pause();
+
+        logger.LogWarning("{Name} cannot complete: {Reason}", name, held.Error);
+        journal.Failed(ActivityStage.Download, name, held.Error);
+    }
+
+    /// <summary>
     /// Stops seeding a torrent that has given back what was asked of it.
     /// </summary>
     /// <remarks>
@@ -1971,6 +2059,9 @@ public sealed class BittorrentEngine(
                 {
                     held.Run.Resume();
                     held.Queued = false;
+
+                    // Waiting in the queue is not time a peer could have turned up in.
+                    held.UnheldSince = null;
                 }
 
                 continue;
@@ -2255,6 +2346,9 @@ public sealed class BittorrentEngine(
 
         /// <summary>Whether it is stopped because the client is full, not because the owner stopped it.</summary>
         public bool Queued { get; set; }
+
+        /// <summary>Since when a piece it still needs has been held by no connected peer, or null.</summary>
+        public DateTimeOffset? UnheldSince { get; set; }
 
         /// <summary>When it finished downloading, which is when seeding started.</summary>
         public DateTimeOffset? Finished { get; set; }

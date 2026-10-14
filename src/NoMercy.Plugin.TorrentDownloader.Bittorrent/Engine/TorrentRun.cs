@@ -640,6 +640,25 @@ public sealed class TorrentRun : IDisposable
         }
     }
 
+    /// <summary>
+    /// How many of the pieces still wanted no connected peer holds, or null before the session is open.
+    /// </summary>
+    /// <remarks>
+    /// Null rather than nought: without a session nothing knows which pieces are wanted, and nought would say
+    /// the swarm holds every one of them. See <see cref="TorrentSession.Unheld"/>.
+    /// </remarks>
+    public int? Unheld()
+    {
+        TorrentSession? session;
+
+        lock (_lock)
+        {
+            session = _session;
+        }
+
+        return session?.Unheld();
+    }
+
     /// <summary>Every file in it, or nothing while the metadata has not arrived.</summary>
     public IReadOnlyList<TorrentFileEntry> Files => Torrent?.Files ?? [];
 

@@ -257,6 +257,10 @@ public sealed class SearchCycle(
         // refused and why, a client that would not take a torrent.
         List<string> refused = [];
 
+        // Every copy passed over because nobody seeds it, as the decision it would have been: when that is the
+        // last word on the episode, the History page needs the release to hang "no seeders" on.
+        List<EpisodeOutcome> unseeded = [];
+
         try
         {
             IReadOnlyList<IReadOnlyList<string>> groups = Wanted(candidates, episode, decisions, refused, subject);
@@ -269,7 +273,7 @@ public sealed class SearchCycle(
                 // TrackerBook decides what is kept.
                 trackers.AddRange(ranked.SelectMany(torrent => torrent.Torrent.Trackers));
 
-                if (await TakeAsync(episode, ranked, decisions, options, subject, trackers, refused, ct) is EpisodeOutcome taken)
+                if (await TakeAsync(episode, ranked, decisions, options, subject, trackers, refused, unseeded, ct) is EpisodeOutcome taken)
                 {
                     return taken;
                 }
@@ -281,9 +285,18 @@ public sealed class SearchCycle(
 
             // indexer-search.md § When no release name gives a torrent: the show and
             // episode, and the best result that names it and meets the show's settings.
-            if (await ByEpisodeAsync(episode, namesake, decisions, options, subject, trackers, refused, asked, ct) is EpisodeOutcome found)
+            if (await ByEpisodeAsync(episode, namesake, decisions, options, subject, trackers, refused, unseeded, asked, ct) is EpisodeOutcome found)
             {
                 return found;
+            }
+
+            if (unseeded.Count > 0 && refused.Count > 0 && refused[^1] == unseeded[^1].Detail)
+            {
+                // Nobody seeds what was left, and that is the answer for tonight: the copy is not refused, so the
+                // next run — when an episode that has only just aired may have its crowd — asks again.
+                journal.Finished(ActivityStage.Decide, subject, unseeded[^1].Detail);
+
+                return unseeded[^1] with { Searched = true };
             }
 
             string none = refused.Count > 0
@@ -321,6 +334,7 @@ public sealed class SearchCycle(
         string subject,
         List<string> trackers,
         List<string> refused,
+        List<EpisodeOutcome> unseeded,
         AskedThisCycle asked,
         CancellationToken ct)
     {
@@ -341,7 +355,7 @@ public sealed class SearchCycle(
             HashSet<string> titles = new(group, StringComparer.Ordinal);
             RankedTorrent[] inGroup = [.. ranked.Where(torrent => titles.Contains(torrent.Torrent.Title))];
 
-            if (await TakeAsync(episode, inGroup, decisions, options, subject, trackers, refused, ct) is EpisodeOutcome taken)
+            if (await TakeAsync(episode, inGroup, decisions, options, subject, trackers, refused, unseeded, ct) is EpisodeOutcome taken)
             {
                 return taken;
             }
@@ -363,6 +377,14 @@ public sealed class SearchCycle(
     /// would not take it — the disk is full, say. The reason is kept, because it is the true answer for this
     /// episode if nothing else can be had either.
     /// </para>
+    /// <para>
+    /// <strong>And one nobody seeds is not offered at all</strong> — GitHub issue #2, which on 14 October 2026
+    /// replaced the owner's rule of 12 September 2026 that there is no seeder gate. A copy every indexer reports
+    /// nought seeders for was started anyway and sat in the client until the stall rule gave up on it half an
+    /// hour later, while a seeded copy of the same release went untried. It is passed over like a winner whose
+    /// torrent cannot be read, and is not refused: the next run asks again, which is how an episode that has
+    /// only just aired, and has no crowd yet, still gets its chance.
+    /// </para>
     /// </remarks>
     private async Task<EpisodeOutcome?> TakeAsync(
         TrackedEpisode episode,
@@ -372,10 +394,24 @@ public sealed class SearchCycle(
         string subject,
         List<string> trackers,
         List<string> refused,
+        List<EpisodeOutcome> unseeded,
         CancellationToken ct)
     {
         foreach (RankedTorrent candidate in ranked)
         {
+            if (candidate.NobodySeeds)
+            {
+                string reason = candidate.Indexers.Count == 1
+                    ? $"{candidate.Torrent.Title} has no seeders: the one indexer that lists it says nought."
+                    : $"{candidate.Torrent.Title} has no seeders: all {candidate.Indexers.Count} indexers that list it say nought.";
+
+                journal.Noted(ActivityStage.Decide, subject, reason);
+                refused.Add(reason);
+                unseeded.Add(new(episode.Key, candidate.Torrent.Title, candidate.Torrent.Source, 0, false, reason));
+
+                continue;
+            }
+
             // Every indexer that listed it, asked once for the artefact its
             // trackers are on; a page already read in the round is not read again.
             ReleaseCopy chosen = await find.ResolveAsync(candidate.Torrent, ct);

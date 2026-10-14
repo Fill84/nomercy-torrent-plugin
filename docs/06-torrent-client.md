@@ -278,6 +278,17 @@ No progress **and** no peers for `StallMinutes`: the torrent is stopped, the rea
 against the grab and the episode returns to missing. Progress with no peers is not a stall; peers with no
 progress for a minute is not either.
 
+**A torrent that cannot complete is stopped too** — GitHub issue #2, since 14 October 2026. A wanted
+piece still missing that no connected peer holds — swarm availability below one — for `StallMinutes` on
+end: the torrent is stopped with a reason that says it cannot complete, the client gives up on it
+(`GaveUp`), and a transfers pass refuses its hash for six hours like any failed download and returns the
+episode to missing. Progress on other pieces does not stop the clock; a peer that holds every missing
+piece starts it again. A moment with no peer at all counts, but a torrent with no peer for the whole
+window is the stall rule's, which is asked first and keeps its own reason. The count comes from the
+connected peers' own bitfields (`TorrentSession.Unheld`), read when the session opens and at each of the
+torrent's deadlines, not per message. `PiecePicker.Availability` cannot answer it: the session adds a
+peer's pieces to the picker for one pick and takes them away again, so between picks it counts nobody.
+
 ## Nothing is done on asking
 
 `StatusAsync` reads and changes nothing. It used to be the client's whole housekeeping — expiring a
@@ -291,7 +302,7 @@ every minute to make sure something drew. Each now runs when its own moment come
 | Completion and the seeding policy | the last piece verifies (`Finished`), and the session saying the ratio has been given back |
 | The concurrency limit | add, settle, finish, pause, resume, remove |
 | Resume files | a piece verifies, a run settles, a torrent finishes, the owner pauses one |
-| Metadata timeout, stall, seed hours | the torrent's one deadline |
+| Metadata timeout, stall, cannot complete, seed hours | the torrent's one deadline |
 
 **One deadline per torrent, and on a download that is running it never goes off.** Three things
 cannot be told by an event, because they are about something not happening: nobody serves a

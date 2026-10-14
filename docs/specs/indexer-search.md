@@ -33,6 +33,12 @@
   choosing the winner.
 - When the winner's magnet or torrent cannot be read from any indexer that listed it, the next merged
   torrent in the same order becomes the winner.
+- A merged torrent whose every indexer result reports nought seeders is not offered to the download
+  client, and the next merged torrent in the same order becomes the winner.
+- A result with no seeder count is not nought: a merged torrent with such a result is offered.
+- When every merged torrent left reports nought seeders, the episode is not grabbed, the Activity and
+  History pages say "no seeders", no release or hash is refused for it, and the next run searches for the
+  episode again.
 
 ## When no release name gives a torrent
 

@@ -581,6 +581,87 @@ public class TorrentSessionTests : IDisposable
     }
 
 
+    /// <summary>
+    /// A session says how many of the pieces it still wants no connected peer holds.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// GitHub issue #2: a torrent whose swarm holds less than one whole copy can never finish, and the client
+    /// is to stop it rather than leave it running for ever. That needs the number, counted over the peers
+    /// that are connected now. <c>PiecePicker.Availability</c> is not it: the session adds a peer's pieces to
+    /// the picker for the length of one pick and takes them away again, so between picks it counts nobody.
+    /// </para>
+    /// <para>
+    /// Three instances of this client on loopback sockets: a leecher with nothing, a peer holding the first
+    /// half, and a seed. All public, so nobody unchokes anybody and nothing moves while it is counted.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASessionSaysHowManyWantedPiecesNoConnectedPeerHolds()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+        using CancellationTokenSource seedGoes = CancellationTokenSource.CreateLinkedTokenSource(stopping.Token);
+
+        byte[] content = Fixture("ubuntu-desktop.torrent");
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768);
+        int half = torrent.PieceCount / 2;
+
+        Bitfield firstHalf = new(torrent.PieceCount);
+
+        for (int piece = 0; piece < half; piece++)
+        {
+            firstHalf.Set(piece);
+        }
+
+        using TorrentSession leecher = Fresh(torrent);
+        using TorrentSession partial = Seeding(torrent, content, "seed-half", firstHalf);
+        using TorrentSession seeder = Seeding(torrent, content, "seed-whole");
+
+        Assert.Equal(torrent.PieceCount, leecher.Unheld());
+
+        List<Task> running = [];
+
+        running.AddRange(await JoinAsync(partial, leecher, stopping.Token, stopping.Token));
+        await Until(() => leecher.Unheld() == torrent.PieceCount - half, stopping.Token);
+
+        running.AddRange(await JoinAsync(seeder, leecher, seedGoes.Token, stopping.Token));
+        await Until(() => leecher.Unheld() == 0, stopping.Token);
+
+        // The seed hangs up, and what only it held is held by nobody again.
+        await seedGoes.CancelAsync();
+        await Until(() => leecher.Unheld() == torrent.PieceCount - half, stopping.Token);
+
+        await stopping.CancelAsync();
+        await Task.WhenAll(running.Select(one => one.ContinueWith(_ => { }, TaskScheduler.Default)));
+    }
+
+    /// <summary>Introduces two sessions over a loopback socket and starts both talking.</summary>
+    /// <param name="serving">The side that answers.</param>
+    /// <param name="leeching">The side that dials.</param>
+    /// <param name="servingStops">Ends the serving side, which hangs up on the other.</param>
+    /// <param name="ct">Ends both.</param>
+    private static async Task<Task[]> JoinAsync(TorrentSession serving, TorrentSession leeching, CancellationToken servingStops, CancellationToken ct)
+    {
+        (Stream server, Stream client) = await LoopbackAsync(ct);
+
+        Task<PeerConnection?> answering = PeerConnection.IntroduceAsync(
+            server, Hash(serving.Torrent), Id("SERVE"), serving.Torrent.PieceCount, dialling: false, ct);
+
+        Task<PeerConnection?> asking = PeerConnection.IntroduceAsync(
+            client, Hash(leeching.Torrent), Id("LEECH"), leeching.Torrent.PieceCount, dialling: true, ct);
+
+        PeerConnection?[] both = await Task.WhenAll(answering, asking);
+
+        Assert.NotNull(both[0]);
+        Assert.NotNull(both[1]);
+
+        return
+        [
+            serving.RunAsync(both[0]!, servingStops).ContinueWith(_ => both[0]!.Dispose(), TaskScheduler.Default),
+            leeching.RunAsync(both[1]!, ct),
+        ];
+    }
+
     /// <summary>Waits for something to be true, and gives up rather than hanging.</summary>
     /// <remarks>
     /// A loopback handshake takes microseconds on an idle machine and can take
@@ -610,8 +691,8 @@ public class TorrentSessionTests : IDisposable
         GC.SuppressFinalize(this);
     }
 
-    /// <summary>A session with the whole file already on disk.</summary>
-    private TorrentSession Seeding(TorrentMetadata torrent, byte[] content, string where = "seed")
+    /// <summary>A session with the whole file already on disk, holding every piece or only the ones named.</summary>
+    private TorrentSession Seeding(TorrentMetadata torrent, byte[] content, string where = "seed", Bitfield? holding = null)
     {
         string folder = Path.Combine(_folder, where);
 
@@ -629,7 +710,7 @@ public class TorrentSessionTests : IDisposable
 
         disk.Create();
 
-        return new(torrent, disk, everything);
+        return new(torrent, disk, holding ?? everything);
     }
 
     /// <summary>A session with nothing at all.</summary>

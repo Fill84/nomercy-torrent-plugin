@@ -104,14 +104,29 @@ setting is applied anywhere except to release names (`docs/specs/release-names.m
 
 An indexer row is not judged against the show's settings (`docs/specs/indexer-search.md`).
 
-**There is no seeder gate.** The owner's decision, 12 September 2026: there is no threshold, download
-what is found — an episode taken the moment it airs has no crowd behind it yet, and refusing it for
-that would refuse the exact case worth downloading for. The count is still read off every row, still
-shown, and still decides which of two copies wins when `ReleaseDecider` ranks them, but it never
-refuses one outright. A copy nobody is seeding still starts; the stall rule ends it after
-`StallMinutes` with no progress **and** no peers, which is the rule that already existed for it.
-Since 15 September 2026 the seeder count decides nothing at all: `ReleaseDecider` is gone, and the
-winner is the torrent the most indexers list (`docs/specs/indexer-search.md`).
+**A copy nobody seeds is not started, and one that cannot finish is stopped.** GitHub issue #2, on the
+owner's word of 14 October 2026 to fix it, which replaced the rule below:
+
+1. A merged torrent every one of whose indexer results reports nought seeders is not offered to the
+   client. A result with no seeder count is not nought. The next merged torrent in winning order is the
+   winner instead, as when a winner's magnet cannot be read. When none is left the episode is not
+   grabbed, the Activity and History pages say "no seeders", and the episode is searched for again on
+   the next run — nothing is refused, so an episode that has only just aired gets its second chance.
+2. A running torrent still missing a wanted piece that no connected peer holds — swarm availability
+   below one — for `StallMinutes` on end is stopped, its hash is refused like any failed download, the
+   Downloads and History pages say "cannot complete", and its episode is searched for again
+   (`docs/06-torrent-client.md` § Stalls). A peer holding the missing pieces may still turn up, which is
+   why the window is `StallMinutes`; with no peers at all the stall rule applies.
+
+The seeder count still orders nothing: the winner is the torrent the most indexers list
+(`docs/specs/indexer-search.md`).
+
+*Replaced, 14 October 2026:* **there was no seeder gate.** The owner's decision of 12 September 2026 was
+no threshold, download what is found — an episode taken the moment it airs has no crowd behind it yet.
+A copy nobody was seeding still started, and the stall rule ended it after `StallMinutes` with no
+progress **and** no peers. Issue #2 keeps that rule's reason — an episode that just aired is retried on a
+later search rather than started dead now. Since 15 September 2026 the seeder count had decided nothing
+at all: `ReleaseDecider` is gone.
 
 **A blocked group has no list of its own.** A group is a tag like any other word a release name
 carries, so a group put in a show's or a library's forbidden list refuses every name carrying it.
@@ -166,7 +181,7 @@ and a pack that was taken answered for every gap in the season it covered.
 | `MaxUploadRate` | 0 | |
 | `SeedRatio` | 1.0 | |
 | `SeedHours` | 48 | whichever comes first |
-| `StallMinutes` | 30 | no progress **and** no peers |
+| `StallMinutes` | 30 | no progress **and** no peers; and, since 14 October 2026, a wanted piece no connected peer holds (issue #2) |
 | `MetadataTimeoutMinutes` | 5 | |
 | `ResumeIntervalSeconds` | 60 | named as `ResumeInterval` in `docs/06`; the number is `S5-12`'s |
 | `Encryption` | allowed | not required |

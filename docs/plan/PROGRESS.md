@@ -8,7 +8,7 @@ Read this first, update it last. Nothing else decides what happens next.
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
-`S14-07` (#5, sort, filter and paging). `S14-01`, `S14-02` and `S14-03` are done (see **Log**). **Current: `S14-04`.**
+`S14-07` (#5, sort, filter and paging). `S14-01` to `S14-04` are done (see **Log**). **Current: `S14-05`.**
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
@@ -804,7 +804,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S14-01` A finished download always reaches the intake folder (#3)
 - [x] `S14-02` No Xvfb, no browser, one warning (#6)
 - [x] `S14-03` A log level the owner sets, and a log file that holds it (#7)
-- [ ] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
+- [x] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
 - [ ] `S14-05` A season with several gaps takes a pack (#1)
 - [ ] `S14-06` A page with two or more tables shows them as tabs (#4)
 - [ ] `S14-07` Every table answers sort, filter and paging (#5)
@@ -812,6 +812,24 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2).** The gate:
+  `RankedTorrent.NobodySeeds` is true when every result of the merged hash reports nought (a result with
+  no count is not nought), and `SearchCycle.TakeAsync` passes such a torrent over like one whose magnet
+  cannot be read, noting "… has no seeders: …" on the Activity page. When that is the last word on the
+  episode the outcome carries the passed-over release, so `CycleRecord` writes a `decided` History line
+  saying "no seeders"; nothing is refused, and the next run asks again. The watch:
+  `TorrentSession.Unheld()` counts wanted, unverified pieces no connected peer's bitfield holds
+  (`TorrentRun.Unheld()` is null before the session opens), and `BittorrentEngine.CannotFinish` reads it
+  when the session opens and at every deadline, after the stall rule: unheld for `StallMinutes` on end
+  stops the run with "Cannot complete: …" (not `ErrorIsTheRelease`, so `Transfers` refuses it for six
+  hours) and raises `GaveUp`; a reading of nought starts the window again, and a resume or a slot coming
+  free resets it. `Owed` includes that window's end. Debug lines when the window starts and ends, a
+  Warning when it stops one. The brief was wrong on one point: `PiecePicker.Availability` counts nobody
+  between picks (see **Decisions**). `ByShowAndEpisodeTests.AResultUploadedAsTheEpisodeAiredIsTakenForIt`
+  now asks the round, because every 720p x265 copy of Dark Matter S02E04 has nought seeders on The Pirate
+  Bay. The `client.stallMinutes` label names both rules it bounds. For S14-05: the gate lives in
+  `TakeAsync`, so a pack offered any other way would not be held to it.
 
 - **`S14-03` A log level the owner sets, and a log file that holds it (#7).** `Hosting/PluginLog` wraps the
   server's logger and every class gets it instead of `Context.Logger` (the plugin's `Log`; `Chain` takes it
@@ -2451,6 +2469,17 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **14 October 2026, GitHub issue #2 replaced the owner's rule of 12 September 2026 that there is no
+  seeder gate.** The owner's word that day was to fix the seven issues, and fixing #2 is the decision to
+  reverse it. A merged torrent every indexer reports nought seeders for is not started (the next one is),
+  and a running torrent missing a piece no connected peer holds for `StallMinutes` is stopped and refused
+  for six hours. The old rule's reason is kept: nothing is refused for having no seeders, so an episode
+  that has only just aired is searched for again on the next run (`docs/04-domain.md`). Found on the way,
+  and corrected in `SPRINTS.md` § S14-04: `PiecePicker.Availability` does not count the connected peers —
+  `TorrentSession.Turn` adds a peer's bitfield for one pick and takes it away again — so the watch counts
+  from the peers' bitfields (`TorrentSession.Unheld`), and a test built on `Availability` never saw a peer.
+  Rarest-first therefore ranks pieces by one peer's bitfield at a time; that is left as it is here.
 
 - **22 September 2026, the owner: the plugin does not re-attach its own endpoints.** FiLL/nomercy-torrent-plugin#1
   asks that every route a plugin has into the server be one the owner can see and revoke, and says a raw

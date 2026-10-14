@@ -311,6 +311,38 @@ public sealed class TorrentSession(
         }
     }
 
+    /// <summary>How many of the pieces still wanted no connected peer holds.</summary>
+    /// <remarks>
+    /// <para>
+    /// Above nought is a swarm availability below one: with the peers there are, this download cannot finish.
+    /// GitHub issue #2 — a torrent like that ran until somebody noticed, because it had peers and the stall
+    /// rule wants none. The client stops it once this has stayed above nought for <c>StallMinutes</c>.
+    /// </para>
+    /// <para>
+    /// Counted from the peers' own bitfields and not from <see cref="PiecePicker.Availability"/>: a peer's
+    /// pieces are added to the picker for the length of one pick and taken away again, so between picks the
+    /// picker counts nobody at all. Asked at the client's deadlines, not per message — it walks every piece
+    /// against every peer.
+    /// </para>
+    /// </remarks>
+    public int Unheld()
+    {
+        lock (_lock)
+        {
+            int unheld = 0;
+
+            for (int piece = 0; piece < torrent.PieceCount; piece++)
+            {
+                if (!verified.Has(piece) && _picker.Wants(piece) && !_peers.Any(peer => peer.Has.Has(piece)))
+                {
+                    unheld++;
+                }
+            }
+
+            return unheld;
+        }
+    }
+
     /// <summary>Whether this peer holds a piece this client still wants.</summary>
     /// <remarks>
     /// Only the wanted pieces: a torrent whose sample files are skipped is

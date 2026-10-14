@@ -3313,6 +3313,11 @@ because the server lets no plugin line below Information through.
 `Bittorrent/Pieces/PiecePicker.cs` (`Availability`), `Bittorrent/Engine/TorrentRun.cs`,
 `Hosting/BittorrentEngine.cs` (`GaveUp`), `Views/ActivityView.cs`, `Views/DownloadsView.cs`.
 
+*Corrected while doing it, 14 October 2026:* `PiecePicker.Availability` does not count the connected
+peers — the session adds a peer's pieces for one pick and takes them away again — so the count is
+`TorrentSession.Unheld`, read off the peers' own bitfields. The seeder gate sits where the winner is
+offered (`SearchCycle.TakeAsync`), not in `Winner.Order`, so its reason can be said.
+
 **The rule, replacing the owner's of 12 September 2026:**
 
 1. A merged torrent whose every result reports nought seeders is not offered to the client. A result

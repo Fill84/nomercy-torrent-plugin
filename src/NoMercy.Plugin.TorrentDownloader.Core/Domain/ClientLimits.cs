@@ -40,7 +40,10 @@ public sealed class ClientLimits
     /// <summary>Seeding stops at the ratio or these hours, whichever comes first.</summary>
     public int SeedHours { get; set; } = 48;
 
-    /// <summary>No progress <em>and</em> no peers for this long is a stall.</summary>
+    /// <summary>
+    /// No progress <em>and</em> no peers for this long is a stall; a wanted piece no connected peer holds for
+    /// this long is a download that cannot complete.
+    /// </summary>
     public int StallMinutes { get; set; } = 30;
 
     public int MetadataTimeoutMinutes { get; set; } = 5;

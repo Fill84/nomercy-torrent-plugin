@@ -394,7 +394,9 @@ public static class SettingsView
             new PluginFormField
             {
                 Name = "client.stallMinutes",
-                Label = "Minutes with no progress and no peers before it counts as stalled",
+                // Both rules it bounds, since GitHub issue #2 made it the window for a download no peer can finish
+                // as well: a label naming only the first leaves the owner unable to find the second.
+                Label = "Minutes with no progress and no peers, or with a needed piece no peer has, before a download is stopped",
                 Type = PluginFormFieldType.Number,
                 Value = settings.Client.StallMinutes,
             },
