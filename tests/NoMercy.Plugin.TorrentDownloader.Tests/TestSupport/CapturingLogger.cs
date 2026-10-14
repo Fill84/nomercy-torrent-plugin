@@ -62,9 +62,15 @@ public sealed class CapturingLogger : ILogger
         Exception? exception,
         Func<TState, Exception?, string> formatter)
     {
+        // The exception as well, because a server's log prints it under the line: a secret in an
+        // exception's message is a secret in the log, and a logger that dropped it could not show one.
+        string line = exception is null
+            ? formatter(state, exception)
+            : $"{formatter(state, exception)}{Environment.NewLine}{exception}";
+
         lock (_lines)
         {
-            _lines.Add((logLevel, formatter(state, exception)));
+            _lines.Add((logLevel, line));
         }
     }
 }

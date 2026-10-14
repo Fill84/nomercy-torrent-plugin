@@ -131,17 +131,23 @@ public sealed class PluginLog : ILogger
             return;
         }
 
-        string line = Clean(formatter(state, exception));
+        string line = Escaped(Clean(formatter(state, exception)));
 
-        _file.Write(
-            logLevel.ToString(),
-            exception is null ? line : $"{line}{Environment.NewLine}{Clean(exception.ToString())}");
+        // The exception's own lines are real ones, so they stay lines — each escaped and indented under the
+        // line it belongs to, so none of them starts at the left edge where an entry starts.
+        string said = exception is null
+            ? line
+            : $"{line}{Environment.NewLine}{Indented(Clean(exception.ToString()))}";
+
+        _file.Write(logLevel.ToString(), said);
 
         if (logLevel >= LogLevel.Information)
         {
-            // The cleaned line rather than the template and its arguments: an argument is exactly where a
-            // secret would ride, and the server's log is a file on disk that gets pasted into support threads.
-            _server.Log(logLevel, eventId, line, exception, static (said, _) => said);
+            // The cleaned text rather than the template, its arguments and the exception: an argument is
+            // exactly where a secret would ride, an exception's message is another, and the server's log is
+            // a file on disk that gets pasted into support threads. So the server is handed no exception
+            // object at all — its text, cleaned, is in the line.
+            _server.Log(logLevel, eventId, said, null, static (text, _) => text);
         }
     }
 
@@ -155,5 +161,49 @@ public sealed class PluginLog : ILogger
         }
 
         return cleaned;
+    }
+
+    /// <summary><paramref name="text"/> on one line, every control character written out rather than obeyed.</summary>
+    /// <remarks>
+    /// A peer names its own client and a tracker writes its own failure reason, and both end up in lines.
+    /// Written raw, a line break followed by a timestamp is a whole entry the plugin never wrote — in the
+    /// owner's file and in the server's log — and an escape sequence can rewrite a terminal following it.
+    /// </remarks>
+    private static string Escaped(string text)
+    {
+        if (!text.Any(NeedsEscaping))
+        {
+            return text;
+        }
+
+        System.Text.StringBuilder escaped = new(text.Length + 16);
+
+        foreach (char one in text)
+        {
+            escaped.Append(one switch
+            {
+                '\r' => @"\r",
+                '\n' => @"\n",
+                '\t' => @"\t",
+                _ when NeedsEscaping(one) => $@"\u{(int)one:x4}",
+                _ => one.ToString(),
+            });
+        }
+
+        return escaped.ToString();
+    }
+
+    /// <summary>Control characters, and the two Unicode line and paragraph separators some readers break on.</summary>
+    private static bool NeedsEscaping(char one)
+    {
+        return char.IsControl(one) || one == (char)0x2028 || one == (char)0x2029;
+    }
+
+    /// <summary>Each line of <paramref name="text"/> escaped and indented by four spaces.</summary>
+    private static string Indented(string text)
+    {
+        return string.Join(
+            Environment.NewLine,
+            text.Split(["\r\n", "\n", "\r"], StringSplitOptions.None).Select(one => $"    {Escaped(one)}"));
     }
 }

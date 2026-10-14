@@ -178,7 +178,10 @@ owner's choice that day. Error: the plugin cannot do its job. Warning: one item 
 goes on. Information: one line per step the owner sees — search, grab, complete, move. Debug: the
 decision behind each step. Trace: wire detail. No line, in the file or the server's log, carries a
 secret: every secret-named parameter is blanked (`docs/05-sources.md` § Fetching), and so is every value
-the secret store holds, wherever it stands in the line.
+the secret store holds, wherever it stands in the line — an exception's text included, which the server
+is handed cleaned inside the line rather than as the exception itself. A tracker is named by its scheme,
+host and port, never its path, query or login. Every control character in a line is written escaped and
+an exception's own lines are indented under it, so text a peer or a tracker chose cannot forge an entry.
 
 **Quality, codec, specials and tags are not settings of the plugin.** The global profile —
 `IncludeSpecials`, `MaximumResolution`, `Codec`, `RequireCodecTag`, `EnglishOnly`, `ExcludeTerms` —

@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
@@ -191,6 +192,46 @@ public sealed class PluginLogTests : IDisposable
         Assert.Contains("tracker.example", Written(Today), StringComparison.Ordinal);
         Assert.Contains("indexer.example", Written(Today), StringComparison.Ordinal);
         Assert.Contains("passkey=***", Written(Today), StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Text a remote side chose cannot forge a line.</strong> A peer names its own client and a
+    /// tracker writes its own failure reason, and both go into lines. One carrying a line break and a
+    /// timestamp would otherwise put a whole entry of its own into the owner's file — or into the server's
+    /// log — that the plugin never wrote.
+    /// </para>
+    /// <para>
+    /// So every control character in a line is written escaped, and an exception's own lines, which are
+    /// real, are indented under the line they belong to: an entry starts at the left edge with its time,
+    /// and nothing else does.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TextARemoteSideChoseCannotForgeALine()
+    {
+        CapturingLogger server = new();
+        PluginLog log = new(server, _folder, _time) { Level = LogLevel.Trace };
+
+        const string forged = "LIAR\r\n2026-10-14 23:30:00.000Z [Error] the library was deleted\u001b[2J";
+
+        log.LogInformation("{Peer} went", forged);
+        log.LogWarning(new IOException("first\n2026-10-14 23:30:00.000Z [Error] forged too"), "It failed");
+        log.Flush();
+
+        string[] lines = File.ReadAllLines(Today);
+        Regex entry = new(@"^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d\.\d{3}Z \[", RegexOptions.CultureInvariant);
+
+        Assert.Equal(2, lines.Count(line => entry.IsMatch(line)));
+        Assert.All(lines, line => Assert.True(entry.IsMatch(line) || line.StartsWith("    ", StringComparison.Ordinal), line));
+        Assert.DoesNotContain(lines, line => line.Contains('\u001b', StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.Contains(@"LIAR\r\n2026-10-14", StringComparison.Ordinal));
+
+        // And the server is handed nothing that starts a line of its own.
+        string said = Assert.Single(server.Lines, line => line.Contains("LIAR", StringComparison.Ordinal));
+
+        Assert.DoesNotContain('\n', said);
+        Assert.DoesNotContain('\r', said);
     }
 
     /// <remarks>

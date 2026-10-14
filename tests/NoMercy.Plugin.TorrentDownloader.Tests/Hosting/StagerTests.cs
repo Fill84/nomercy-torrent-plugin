@@ -472,6 +472,73 @@ public class StagerTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>An intake folder nothing may be written into is said once, however many passes find it so.</strong>
+    /// The failure names the part-copy, and the part is named afresh on every attempt — so judged by its
+    /// words, every pass's refusal was a new one, and the Warning, the move's Warning before it and the
+    /// History entry came back every minute.
+    /// </para>
+    /// <para>
+    /// Windows only: the folder is shut by a rule that refuses new files in it, which is a Windows access rule.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnIntakeFolderThatRefusesEveryFileIsSaidOnceAcrossPasses()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
+        byte[] content = Content(1024 * 1024);
+        string from = Folder("incomplete-shut");
+        string into = Folder("intake-shut");
+        string path = Path.Combine(from, "Silo.S03E07.mkv");
+
+        await File.WriteAllBytesAsync(path, content);
+
+        DirectoryInfo shut = new(into);
+        System.Security.AccessControl.DirectorySecurity rules = shut.GetAccessControl();
+        System.Security.AccessControl.FileSystemAccessRule noAdding = new(
+            System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+            System.Security.AccessControl.FileSystemRights.CreateFiles,
+            System.Security.AccessControl.AccessControlType.Deny);
+
+        rules.AddAccessRule(noAdding);
+        shut.SetAccessControl(rules);
+
+        CapturingLogger log = new();
+        ActivityJournal journal = new();
+        Stager stager = new(journal, log);
+
+        try
+        {
+            for (int pass = 0; pass < 3; pass++)
+            {
+                StagedResult result = Assert.Single(await stager.MoveAsync(
+                    [new("Silo.S03E07.mkv", Episode(7), content.Length)],
+                    from,
+                    into,
+                    show: null,
+                    resolution: null,
+                    CancellationToken.None));
+
+                Assert.False(result.Moved);
+            }
+        }
+        finally
+        {
+            rules.RemoveAccessRule(noAdding);
+            shut.SetAccessControl(rules);
+        }
+
+        Assert.Single(log.Entries, entry => entry.Level == LogLevel.Warning && entry.Line.Contains("could not be staged", StringComparison.Ordinal));
+        Assert.Single(log.Entries, entry => entry.Level == LogLevel.Warning && entry.Line.Contains("could not be moved", StringComparison.Ordinal));
+        Assert.Single(journal.Snapshot().History, entry => (entry.Detail ?? string.Empty).Contains("could not be staged", StringComparison.Ordinal));
+        Assert.True(File.Exists(path), "the download was not left where it was");
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>A move the file system refuses says so before the file is copied.</strong> The copy that
     /// follows is the slow path — a whole episode read and written byte by byte — and without a line the
     /// owner sees only that staging took half an hour.

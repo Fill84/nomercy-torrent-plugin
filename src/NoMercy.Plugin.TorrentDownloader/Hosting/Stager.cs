@@ -39,6 +39,10 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
     /// <summary>The failures already said, by download, so one that repeats every pass is said loudly once.</summary>
     private readonly SaidBefore _failed = new();
 
+    /// <summary>The moves already refused, by download, said loudly once for the same reason as <see cref="_failed"/>.</summary>
+    /// <remarks>Its own memory: one shared with the staging failure would hold two answers for one download and call each new.</remarks>
+    private readonly SaidBefore _notMoved = new();
+
     /// <summary>Moves what was chosen, and says what happened to each.</summary>
     /// <param name="staged">What <see cref="Staging.Choose"/> decided.</param>
     /// <param name="from">The download's own folder.</param>
@@ -208,7 +212,7 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         }
         catch (Exception refused) when (refused is IOException or UnauthorizedAccessException)
         {
-            return Refused(file, source, into, refused);
+            return Refused(file, source, into, part, refused);
         }
 
         try
@@ -293,7 +297,7 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
                 PutBack(part, source);
             }
 
-            return Refused(file, source, into, refused);
+            return Refused(file, source, into, part, refused);
         }
         finally
         {
@@ -317,11 +321,11 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
     /// Loudly: an unwritable intake folder is something the owner has to fix, and
     /// deleting the only copy of the episode while saying so would be unforgivable.
     /// </remarks>
-    private StagedResult Refused(Staged file, string source, string into, Exception refused)
+    private StagedResult Refused(Staged file, string source, string into, string part, Exception refused)
     {
         string reason = $"{Path.GetFileName(source)} could not be staged into {into}: {refused.Message}";
 
-        if (!_failed.IsNews(source, $"{into}|{refused.Message}"))
+        if (!_failed.IsNews(source, Unparted(refused.Message, part, into)))
         {
             // Tried again a minute later, and refused for the same reason: the
             // Warning and the History entry the first refusal made still say it.
@@ -340,6 +344,17 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         return new(file, null, reason);
     }
 
+    /// <summary>What a failure says, with the part-copy's name taken out, so two passes refused the same way read the same.</summary>
+    /// <remarks>
+    /// The part is named afresh on every attempt and the file system quotes it: "Access to the path
+    /// '…\.nomercy-&lt;guid&gt;.part' is denied." Compared with its name in, every pass's refusal was a new one,
+    /// and the Warning came back every minute for an intake folder nobody could write to.
+    /// </remarks>
+    private static string Unparted(string message, string part, string into)
+    {
+        return $"{into}|{message.Replace(part, into, StringComparison.OrdinalIgnoreCase)}";
+    }
+
     /// <summary>Says a file reached the intake folder, and forgets any failure of it.</summary>
     /// <remarks>
     /// Information, because a move is one of the steps an owner sees (GitHub issue #7) — and it had no line
@@ -348,6 +363,7 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
     private void Arrived(string source, string into, string how)
     {
         _failed.Forget(source);
+        _notMoved.Forget(source);
 
         logger.LogInformation("{File} was {How} into {Into}.", Path.GetFileName(source), how, into);
     }
@@ -369,10 +385,23 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         }
         catch (Exception held) when (held is IOException or UnauthorizedAccessException)
         {
+            string into = Path.GetDirectoryName(part) ?? part;
+
+            if (!_notMoved.IsNews(source, Unparted(held.Message, part, into)))
+            {
+                logger.LogDebug(
+                    "{Source} could not be moved into {Into} again, so it is copied: {Reason}",
+                    source,
+                    into,
+                    held.Message);
+
+                return false;
+            }
+
             logger.LogWarning(
                 "{Source} could not be moved into {Into}, so it is copied: {Reason}",
                 source,
-                Path.GetDirectoryName(part),
+                into,
                 held.Message);
 
             return false;

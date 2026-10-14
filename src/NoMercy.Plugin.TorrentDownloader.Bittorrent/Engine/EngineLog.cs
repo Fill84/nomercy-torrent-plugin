@@ -34,16 +34,18 @@ public static class EngineLog
     /// <summary>For a client built with no log: every question answered no.</summary>
     public static IEngineLog Silent { get; } = new Nobody();
 
-    /// <summary>A tracker as a line may name it: its scheme, host and port, and nothing after.</summary>
+    /// <summary>A tracker as a line may name it: its scheme, host and port, and nothing else.</summary>
     /// <remarks>
     /// A private tracker's announce address carries the owner's passkey, as a parameter or as a path
     /// segment, and a torrent's own announce list brings that address here with no word of which part is
     /// secret. The host is what tells one tracker from another in a log, and it is never the secret.
+    /// Built from the parts rather than cut from the front of the address: the front holds the user part,
+    /// <c>http://user:secret@host</c>, which is where a tracker that takes a login keeps it.
     /// </remarks>
     public static string Host(string tracker)
     {
         return Uri.TryCreate(tracker, UriKind.Absolute, out Uri? address)
-            ? address.GetLeftPart(UriPartial.Authority)
+            ? $"{address.Scheme}://{address.Host}{(address.IsDefaultPort ? string.Empty : $":{address.Port}")}"
             : "a tracker whose address does not read as one";
     }
 
