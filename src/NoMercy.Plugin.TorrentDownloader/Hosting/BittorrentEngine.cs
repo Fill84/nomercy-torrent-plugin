@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Bittorrent;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
@@ -365,11 +366,15 @@ public sealed class BittorrentEngine(
 
                 // The owner's rule, handed to an engine that has no idea what a
                 // video file is: only the video files in a torrent are ever
-                // downloaded, and samples are not among them.
+                // downloaded, and samples are not among them. A season pack is
+                // narrowed to the videos of the episodes it was taken for, so an
+                // episode already in the library is not downloaded again
+                // (GitHub issue #1).
                 files =>
                 [
-                    .. Staging
-                        .Wanted([.. files.Select(file => new TorrentFile(file.Path, file.Length))])
+                    .. (request.Episodes is IReadOnlyList<EpisodeKey> episodes
+                            ? Staging.ForEpisodes([.. files.Select(file => new TorrentFile(file.Path, file.Length))], episodes)
+                            : Staging.Wanted([.. files.Select(file => new TorrentFile(file.Path, file.Length))]))
                         .Select(kept => files.First(file => string.Equals(file.Path, kept.Path, StringComparison.Ordinal))),
                 ],
                 _limits,
@@ -1780,7 +1785,11 @@ public sealed class BittorrentEngine(
             return;
         }
 
-        held.Error = "There is no video file in it, so nothing in it was downloaded.";
+        // A season pack can hold videos and none for the episodes it was taken for (GitHub issue #1); saying
+        // there is no video in it would send the owner looking for a fake release that is not one.
+        held.Error = held.Run.Torrent?.Files.Any(file => Staging.IsVideo(file.Path)) == true
+            ? "There is no video file in it for the episodes it was taken for, so nothing in it was downloaded."
+            : "There is no video file in it, so nothing in it was downloaded.";
 
         // The one refusal that is about the torrent rather than about tonight.
         // Nothing will ever put a video file into it, so it is never worth

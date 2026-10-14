@@ -260,9 +260,15 @@ public static partial class Staging
 
         if (covers.Count == 1)
         {
-            // The largest video, and nothing else. A release for one episode
-            // that contains three videos has two the owner did not ask for.
-            return [new(videos[0].Path, covers[0], videos[0].Length)];
+            // The video that names the episode, else the largest video, and
+            // nothing else. A release for one episode that contains three videos
+            // has two the owner did not ask for. Named first because a season
+            // pack can be left answering for one episode, and only that
+            // episode's file was downloaded: the largest of nine equal episodes
+            // is whichever the torrent happens to list first.
+            TorrentFile only = videos.FirstOrDefault(one => Answers(one, covers[0])) ?? videos[0];
+
+            return [new(only.Path, covers[0], only.Length)];
         }
 
         List<Staged> staged = [];
@@ -287,6 +293,34 @@ public static partial class Staging
         // anybody watching a season wants. Season before number, because a pack
         // of two seasons is still one pack.
         return [.. staged.OrderBy(one => one.Episode.Season).ThenBy(one => one.Episode.Number)];
+    }
+
+    /// <summary>
+    /// Which files out of a season pack are downloaded: the videos <see cref="Wanted"/> keeps that name one of
+    /// <paramref name="episodes"/>.
+    /// </summary>
+    /// <remarks>
+    /// <c>docs/specs/release-names.md</c> § Season packs, GitHub issue #1: a pack answers for the episodes of its
+    /// season being searched for, and an episode with a file in the library is not one of them — so its file in
+    /// the pack is not downloaded again. Read off each file's own name, as staging reads it, so the file that is
+    /// downloaded is the file that is staged.
+    /// </remarks>
+    public static IReadOnlyList<TorrentFile> ForEpisodes(IReadOnlyList<TorrentFile> files, IReadOnlyList<EpisodeKey> episodes)
+    {
+        return [.. Wanted(files).Where(file => episodes.Any(episode => Answers(file, episode)))];
+    }
+
+    /// <summary>Which of <paramref name="episodes"/> a video in the torrent answers for.</summary>
+    /// <remarks>
+    /// An episode a pack turns out not to hold is released from its grab and searched for singly
+    /// (<c>docs/specs/release-names.md</c> § Season packs): a grab that went on answering for it would keep it out
+    /// of every run until the pack was done, for a file the pack never had.
+    /// </remarks>
+    public static IReadOnlyList<EpisodeKey> Held(IReadOnlyList<TorrentFile> files, IReadOnlyList<EpisodeKey> episodes)
+    {
+        IReadOnlyList<TorrentFile> videos = Wanted(files);
+
+        return [.. episodes.Where(episode => videos.Any(file => Answers(file, episode)))];
     }
 
     /// <summary>Every episode the grab covered that no file answered for.</summary>

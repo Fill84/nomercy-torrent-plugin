@@ -548,7 +548,8 @@ public sealed class SearchCycle(
                 chosen,
                 [.. answersFor.Select(one => one.Key)],
                 options,
-                ct);
+                ct,
+                pack: covering is not null);
 
             if (!stands)
             {
@@ -661,12 +662,17 @@ public sealed class SearchCycle(
     /// down the ranking is still worth a turn, and nothing this one would have
     /// covered is settled by it.
     /// </returns>
+    /// <remarks>
+    /// A season pack tells the client which episodes it is taken for, so that only their videos are downloaded
+    /// and an episode already in the library is not downloaded again (GitHub issue #1).
+    /// </remarks>
     private async Task<(EpisodeOutcome Outcome, bool Stands)> GrabAsync(
         TrackedEpisode episode,
         ReleaseCopy chosen,
         IReadOnlyList<EpisodeKey> covers,
         CycleOptions options,
-        CancellationToken ct)
+        CancellationToken ct,
+        bool pack = false)
     {
         string subject = $"{episode.ShowTitle} {episode.Key}";
 
@@ -718,7 +724,8 @@ public sealed class SearchCycle(
             options.IncompleteFolder,
             options.DefaultTrackers,
             options.OwnTrackerHosts,
-            ct);
+            ct,
+            pack ? covers : null);
 
         if (taken.Result != GrabResult.Taken)
         {

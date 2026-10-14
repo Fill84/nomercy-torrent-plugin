@@ -341,6 +341,53 @@ public class BittorrentEngineTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// A season pack is taken for the episodes of its season being searched for, and only their videos are
+    /// downloaded: an episode with a file in the library is not downloaded again (GitHub issue #1). The real
+    /// Classroom of the Elite batch holds sixteen episodes; taken for three and five, the client fetches those two
+    /// files and the pieces they share with their neighbours, and nothing else.
+    /// </para>
+    /// <para>
+    /// What is fetched is what the client says it is downloading: the size it reports once it has settled what
+    /// the torrent holds.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APackTakenForSomeEpisodesFetchesOnlyTheirVideos()
+    {
+        using BittorrentEngine engine = Started();
+
+        byte[] bytes = Fixture("classroom-of-the-elite-s04-batch.torrent");
+        TorrentMetadata torrent = TorrentMetadata.Read(bytes);
+        string file = Path.Combine(_folder, "batch.torrent");
+
+        Directory.CreateDirectory(_folder);
+        File.WriteAllBytes(file, bytes);
+
+        await engine.AddAsync(
+            Request with { Source = file, DownloadFolder = _folder, Episodes = [new(77, 4, 3), new(77, 4, 5)] },
+            CancellationToken.None);
+
+        long wanted = torrent.Files
+            .Where(one => one.Path.Contains("S04E03", StringComparison.Ordinal) || one.Path.Contains("S04E05", StringComparison.Ordinal))
+            .Sum(one => one.Length);
+
+        // Settled once the size reported is no longer the whole torrent's.
+        DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + TimeSpan.FromSeconds(20);
+        TorrentStatus status = Assert.Single(await engine.StatusAsync(CancellationToken.None));
+
+        while (status.BytesTotal == torrent.TotalLength && DateTimeOffset.UtcNow < giveUpAt)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(25));
+
+            status = Assert.Single(await engine.StatusAsync(CancellationToken.None));
+        }
+
+        Assert.True(wanted > 0, "the batch names no third or fifth episode");
+        Assert.InRange(status.BytesTotal ?? 0, wanted, wanted + (4 * torrent.PieceLength));
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong><c>MaxConcurrentDownloads</c> is a limit and not a note.</strong>
     /// It was read from the Settings page and passed to nothing at all: on
     /// 22 August 2026 the owner's client had sixteen torrents dialling at once

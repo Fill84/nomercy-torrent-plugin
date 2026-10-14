@@ -325,6 +325,29 @@ public sealed class GrabRepository(Store database)
         await command.ExecuteNonQueryAsync(ct);
     }
 
+    /// <summary>Lets a season pack's grab stop answering for the episodes it turned out not to hold.</summary>
+    /// <remarks>
+    /// <c>docs/specs/release-names.md</c> § Season packs, GitHub issue #1: an episode the pack does not hold stays
+    /// missing and is searched for singly. Every run leaves out the episodes an open grab answers for, so a grab
+    /// still answering for it would keep it from being searched for until the pack was done. Unlike
+    /// <see cref="CoversAsync"/> this overwrites what the grab answers for, and only ever with less of it.
+    /// </remarks>
+    public async Task NarrowAsync(string infoHash, IReadOnlyList<EpisodeKey> held, CancellationToken ct)
+    {
+        await using SqliteConnection connection = await database.OpenAsync(ct);
+        await using SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText = "UPDATE grabs SET covers = $covers WHERE info_hash = $hash;";
+
+        command.Parameters.AddWithValue(
+            "$covers",
+            JsonSerializer.Serialize(held.Select(one => new[] { one.ShowId, one.Season, one.Number })));
+
+        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+
+        await command.ExecuteNonQueryAsync(ct);
+    }
+
     /// <summary>How an episode is spelled inside the encode-jobs column.</summary>
     public static string Tag(EpisodeKey episode)
     {

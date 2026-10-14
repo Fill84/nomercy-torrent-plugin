@@ -50,7 +50,10 @@ public sealed class SeasonPackCycleTests
         Assert.Equal(PackHash, taken.InfoHash);
         Assert.Equal(FluxPack, taken.Release);
         Assert.Equal([Adolescence(1).Key, Adolescence(2).Key, Adolescence(3).Key], taken.Covers);
-        Assert.Single(engine.Taken);
+
+        // And the client is told which episodes those are, so the fourth — which has its file — is not
+        // downloaded again.
+        Assert.Equal(taken.Covers, Assert.Single(engine.Taken).Episodes);
         Assert.Equal(3, report.Outcomes.Count);
         Assert.DoesNotContain(fetch.Asked, address => address.ToString().Contains("S01E0", StringComparison.OrdinalIgnoreCase));
     }
@@ -74,6 +77,9 @@ public sealed class SeasonPackCycleTests
         Assert.Equal(Single, taken.Release);
         Assert.Equal([Adolescence(1).Key], taken.Covers);
         Assert.DoesNotContain(fetch.Asked, address => address.ToString() == SceneSourceSeason);
+
+        // A single episode's release is downloaded as it always was: every video, the largest one staged.
+        Assert.Null(Assert.Single(engine.Taken).Episodes);
     }
 
     /// <remarks>

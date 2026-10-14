@@ -64,10 +64,16 @@ public enum TorrentState
 /// the owner's own list. More trackers is a faster download.
 /// </param>
 /// <param name="DownloadFolder">Where the bytes land while it downloads.</param>
+/// <param name="Episodes">
+/// For a season pack, the episodes it is downloaded for: only the videos naming one of them are fetched
+/// (<c>Staging.ForEpisodes</c>). Null fetches every video, which is what an episode's own release and a torrent
+/// added by hand want.
+/// </param>
 public sealed record TorrentRequest(
     string Source,
     IReadOnlyList<string> Trackers,
-    string DownloadFolder);
+    string DownloadFolder,
+    IReadOnlyList<Domain.EpisodeKey>? Episodes = null);
 
 /// <summary>What the client calls a torrent it has taken on.</summary>
 /// <param name="InfoHash">Forty hex characters, upper case.</param>

@@ -82,12 +82,16 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
     /// for anybody else's torrent.
     /// </param>
     /// <param name="ct">Cancellation.</param>
+    /// <param name="episodes">
+    /// For a season pack, the episodes it is taken for, whose videos alone are downloaded; null for every video.
+    /// </param>
     public async Task<Grabbed> TakeAsync(
         ReleaseCopy copy,
         string folder,
         IReadOnlyList<string> defaultTrackers,
         IReadOnlyCollection<string> ownTrackerHosts,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<EpisodeKey>? episodes = null)
     {
         if (Room(copy, folder) is string full)
         {
@@ -130,7 +134,8 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
                         // owner's passkey, which must never travel with
                         // somebody else's torrent.
                         TrackerBook.Learn(copy.Trackers, defaultTrackers, ownTrackerHosts),
-                        folder),
+                        folder,
+                        episodes),
                     ct)
                 .ConfigureAwait(false);
 

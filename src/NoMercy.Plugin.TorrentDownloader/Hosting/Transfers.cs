@@ -146,8 +146,11 @@ public sealed class Transfers(
         // gone by 12:22:46, one episode in the library at the end of it.
         List<string> justStaged = [];
 
-        foreach (StoredDownload finished in plan.Stage)
+        foreach (StoredDownload whole in plan.Stage)
         {
+            // What a pack does not hold is let go of first, so it is neither staged nor waited for.
+            StoredDownload finished = await NarrowedAsync(whole, ct);
+
             bool seeding = running.Any(one =>
                 string.Equals(one.InfoHash, finished.InfoHash, StringComparison.OrdinalIgnoreCase)
                 && one.State == TorrentState.Seeding);
@@ -175,10 +178,73 @@ public sealed class Transfers(
 
         foreach (StoredDownload carrying in plan.Carry)
         {
+            // While it downloads, once its metadata is in: an episode a pack does not hold is searched for by
+            // the next run, not after the pack is done.
+            await NarrowedAsync(carrying, ct);
+
             if (carrying.State != GrabState.Downloading)
             {
                 await grabs.StateAsync(carrying.InfoHash, GrabState.Downloading, ct);
             }
+        }
+    }
+
+    /// <summary>For a season pack, the episodes its videos are downloaded for; null for every other grab.</summary>
+    /// <remarks>
+    /// Read off the grab every time it is handed to the client, so a pack added back after a restart goes on
+    /// downloading only the videos of the episodes it answers for (GitHub issue #1).
+    /// </remarks>
+    private static IReadOnlyList<EpisodeKey>? PackEpisodes(StoredDownload grab)
+    {
+        return grab.Covers.Count > 0 && ReleaseName.Parse(grab.ReleaseTitle).IsSeasonPack ? grab.Covers : null;
+    }
+
+    /// <summary>
+    /// A season pack's grab, answering only for the episodes its files hold once the client knows its files.
+    /// </summary>
+    /// <remarks>
+    /// <c>docs/specs/release-names.md</c> § Season packs: an episode the pack turns out not to hold stays missing
+    /// and is searched for singly. A pack holding none of them is left as it is: the client refuses it for having
+    /// nothing to download for them, and that failure puts every one of them back.
+    /// </remarks>
+    private async Task<StoredDownload> NarrowedAsync(StoredDownload grab, CancellationToken ct)
+    {
+        if (PackEpisodes(grab) is not IReadOnlyList<EpisodeKey> covers)
+        {
+            return grab;
+        }
+
+        try
+        {
+            IReadOnlyList<TorrentFile> files = await engine.FilesAsync(grab.InfoHash, ct);
+            IReadOnlyList<EpisodeKey> held = files.Count == 0 ? covers : Staging.Held(files, covers);
+
+            if (held.Count == covers.Count || held.Count == 0)
+            {
+                return grab;
+            }
+
+            string released = string.Join(", ", covers.Except(held));
+
+            await grabs.NarrowAsync(grab.InfoHash, held, ct);
+
+            logger.LogInformation(
+                "{Release} holds no file for {Episodes}, so the next run searches for them singly.",
+                grab.ReleaseTitle,
+                released);
+            journal.Noted(
+                ActivityStage.Download,
+                grab.ReleaseTitle,
+                $"it holds no file for {released}, so the next run searches for them singly");
+
+            return grab with { Covers = held };
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            // One torrent is one torrent, and the next pass asks again.
+            logger.LogWarning("What {Release} holds could not be read: {Reason}", grab.ReleaseTitle, wrong.Message);
+
+            return grab;
         }
     }
 
@@ -418,7 +484,7 @@ public sealed class Transfers(
             // Into the folder it had, when it had one of its own: a second copy
             // of a release put back into the shared folder writes over the
             // first copy's file of the same name.
-            await engine.AddAsync(new(lost.Magnet, trackers, lost.Folder ?? incompleteFolder), ct);
+            await engine.AddAsync(new(lost.Magnet, trackers, lost.Folder ?? incompleteFolder, PackEpisodes(lost)), ct);
         }
         catch (Exception refused) when (refused is not OperationCanceledException)
         {
@@ -581,7 +647,7 @@ public sealed class Transfers(
                 // moved files missing and download them a second time; let go of, its
                 // grab goes on to its encodes and what is left is deleted when the
                 // grab is done, by what the client kept of it.
-                await engine.AddAsync(new(finished.Magnet, trackers, finished.Folder ?? incompleteFolder), ct);
+                await engine.AddAsync(new(finished.Magnet, trackers, finished.Folder ?? incompleteFolder, PackEpisodes(finished)), ct);
 
                 logger.LogDebug(
                     "{Release}: nothing reached the intake folder, so the client holds it again and the next pass tries again.",
