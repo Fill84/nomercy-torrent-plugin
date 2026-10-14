@@ -641,13 +641,13 @@ public sealed class TorrentRun : IDisposable
     }
 
     /// <summary>
-    /// How many of the pieces still wanted no connected peer holds, or null before the session is open.
+    /// How many peers the session has and how many wanted pieces none of them holds, or null before it is open.
     /// </summary>
     /// <remarks>
     /// Null rather than nought: without a session nothing knows which pieces are wanted, and nought would say
-    /// the swarm holds every one of them. See <see cref="TorrentSession.Unheld"/>.
+    /// the swarm holds every one of them. See <see cref="TorrentSession.Holding"/>.
     /// </remarks>
-    public int? Unheld()
+    public PeerHolding? Holding()
     {
         TorrentSession? session;
 
@@ -656,8 +656,12 @@ public sealed class TorrentRun : IDisposable
             session = _session;
         }
 
-        return session?.Unheld();
+        return session?.Holding();
     }
+
+    /// <summary>Raised when a peer joins this run's session or leaves it.</summary>
+    /// <remarks>Passed straight up from the session, outside every lock, like <see cref="Progressed"/>.</remarks>
+    public event Action? PeersChanged;
 
     /// <summary>Every file in it, or nothing while the metadata has not arrived.</summary>
     public IReadOnlyList<TorrentFileEntry> Files => Torrent?.Files ?? [];
@@ -1732,6 +1736,7 @@ public sealed class TorrentRun : IDisposable
                         // one announcement with nobody listening for it.
                         _session.Finished += PassedOn;
                         _session.Progressed += Moved;
+                        _session.PeersChanged += Met;
 
                         // Said outside the lock, in the finally below.
                         _fresh = _session;
@@ -1782,6 +1787,9 @@ public sealed class TorrentRun : IDisposable
 
     /// <summary>Passes a verified piece up to whoever holds this run.</summary>
     private void Moved() => Progressed?.Invoke();
+
+    /// <summary>Passes a peer joining or leaving up to whoever holds this run.</summary>
+    private void Met() => PeersChanged?.Invoke();
 
     /// <summary>Says this run has settled what it is holding.</summary>
     private void Settled() => Opened?.Invoke();

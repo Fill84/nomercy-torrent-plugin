@@ -617,19 +617,21 @@ public class TorrentSessionTests : IDisposable
         using TorrentSession partial = Seeding(torrent, content, "seed-half", firstHalf);
         using TorrentSession seeder = Seeding(torrent, content, "seed-whole");
 
-        Assert.Equal(torrent.PieceCount, leecher.Unheld());
+        Assert.Equal(torrent.PieceCount, leecher.Holding().Unheld);
 
         List<Task> running = [];
 
         running.AddRange(await JoinAsync(partial, leecher, stopping.Token, stopping.Token));
-        await Until(() => leecher.Unheld() == torrent.PieceCount - half, stopping.Token);
+        await Until(() => leecher.Holding().Unheld == torrent.PieceCount - half, stopping.Token);
 
         running.AddRange(await JoinAsync(seeder, leecher, seedGoes.Token, stopping.Token));
-        await Until(() => leecher.Unheld() == 0, stopping.Token);
+        await Until(() => leecher.Holding().Unheld == 0, stopping.Token);
+
+        Assert.Equal(2, leecher.Holding().Peers);
 
         // The seed hangs up, and what only it held is held by nobody again.
         await seedGoes.CancelAsync();
-        await Until(() => leecher.Unheld() == torrent.PieceCount - half, stopping.Token);
+        await Until(() => leecher.Holding().Unheld == torrent.PieceCount - half, stopping.Token);
 
         await stopping.CancelAsync();
         await Task.WhenAll(running.Select(one => one.ContinueWith(_ => { }, TaskScheduler.Default)));

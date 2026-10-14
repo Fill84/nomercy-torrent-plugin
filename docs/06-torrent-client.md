@@ -282,12 +282,29 @@ progress for a minute is not either.
 piece still missing that no connected peer holds — swarm availability below one — for `StallMinutes` on
 end: the torrent is stopped with a reason that says it cannot complete, the client gives up on it
 (`GaveUp`), and a transfers pass refuses its hash for six hours like any failed download and returns the
-episode to missing. Progress on other pieces does not stop the clock; a peer that holds every missing
-piece starts it again. A moment with no peer at all counts, but a torrent with no peer for the whole
-window is the stall rule's, which is asked first and keeps its own reason. The count comes from the
-connected peers' own bitfields (`TorrentSession.Unheld`), read when the session opens and at each of the
-torrent's deadlines, not per message. `PiecePicker.Availability` cannot answer it: the session adds a
-peer's pieces to the picker for one pick and takes them away again, so between picks it counts nobody.
+episode to missing.
+
+*On end* is measured by readings of what the connected peers hold (`TorrentSession.Holding`: how many
+peers, and how many still-wanted pieces none of them has), taken while the session runs:
+
+- A peer joining or leaving the session asks for a reading a minute later — late enough that a new peer
+  has said what it has — and while a window is open there is a reading every minute. Never more than one
+  reading a minute per torrent: a reading walks every piece against every peer under the session's lock.
+- A reading with no peer connected neither opens a window nor closes one. No peer at all is the stall
+  rule's case, under its own reason.
+- A reading with a peer connected and a needed piece none of them holds opens a window, if none is open.
+- A reading where every needed piece is held by some connected peer closes the window.
+- At the window's end (its start plus `StallMinutes`) the torrent is stopped only if a reading at that
+  moment, with a peer connected, still finds a needed piece nobody holds — and no reading in between
+  closed the window. Otherwise nothing is stopped; a window whose end found nobody connected is decided
+  by its next reading.
+
+Progress on other pieces does not move the window's end: a piece arriving from one peer says nothing about
+the pieces only a departed peer had. Before 14 October 2026 was out the window was read once, at its
+end, and opened the moment the session did — so a seed connected for the first twenty-nine minutes was
+invisible and a healthy download could be stopped; that is what the readings replaced.
+`PiecePicker.Availability` cannot answer any of this: the session adds a peer's pieces to the picker for
+one pick and takes them away again, so between picks it counts nobody.
 
 ## Nothing is done on asking
 

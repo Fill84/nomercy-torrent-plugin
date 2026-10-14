@@ -1,5 +1,10 @@
 namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 
+/// <summary>One reading of what the connected peers hold.</summary>
+/// <param name="Peers">How many peers are connected.</param>
+/// <param name="Unheld">How many of the pieces still wanted none of them holds.</param>
+public readonly record struct PeerHolding(int Peers, int Unheld);
+
 /// <summary>What one torrent is doing, from the inside.</summary>
 /// <param name="Verified">How many pieces are on disk and hashed.</param>
 /// <param name="Pieces">How many there are.</param>
@@ -311,21 +316,23 @@ public sealed class TorrentSession(
         }
     }
 
-    /// <summary>How many of the pieces still wanted no connected peer holds.</summary>
+    /// <summary>How many peers are connected, and how many of the pieces still wanted none of them holds.</summary>
     /// <remarks>
     /// <para>
-    /// Above nought is a swarm availability below one: with the peers there are, this download cannot finish.
-    /// GitHub issue #2 — a torrent like that ran until somebody noticed, because it had peers and the stall
-    /// rule wants none. The client stops it once this has stayed above nought for <c>StallMinutes</c>.
+    /// Unheld above nought with a peer connected is a swarm availability below one: with the peers there are,
+    /// this download cannot finish. GitHub issue #2 — a torrent like that ran until somebody noticed, because
+    /// it had peers and the stall rule wants none. The client stops it once this has stayed above nought for
+    /// <c>StallMinutes</c>. The peers are counted in the same breath, because a reading with nobody connected
+    /// is the stall rule's case and says nothing about this one.
     /// </para>
     /// <para>
     /// Counted from the peers' own bitfields and not from <see cref="PiecePicker.Availability"/>: a peer's
     /// pieces are added to the picker for the length of one pick and taken away again, so between picks the
-    /// picker counts nobody at all. Asked at the client's deadlines, not per message — it walks every piece
-    /// against every peer.
+    /// picker counts nobody at all. Asked at most about once a minute by the client, never per message — it
+    /// walks every piece against every peer.
     /// </para>
     /// </remarks>
-    public int Unheld()
+    public PeerHolding Holding()
     {
         lock (_lock)
         {
@@ -339,9 +346,17 @@ public sealed class TorrentSession(
                 }
             }
 
-            return unheld;
+            return new(_peers.Count, unheld);
         }
     }
+
+    /// <summary>Raised when a peer joins the session or leaves it, outside the lock.</summary>
+    /// <remarks>
+    /// A peer going is the only thing that can leave a wanted piece held by nobody, and a peer arriving the
+    /// only thing besides a verified piece that can end that — so these are the moments the client reads
+    /// <see cref="Holding"/> again. GitHub issue #2.
+    /// </remarks>
+    public event Action? PeersChanged;
 
     /// <summary>Whether this peer holds a piece this client still wants.</summary>
     /// <remarks>
@@ -383,6 +398,8 @@ public sealed class TorrentSession(
         {
             _peers.Add(peer);
         }
+
+        PeersChanged?.Invoke();
 
         Task? beating = null;
 
@@ -453,6 +470,8 @@ public sealed class TorrentSession(
                     _claimedFor.Remove(piece);
                 }
             }
+
+            PeersChanged?.Invoke();
 
             if (beating is not null)
             {

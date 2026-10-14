@@ -819,16 +819,21 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   cannot be read, noting "… has no seeders: …" on the Activity page. When that is the last word on the
   episode the outcome carries the passed-over release, so `CycleRecord` writes a `decided` History line
   saying "no seeders"; nothing is refused, and the next run asks again. The watch:
-  `TorrentSession.Unheld()` counts wanted, unverified pieces no connected peer's bitfield holds
-  (`TorrentRun.Unheld()` is null before the session opens), and `BittorrentEngine.CannotFinish` reads it
-  when the session opens and at every deadline, after the stall rule: unheld for `StallMinutes` on end
-  stops the run with "Cannot complete: …" (not `ErrorIsTheRelease`, so `Transfers` refuses it for six
-  hours) and raises `GaveUp`; a reading of nought starts the window again, and a resume or a slot coming
-  free resets it. `Owed` includes that window's end. Debug lines when the window starts and ends, a
-  Warning when it stops one. The brief was wrong on one point: `PiecePicker.Availability` counts nobody
-  between picks (see **Decisions**). `ByShowAndEpisodeTests.AResultUploadedAsTheEpisodeAiredIsTakenForIt`
-  now asks the round, because every 720p x265 copy of Dark Matter S02E04 has nought seeders on The Pirate
-  Bay. The `client.stallMinutes` label names both rules it bounds. For S14-05: the gate lives in
+  `TorrentSession.Holding()` reads how many peers are connected and how many wanted, unverified pieces no
+  connected peer's bitfield holds (`TorrentRun.Holding()` is null before the session opens), and
+  `TorrentSession.PeersChanged` says when a peer joins or leaves. `BittorrentEngine.PeersMoved` asks for a
+  reading a minute after that (`Held.ReadDue`, at most one a minute), an open window is read every
+  minute, and `CannotFinish` decides in `Woke`, after the stall rule: a reading with no peer neither opens
+  nor closes a window; a peer and an unheld piece opens one; nothing unheld closes it; at its end a fresh
+  reading with a peer and an unheld piece stops the run with "Cannot complete: …" (not
+  `ErrorIsTheRelease`, so `Transfers` refuses it for six hours) and raises `GaveUp`. A resume or a slot
+  coming free clears it. `Owed` includes the reading and the window's end while that end is ahead — a
+  passed end re-owed at once spun the fake clock's timer for ever. Fix round 1 of review: the first
+  version read once, at the end, of a window opened when the session did, so a seed connected for the
+  first twenty-nine minutes was invisible. Debug lines when a window opens and closes, a Warning when it
+  stops one. The brief was wrong on one point: `PiecePicker.Availability` counts nobody between picks
+  (see **Decisions**). `ByShowAndEpisodeTests.AResultUploadedAsTheEpisodeAiredWinsTheRoundForIt` asks the
+  round, because every 720p x265 copy of Dark Matter S02E04 has nought seeders on The Pirate Bay. The `client.stallMinutes` label names both rules it bounds. For S14-05: the gate lives in
   `TakeAsync`, so a pack offered any other way would not be held to it.
 
 - **`S14-03` A log level the owner sets, and a log file that holds it (#7).** `Hosting/PluginLog` wraps the
@@ -2478,7 +2483,7 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   that has only just aired is searched for again on the next run (`docs/04-domain.md`). Found on the way,
   and corrected in `SPRINTS.md` § S14-04: `PiecePicker.Availability` does not count the connected peers —
   `TorrentSession.Turn` adds a peer's bitfield for one pick and takes it away again — so the watch counts
-  from the peers' bitfields (`TorrentSession.Unheld`), and a test built on `Availability` never saw a peer.
+  from the peers' bitfields (`TorrentSession.Holding`), and a test built on `Availability` never saw a peer.
   Rarest-first therefore ranks pieces by one peer's bitfield at a time; that is left as it is here.
 
 - **22 September 2026, the owner: the plugin does not re-attach its own endpoints.** FiLL/nomercy-torrent-plugin#1

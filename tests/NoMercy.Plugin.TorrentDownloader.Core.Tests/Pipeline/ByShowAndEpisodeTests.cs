@@ -173,7 +173,7 @@ public class ByShowAndEpisodeTests
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AResultUploadedAsTheEpisodeAiredIsTakenForIt()
+    public async Task AResultUploadedAsTheEpisodeAiredWinsTheRoundForIt()
     {
         SettingsByShow h265At720 = SettingsByShow.Every(new() { Quality = "720p", Codec = "h265", EnglishOnly = true, Searched = true });
 

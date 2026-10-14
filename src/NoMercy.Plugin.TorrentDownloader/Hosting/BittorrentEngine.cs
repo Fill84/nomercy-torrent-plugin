@@ -394,6 +394,7 @@ public sealed class BittorrentEngine(
             run.Finished += () => Whole(infoHash);
             run.Progressed += () => Moved(infoHash);
             run.Opened += () => Knows(infoHash);
+            run.PeersChanged += () => PeersMoved(infoHash);
 
             Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time));
 
@@ -498,7 +499,10 @@ public sealed class BittorrentEngine(
     /// <strong>On a download that is running it never goes off.</strong>
     /// <see cref="Moved"/> cancels and sets it again every time a piece really
     /// verifies, so it can only reach its end when the torrent has genuinely
-    /// stopped. A client holding nothing has no timer at all.
+    /// stopped. A client holding nothing has no timer at all. The one
+    /// exception is a reading of what the peers hold (<see cref="CannotFinish"/>):
+    /// a minute after a peer comes or goes, and each minute while a needed
+    /// piece is held by nobody.
     /// </para>
     /// <para>
     /// Why this client gives up when no ordinary one does: there is nobody
@@ -555,10 +559,17 @@ public sealed class BittorrentEngine(
         DateTimeOffset stall = (held.Stall.StuckSince ?? now) + stallLimit;
 
         // And a download no connected peer can finish owes its answer the same limit after that began
-        // (CannotFinish), whether or not anything is arriving meanwhile.
-        if (held.UnheldSince is DateTimeOffset unheld)
+        // (CannotFinish), whether or not anything is arriving meanwhile — and a reading of what the peers hold
+        // when one is due. A window whose end has passed undecided, because nobody was connected to read, is
+        // decided by its next reading: owing its end again would wake this timer at once, for ever.
+        if (held.UnheldSince is DateTimeOffset unheld && unheld + stallLimit > now)
         {
             stall = Earlier(stall, unheld + stallLimit);
+        }
+
+        if (held.ReadDue is DateTimeOffset read)
+        {
+            stall = Earlier(stall, read);
         }
 
         DateTimeOffset first = held.Run.Torrent is null
@@ -595,7 +606,7 @@ public sealed class BittorrentEngine(
             Stalled(held);
 
             // After the stall rule: a torrent with no peer at all is that rule's, under its own reason.
-            CannotFinish(held);
+            CannotFinish(held, now);
             Seeded(held, now);
             Queue();
             Rearm(infoHash, held);
@@ -704,10 +715,6 @@ public sealed class BittorrentEngine(
             Refuse(held);
             Cramped(held);
             Queue();
-
-            // The first moment the wanted pieces are known, so the first moment it can be asked whether the
-            // peers hold them: the window starts here when they do not.
-            CannotFinish(held);
             Rearm(infoHash, held);
 
             // What the disk pass just found, written down. This is the first
@@ -836,8 +843,10 @@ public sealed class BittorrentEngine(
                 held.Since = _time.GetUtcNow();
                 held.Error = null;
 
-                // Its window too: the time it stood stopped is not time a peer could have turned up in.
+                // Its window too: the time it stood stopped is not time a peer could have turned up in. Its
+                // peers come back as it starts, and each one asks for a reading.
                 held.UnheldSince = null;
+                held.ReadDue = null;
 
                 Queue();
                 Rearm(infoHash, held);
@@ -1909,26 +1918,61 @@ public sealed class BittorrentEngine(
     /// searched for again.
     /// </para>
     /// <para>
-    /// <c>StallMinutes</c> because a peer holding the missing pieces may still turn up, and one that does
-    /// starts the window again. A moment with no peer at all counts — no peer holds anything then either —
-    /// but a torrent that never had one is the stall rule's, which runs first and gives its own reason.
+    /// <strong>On end, so it is read through the window and not once at its end.</strong> Read once, at the
+    /// deadline, a seed connected for the first twenty-nine minutes was invisible, and the leecher left at the
+    /// thirtieth had a healthy download stopped and refused for six hours. So: a peer joining or leaving asks
+    /// for a reading a minute later (<see cref="PeersMoved"/>) — a minute, so a peer that has just arrived has
+    /// said what it has — and while a window is open it is read every minute. A reading with a peer connected
+    /// and a needed piece held by none opens a window if none is open; one where every needed piece is held
+    /// closes it. A reading with no peer at all does neither: no peer at all is the stall rule's case, under
+    /// its own reason. At the window's end the download is stopped only if a reading at that moment, with a
+    /// peer connected, still finds a needed piece nobody holds — and nothing in between closed it.
     /// </para>
     /// <para>
-    /// Read at the client's own moments — the session opening, and each deadline — like the stall rule's
-    /// readings, and not per message: it walks every piece against every peer.
+    /// Progress on other pieces does not move the window: a piece arriving from one peer says nothing about the
+    /// pieces only the peer that left had. At most one reading a minute, because <see cref="TorrentRun.Holding"/>
+    /// walks every piece against every peer under the session's lock.
     /// </para>
     /// </remarks>
-    private void CannotFinish(Held held)
+    private void CannotFinish(Held held, DateTimeOffset now)
     {
-        if (held.Error is not null || held.Run.Paused || held.Run.Unheld() is not int unheld)
+        if (held.Error is not null || held.Run.Paused)
+        {
+            held.ReadDue = null;
+
+            return;
+        }
+
+        bool due = held.ReadDue is DateTimeOffset read && read <= now;
+        bool ends = held.UnheldSince is DateTimeOffset opened && now - opened >= stallLimit;
+
+        if (!due && !ends)
+        {
+            return;
+        }
+
+        held.ReadDue = null;
+
+        if (held.Run.Holding() is not PeerHolding holding)
         {
             return;
         }
 
         string name = held.Run.Torrent?.Name ?? held.Name ?? "a torrent";
-        DateTimeOffset now = _time.GetUtcNow();
 
-        if (unheld == 0)
+        if (holding.Peers == 0)
+        {
+            // Neither opens nor closes anything. An open window goes on being read, so a peer that returns
+            // without the pieces is still caught, and one that returns with them closes it.
+            if (held.UnheldSince is not null)
+            {
+                held.ReadDue = now + ReadEvery;
+            }
+
+            return;
+        }
+
+        if (holding.Unheld == 0)
         {
             if (held.UnheldSince is not null)
             {
@@ -1943,11 +1987,13 @@ public sealed class BittorrentEngine(
         if (held.UnheldSince is not DateTimeOffset since)
         {
             held.UnheldSince = now;
+            held.ReadDue = now + ReadEvery;
 
             logger.LogDebug(
-                "{Name}: {Unheld} pieces it still needs are held by no connected peer; it is stopped after {Minutes} minutes unless a peer that has them turns up.",
+                "{Name}: {Unheld} pieces it still needs are held by none of its {Peers} peers; it is stopped after {Minutes} minutes unless a peer that has them turns up.",
                 name,
-                unheld,
+                holding.Unheld,
+                holding.Peers,
                 stallLimit.TotalMinutes);
 
             return;
@@ -1955,8 +2001,12 @@ public sealed class BittorrentEngine(
 
         if (now - since < stallLimit)
         {
+            held.ReadDue = now + ReadEvery;
+
             return;
         }
+
+        int unheld = holding.Unheld;
 
         // Its own words, naming the limit, as the stall rule does: it is the same setting.
         held.Error =
@@ -1966,6 +2016,37 @@ public sealed class BittorrentEngine(
 
         logger.LogWarning("{Name} cannot complete: {Reason}", name, held.Error);
         journal.Failed(ActivityStage.Download, name, held.Error);
+    }
+
+    /// <summary>How long after a peer joins or leaves what the peers hold is read, and how often while a window is open.</summary>
+    /// <remarks>
+    /// A minute. No document gives a number: long enough that a peer that has just arrived has sent its
+    /// bitfield, and that a session of forty peers is not walked piece by piece more than once a minute;
+    /// short against a <c>StallMinutes</c> of thirty.
+    /// </remarks>
+    private static readonly TimeSpan ReadEvery = TimeSpan.FromMinutes(1);
+
+    /// <summary>A peer joined this torrent's session or left it, so what its peers hold is read a minute from now.</summary>
+    /// <remarks>
+    /// Asked for once: a reading already asked for covers every peer that comes and goes before it, which is
+    /// what keeps a swarm of forty to one reading a minute. Raised outside every lock by the session.
+    /// </remarks>
+    private void PeersMoved(string infoHash)
+    {
+        lock (_lock)
+        {
+            if (!_torrents.TryGetValue(infoHash, out Held? held)
+                || held.Error is not null
+                || held.Run.Paused
+                || held.ReadDue is not null)
+            {
+                return;
+            }
+
+            held.ReadDue = _time.GetUtcNow() + ReadEvery;
+
+            Rearm(infoHash, held);
+        }
     }
 
     /// <summary>
@@ -2062,6 +2143,7 @@ public sealed class BittorrentEngine(
 
                     // Waiting in the queue is not time a peer could have turned up in.
                     held.UnheldSince = null;
+                    held.ReadDue = null;
                 }
 
                 continue;
@@ -2349,6 +2431,9 @@ public sealed class BittorrentEngine(
 
         /// <summary>Since when a piece it still needs has been held by no connected peer, or null.</summary>
         public DateTimeOffset? UnheldSince { get; set; }
+
+        /// <summary>When what its peers hold is next to be read, or null when nothing has asked for a reading.</summary>
+        public DateTimeOffset? ReadDue { get; set; }
 
         /// <summary>When it finished downloading, which is when seeding started.</summary>
         public DateTimeOffset? Finished { get; set; }
