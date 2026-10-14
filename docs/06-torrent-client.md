@@ -321,11 +321,14 @@ every minute to make sure something drew. Each now runs when its own moment come
 | Resume files | a piece verifies, a run settles, a torrent finishes, the owner pauses one |
 | Metadata timeout, stall, cannot complete, seed hours | the torrent's one deadline |
 
-**One deadline per torrent, and on a download that is running it never goes off.** Three things
-cannot be told by an event, because they are about something not happening: nobody serves a
-magnet's metadata, nothing arrives for `StallMinutes`, and `SeedHours` passes. Each torrent holds one
-timer set to the earliest of what it owes, and a verified piece pushes it back. A client holding
-nothing has no timer at all.
+**One deadline per torrent.** Three things cannot be told by an event, because they are about
+something not happening: nobody serves a magnet's metadata, nothing arrives for `StallMinutes`, and
+`SeedHours` passes. Each torrent holds one timer set to the earliest of what it owes, and a verified
+piece pushes the stall deadline back. Since 14 October 2026 (issue #2) it also owes the readings of what
+its peers hold (§ Stalls): one a minute after a peer joins or leaves, one every minute while a window is
+open, and the window's end — none of which a verified piece pushes back. So a running download's timer
+goes off only for those readings; with peers coming and going and every needed piece held, that is
+once a minute at most and decides nothing. A client holding nothing has no timer at all.
 
 ## The client always answers
 

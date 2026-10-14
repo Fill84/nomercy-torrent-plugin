@@ -2052,6 +2052,60 @@ public class BittorrentEngineTests : IDisposable
     }
 
     /// <summary>
+    /// A connected peer that comes to hold the missing pieces closes the window, though nobody joined or left.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A peer downloading the same torrent says each piece it finishes with a <c>have</c>, and nothing joins or
+    /// leaves when it does — so only the reading taken every minute while a window is open can see it. Two
+    /// leechers with nothing open the window at the first minute; at the third, after two more readings, one
+    /// of them announces every piece and the next reading closes the window.
+    /// </para>
+    /// <para>
+    /// At twenty-nine minutes that peer leaves, and the other alone opens a new window with thirty minutes of
+    /// its own. Without the every-minute reading the first window was never closed, and the download was
+    /// stopped at thirty-one.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APeerThatComesToHoldTheMissingPiecesClosesTheWindow()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero));
+
+        using BittorrentEngine engine = new(
+            0, TimeSpan.FromHours(12), TimeSpan.FromMinutes(30), Together, Seeding, 0, 0, null,
+            new ActivityJournal(clock), new CapturingLogger(), new SilentTrackers(), new NoPeers(), clock);
+
+        engine.Start();
+
+        TorrentHandle handle = await AddEpisodeAsync(engine);
+
+        PeerConnection catchingUp = await DialInAsync(engine, handle, stopping.Token);
+        using PeerConnection stuck = await DialInAsync(engine, handle, stopping.Token);
+
+        await Until(async () => (await engine.StatusAsync(stopping.Token))[0].Peers == 2, stopping.Token);
+
+        // Both with nothing, read at the first minute: the window opens, and is read again at the second and
+        // the third.
+        await StillRunningAsync(engine, clock, minutes: 3, stopping.Token);
+
+        for (int piece = 0; piece < EpisodePieces; piece++)
+        {
+            await catchingUp.SendAsync(PeerMessage.Have(piece), stopping.Token);
+        }
+
+        await Until(async () => (await engine.StatusAsync(stopping.Token))[0].Seeds == 1, stopping.Token);
+
+        await StillRunningAsync(engine, clock, minutes: 26, stopping.Token);
+
+        catchingUp.Dispose();
+        await Until(async () => (await engine.StatusAsync(stopping.Token))[0].Peers == 1, stopping.Token);
+
+        await StillRunningAsync(engine, clock, minutes: 16, stopping.Token);
+    }
+
+    /// <summary>
     /// A session that opens with nobody and then meets a seed never opens a window at all.
     /// </summary>
     /// <remarks>
