@@ -1,6 +1,7 @@
 using System.Buffers.Binary;
 using System.Net;
 using Microsoft.Extensions.Time.Testing;
+using NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests.TestSupport;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests;
@@ -875,13 +876,15 @@ public class TorrentRunTests : IDisposable
         IPeerDialler dialler,
         TorrentMetadata? torrent = null,
         ResumeKeeper? resume = null,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        IReadOnlyList<string>? trackers = null,
+        IEngineLog? log = null)
     {
         TimeProvider clock = time ?? TimeProvider.System;
 
         return new(
             ArchiveHash,
-            ["http://one.example/announce", "http://two.example/announce"],
+            trackers ?? ["http://one.example/announce", "http://two.example/announce"],
             _folder,
             new TrackerSet(transport, clock),
             dialler,
@@ -889,7 +892,60 @@ public class TorrentRunTests : IDisposable
             listenPort: 51413,
             clock,
             torrent,
-            resume);
+            resume,
+            log: log);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>An announce says, at Debug, which trackers answered and which did not.</strong> GitHub issue
+    /// #7: a download stuck at nought per cent had not one line about its trackers, its peers or its pieces.
+    /// </para>
+    /// <para>
+    /// A tracker is named by its host and nothing after it. A private tracker's announce address carries
+    /// the owner's passkey in its path as often as in a parameter, and the address comes here from the
+    /// torrent's own announce list with no word of which part is the secret.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnAnnounceSaysWhichTrackersAnsweredAndNeverAPasskey()
+    {
+        const string passkey = "a1b2c3d4e5f60718293a4b5c6d7e8f90";
+
+        AnsweringTrackers trackers = new();
+        trackers.Refuse($"http://one.example/{passkey}/announce");
+
+        RecordingLog log = new();
+
+        using TorrentRun run = Run(
+            trackers,
+            new RecordingDialler(),
+            trackers: [$"http://one.example/{passkey}/announce", "http://two.example/announce?passkey=" + passkey],
+            log: log);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        string said = string.Join("\n", [.. log.Debugged, .. log.Traced]);
+
+        Assert.Contains(log.Debugged, line => line.Contains("http://two.example", StringComparison.Ordinal) && line.Contains("answered", StringComparison.Ordinal));
+        Assert.Contains(log.Debugged, line => line.Contains("http://one.example", StringComparison.Ordinal));
+        Assert.DoesNotContain(passkey, said, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
+    /// Nobody listening is nothing said, and nothing built: the run asks before it writes a line.
+    /// </remarks>
+    [Fact]
+    public async Task ARunNobodyIsListeningToSaysNothing()
+    {
+        RecordingLog log = new(debugging: false, tracing: false);
+
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler(), log: log);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.Empty(log.Debugged);
+        Assert.Empty(log.Traced);
     }
 
     /// <summary>The archive torrent's own info hash, which all of this comes back to.</summary>

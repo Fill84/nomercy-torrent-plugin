@@ -1397,6 +1397,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         // Everything the cycle decided is already written: CycleWriter put
         // each episode down as it was decided rather than all of them here.
+        // The log has not had it, and search and grab are steps the owner reads.
+        SearchSummary.Tell(Log, _lastCycle);
+
         await KeepTrackersAsync(settings, _lastCycle.Trackers, ct);
     }
 

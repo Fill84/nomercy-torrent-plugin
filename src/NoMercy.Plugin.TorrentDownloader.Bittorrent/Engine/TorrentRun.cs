@@ -302,6 +302,9 @@ public sealed class TorrentRun : IDisposable
     /// </remarks>
     private const int DhtPeersWanted = 50;
 
+    /// <summary>Where this run says what it decided: trackers, the DHT, peers.</summary>
+    private readonly IEngineLog _log;
+
     public TorrentRun(
         byte[] infoHash,
         IReadOnlyList<string> trackers,
@@ -316,8 +319,10 @@ public sealed class TorrentRun : IDisposable
         Func<IReadOnlyList<TorrentFileEntry>, IReadOnlyList<TorrentFileEntry>>? choose = null,
         RateLimits? limits = null,
         Dht? dht = null,
-        Func<TorrentMetadata, TorrentDisk, Bitfield>? verify = null)
+        Func<TorrentMetadata, TorrentDisk, Bitfield>? verify = null,
+        IEngineLog? log = null)
     {
+        _log = log ?? EngineLog.Silent;
         _verify = verify;
         _dht = dht;
         _infoHash = infoHash;
@@ -729,6 +734,7 @@ public sealed class TorrentRun : IDisposable
                 .ConfigureAwait(false);
 
             Told(answers);
+            Announced(answers);
 
             _said = [.. answers.Select(one => new TrackerSaid(
                 one.Tracker,
@@ -925,6 +931,13 @@ public sealed class TorrentRun : IDisposable
             .WhenAll(fresh.Select(async one => (one, await DialAsync(one, ct).ConfigureAwait(false))))
             .ConfigureAwait(false);
 
+        // How many of the peers it chose would talk: most addresses a tracker hands out are stale, and a
+        // torrent where none answers is a different fault from one where they answer and send nothing.
+        if (_log.Debugging)
+        {
+            _log.Debug($"{Named}: dialled {dialled.Length} peers, and {dialled.Count(one => one.Peer is not null)} answered.");
+        }
+
         foreach ((PeerAddress address, PeerConnection? peer) in dialled)
         {
             if (peer is null)
@@ -964,6 +977,11 @@ public sealed class TorrentRun : IDisposable
             _peers.Add(peer);
 
             Talking(ConverseAsync(peer, ct));
+        }
+
+        if (_log.Debugging)
+        {
+            _log.Debug($"{Named}: {peer.Introduction.Client} dialled in.");
         }
     }
 
@@ -1076,6 +1094,53 @@ public sealed class TorrentRun : IDisposable
         Interval = wanted > floor ? wanted : floor;
     }
 
+    /// <summary>What a line calls this torrent: its name once the metadata says it, its hash until then.</summary>
+    private string Named => Torrent?.Name ?? Convert.ToHexString(_infoHash);
+
+    /// <summary>Says which trackers answered an announce and which did not.</summary>
+    /// <remarks>
+    /// <para>
+    /// One Debug line an announce, and a Trace line for each tracker that did not answer with why. GitHub
+    /// issue #7: a download at nought per cent said nothing about its trackers anywhere. Not a Debug line per
+    /// tracker: a torrent can carry seventy, and the owner's decision of 11 September 2026 was that seventy
+    /// lines an announce, most of them the same dead hosts, is a log nobody reads.
+    /// </para>
+    /// <para>
+    /// Every tracker by its host alone (<see cref="EngineLog.Host"/>), and its address taken out of the
+    /// reason too: a private tracker's address carries the owner's passkey.
+    /// </para>
+    /// </remarks>
+    private void Announced(IReadOnlyList<TrackerResult> answers)
+    {
+        if (_log.Debugging)
+        {
+            string[] answered =
+            [
+                .. answers
+                    .Where(one => one.Response is not null)
+                    .Select(one => $"{EngineLog.Host(one.Tracker)} with {one.Response!.Peers.Count} peers"),
+            ];
+
+            string[] silent = [.. answers.Where(one => one.Response is null).Select(one => EngineLog.Host(one.Tracker))];
+
+            _log.Debug(
+                $"{Named}: {answered.Length} of {answers.Count} trackers answered"
+                + (answered.Length == 0 ? string.Empty : $" ({string.Join(", ", answered)})")
+                + (silent.Length == 0 ? string.Empty : $"; no answer from {string.Join(", ", silent)}")
+                + $". The next announce is in {Interval.TotalMinutes:0} minutes.");
+        }
+
+        if (_log.Tracing)
+        {
+            foreach (TrackerResult one in answers.Where(one => one.Response is null))
+            {
+                string host = EngineLog.Host(one.Tracker);
+
+                _log.Trace($"{Named}: {host} did not answer: {(one.Failure ?? "no reason given").Replace(one.Tracker, host, StringComparison.OrdinalIgnoreCase)}");
+            }
+        }
+    }
+
     /// <summary>
     /// What is announced as still wanted before the metadata says otherwise.
     /// </summary>
@@ -1174,6 +1239,11 @@ public sealed class TorrentRun : IDisposable
         {
             PeerSearch found = await _dht.PeersAsync(torrent, DhtPeersWanted, ct).ConfigureAwait(false);
 
+            if (_log.Debugging)
+            {
+                _log.Debug($"{Named}: the DHT named {found.Peers.Count} peers.");
+            }
+
             if (found.Peers.Count > 0)
             {
                 await MeetAsync(found.Peers, ct).ConfigureAwait(false);
@@ -1183,6 +1253,10 @@ public sealed class TorrentRun : IDisposable
         {
             // The DHT is a best effort by design: a search that fails leaves
             // the trackers and the peer exchanges exactly as they were.
+            if (_log.Debugging)
+            {
+                _log.Debug($"{Named}: the DHT search failed, and the trackers go on without it: {quiet.Message}");
+            }
         }
     }
 
@@ -1246,7 +1320,12 @@ public sealed class TorrentRun : IDisposable
         }
         catch (Exception gone) when (gone is not OperationCanceledException)
         {
-            // One peer is one peer.
+            // One peer is one peer. Said, because a swarm whose every peer goes
+            // the same way is a fault of this client's, not of forty peers'.
+            if (_log.Debugging)
+            {
+                _log.Debug($"{Named}: {peer.Introduction.Client} went: {gone.Message}");
+            }
         }
         finally
         {
@@ -1625,7 +1704,8 @@ public sealed class TorrentRun : IDisposable
 
                             // What the session is told about, this run dials. The
                             // session owns no sockets on purpose.
-                            met: addresses => _ = MeetAsync(addresses, _stopping.Token));
+                            met: addresses => _ = MeetAsync(addresses, _stopping.Token),
+                            log: _log);
 
                         // Under the lock, which only adds a delegate and raises
                         // nothing. Attached here rather than after it, because a

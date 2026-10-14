@@ -105,6 +105,8 @@ public sealed class BrowserSolver(
             return null;
         }
 
+        logger.LogDebug("Opening {Host} in the browser to clear its challenge.", url.Host);
+
         if (!await Navigate(tab, url, ct))
         {
             return null;
@@ -290,6 +292,8 @@ public sealed class BrowserSolver(
 
             return null;
         }
+
+        logger.LogDebug("{Host} cleared, and its {Cookie} is replayed over plain requests from here on.", host, ClearanceCookie);
 
         // The user agent it was issued to travels with it. Replaying the cookie
         // under any other is a refusal that reads like the site changing its

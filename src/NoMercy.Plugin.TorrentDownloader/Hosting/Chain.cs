@@ -224,7 +224,8 @@ public sealed class Chain : IAsyncDisposable
             return;
         }
 
-        _logger.LogInformation(
+        // Debug: the decisions behind a search, which is the step the owner sees.
+        _logger.LogDebug(
             "Looking at {Count} hosts that may challenge us, before the run, so the run itself needs no browser.",
             behindAChallenge.Length);
 
@@ -278,7 +279,7 @@ public sealed class Chain : IAsyncDisposable
             return;
         }
 
-        _logger.LogInformation(
+        _logger.LogDebug(
             "Clearing {Count} challenges together, so the run itself needs no browser.",
             needing.Length);
 

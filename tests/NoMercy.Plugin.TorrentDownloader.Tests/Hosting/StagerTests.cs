@@ -406,6 +406,72 @@ public class StagerTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>A staging that fails the same way every pass is a Warning once, and Debug after.</strong>
+    /// Since S14-01 a finished download whose staging failed is tried again every minute, so a cause that
+    /// lasts — an intake folder somebody made read-only — put the same Warning into the log and the same
+    /// failure into the History once a minute until the owner noticed, burying every other line.
+    /// </para>
+    /// <para>
+    /// Said again, loudly, once it has worked and then fails again: that is news, not a repeat.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AStagingThatFailsTheSameWayEveryPassIsAWarningOnceAndDebugAfter()
+    {
+        byte[] content = Content(1024 * 1024);
+        string from = Folder("incomplete-again");
+        string into = Path.Combine(_root, "intake-again");
+        string path = Path.Combine(from, "Silo.S03E07.mkv");
+        string blocking = Path.Combine(into, "Silo.S03E07.mkv");
+
+        CapturingLogger log = new();
+        ActivityJournal journal = new();
+        Stager stager = new(journal, log);
+
+        async Task<StagedResult> Pass()
+        {
+            return Assert.Single(await stager.MoveAsync(
+                [new("Silo.S03E07.mkv", Episode(7), content.Length)],
+                from,
+                into,
+                show: null,
+                resolution: null,
+                CancellationToken.None));
+        }
+
+        await File.WriteAllBytesAsync(path, content);
+        Directory.CreateDirectory(blocking);
+
+        for (int pass = 0; pass < 3; pass++)
+        {
+            Assert.False((await Pass()).Moved);
+        }
+
+        Assert.Single(log.Entries, entry => entry.Level == LogLevel.Warning && entry.Line.Contains("could not be staged", StringComparison.Ordinal));
+        Assert.Equal(2, log.Entries.Count(entry => entry.Level == LogLevel.Debug && entry.Line.Contains("could not be staged", StringComparison.Ordinal)));
+        Assert.Single(journal.Snapshot().History, entry => entry.Subject == "Silo.S03E07.mkv" && (entry.Detail ?? string.Empty).Contains("could not be staged", StringComparison.Ordinal));
+
+        // The cause goes, and the next pass moves it and says so at Information: a move is a step the owner sees.
+        Directory.Delete(blocking);
+
+        Assert.True((await Pass()).Moved);
+        Assert.Contains(
+            log.Entries,
+            entry => entry.Level == LogLevel.Information
+                     && entry.Line.Contains("Silo.S03E07.mkv", StringComparison.Ordinal)
+                     && entry.Line.Contains(into, StringComparison.Ordinal));
+
+        // And the same cause coming back is news again.
+        await File.WriteAllBytesAsync(path, content);
+        File.Delete(blocking);
+        Directory.CreateDirectory(blocking);
+
+        Assert.False((await Pass()).Moved);
+        Assert.Equal(2, log.Entries.Count(entry => entry.Level == LogLevel.Warning && entry.Line.Contains("could not be staged", StringComparison.Ordinal)));
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>A move the file system refuses says so before the file is copied.</strong> The copy that
     /// follows is the slow path — a whole episode read and written byte by byte — and without a line the
     /// owner sees only that staging took half an hour.

@@ -8,7 +8,7 @@ Read this first, update it last. Nothing else decides what happens next.
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
-`S14-07` (#5, sort, filter and paging). `S14-01` and `S14-02` are done (see **Log**). **Current: `S14-03`.**
+`S14-07` (#5, sort, filter and paging). `S14-01`, `S14-02` and `S14-03` are done (see **Log**). **Current: `S14-04`.**
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
@@ -803,7 +803,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 14 — The seven GitHub issues of 13 October 2026
 - [x] `S14-01` A finished download always reaches the intake folder (#3)
 - [x] `S14-02` No Xvfb, no browser, one warning (#6)
-- [ ] `S14-03` A log level the owner sets, and a log file that holds it (#7)
+- [x] `S14-03` A log level the owner sets, and a log file that holds it (#7)
 - [ ] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
 - [ ] `S14-05` A season with several gaps takes a pack (#1)
 - [ ] `S14-06` A page with two or more tables shows them as tabs (#4)
@@ -812,6 +812,29 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S14-03` A log level the owner sets, and a log file that holds it (#7).** `Hosting/PluginLog` wraps the
+  server's logger and every class gets it instead of `Context.Logger` (the plugin's `Log`; `Chain` takes it
+  as `logger:`). It filters by `Settings.LogLevel` (Error, Warning, Information by default, Debug, Trace;
+  anything else refused by the page and by the JSON endpoint), writes every line it lets through to
+  `logs/torrent-downloader-<yyyy-MM-dd>.log` under the data folder through `Hosting/LogFile` (UTC day,
+  newest seven kept, only files named exactly so are deleted, queued off the caller's thread, never
+  throws), and passes Information and above on to the server as the cleaned line. Every line is cleaned
+  of secret-named parameters (`Addresses.RedactText`, the rule `Redact` keeps) and of every value the
+  secret store holds — learned at start-up and from `SettingsStore.SecretStored`. A save applies the level
+  to the next line (`SettingsStore.Saved` now carries the saved settings). The Settings page shows it last
+  under Advanced, with the log folder written under the form. The BitTorrent project cannot reference a
+  logging library (`ProjectIsolationTests`), so it has its own `IEngineLog` (Debug, Trace, asked before a
+  line is built), handed in by `BittorrentEngine` as `ClientLog`; it says each announce (tracker hosts
+  only, never the address: a passkey rides in it), the DHT search, dials, peers going, pieces failing their
+  hash or re-offered, and the endgame. Re-levelled to the issue's rule: Information is search, grab,
+  complete and move (`SearchSummary`, `Transfers` "finished downloading", `Stager` "moved/copied into");
+  port mapping, DHT counts, the per-announce swarm line, the solver's start and close went to Debug; no
+  encoder is an Error. The controller's ruling: a staging failure that repeats each pass is a Warning and
+  a History entry once and Debug after, until it succeeds or the reason changes (`Hosting/SaidBefore`, in
+  memory, 512 items). For the next slices: log new lines through `Log` at the issue's levels, and a line
+  that repeats every pass uses `SaidBefore`. `InitialiseReturnsAndTheStartRunsOnItsOwn` now allows the
+  `logs` folder in an unconfigured plugin's data folder.
 
 - **`S14-02` No Xvfb, no browser, one warning (#6).** `HiddenStages.HidingFor` now takes whether `Xvfb`
   was found (`XvfbLookup`: an executable file named `Xvfb` in a folder of `PATH`, execute bit required on

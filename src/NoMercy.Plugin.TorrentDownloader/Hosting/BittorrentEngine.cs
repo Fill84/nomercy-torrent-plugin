@@ -54,6 +54,9 @@ public sealed class BittorrentEngine(
     private readonly CancellationTokenSource _stopping = new();
     private readonly RandomNumberGenerator _random = RandomNumberGenerator.Create();
 
+    /// <summary>Where every torrent this client runs says what it decided.</summary>
+    private readonly ClientLog _clientLog = new(logger);
+
     /// <summary>
     /// The owner's rate limits, shared by every torrent: the line is what has a
     /// speed, not a torrent.
@@ -244,7 +247,9 @@ public sealed class BittorrentEngine(
             // the router would not open it by itself. Written as "could not be
             // opened" it read as "your port is closed" to an owner who had
             // forwarded it by hand months earlier.
-            logger.LogInformation(
+            // Debug: UPnP and NAT-PMP failing says nothing about whether the
+            // port is open, and on a router forwarded by hand they always fail.
+            logger.LogDebug(
                 "Port {Port} could not be opened automatically; if it is forwarded on the router "
                 + "there is nothing to do: {Reason}",
                 port,
@@ -254,7 +259,7 @@ public sealed class BittorrentEngine(
         {
             Mapped = new(MappedBy.Nothing, port, refused.Message);
 
-            logger.LogInformation(refused, "Port {Port} could not be opened automatically.", port);
+            logger.LogDebug(refused, "Port {Port} could not be opened automatically.", port);
         }
     }
 
@@ -376,7 +381,11 @@ public sealed class BittorrentEngine(
                 // The disk pass, replaceable so a test can hold one open. What
                 // the client must go on answering through is that pass, and a
                 // test cannot hold a real one open for long enough to tell.
-                verify);
+                verify,
+
+                // The client's own lines — trackers, the DHT, peers, pieces — into the
+                // plugin's log at the owner's level. GitHub issue #7.
+                _clientLog);
 
             // Before it is held, so a torrent that is whole on disk already —
             // which is every staged and dispatched grab after a restart — is
@@ -1051,11 +1060,13 @@ public sealed class BittorrentEngine(
             }
             catch (Exception refused) when (refused is not OperationCanceledException)
             {
-                logger.LogWarning(refused, "The port mapping could not be taken away.");
+                // Debug, for the reason the mapping itself is: a router that would
+                // not open the port will not close it either, and that is no fault.
+                logger.LogDebug(refused, "The port mapping could not be taken away.");
             }
             catch (OperationCanceledException)
             {
-                logger.LogWarning("The router did not answer in time to take the port mapping away.");
+                logger.LogDebug("The router did not answer in time to take the port mapping away.");
             }
         }
 
@@ -1176,7 +1187,7 @@ public sealed class BittorrentEngine(
         {
             await dht.BootstrapAsync(nodes, ct).ConfigureAwait(false);
 
-            logger.LogInformation("The DHT bootstrap answered with {Count} nodes.", dht.Table.Count);
+            logger.LogDebug("The DHT bootstrap answered with {Count} nodes.", dht.Table.Count);
         }
         catch (Exception quiet) when (quiet is not OperationCanceledException)
         {
@@ -1193,7 +1204,9 @@ public sealed class BittorrentEngine(
         {
             try
             {
-                logger.LogInformation("The DHT knows {Count} nodes.", await dht.JoinAsync(ct).ConfigureAwait(false));
+                // Every refresh, for the life of the server: the decision behind
+                // where peers come from, and no step the owner sees.
+                logger.LogDebug("The DHT knows {Count} nodes.", await dht.JoinAsync(ct).ConfigureAwait(false));
             }
             catch (Exception quiet) when (quiet is not OperationCanceledException)
             {
@@ -1682,7 +1695,10 @@ public sealed class BittorrentEngine(
 
         RunProgress progress = held.Run.Progress();
 
-        logger.LogInformation(
+        // Debug since GitHub issue #7: it is the swarm behind a download, once an
+        // announce for every torrent, and the steps an owner sees are search,
+        // grab, complete and move. The plugin's own file is where it is read now.
+        logger.LogDebug(
             "{Name}: {Answered} of {Asked} trackers answered with {Addresses} addresses; "
             + "{Seeds} seeds and {Leechers} leechers connected, {Choked} of them choking us, "
             + "{Askable} with something wanted; "
@@ -2146,7 +2162,7 @@ public sealed class BittorrentEngine(
             // list, so a torrent that never had metadata has written nothing —
             // and the download folder is every torrent's, never this one's to
             // delete.
-            logger.LogInformation("{Hash} was removed, and it had written nothing to delete.", infoHash);
+            logger.LogDebug("{Hash} was removed, and it had written nothing to delete.", infoHash);
 
             return;
         }

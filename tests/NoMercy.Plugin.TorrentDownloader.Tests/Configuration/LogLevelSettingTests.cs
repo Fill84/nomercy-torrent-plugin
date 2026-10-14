@@ -69,11 +69,7 @@ public class LogLevelSettingTests
         plugin.Log.LogInformation("not seen at Warning");
         plugin.Log.Flush();
 
-        string file = string.Join(
-            "\n",
-            Directory.Exists(plugin.Log.Folder)
-                ? Directory.GetFiles(plugin.Log.Folder).Select(File.ReadAllText)
-                : []);
+        string file = string.Join("\n", LogFiles.Lines(plugin.Log.Folder));
 
         Assert.StartsWith(context.DataFolderPath, plugin.Log.Folder, StringComparison.Ordinal);
         Assert.Contains("seen at Debug", file, StringComparison.Ordinal);

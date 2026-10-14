@@ -1548,6 +1548,79 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
+    /// <strong>The same failure every pass is a Warning once, then Debug, and one entry in the History.</strong>
+    /// A pass comes round every minute while a finished download waits to be staged (S14-01), so a cause
+    /// that lasts said the same Warning once a minute until somebody noticed.
+    /// </remarks>
+    [Fact]
+    public async Task AStagingThatFailsTheSameWayEveryPassWarnsOnceAndIsWrittenDownOnce()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        NoFileList engine = new(new StandingEngine().Holding(Finished() with { State = TorrentState.Finished }));
+        FakeProvider server = Server();
+        Transfers transfers = Transfers(engine, grabs, server);
+
+        for (int pass = 0; pass < 3; pass++)
+        {
+            await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        }
+
+        Assert.Single(
+            server.Log.Entries,
+            entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Warning
+                     && entry.Line.Contains(NoFileList.Reason, StringComparison.Ordinal));
+        Assert.Equal(
+            2,
+            server.Log.Entries.Count(entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Debug
+                                              && entry.Line.Contains(NoFileList.Reason, StringComparison.Ordinal)));
+        Assert.Single(
+            server.Journal.Snapshot().History,
+            entry => (entry.Detail ?? string.Empty).Contains(NoFileList.Reason, StringComparison.Ordinal));
+
+        // And that it finished is said once too, however many passes look at it.
+        Assert.Single(
+            server.Log.Entries,
+            entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Information
+                     && entry.Line.Contains("finished downloading", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// <strong>A download that finishes says so once, at Information.</strong> Complete is one of the four
+    /// steps an owner sees, and it had no line at all: the log went from the grab to nothing. Once, because
+    /// the client says a torrent is whole every time it is opened — on every restart, for every download it
+    /// still holds.
+    /// </remarks>
+    [Fact]
+    public async Task AFinishedDownloadSaysSoOnceAtInformation()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished() with { State = TorrentState.Finished },
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+        Transfers transfers = Transfers(engine, grabs, server);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "It was never staged.");
+        Assert.Single(
+            server.Log.Entries,
+            entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Information
+                     && entry.Line.Contains("Silo.S03E06.1080p.WEB.H264-CAKES", StringComparison.Ordinal)
+                     && entry.Line.Contains("finished downloading", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
     /// The other half. A torrent still seeding owes the swarm what its seeding rules say, and it seeds out of
     /// the file it downloaded: that file is copied into the intake folder and left with the client, and the
     /// torrent is not let go of.

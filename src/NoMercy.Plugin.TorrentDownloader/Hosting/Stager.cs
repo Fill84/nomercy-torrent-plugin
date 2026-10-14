@@ -36,6 +36,9 @@ public sealed record StagedResult(Staged File, string? Path, string? Reason)
 /// </remarks>
 public sealed class Stager(IActivityJournal journal, ILogger logger)
 {
+    /// <summary>The failures already said, by download, so one that repeats every pass is said loudly once.</summary>
+    private readonly SaidBefore _failed = new();
+
     /// <summary>Moves what was chosen, and says what happened to each.</summary>
     /// <param name="staged">What <see cref="Staging.Choose"/> decided.</param>
     /// <param name="from">The download's own folder.</param>
@@ -139,7 +142,8 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         }
         catch (Exception held) when (held is IOException or UnauthorizedAccessException)
         {
-            logger.LogInformation(
+            // Debug: the ordinary case, and the staging is done whatever this says.
+            logger.LogDebug(
                 "{File} was staged and could not be deleted yet: {Reason}",
                 Path.GetFileName(source),
                 held.Message);
@@ -214,6 +218,7 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
                 File.Move(part, destination, overwrite: true);
 
                 journal.Finished(ActivityStage.Download, Path.GetFileName(source), $"moved into {into}");
+                Arrived(source, into, "moved");
 
                 return new(file, destination, null);
             }
@@ -253,6 +258,7 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
                     ActivityStage.Download,
                     Path.GetFileName(source),
                     $"copied into {into}; the download stays while the torrent seeds");
+                Arrived(source, into, "copied");
 
                 return new(file, destination, null);
             }
@@ -274,6 +280,7 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
                 held
                     ? $"staged into {into}; the download is still held by the client and goes when the torrent does"
                     : $"staged into {into}");
+            Arrived(source, into, "copied");
 
             return new(file, destination, null);
         }
@@ -314,6 +321,15 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
     {
         string reason = $"{Path.GetFileName(source)} could not be staged into {into}: {refused.Message}";
 
+        if (!_failed.IsNews(source, $"{into}|{refused.Message}"))
+        {
+            // Tried again a minute later, and refused for the same reason: the
+            // Warning and the History entry the first refusal made still say it.
+            logger.LogDebug("{Source} could not be staged into {Into} again, the same way: {Reason}", source, into, refused.Message);
+
+            return new(file, null, reason);
+        }
+
         // The whole path in the log, where the page is given the file's name: a
         // server with more than one download folder cannot be told apart by a
         // file name, and GitHub issue #3 was a download that never arrived with
@@ -322,6 +338,18 @@ public sealed class Stager(IActivityJournal journal, ILogger logger)
         journal.Failed(ActivityStage.Download, Path.GetFileName(source), reason);
 
         return new(file, null, reason);
+    }
+
+    /// <summary>Says a file reached the intake folder, and forgets any failure of it.</summary>
+    /// <remarks>
+    /// Information, because a move is one of the steps an owner sees (GitHub issue #7) — and it had no line
+    /// at all: the journal said it and the log did not.
+    /// </remarks>
+    private void Arrived(string source, string into, string how)
+    {
+        _failed.Forget(source);
+
+        logger.LogInformation("{File} was {How} into {Into}.", Path.GetFileName(source), how, into);
     }
 
     /// <summary>Moves the download to the part, where nothing holds it open.</summary>

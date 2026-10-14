@@ -87,6 +87,10 @@ public sealed record SessionProgress(
 /// null to ignore them. It is handed up rather than acted on here, because
 /// this session owns no sockets.
 /// </param>
+/// <param name="log">
+/// Where the decisions about pieces are said — a piece that failed its hash, the endgame — or null for
+/// nowhere. GitHub issue #7: a download stuck at nought per cent had not one line about its pieces.
+/// </param>
 public sealed class TorrentSession(
     TorrentMetadata torrent,
     TorrentDisk disk,
@@ -95,8 +99,15 @@ public sealed class TorrentSession(
     TimeSpan? patience = null,
     TimeProvider? time = null,
     RateLimits? limits = null,
-    Action<IReadOnlyList<PeerAddress>>? met = null) : IDisposable
+    Action<IReadOnlyList<PeerAddress>>? met = null,
+    IEngineLog? log = null) : IDisposable
 {
+    /// <summary>Where this session says what it decided about pieces.</summary>
+    private readonly IEngineLog _log = log ?? EngineLog.Silent;
+
+    /// <summary>Whether the endgame has been said, so it is said once.</summary>
+    private bool _endgameSaid;
+
     private readonly PiecePicker _picker = new(torrent.PieceCount, PiecePicker.DefaultEndgamePieces, wanted);
     private readonly Dictionary<int, PieceAssembly> _building = [];
 
@@ -542,6 +553,19 @@ public sealed class TorrentSession(
             // Undone straight away: availability is counted once per peer, and
             // this is asked on every message that arrives.
             _picker.Left(peer.Has);
+
+            // Once: the endgame is the moment the picker starts asking several
+            // peers for the same piece, which changes what the traffic means.
+            if (!_endgameSaid && _log.Debugging && _picker.Endgame(verified))
+            {
+                _endgameSaid = true;
+                _log.Debug($"{torrent.Name}: {_picker.Missing(verified)} pieces left, so each is asked of every peer that has it.");
+            }
+        }
+
+        if (asking.Count > 0 && _log.Tracing)
+        {
+            _log.Trace($"{torrent.Name}: asked {peer.Introduction.Client} for pieces {string.Join(", ", asking)}.");
         }
 
         foreach (int piece in asking)
@@ -650,6 +674,13 @@ public sealed class TorrentSession(
 
         foreach (int piece in _asked.Where(one => now - one.Value >= waited).Select(one => one.Key).ToArray())
         {
+            if (_log.Debugging)
+            {
+                _log.Debug(
+                    $"{torrent.Name}: piece {piece} sat unanswered for {waited.TotalSeconds:0} seconds with "
+                    + $"{(_claimedFor.TryGetValue(piece, out PeerConnection? quiet) ? quiet.Introduction.Client : "a peer")}, so it is offered to somebody else.");
+            }
+
             _building.Remove(piece);
             _claimedFor.Remove(piece);
             _asked.Remove(piece);
@@ -715,10 +746,22 @@ public sealed class TorrentSession(
                 _asked.Remove(piece);
 
                 whole = Complete;
+
+                if (_log.Tracing)
+                {
+                    _log.Trace($"{torrent.Name}: piece {piece} verified, from {who}.");
+                }
             }
             else if (outcome == PieceOutcome.Failed)
             {
                 _trust.Failed(assembly.Contributors);
+
+                // The decision this forces — trusting these peers less, asking for the
+                // piece again — is the one behind a download that will not move.
+                if (_log.Debugging)
+                {
+                    _log.Debug($"{torrent.Name}: piece {piece} failed its hash, so it is asked for again; it came from {string.Join(", ", assembly.Contributors)}.");
+                }
                 _building.Remove(piece);
                 _claimedFor.Remove(piece);
                 _asked.Remove(piece);

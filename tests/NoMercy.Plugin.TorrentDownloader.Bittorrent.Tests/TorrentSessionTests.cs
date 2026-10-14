@@ -235,6 +235,82 @@ public class TorrentSessionTests : IDisposable
     }
 
     /// <remarks>
+    /// <strong>A piece that fails its hash is said at Debug, with the piece and who sent it.</strong> GitHub
+    /// issue #7: a download that sits at nought per cent in front of a swarm says nothing at all about why,
+    /// and a peer sending rubbish is one of the reasons it can.
+    /// </remarks>
+    [Fact]
+    public async Task APieceThatFailsItsHashIsSaidWithWhoSentIt()
+    {
+        byte[] content = Fixture("ubuntu-desktop.torrent");
+        TorrentMetadata torrent = TorrentOf(content, pieceLength: 32768);
+
+        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(20));
+
+        (Stream lying, Stream leeching) = await LoopbackAsync(stopping.Token);
+
+        RecordingLog log = new();
+
+        using TorrentSession leecher = Fresh(torrent, log);
+
+        Task<PeerConnection?> theirs = PeerConnection.IntroduceAsync(
+            lying, Hash(torrent), Id("LIAR"), torrent.PieceCount, dialling: false, stopping.Token);
+
+        Task<PeerConnection?> ours = PeerConnection.IntroduceAsync(
+            leeching, Hash(torrent), Id("LEECH"), torrent.PieceCount, dialling: true, stopping.Token);
+
+        PeerConnection?[] both = await Task.WhenAll(theirs, ours);
+
+        Task asks = leecher.RunAsync(both[1]!, stopping.Token);
+
+        PeerConnection liar = both[0]!;
+        Bitfield everything = new(torrent.PieceCount);
+
+        for (int piece = 0; piece < torrent.PieceCount; piece++)
+        {
+            everything.Set(piece);
+        }
+
+        await liar.SendAsync(new(PeerMessageId.Bitfield, everything.Write()), stopping.Token);
+        await liar.SendAsync(PeerMessage.Of(PeerMessageId.Unchoke), stopping.Token);
+
+        // Every block of every piece it is asked for, in nought bytes: the right length and the wrong
+        // contents, so each piece is whole and fails its hash.
+        try
+        {
+            while (!log.Debugged.Any(line => line.Contains("failed its hash", StringComparison.Ordinal))
+                   && !stopping.IsCancellationRequested)
+            {
+                PeerMessage? asked = await liar.NextAsync(stopping.Token);
+
+                if (asked is null)
+                {
+                    break;
+                }
+
+                if (asked.Id == PeerMessageId.Request)
+                {
+                    (int piece, int offset, int length) = asked.AsRequest();
+
+                    await liar.SendAsync(PeerMessage.Block(piece, offset, new byte[length]), stopping.Token);
+                }
+            }
+        }
+        catch (Exception given) when (given is OperationCanceledException or IOException or SocketException)
+        {
+            // Out of time with nothing said: the assertion below is what reports it.
+        }
+
+        await stopping.CancelAsync();
+        await asks.ContinueWith(_ => { }, TaskScheduler.Default);
+
+        Assert.Contains(
+            log.Debugged,
+            line => line.Contains("failed its hash", StringComparison.Ordinal)
+                    && line.Contains("LIAR", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
     /// A peer that shakes hands about another torrent is a different swarm.
     /// BEP 3 says to drop it, and writing its blocks into these files would be
     /// writing somebody else's bytes into the owner's library.
@@ -557,7 +633,7 @@ public class TorrentSessionTests : IDisposable
     }
 
     /// <summary>A session with nothing at all.</summary>
-    private TorrentSession Fresh(TorrentMetadata torrent)
+    private TorrentSession Fresh(TorrentMetadata torrent, IEngineLog? log = null)
     {
         string folder = Path.Combine(_folder, "leech");
 
@@ -567,7 +643,7 @@ public class TorrentSessionTests : IDisposable
 
         disk.Create();
 
-        return new(torrent, disk, new(torrent.PieceCount));
+        return new(torrent, disk, new(torrent.PieceCount), log: log);
     }
 
     /// <summary>What the downloading side ended up with.</summary>

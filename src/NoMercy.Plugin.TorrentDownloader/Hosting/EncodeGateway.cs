@@ -61,7 +61,9 @@ public static class EncodeGateway
         // says it: downloads would go on finishing and staging, and every one
         // of them would sit in the intake folder waiting for an encode that
         // could never be asked for.
-        logger.LogWarning(
+        // Error: the plugin cannot do its job. Nothing it downloads reaches the
+        // library, which is the whole of what it is for (GitHub issue #7's levels).
+        logger.LogError(
             "This server handed the plugin no IPluginEncoder, so no encode can be asked for. "
             + "The server hands it over only to a plugin whose manifest names the encoder hook, "
             + "and only once the owner has approved that on the plugin's page.");

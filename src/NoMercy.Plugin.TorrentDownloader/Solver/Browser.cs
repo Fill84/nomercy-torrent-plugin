@@ -90,7 +90,8 @@ public sealed class Browser(
             // the machine.
             _stage ??= stages.Create();
 
-            logger.LogInformation(
+            // Debug: the browser is how a challenge is cleared, never a step of its own.
+            logger.LogDebug(
                 "Starting the browser on {Stage}, listening on port {Port}.",
                 _stage.Name,
                 port);

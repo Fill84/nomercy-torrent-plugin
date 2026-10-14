@@ -60,6 +60,12 @@ public sealed class Transfers(
     /// </remarks>
     private readonly Dictionary<string, string> _failures = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Which downloads have been said to have finished, so each is said once.</summary>
+    private readonly SaidBefore _finished = new();
+
+    /// <summary>The staging failures already said, by download, so one that repeats every pass is loud once.</summary>
+    private readonly SaidBefore _stagingFailed = new();
+
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
     /// <param name="trackers">
@@ -303,7 +309,8 @@ public sealed class Transfers(
             }
             catch (Exception wrong) when (wrong is IOException or UnauthorizedAccessException)
             {
-                logger.LogInformation("{Folder} could not be removed: {Reason}", one, wrong.Message);
+                // Debug: an empty folder left behind, tried again on the next pass.
+                logger.LogDebug("{Folder} could not be removed: {Reason}", one, wrong.Message);
             }
         }
     }
@@ -446,6 +453,15 @@ public sealed class Transfers(
     {
         try
         {
+            // Complete is one of the steps an owner sees (GitHub issue #7), and it
+            // had no line at all. Once a download: a staging that fails is tried
+            // again every pass, and the client says a torrent is whole every time
+            // it opens one, which is every restart.
+            if (_finished.IsNews(finished.InfoHash, "finished"))
+            {
+                logger.LogInformation("{Release} finished downloading.", finished.ReleaseTitle);
+            }
+
             IReadOnlyList<TorrentFile> files = await engine.FilesAsync(finished.InfoHash, ct);
 
             // A torrent added by hand covers no episode, deliberately: claiming
@@ -504,6 +520,16 @@ public sealed class Transfers(
 
             IReadOnlyList<Staged> chosen = Staging.Choose(files, covers);
 
+            // The decision behind the move, which is the step after it.
+            logger.LogDebug(
+                "{Release}: {Chosen} of its {Files} files are staged from {Folder} into {Intake}, {How}.",
+                finished.ReleaseTitle,
+                chosen.Count,
+                files.Count,
+                finished.Folder ?? incompleteFolder,
+                intakeFolder,
+                seeding ? "copied, because the torrent still seeds" : "moved, once the client has let go of it");
+
             foreach (EpisodeKey unanswered in Staging.Unanswered(chosen, covers))
             {
                 journal.Failed(
@@ -556,6 +582,10 @@ public sealed class Transfers(
                 // grab goes on to its encodes and what is left is deleted when the
                 // grab is done, by what the client kept of it.
                 await engine.AddAsync(new(finished.Magnet, trackers, finished.Folder ?? incompleteFolder), ct);
+
+                logger.LogDebug(
+                    "{Release}: nothing reached the intake folder, so the client holds it again and the next pass tries again.",
+                    finished.ReleaseTitle);
             }
 
             if (!moved.Any(one => one.Moved))
@@ -564,6 +594,9 @@ public sealed class Transfers(
                 // Marking it done would lose the download and the episode.
                 return [];
             }
+
+            // Staged, so a failure of it from here on is news again.
+            _stagingFailed.Forget(finished.InfoHash);
 
             // Staged, and said so before the encode is asked for. The copy has
             // happened and must not happen again; whether the encode is taken
@@ -593,6 +626,20 @@ public sealed class Transfers(
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
+            if (!_stagingFailed.IsNews(finished.InfoHash, wrong.Message))
+            {
+                // The pass comes round every minute while this waits (S14-01),
+                // and the Warning and History entry of the first time still say
+                // it: the same again is the decision behind a retry, not news.
+                logger.LogDebug(
+                    "{Release} could not be staged from {Folder} again, the same way: {Reason}",
+                    finished.ReleaseTitle,
+                    finished.Folder ?? incompleteFolder,
+                    wrong.Message);
+
+                return [];
+            }
+
             // With the folder its files are in: the release alone does not say
             // where a download that never arrived is (GitHub issue #3).
             logger.LogWarning(
@@ -894,7 +941,9 @@ public sealed class Transfers(
         }
         catch (Exception held) when (held is IOException or UnauthorizedAccessException)
         {
-            logger.LogInformation(
+            // Debug: it comes round again on the next tick, every minute while
+            // the encoder holds it, and the line above says when it goes.
+            logger.LogDebug(
                 "{Entry} could not be cleared from the intake folder and was left: {Reason}",
                 Path.GetFileName(entry),
                 held.Message);
@@ -1381,7 +1430,7 @@ public sealed class Transfers(
         {
             // Something still has it open. It is one file left behind, which is
             // not worth stopping the tick for; the next one tries again.
-            logger.LogInformation("{File} could not be deleted: {Reason}", Path.GetFileName(path), held.Message);
+            logger.LogDebug("{File} could not be deleted: {Reason}", Path.GetFileName(path), held.Message);
         }
     }
 }

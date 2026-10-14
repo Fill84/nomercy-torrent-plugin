@@ -294,7 +294,7 @@ public sealed class PuppeteerTabs : IBrowserTabs
             _connected?.Dispose();
             _connected = null;
 
-            _logger.LogInformation("The browser had nothing left open, so it was closed.");
+            _logger.LogDebug("The browser had nothing left open, so it was closed.");
 
             // Inside the guard, for the reason the backstop gives: stopped after
             // letting go of it, a tab asked for in between was handed a browser

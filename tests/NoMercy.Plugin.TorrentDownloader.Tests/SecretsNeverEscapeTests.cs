@@ -257,8 +257,7 @@ public class SecretsNeverEscapeTests
 
         return
         [
-            .. (Directory.Exists(plugin.Log.Folder) ? Directory.GetFiles(plugin.Log.Folder) : [])
-                .SelectMany(File.ReadAllLines)
+            .. LogFiles.Lines(plugin.Log.Folder)
                 .Where(line => line.Contains(mark, StringComparison.Ordinal)),
         ];
     }
