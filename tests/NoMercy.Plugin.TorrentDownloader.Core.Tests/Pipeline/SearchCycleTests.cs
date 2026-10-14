@@ -108,6 +108,9 @@ public class SearchCycleTests
     /// in the name sources' own test. No feed names any of them, so each is
     /// looked up in every name source's search, asked show and episode once
     /// (docs/specs/release-names.md § Backfill): forty-two questions a source.
+    /// Since 14 October 2026 each season is asked once more, for its pack, before
+    /// its episodes (release-names.md § Season packs) — and still never instead
+    /// of them.
     /// </para>
     /// <para>
     /// It was six: one question per season. That saving is what hid the release
@@ -136,10 +139,16 @@ public class SearchCycleTests
 
         Assert.Equal(42, report.Outcomes.Count);
 
-        Assert.Equal(42, fetch.Asked.Count(address => address.Host == "api.srrdb.com"));
+        // Every episode on its own, and each season once besides for its pack, which is looked for first
+        // (release-names.md § Season packs) and gives no name here.
+        Assert.Equal(
+            42,
+            fetch.Asked.Count(address => address.Host == "api.srrdb.com"
+                                         && System.Text.RegularExpressions.Regex.IsMatch(address.AbsolutePath, @"-s\d{2}e\d{2}$")));
+        Assert.Equal(48, fetch.Asked.Count(address => address.Host == "api.srrdb.com"));
 
         // And PreDB's feed once, at the start of the run, besides.
-        Assert.Equal(43, fetch.Asked.Count(address => address.Host == "predb.me"));
+        Assert.Equal(49, fetch.Asked.Count(address => address.Host == "predb.me"));
 
         // No name source gave a release name, so each episode was put to the
         // indexer by itself and nothing else (indexer-search.md § When no release

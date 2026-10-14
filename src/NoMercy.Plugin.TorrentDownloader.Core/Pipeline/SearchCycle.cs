@@ -186,6 +186,11 @@ public sealed class SearchCycle(
         // from nothing — which is what an episode with no torrent yet needs.
         AskedThisCycle asked = new();
 
+        // The seasons that look for a pack first (release-names.md § Season packs, GitHub issue #1), taken out
+        // as the run reaches each one's first episode, so each is looked for once.
+        Dictionary<(int ShowId, int Season), IReadOnlyList<TrackedEpisode>> packFirst =
+            SeasonPacks.WithSeveralGaps(queue).ToDictionary(season => (season[0].Key.ShowId, season[0].Key.Season));
+
         // One episode at a time, because the decisions of each are part of the
         // state of the next: a pack taken for season three settles the rest of
         // season three, and running them together would have two of them grab
@@ -194,16 +199,22 @@ public sealed class SearchCycle(
         {
             ct.ThrowIfCancellationRequested();
 
+            EpisodeOutcome? outcome = null;
+
+            if (!decisions.Settled(episode.Key)
+                && packFirst.Remove((episode.Key.ShowId, episode.Key.Season), out IReadOnlyList<TrackedEpisode>? season))
+            {
+                outcome = await PackAsync(episode, season, taken, decisions, options, trackers, asked, ct);
+            }
+
             // An episode a pack taken earlier this cycle already answers for is
             // not asked about at all: a question to a source is a paced request,
             // and this one has no use.
-            IReadOnlyList<string> candidates = decisions.Settled(episode.Key)
-                ? []
-                : [.. (await names.NamesForAsync(episode, taken, ct)).Select(name => name.Title).Distinct(StringComparer.Ordinal)];
-
-            EpisodeOutcome outcome = await LookAsync(
+            outcome ??= await LookAsync(
                 episode,
-                candidates,
+                decisions.Settled(episode.Key)
+                    ? []
+                    : [.. (await names.NamesForAsync(episode, taken, ct)).Select(name => name.Title).Distinct(StringComparer.Ordinal)],
                 taken.HasNamesake(episode.Key),
                 decisions,
                 options,
@@ -247,8 +258,17 @@ public sealed class SearchCycle(
 
         if (decisions.Settled(episode.Key))
         {
-            // Already answered for by something taken earlier in this cycle.
-            return new(episode.Key, null, null, null, false, "settled by a grab taken earlier this cycle");
+            // Already answered for by something taken earlier in this cycle: the season's pack. No release is
+            // carried, so nothing is written down for it as a decision of its own — the pack's grab answers for it.
+            return new(
+                episode.Key,
+                null,
+                null,
+                null,
+                false,
+                decisions.SettledBy(episode.Key) is string pack
+                    ? $"settled by {pack}, taken earlier this cycle for its season"
+                    : "settled by a grab taken earlier this cycle");
         }
 
         journal.Started(ActivityStage.Decide, subject, $"{candidates.Count} names");
@@ -315,6 +335,98 @@ public sealed class SearchCycle(
 
             return new(episode.Key, null, null, null, false, exception.Message);
         }
+    }
+
+    /// <summary>
+    /// Looks for a pack of a season with several gaps, and takes it for every one of them when one gives a torrent.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>docs/specs/release-names.md</c> § Season packs — GitHub issue #1, on the owner's word of
+    /// 14 October 2026, which replaced the owner's rule of 15 September 2026 that a pack is not searched for. A
+    /// season of seven missing episodes was seven searches and seven grabs where one pack would do.
+    /// </para>
+    /// <para>
+    /// The pack's names are judged, grouped by wishes and put to the indexers exactly as an episode's are —
+    /// letter for letter, then without punctuation, merged by hash, the torrent on the most indexers winning and
+    /// one nobody seeds passed over — with the latest-aired episode of the season as the one a name and a row
+    /// are dated against. Null when no pack gives a torrent: the episodes are then searched for singly, as they
+    /// always were. The <c>When no release name gives a torrent</c> search stays an episode's: no
+    /// <c>Show S03</c> is put to the indexers.
+    /// </para>
+    /// <para>
+    /// The grab is written against <paramref name="first"/>, the episode the run has reached, and answers for
+    /// every episode of <paramref name="season"/> searched for in this run.
+    /// </para>
+    /// </remarks>
+    private async Task<EpisodeOutcome?> PackAsync(
+        TrackedEpisode first,
+        IReadOnlyList<TrackedEpisode> season,
+        FeedNamesTaken taken,
+        Decisions decisions,
+        CycleOptions options,
+        List<string> trackers,
+        AskedThisCycle asked,
+        CancellationToken ct)
+    {
+        TrackedEpisode latest = SeasonPacks.Latest(season);
+        string subject = SeasonPacks.Subject(latest);
+
+        journal.Noted(
+            ActivityStage.Decide,
+            subject,
+            $"{season.Count} episodes of season {latest.Key.Season} are searched for, so a pack of it is looked for first");
+
+        // Kept apart from the episodes' own: why no pack was taken is not why an episode was not.
+        List<string> refused = [];
+        List<EpisodeOutcome> unseeded = [];
+
+        try
+        {
+            List<string> worth = [];
+
+            foreach (string candidate in (await names.PackNamesForAsync(season, taken, ct)).Select(name => name.Title).Distinct(StringComparer.Ordinal))
+            {
+                Verdict verdict = decisions.JudgePack(ReleaseName.Parse(candidate), latest);
+
+                if (verdict.Accepted)
+                {
+                    worth.Add(candidate);
+                    journal.Noted(ActivityStage.Decide, subject, $"asking the indexers for {candidate}");
+
+                    continue;
+                }
+
+                journal.Counted(RunCounter.NamesRefused);
+                journal.Noted(ActivityStage.Decide, subject, $"refused {candidate}: {verdict.Reason}");
+            }
+
+            foreach (IReadOnlyList<string> group in WishGroups.Of(worth, decisions.SettingsFor(latest).Wishes))
+            {
+                IReadOnlyList<RankedTorrent> ranked = await _round.AskAsync(group, latest, options.Blacklisted, asked, ct);
+
+                trackers.AddRange(ranked.SelectMany(torrent => torrent.Torrent.Trackers));
+
+                if (await TakeAsync(first, ranked, decisions, options, subject, trackers, refused, unseeded, ct, season) is EpisodeOutcome won)
+                {
+                    return won;
+                }
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            // A pack that could not be looked for costs the season nothing: its episodes are searched for singly.
+            refused.Add(exception.Message);
+        }
+
+        journal.Noted(
+            ActivityStage.Decide,
+            subject,
+            refused.Count > 0
+                ? $"no pack gave a torrent ({refused[^1]}), so its episodes are searched for singly"
+                : "no pack gave a torrent, so its episodes are searched for singly");
+
+        return null;
     }
 
     /// <summary>
@@ -395,8 +507,12 @@ public sealed class SearchCycle(
         List<string> trackers,
         List<string> refused,
         List<EpisodeOutcome> unseeded,
-        CancellationToken ct)
+        CancellationToken ct,
+        IReadOnlyList<TrackedEpisode>? covering = null)
     {
+        // The episode itself, or every episode of the season a pack is taken for.
+        IReadOnlyList<TrackedEpisode> answersFor = covering ?? [episode];
+
         foreach (RankedTorrent candidate in ranked)
         {
             if (candidate.NobodySeeds)
@@ -427,7 +543,12 @@ public sealed class SearchCycle(
 
             journal.Finished(ActivityStage.Decide, subject, $"chose {chosen.Title}, on {candidate.Indexers.Count} indexers");
 
-            (EpisodeOutcome outcome, bool stands) = await GrabAsync(episode, chosen, [episode.Key], options, ct);
+            (EpisodeOutcome outcome, bool stands) = await GrabAsync(
+                episode,
+                chosen,
+                [.. answersFor.Select(one => one.Key)],
+                options,
+                ct);
 
             if (!stands)
             {
@@ -436,7 +557,10 @@ public sealed class SearchCycle(
                 continue;
             }
 
-            decisions.Settle(episode);
+            foreach (TrackedEpisode answered in answersFor)
+            {
+                decisions.Settle(answered, covering is null ? null : chosen.Title);
+            }
 
             return outcome with
             {

@@ -10,17 +10,25 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// A per-run object with state rather than a static rule, because the answers change as the run takes things.
 /// It holds the real settings of every show and the real judge. <strong>H1:</strong> every test covering
 /// 0.3.4's seeder fault stubbed the profile out with a fake chooser and passed while the plugin took nothing at
-/// all. Ranking copies and settling a season by a pack went on 15 September 2026: the winner is
-/// <see cref="Winner"/>'s, and a release name names one episode.
+/// all. Ranking copies went on 15 September 2026: the winner is <see cref="Winner"/>'s. Settling a season by a
+/// pack went that day too and came back on 14 October 2026 (GitHub issue #1): a season with several gaps looks
+/// for its pack first, and a pack taken answers for every episode of the season searched for.
 /// </remarks>
 public sealed class Decisions(SettingsByShow settings, IReadOnlySet<string> blacklisted)
 {
-    private readonly HashSet<EpisodeKey> _settled = [];
+    /// <summary>Every episode taken for this run, and the season's pack that answers for it when one does.</summary>
+    private readonly Dictionary<EpisodeKey, string?> _settled = [];
 
     /// <summary>Whether something already taken this run answers for this episode.</summary>
     public bool Settled(EpisodeKey episode)
     {
-        return _settled.Contains(episode);
+        return _settled.ContainsKey(episode);
+    }
+
+    /// <summary>The pack taken this run that answers for this episode, or null when none does.</summary>
+    public string? SettledBy(EpisodeKey episode)
+    {
+        return _settled.GetValueOrDefault(episode);
     }
 
     /// <summary>Whether this name is worth searching for, for this episode, by the settings of its show.</summary>
@@ -53,8 +61,10 @@ public sealed class Decisions(SettingsByShow settings, IReadOnlySet<string> blac
     /// Settled when it is taken and not when it is chosen: a winner the client would not take settles nothing,
     /// and the next torrent in winning order is still worth a turn.
     /// </remarks>
-    public void Settle(TrackedEpisode episode)
+    /// <param name="episode">The episode taken for.</param>
+    /// <param name="pack">The season's pack it was taken with, or null for the episode's own release.</param>
+    public void Settle(TrackedEpisode episode, string? pack = null)
     {
-        _settled.Add(episode.Key);
+        _settled[episode.Key] = pack;
     }
 }
