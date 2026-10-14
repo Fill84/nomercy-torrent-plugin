@@ -74,6 +74,48 @@ public class ChallengeAwareFetchTests
     }
 
     /// <remarks>
+    /// GitHub issue 6. Where the browser is off, a source behind a challenge is skipped at once and the reason
+    /// is the plugin's own gap in the owner's words — no solve, no page read, no attempt at a browser that
+    /// cannot start — while a source that is not behind one is read as it always was.
+    /// </remarks>
+    [Fact]
+    public async Task WhereTheBrowserIsOffASourceBehindAChallengeIsSkippedAndTheOthersStillAnswer()
+    {
+        const string Why = "Xvfb is not installed, so sources behind a challenge are off.";
+        FakeHttp http = new FakeHttp().Answers(HttpStatusCode.OK, "the open body");
+        FakeSolver solver = new(new("cookie", "a user agent"));
+        FakePages pages = new("<html>never asked</html>");
+        ChallengeAwareFetch fetch = Fetch(http, solver, pages, browserOff: Why);
+
+        FetchResult skipped = await fetch.GetAsync(new("https://www.1337x.to/search/Silo/"), gated: true, CancellationToken.None);
+        FetchResult answered = await fetch.GetAsync(new("https://mine.example/api?q=Silo"), gated: false, CancellationToken.None);
+
+        Assert.Equal(FetchOutcome.NoBrowser, skipped.Failure?.Outcome);
+        Assert.Contains(Why, skipped.Failure?.Reason ?? string.Empty, StringComparison.Ordinal);
+        Assert.Equal(0, solver.Solves);
+        Assert.Empty(pages.Asked);
+        Assert.Equal("the open body", answered.Body);
+        Assert.Single(http.Attempts);
+    }
+
+    /// <remarks>
+    /// A clearance already in hand needs no browser, so a gated host that cleared before is still read.
+    /// Skipping it would turn a source that works into one that is off.
+    /// </remarks>
+    [Fact]
+    public async Task WhereTheBrowserIsOffAGatedHostWithAClearanceIsStillRead()
+    {
+        FakeHttp http = new FakeHttp().Answers(HttpStatusCode.OK, "the real body");
+        ClearanceStore clearances = new();
+        clearances.Keep("www.1337x.to", new("cookie", "a user agent"));
+
+        FetchResult result = await Fetch(http, clearances: clearances, browserOff: "Xvfb is not installed, so sources behind a challenge are off.")
+            .GetAsync(new("https://www.1337x.to/search/Silo/"), gated: true, CancellationToken.None);
+
+        Assert.Equal("the real body", result.Body);
+    }
+
+    /// <remarks>
     /// A challenge on an address nobody marked is met once and the fetch tried
     /// again. Gating is per address, so a source not marked still reaches the
     /// solver when one of its addresses needs it.
@@ -418,7 +460,8 @@ public class ChallengeAwareFetchTests
         IChallengeSolver? solver = null,
         IPageSource? pages = null,
         ClearanceStore? clearances = null,
-        HostGate? gate = null)
+        HostGate? gate = null,
+        string? browserOff = null)
     {
         FakeGrants grants = new();
 
@@ -433,7 +476,8 @@ public class ChallengeAwareFetchTests
             grants,
             clearances ?? new ClearanceStore(),
             solver,
-            pages);
+            pages,
+            browserOff);
     }
 
     /// <summary>

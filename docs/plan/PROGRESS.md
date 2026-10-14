@@ -8,7 +8,7 @@ Read this first, update it last. Nothing else decides what happens next.
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
-`S14-07` (#5, sort, filter and paging). `S14-01` is done (see **Log**). **Current: `S14-02`.**
+`S14-07` (#5, sort, filter and paging). `S14-01` and `S14-02` are done (see **Log**). **Current: `S14-03`.**
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
@@ -802,7 +802,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 14 — The seven GitHub issues of 13 October 2026
 - [x] `S14-01` A finished download always reaches the intake folder (#3)
-- [ ] `S14-02` No Xvfb, no browser, one warning (#6)
+- [x] `S14-02` No Xvfb, no browser, one warning (#6)
 - [ ] `S14-03` A log level the owner sets, and a log file that holds it (#7)
 - [ ] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
 - [ ] `S14-05` A season with several gaps takes a pack (#1)
@@ -812,6 +812,21 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S14-02` No Xvfb, no browser, one warning (#6).** `HiddenStages.HidingFor` now takes whether `Xvfb`
+  was found (`XvfbLookup`: an executable file named `Xvfb` in a folder of `PATH`, execute bit required on
+  Linux), and a Linux machine without it is `Hiding.NoXvfb` — `CanHideABrowser` false, `WhyNot` "Xvfb is
+  not installed, so sources behind a challenge are off.", and `Create()` refuses instead of starting a
+  program that is not there. `Browser` logs the reason at Warning once per plugin lifetime and at Debug
+  after; `BrowserSolver`'s per-host "no browser" line went from Warning to Debug. A source behind a
+  challenge (`SourceDefinition.NeedsABrowser`, now shared with the clearance pass) is skipped by
+  `ChallengeAwareFetch` as `NoBrowser` with the reason, before any solve, unless the host already holds
+  a clearance; the clearance pass starts no browser; the Sources page names the sources that are off and
+  why (`BrowserOff`). The brief said the macOS path already skipped gated sources; it did not skip them,
+  it let each one fail through a solve that returned null, so macOS gets the same skip now. For the next
+  slices: S14-03 changes log levels, and the once-only line is the one `Browser` writes at Warning.
+  Media-server request for `xvfb` and Chrome's libraries in the Docker images:
+  NoMercy-Entertainment/nomercy-media-server#597. Tests also run in a Linux container (no `Xvfb` there).
 
 - **`S14-01` A finished download always reaches the intake folder (#3).** Two faults. The lost wake-up:
   a pass refused while another ran wrote its wish only after the refusal, so the running pass could read

@@ -133,6 +133,49 @@ public class SourcesViewTests
             StringComparison.Ordinal);
     }
 
+    /// <remarks>
+    /// GitHub issue 6. Where the browser is off the page names the sources that are off and why, on the
+    /// source's own row and once above the table; a source that does not need the browser says nothing of
+    /// the kind.
+    /// </remarks>
+    [Fact]
+    public void ThePageSaysWhichSourcesAreOffAndWhy()
+    {
+        const string Why = "Xvfb is not installed, so sources behind a challenge are off.";
+
+        PluginView view = SourcesView.Render(
+        [
+            new("1337x", Now.AddMinutes(-2), 0, "an old refusal", TimeSpan.FromSeconds(1), null),
+            new("Nyaa", Now.AddMinutes(-2), 12, null, TimeSpan.FromSeconds(1), null),
+        ],
+            Now,
+            browserOff: new(Why, ["1337x"]));
+
+        string[] values = [.. Rendered.EveryValue(view)];
+        string page = string.Join(" ", [.. Rendered.Words(view), .. values]);
+
+        Assert.Contains("1337x", page, StringComparison.Ordinal);
+        Assert.Contains(Why, page, StringComparison.Ordinal);
+
+        // On the row: the refusal column of the source that is off is the reason, not what it said last week.
+        // Exactly one row says it: Nyaa is not behind a challenge and is not accused of anything.
+        Assert.Single(values, one => one == Why);
+        Assert.DoesNotContain("an old refusal", page, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WhereTheBrowserWorksThePageSaysNothingAboutSourcesBeingOff()
+    {
+        PluginView view = SourcesView.Render(
+            [new("1337x", Now.AddMinutes(-2), 3, null, TimeSpan.FromSeconds(1), null)],
+            Now);
+
+        Assert.DoesNotContain(
+            "are off",
+            string.Join(" ", [.. Rendered.Words(view), .. Rendered.EveryValue(view)]),
+            StringComparison.Ordinal);
+    }
+
     private static DateTimeOffset Now => new(2026, 8, 19, 12, 0, 0, TimeSpan.Zero);
 
     /// <summary>The shipped catalogue, as far as this page is concerned.</summary>

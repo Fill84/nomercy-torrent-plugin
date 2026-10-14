@@ -70,9 +70,9 @@ public class BrowserTests : IDisposable
     {
         // Neither Windows nor Linux is macOS, and it is the only one of the
         // three with nowhere to put a window.
-        Assert.Equal(Hiding.Nowhere, HiddenStages.HidingFor(isWindows: false, isLinux: false));
-        Assert.Equal(Hiding.WindowsDesktop, HiddenStages.HidingFor(isWindows: true, isLinux: false));
-        Assert.Equal(Hiding.XvfbDisplay, HiddenStages.HidingFor(isWindows: false, isLinux: true));
+        Assert.Equal(Hiding.Nowhere, HiddenStages.HidingFor(isWindows: false, isLinux: false, xvfbFound: false));
+        Assert.Equal(Hiding.WindowsDesktop, HiddenStages.HidingFor(isWindows: true, isLinux: false, xvfbFound: false));
+        Assert.Equal(Hiding.XvfbDisplay, HiddenStages.HidingFor(isWindows: false, isLinux: true, xvfbFound: true));
 
         // And the reason is given exactly when there is one to give.
         HiddenStages stages = new(new CapturingLogger());

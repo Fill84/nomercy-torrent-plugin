@@ -156,6 +156,16 @@ public sealed record SourceDefinition(
     public bool SearchAddressGated => SearchUrl is not null ? SearchGated : Gated;
 
     /// <summary>
+    /// Whether this source may need a browser at all: its search address or its address is behind a
+    /// challenge.
+    /// </summary>
+    /// <remarks>
+    /// The one question the run's clearance pass and the Sources page both ask, so a machine with no browser
+    /// names the same sources as off that the run skips.
+    /// </remarks>
+    public bool NeedsABrowser => SearchAddressGated || Gated;
+
+    /// <summary>
     /// Every host this source reaches, without duplicates.
     /// </summary>
     /// <remarks>

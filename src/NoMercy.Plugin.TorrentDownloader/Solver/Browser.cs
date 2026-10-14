@@ -35,6 +35,9 @@ public sealed class Browser(
     private IBrowserProcess? _process;
     private bool _disposed;
 
+    /// <summary>1 once the warning that no browser can be started has been logged. An int for <see cref="Interlocked"/>: searches arrive on many threads.</summary>
+    private int _saidNoBrowser;
+
     /// <summary>
     /// Starts the browser, or answers the one already running.
     /// </summary>
@@ -49,9 +52,17 @@ public sealed class Browser(
 
         if (!stages.CanHideABrowser)
         {
-            // Said once per attempt at debug level and once loudly by whoever
-            // skips the sources; starting nothing is the behaviour that matters.
-            logger.LogWarning("No browser was started. {Why}", stages.WhyNot);
+            // Loudly once, quietly after. Every search that meets a challenge asks for the browser, and a
+            // warning per ask filled the owner's log with the same sentence a hundred times a run (GitHub
+            // issue 6). The reason also stands on the Sources page, so nothing is lost by saying it once.
+            if (Interlocked.Exchange(ref _saidNoBrowser, 1) == 0)
+            {
+                logger.LogWarning("No browser was started. {Why}", stages.WhyNot);
+            }
+            else
+            {
+                logger.LogDebug("No browser was started. {Why}", stages.WhyNot);
+            }
 
             return null;
         }

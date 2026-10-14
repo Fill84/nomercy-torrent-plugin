@@ -9,6 +9,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
+using NoMercy.Plugin.TorrentDownloader.Solver;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.PluginSdk.Abstractions;
@@ -2218,7 +2219,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // Only which secrets exist, never their values: the page
                     // draws that a key is set and has nothing it could leak.
                     await Settings.SecretsSetAsync(ct),
-                    ShowAdvanced);
+                    ShowAdvanced,
+                    await BrowserOffAsync(ct));
 
             case "history":
                 return HistoryView.Render(
@@ -2513,6 +2515,26 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 EncodeFailure = _transfers?.FailureOf(one.InfoHash),
             }),
         ];
+    }
+
+    /// <summary>
+    /// Which sources this machine cannot read for want of a browser, and why. Null where it can run one.
+    /// </summary>
+    /// <remarks>
+    /// Asked of a fresh <see cref="HiddenStages"/> rather than of the chain: the chain is built lazily and
+    /// rendering a page must not start anything, and the answer is the same for both because it is read from
+    /// the machine.
+    /// </remarks>
+    private async Task<BrowserOff?> BrowserOffAsync(CancellationToken ct)
+    {
+        if (new HiddenStages(Context.Logger).WhyNot is not string why)
+        {
+            return null;
+        }
+
+        Settings settings = await Settings.LoadAsync(ct);
+
+        return new(why, [.. Chain.Catalogue(Shipped(), settings).Enabled.Where(source => source.NeedsABrowser).Select(source => source.Name)]);
     }
 
     /// <summary>

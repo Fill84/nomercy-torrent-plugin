@@ -13,51 +13,80 @@ namespace NoMercy.Plugin.TorrentDownloader.Solver;
 /// does not mean a window on a screen, and pretending otherwise is how the
 /// window got there.
 /// </remarks>
-public sealed class HiddenStages(ILogger logger) : IHiddenStageFactory
+/// <param name="logger">Where the Windows stage says what it is doing.</param>
+/// <param name="platform">
+/// How this machine hides a window, when a test is saying so. Left out, it is asked of the operating system
+/// and of <c>PATH</c> once, when this is made.
+/// </param>
+public sealed class HiddenStages(ILogger logger, Hiding? platform = null) : IHiddenStageFactory
 {
     /// <summary>What the plugin's desktop is called on Windows.</summary>
     public const string DesktopName = "NoMercyTorrentDownloader";
 
+    /// <summary>
+    /// What the owner is told on a Linux machine with no <c>Xvfb</c>.
+    /// </summary>
+    /// <remarks>
+    /// GitHub issue 6. The server's Docker images ship neither <c>Xvfb</c> nor a browser, and the plugin chose
+    /// the Xvfb stage regardless, so every search that needed the browser failed with ".NET could not start
+    /// 'Xvfb' with working directory /app" — a sentence about the plugin's plumbing, not about what to do.
+    /// </remarks>
+    public const string XvfbMissing = "Xvfb is not installed, so sources behind a challenge are off.";
+
+    /// <summary>
+    /// How this machine hides a window, if it can.
+    /// </summary>
+    /// <remarks>
+    /// Decided once. <c>PATH</c> does not change under a running server, and looking through it on every
+    /// question would put a file-system scan in the path of every search.
+    /// </remarks>
+    public Hiding Platform { get; } = platform ?? HidingFor(
+        OperatingSystem.IsWindows(),
+        OperatingSystem.IsLinux(),
+        OperatingSystem.IsLinux() && XvfbLookup.IsOnPath(Environment.GetEnvironmentVariable("PATH")));
+
     public bool CanHideABrowser => Platform is Hiding.WindowsDesktop or Hiding.XvfbDisplay;
 
     public string? WhyNot =>
-        CanHideABrowser
-            ? null
-            : "There is nowhere on macOS to put a browser window that is not somebody's Space, so sources behind a challenge are skipped.";
-
-    /// <summary>How this platform hides a window, if it can.</summary>
-    public static Hiding Platform => HidingFor(OperatingSystem.IsWindows(), OperatingSystem.IsLinux());
+        Platform switch
+        {
+            Hiding.WindowsDesktop or Hiding.XvfbDisplay => null,
+            Hiding.NoXvfb => XvfbMissing,
+            _ => "There is nowhere on macOS to put a browser window that is not somebody's Space, so sources behind a challenge are skipped.",
+        };
 
     /// <summary>
     /// The decision itself, separated from asking the operating system what it
-    /// is.
+    /// is and the file system what is installed.
     /// </summary>
     /// <remarks>
-    /// Written this way so the macOS answer can be asserted on a machine that
-    /// is not a Mac. A rule about a platform nobody runs the tests on is
-    /// otherwise a rule nobody ever checks — and this one is the difference
-    /// between skipping gated sources and opening a window on somebody's
-    /// screen.
+    /// Written this way so the macOS answer, and the Linux answer without
+    /// <c>Xvfb</c>, can be asserted on a machine that is neither. A rule about
+    /// a platform nobody runs the tests on is otherwise a rule nobody ever
+    /// checks — and these are the difference between skipping gated sources
+    /// and opening a window on somebody's screen, or starting a program that
+    /// is not there.
     /// </remarks>
-    public static Hiding HidingFor(bool isWindows, bool isLinux)
+    public static Hiding HidingFor(bool isWindows, bool isLinux, bool xvfbFound)
     {
         return isWindows ? Hiding.WindowsDesktop
-            : isLinux ? Hiding.XvfbDisplay
+            : isLinux ? (xvfbFound ? Hiding.XvfbDisplay : Hiding.NoXvfb)
             : Hiding.Nowhere;
     }
 
     public IHiddenStage Create()
     {
-        // Asked of the operating system directly rather than of Platform, so
-        // the compiler's platform analyser can see that a Windows-only type is
-        // only ever constructed on Windows. It is the same question either way,
-        // and having it checked is worth the repetition.
-        if (OperatingSystem.IsWindows())
+        // Both questions are asked: Platform says what this machine can do, and the operating system is asked
+        // directly as well so the compiler's platform analyser can see that a Windows-only type is only ever
+        // constructed on Windows.
+        if (Platform is Hiding.WindowsDesktop && OperatingSystem.IsWindows())
         {
             return new WindowsDesktopStage(DesktopName, logger);
         }
 
-        if (OperatingSystem.IsLinux())
+        // Only where Xvfb was found. Linux without it is refused like macOS is: building the stage would
+        // start a program that is not there.
+        if (Platform is Hiding.XvfbDisplay && OperatingSystem.IsLinux())
         {
             return new XvfbStage();
         }
@@ -88,6 +117,9 @@ public enum Hiding
 {
     /// <summary>Nowhere. macOS, and anything else nobody has measured.</summary>
     Nowhere,
+
+    /// <summary>Linux, but no <c>Xvfb</c> on <c>PATH</c>: the server's Docker images.</summary>
+    NoXvfb,
 
     /// <summary>A desktop of its own, via <c>CreateDesktop</c>.</summary>
     WindowsDesktop,

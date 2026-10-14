@@ -15,12 +15,31 @@ The plugin has its own. It downloads a Chrome, drives it, and keeps it for the l
 | Platform | How |
 | --- | --- |
 | Windows | a desktop of its own via `CreateDesktop`, Chrome launched with `STARTUPINFO.lpDesktop` pointing at it |
-| Linux | an `Xvfb` display, `DISPLAY` set for the child process only |
+| Linux with `Xvfb` | an `Xvfb` display, `DISPLAY` set for the child process only |
+| Linux without `Xvfb` | the server's Docker images. There is no display to put a window on. **Gated sources are skipped**, and the plugin says "Xvfb is not installed, so sources behind a challenge are off." |
 | macOS | there is nowhere to put a window that is not somebody's Space. **Gated sources are skipped**, and the plugin says so |
 
-`HiddenStages.CanHideABrowser` is the one place that decides. The stage is created **before** Chrome
-starts: start it first and the window appears on the owner's desktop for the half second it takes to
-move it.
+`HiddenStages.CanHideABrowser` is the one place that decides, from the operating system and from whether
+an executable file named `Xvfb` is in one of the folders of `PATH` (`XvfbLookup`; on Linux it needs an
+execute bit). The decision, `HiddenStages.HidingFor`, is a pure function of those inputs so the Linux
+answer without `Xvfb` can be tested on any machine. The stage is created **before** Chrome starts: start
+it first and the window appears on the owner's desktop for the half second it takes to move it.
+
+Where the browser is off (GitHub issue 6, 14 October 2026; the rows for Linux without `Xvfb` and macOS):
+
+- The reason is logged **once** per plugin lifetime, at Warning, by `Browser`; every later attempt is
+  logged at Debug. Before this, every search that met a challenge logged it again, and with `Xvfb`
+  missing the plugin tried to start the program on every one of them and failed with ".NET could not
+  start 'Xvfb' with working directory /app".
+- A source behind a challenge (`SourceDefinition.NeedsABrowser`) is skipped without a solve being tried,
+  unless the host already holds a clearance, which needs no browser to be read. Its failure is
+  `NoBrowser` and carries the reason. Every source that is not behind a challenge answers as usual.
+- The run's clearance pass starts no browser; it ends with the reason in the activity journal.
+- The Sources page names the sources that are off and the reason, above the table, and the reason stands
+  in the refusal column of each of those rows.
+
+The server's Docker images ship neither `Xvfb` nor the libraries Chrome needs, and headless is not an
+answer (below). NoMercy-Entertainment/nomercy-media-server#597 asks for them in the images.
 
 ## Headless is not used
 

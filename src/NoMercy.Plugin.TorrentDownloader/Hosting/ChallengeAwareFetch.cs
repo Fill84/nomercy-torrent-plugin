@@ -21,7 +21,8 @@ public sealed class ChallengeAwareFetch(
     IPluginGrants grants,
     ClearanceStore clearances,
     IChallengeSolver? solver = null,
-    IPageSource? pages = null) : IFetch, ISessionPost
+    IPageSource? pages = null,
+    string? browserOff = null) : IFetch, ISessionPost
 {
     /// <summary>
     /// A form posted the way a page is read: granted, through the host's gate, with the clearance.
@@ -133,6 +134,11 @@ public sealed class ChallengeAwareFetch(
             return first;
         }
 
+        if (browserOff is not null)
+        {
+            return NoBrowserFailure(address, host);
+        }
+
         return await SolvedAndTried(address, host, ct);
     }
 
@@ -237,6 +243,14 @@ public sealed class ChallengeAwareFetch(
             clearances.Spend(host);
         }
 
+        // Skipped here, before any solve is tried: with the browser off, every solve is a start that is
+        // refused, and each of them cost the owner a log line for a source that could not have answered.
+        // After the clearance above, because a host that cleared earlier needs no browser to be read.
+        if (browserOff is not null)
+        {
+            return NoBrowserFailure(address, host);
+        }
+
         if (solver is not null)
         {
             for (int solve = 0; solve < Solves; solve++)
@@ -268,6 +282,21 @@ public sealed class ChallengeAwareFetch(
         }
 
         return await ThroughBrowser(address, ct, "This address is behind a challenge");
+    }
+
+    /// <summary>
+    /// A source behind a challenge, skipped because this machine cannot run a browser.
+    /// </summary>
+    /// <remarks>
+    /// The plugin's own gap, in the sentence the Sources page shows, so the owner can act on it and does not
+    /// read it as the site refusing us.
+    /// </remarks>
+    private FetchResult NoBrowserFailure(Uri address, string host)
+    {
+        return FetchResult.Failed(FetchFailure.For(
+            FetchOutcome.NoBrowser,
+            address,
+            $"{host} is behind a challenge and was skipped. {browserOff}"));
     }
 
     private async Task<FetchResult> ThroughBrowser(Uri address, CancellationToken ct, string why)

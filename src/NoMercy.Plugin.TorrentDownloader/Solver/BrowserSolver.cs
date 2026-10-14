@@ -98,7 +98,9 @@ public sealed class BrowserSolver(
 
         if (tab is null)
         {
-            logger.LogWarning("No browser, so the challenge on {Host} was not attempted.", url.Host);
+            // Debug: the browser has already said why it is not there, once, at Warning. Repeating it per host
+            // buried that line under a copy for every challenge of every search.
+            logger.LogDebug("No browser, so the challenge on {Host} was not attempted.", url.Host);
 
             return null;
         }

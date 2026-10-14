@@ -37,6 +37,7 @@ public sealed class Chain : IAsyncDisposable
     private readonly Readers _readers = Readers.Shipped();
     private readonly ClearanceStore _clearances = new();
     private readonly HttpClient _http;
+    private readonly HiddenStages _stages;
     private readonly Browser _browser;
     private readonly PuppeteerTabs _tabs;
     private readonly BrowserSolver _solver;
@@ -73,9 +74,10 @@ public sealed class Chain : IAsyncDisposable
         _http = handler is null ? new() : new(handler);
         _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgent);
 
+        _stages = new(_logger);
         _browser = new(
             new BrowserInstall(Path.Combine(context.DataFolderPath, "browser"), new PuppeteerBrowserDownloader(), _logger),
-            new HiddenStages(_logger),
+            _stages,
             _logger);
 
         _tabs = new(_browser, _logger);
@@ -202,7 +204,7 @@ public sealed class Chain : IAsyncDisposable
         Uri[] behindAChallenge =
         [
             .. catalogue.Enabled
-                .Where(source => source.SearchAddressGated || source.Gated)
+                .Where(source => source.NeedsABrowser)
                 .Select(source => source.SearchAddress ?? source.Url)
                 .Select(address => new Uri(address.Replace("{query}", "a", StringComparison.Ordinal)))
 
@@ -259,6 +261,15 @@ public sealed class Chain : IAsyncDisposable
         if (needing.Length == 0)
         {
             _journal.Finished(ActivityStage.Clearance, pass, "none of them needed a browser");
+
+            return;
+        }
+
+        // Nothing to clear them with. The sources behind these challenges are skipped when they are asked, and
+        // the Sources page says which and why; starting a browser that cannot start would only repeat that here.
+        if (_stages.WhyNot is string browserOff)
+        {
+            _journal.Finished(ActivityStage.Clearance, pass, browserOff);
 
             return;
         }
@@ -390,7 +401,7 @@ public sealed class Chain : IAsyncDisposable
     /// </summary>
     private ChallengeAwareFetch Fetch()
     {
-        return new(_http, _gate, _context.Grants, _clearances, _solver, _solver);
+        return new(_http, _gate, _context.Grants, _clearances, _solver, _solver, _stages.WhyNot);
     }
 
     /// <summary>An indexer the owner added, as a source like any other.</summary>

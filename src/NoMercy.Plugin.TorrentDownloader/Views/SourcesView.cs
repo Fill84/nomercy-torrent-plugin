@@ -28,6 +28,13 @@ public sealed record SourceReport(
     DateTimeOffset? NextAskable);
 
 /// <summary>
+/// The sources a machine with no browser cannot read, and the plain-words reason.
+/// </summary>
+/// <param name="Why">The sentence the owner is told, from <c>HiddenStages.WhyNot</c>.</param>
+/// <param name="Sources">The sources behind a challenge, which are the ones that are off.</param>
+public sealed record BrowserOff(string Why, IReadOnlyCollection<string> Sources);
+
+/// <summary>
 /// Every source, and what it last answered.
 /// </summary>
 /// <remarks>
@@ -54,7 +61,8 @@ public static class SourcesView
         IReadOnlyList<SourceDefinition>? shipped = null,
         Settings? settings = null,
         IReadOnlyCollection<string>? secretsSet = null,
-        bool advanced = false)
+        bool advanced = false,
+        BrowserOff? browserOff = null)
     {
         List<PluginComponent> page =
             [
@@ -88,12 +96,24 @@ public static class SourcesView
 
                                 // Its own words, or nothing at all. A site that
                                 // answered and had nothing to give is working.
-                                ["refusal"] = source.Refusal ?? string.Empty,
+                                ["refusal"] = IsOff(source.Name, browserOff) ? browserOff!.Why : source.Refusal ?? string.Empty,
                                 ["next"] = Next(source, now),
                             })),
                     ],
                     "No source has been asked yet."),
         ];
+
+        // Above the table, where the owner looks first: which sources are off is the reason their rows are
+        // empty, and a row each does not say how many are affected.
+        if (browserOff is { Sources.Count: > 0 })
+        {
+            page.Insert(
+                2,
+                Ui.Text(
+                    "sources-browser-off",
+                    $"{browserOff.Why} Off: {string.Join(", ", browserOff.Sources)}.",
+                    "caption"));
+        }
 
         // The indexers of the owner live here now rather than on the settings
         // page: this is the page about sources, and an indexer is one.
@@ -114,6 +134,12 @@ public static class SourcesView
             Layout = PluginLayout.Wide,
             Components = [.. page],
         };
+    }
+
+    /// <summary>Whether this source is one the browser being off has switched off.</summary>
+    private static bool IsOff(string name, BrowserOff? browserOff)
+    {
+        return browserOff is not null && browserOff.Sources.Contains(name, StringComparer.OrdinalIgnoreCase);
     }
 
     /// <summary>
