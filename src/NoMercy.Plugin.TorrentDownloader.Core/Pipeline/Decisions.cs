@@ -34,6 +34,14 @@ public sealed class Decisions(SettingsByShow settings, IReadOnlySet<string> blac
         return new NameJudge(SettingsFor(episode)).JudgeName(name, episode, blacklisted);
     }
 
+    /// <summary>Whether this name is worth searching for as the pack of a season, by the settings of its show.</summary>
+    /// <param name="name">The release name, parsed.</param>
+    /// <param name="latest">The latest-aired episode of the season the pack would cover.</param>
+    public Verdict JudgePack(ReleaseName name, TrackedEpisode latest)
+    {
+        return new NameJudge(SettingsFor(latest)).JudgePack(name, latest, blacklisted);
+    }
+
     /// <summary>The settings of this episode's show.</summary>
     public EffectiveSettings SettingsFor(TrackedEpisode episode)
     {

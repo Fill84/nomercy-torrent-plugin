@@ -87,6 +87,20 @@ public static class NameSourceSites
             .Answers(SceneSourceSearch, Capture.Fixture("names-scenesource-search-silo-s02e01.xml"));
     }
 
+    /// <summary>
+    /// Every search answering what it answered when asked about Adolescence S01, on 14 October 2026, and
+    /// srrDB what it answered about Adolescence S01E01 that day.
+    /// </summary>
+    public static FakeFetch AnsweringAdolescenceSeason(this FakeFetch fetch)
+    {
+        return fetch
+            .Answers("https://predb.me/?search=Adolescence+S01&rss=1", Capture.Fixture("names-predb-search-adolescence-s01.xml"))
+            .Answers("https://api.srrdb.com/v1/search/adolescence-s01", Capture.Fixture("names-srrdb-search-adolescence-s01.json"))
+            .Answers("https://api.predb.net/feed/?q=Adolescence+S01", Capture.Fixture("names-predbnet-search-adolescence-s01.xml"))
+            .Answers("https://www.scnsrc.me/feed/?s=Adolescence+S01", Capture.Fixture("names-scenesource-search-adolescence-s01.xml"))
+            .Answers("https://api.srrdb.com/v1/search/adolescence-s01e01", Capture.Fixture("names-srrdb-search-adolescence-s01e01.json"));
+    }
+
     public static NameSources Over(
         FakeFetch fetch,
         IActivityJournal? journal = null,

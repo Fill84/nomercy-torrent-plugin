@@ -82,6 +82,38 @@ public sealed class NameJudge(EffectiveSettings settings)
     /// </param>
     public Verdict JudgeName(ReleaseName name, TrackedEpisode episode, IReadOnlySet<string> blacklisted)
     {
+        return Judge(name, episode, blacklisted, EpisodeNaming.Names(name, episode.ShowTitle, episode.Key), episode.Key.ToString());
+    }
+
+    /// <summary>
+    /// Whether this name is worth putting to an indexer as the pack of a season.
+    /// </summary>
+    /// <remarks>
+    /// <c>docs/specs/release-names.md</c> § Season packs, GitHub issue #1: a pack name is judged against the
+    /// show's settings exactly as an episode's name is. Only what it has to name differs — the season, and no
+    /// episode.
+    /// </remarks>
+    /// <param name="name">The release name, parsed.</param>
+    /// <param name="latest">The latest-aired episode of the season the pack would cover.</param>
+    /// <param name="blacklisted">Keys already refused.</param>
+    public Verdict JudgePack(ReleaseName name, TrackedEpisode latest, IReadOnlySet<string> blacklisted)
+    {
+        return Judge(
+            name,
+            latest,
+            blacklisted,
+            EpisodeNaming.NamesSeason(name, latest.ShowTitle, latest.Key.Season),
+            $"a pack of season {latest.Key.Season}");
+    }
+
+    /// <summary>The rules every name is held to, once whether it names what is searched for is known.</summary>
+    /// <param name="name">The release name, parsed.</param>
+    /// <param name="episode">The episode whose show's settings apply, and whose show's year.</param>
+    /// <param name="blacklisted">Keys already refused.</param>
+    /// <param name="named">Whether the name names this show's episode, or this show's season.</param>
+    /// <param name="slot">What it should have named, for the reason when it does not.</param>
+    private Verdict Judge(ReleaseName name, TrackedEpisode episode, IReadOnlySet<string> blacklisted, bool named, string slot)
+    {
         if (blacklisted.Contains(Blacklist.KeyOf(name.Original)))
         {
             return Verdict.No($"{name.Original} is blacklisted.");
@@ -96,24 +128,24 @@ public sealed class NameJudge(EffectiveSettings settings)
             return Verdict.No($"'{name.Original}' is a {type} file and only video files are downloaded.");
         }
 
-        if (!EpisodeNaming.Names(name, episode.ShowTitle, episode.Key))
+        if (!named)
         {
             // Said two ways, because the owner acts on them differently: another programme, or this one's
             // other episode — or a pack or an absolute-numbered post, which names no one episode.
             return TitleMatcher.Matches(name.Title, episode.ShowTitle)
-                ? Verdict.No($"'{name.Original}' is not {episode.Key}.")
+                ? Verdict.No($"'{name.Original}' is not {slot}.")
                 : Verdict.No($"'{name.Title}' is not a release of {episode.ShowTitle}.");
         }
 
         if (episode.ShowYear is int year
-            && TitleMatcher.YearAfter(name.Title, episode.ShowTitle) is int named
-            && Math.Abs(named - year) > 1)
+            && TitleMatcher.YearAfter(name.Title, episode.ShowTitle) is int yearNamed
+            && Math.Abs(yearNamed - year) > 1)
         {
             // A name carries a year to say which of two programmes of one title it is, so another year is
             // another programme: the owner's report of 17 September 2026, Dark Matter from 2015 taken for the
             // one from 2024. One year either way, because the library's year is the first air date's and a
             // premiere at the end of a year can be named after the next.
-            return Verdict.No($"'{name.Original}' is the {episode.ShowTitle} of {named}, and this one is from {year}.");
+            return Verdict.No($"'{name.Original}' is the {episode.ShowTitle} of {yearNamed}, and this one is from {year}.");
         }
 
         if (settings.Quality is not string quality)

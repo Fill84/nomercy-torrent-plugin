@@ -32,6 +32,24 @@ public static class EpisodeNaming
             return false;
         }
 
+        return IsTheShow(name, showTitle);
+    }
+
+    /// <summary>
+    /// True when <paramref name="name"/> is a pack of this show's season <paramref name="season"/>, and nothing
+    /// more.
+    /// </summary>
+    /// <remarks>
+    /// <c>docs/specs/release-names.md</c> § Season packs, GitHub issue #1: a season with two or more episodes
+    /// being searched for looks for its pack first. The show is matched the same two ways as an episode's.
+    /// </remarks>
+    public static bool NamesSeason(ReleaseName name, string showTitle, int season)
+    {
+        return name.IsSeasonPack && name.Season == season && IsTheShow(name, showTitle);
+    }
+
+    private static bool IsTheShow(ReleaseName name, string showTitle)
+    {
         return string.Equals(TitleMatcher.Normalised(name.Title), TitleMatcher.Normalised(showTitle), StringComparison.Ordinal)
                || TitleMatcher.Matches(name.Title, showTitle);
     }

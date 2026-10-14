@@ -22,4 +22,10 @@ public sealed class FixedNames(params (string Title, string Source)[] names) : I
     {
         return Task.FromResult<IReadOnlyList<SourceName>>([.. names.Select(name => new SourceName(name.Title, name.Source))]);
     }
+
+    /// <summary>No pack names: a test about a season's pack gives its names through the real name sources.</summary>
+    public Task<IReadOnlyList<SourceName>> PackNamesForAsync(IReadOnlyList<TrackedEpisode> season, FeedNamesTaken taken, CancellationToken ct)
+    {
+        return Task.FromResult<IReadOnlyList<SourceName>>([]);
+    }
 }

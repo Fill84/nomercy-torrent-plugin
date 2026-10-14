@@ -63,8 +63,9 @@ public sealed class FeedNamesTests
     }
 
     /// <remarks>
-    /// A release name without an episode number, such as a season pack, is not searched for — so it is
-    /// not taken, even for a season whose every episode is being searched for.
+    /// A release name without an episode number, such as a season pack, names no episode — so it is not
+    /// taken for one, even for a season whose every episode is being searched for. It is that season's pack
+    /// name instead (<c>SeasonPackNamesTests</c>).
     /// </remarks>
     [Fact]
     public async Task ANameWithNoEpisodeNumberIsNeverTaken()

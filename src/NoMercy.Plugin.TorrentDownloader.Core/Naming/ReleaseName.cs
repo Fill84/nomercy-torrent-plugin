@@ -55,6 +55,17 @@ public sealed record ReleaseName(
     /// </remarks>
     public bool HasCodecTag => Codec is not null;
 
+    /// <summary>
+    /// Whether the name is a pack of one season: a season with no episode after it, as
+    /// <c>Show.S03.1080p.WEB.H264-GROUP</c>.
+    /// </summary>
+    /// <remarks>
+    /// The only pack a run searches for (<c>docs/specs/release-names.md</c> § Season packs). An anime batch —
+    /// <c>01~12</c>, or a name carrying <c>Batch</c> or <c>Complete</c> with no season — names no season to hold
+    /// it to, and is not one.
+    /// </remarks>
+    public bool IsSeasonPack => IsPack && Season is not null && Episode is null && Absolute is null;
+
     /// <summary>The season tag, and a range after it when the name covers two.</summary>
     /// <remarks>
     /// <c>E(\d{1,4})</c>, not two digits: <c>One Piece S01E1173</c> is a real

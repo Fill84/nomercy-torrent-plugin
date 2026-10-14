@@ -64,8 +64,15 @@ public sealed record SourceName(string Title, string Source, DateTimeOffset? Pub
     }
 }
 
-/// <summary>The feed release names a run took, per episode, and the name sources that failed in it.</summary>
-public sealed class FeedNamesTaken(IReadOnlyDictionary<EpisodeKey, IReadOnlyList<SourceName>> byEpisode)
+/// <summary>
+/// The feed release names a run took, per episode and per season with several gaps, and the name sources that
+/// failed in it.
+/// </summary>
+/// <param name="byEpisode">The names taken for each episode.</param>
+/// <param name="bySeason">The pack names taken for each season of a show, by show id and season.</param>
+public sealed class FeedNamesTaken(
+    IReadOnlyDictionary<EpisodeKey, IReadOnlyList<SourceName>> byEpisode,
+    IReadOnlyDictionary<(int ShowId, int Season), IReadOnlyList<SourceName>>? bySeason = null)
 {
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, bool> _failed = new(StringComparer.OrdinalIgnoreCase);
 
@@ -113,6 +120,12 @@ public sealed class FeedNamesTaken(IReadOnlyDictionary<EpisodeKey, IReadOnlyList
     {
         return byEpisode.GetValueOrDefault(episode) ?? [];
     }
+
+    /// <summary>The pack names taken for one season of one show, none when no feed named a pack of it.</summary>
+    public IReadOnlyList<SourceName> PacksFor(int showId, int season)
+    {
+        return bySeason?.GetValueOrDefault((showId, season)) ?? [];
+    }
 }
 
 /// <summary>Where a run's release names come from.</summary>
@@ -127,6 +140,9 @@ public interface IReleaseNames
 
     /// <summary>One episode's release names: what the feeds gave, or else what the searches give.</summary>
     Task<IReadOnlyList<SourceName>> NamesForAsync(TrackedEpisode episode, FeedNamesTaken taken, CancellationToken ct);
+
+    /// <summary>One season's pack names: what the feeds gave, or else what the searches give.</summary>
+    Task<IReadOnlyList<SourceName>> PackNamesForAsync(IReadOnlyList<TrackedEpisode> season, FeedNamesTaken taken, CancellationToken ct);
 }
 
 /// <summary>
@@ -165,7 +181,8 @@ public sealed class NameSources(
         (SourceName[] Names, bool Failed)[] read = await Task.WhenAll(feeds.Select(feed => ReadFeedAsync(feed, ct)));
 
         HashSet<EpisodeKey> namesakes = [];
-        FeedNamesTaken taken = new(Take([.. read.SelectMany(one => one.Names)], episodes, namesakes));
+        SourceName[] fed = [.. read.SelectMany(one => one.Names)];
+        FeedNamesTaken taken = new(Take(fed, episodes, namesakes), TakePacks(fed, episodes));
 
         foreach (EpisodeKey namesake in namesakes)
         {
@@ -193,7 +210,77 @@ public sealed class NameSources(
             return fed;
         }
 
-        return await LookUpAsync(episode, taken, ct);
+        string subject = $"{episode.ShowTitle} {episode.Key}";
+
+        return await LookUpAsync(
+            episode,
+            subject,
+            subject,
+            name => EpisodeNaming.Names(name, episode.ShowTitle, episode.Key),
+            episode: true,
+            taken,
+            ct);
+    }
+
+    public async Task<IReadOnlyList<SourceName>> PackNamesForAsync(IReadOnlyList<TrackedEpisode> season, FeedNamesTaken taken, CancellationToken ct)
+    {
+        TrackedEpisode latest = SeasonPacks.Latest(season);
+        IReadOnlyList<SourceName> fed = taken.PacksFor(latest.Key.ShowId, latest.Key.Season);
+
+        // Named by a feed, so no search is asked, exactly as for an episode.
+        if (fed.Count > 0)
+        {
+            return fed;
+        }
+
+        // Asked "Show S03" and nothing else: the season as an episode's search asks for the episode
+        // (release-names.md: the plugin builds no other search term of its own).
+        string term = SeasonPacks.Subject(latest);
+
+        return await LookUpAsync(
+            latest,
+            term,
+            term,
+            name => EpisodeNaming.NamesSeason(name, latest.ShowTitle, latest.Key.Season),
+            episode: false,
+            taken,
+            ct);
+    }
+
+    /// <summary>
+    /// The feed names that are a pack of a season with several gaps, per season.
+    /// </summary>
+    /// <remarks>
+    /// Dated against the latest-aired episode the pack would cover, by the same week as an episode's name
+    /// (<see cref="SeasonPacks.Latest"/>).
+    /// </remarks>
+    private static Dictionary<(int ShowId, int Season), IReadOnlyList<SourceName>> TakePacks(
+        IReadOnlyList<SourceName> names,
+        IReadOnlyList<TrackedEpisode> episodes)
+    {
+        Dictionary<(int ShowId, int Season), IReadOnlyList<SourceName>> taken = [];
+
+        foreach (IReadOnlyList<TrackedEpisode> season in SeasonPacks.WithSeveralGaps(episodes))
+        {
+            TrackedEpisode latest = SeasonPacks.Latest(season);
+
+            SourceName[] naming =
+            [
+                .. names
+                    .Where(name => EpisodeNaming.NamesSeason(ReleaseName.Parse(name.Title), latest.ShowTitle, latest.Key.Season))
+                    .Distinct(),
+            ];
+
+            IReadOnlySet<string> tooOld = SourceName.TooOld(naming, latest);
+            SourceName[] named = [.. naming.Where(name => !tooOld.Contains(name.Title))];
+
+            if (named.Length > 0)
+            {
+                taken[(latest.Key.ShowId, latest.Key.Season)] = named;
+            }
+        }
+
+        return taken;
     }
 
     /// <summary>
@@ -286,32 +373,54 @@ public sealed class NameSources(
     }
 
     /// <summary>
-    /// Asks every name source's search about one episode, all at once, and keeps what names it.
+    /// Asks every name source's search about one episode or one season, all at once, and keeps what names it.
     /// </summary>
     /// <remarks>
-    /// Asked <c>Show SxxEyy</c> and nothing else (<c>release-names.md</c>: the plugin builds no search term
-    /// of its own). No quality, which is judged on the names that come back; no year and no absolute
-    /// number, which the search ladder added until 15 September 2026 and the owner's requirements do not.
+    /// Asked <c>Show SxxEyy</c> for an episode and <c>Show Sxx</c> for a season's pack, and nothing else
+    /// (<c>release-names.md</c>: the plugin builds no other search term of its own). No quality, which is judged
+    /// on the names that come back; no year and no absolute number, which the search ladder added until
+    /// 15 September 2026 and the owner's requirements do not.
     /// </remarks>
-    private async Task<IReadOnlyList<SourceName>> LookUpAsync(TrackedEpisode episode, FeedNamesTaken taken, CancellationToken ct)
+    /// <param name="dated">
+    /// The episode a name is dated against: the one asked for, or the latest-aired one a pack would cover.
+    /// </param>
+    /// <param name="term">What every source is asked.</param>
+    /// <param name="subject">What the Activity page calls it.</param>
+    /// <param name="keeps">Which of a source's answers name what was asked for.</param>
+    /// <param name="episode">
+    /// Whether one episode is asked for rather than a season's pack. A pack is counted nowhere the run counts
+    /// episodes asked about, and older names answering it mark no episode as having a namesake: that is what an
+    /// episode's own answer says, for that episode.
+    /// </param>
+    /// <param name="taken">The run's names so far, and the sources that failed in it.</param>
+    /// <param name="ct">The run's lifetime.</param>
+    private async Task<IReadOnlyList<SourceName>> LookUpAsync(
+        TrackedEpisode dated,
+        string term,
+        string subject,
+        Func<ReleaseName, bool> keeps,
+        bool episode,
+        FeedNamesTaken taken,
+        CancellationToken ct)
     {
         // Not a source that failed earlier in the run, feed or search: it gives no names in it (run.md).
         SourceDefinition[] searches = [.. catalogue.For(SourceRole.Names).Where(search => !taken.Failed(search.Name))];
-        string subject = $"{episode.ShowTitle} {episode.Key}";
-        string term = subject;
 
         journal.Started(ActivityStage.Names, subject, $"asking {searches.Length} sources what it is called");
 
-        SourceName[][] answers = await Task.WhenAll(searches.Select(search => AskAsync(search, episode, term, subject, taken, ct)));
+        SourceName[][] answers = await Task.WhenAll(searches.Select(search => AskAsync(search, keeps, term, subject, taken, ct)));
         SourceName[] every = [.. answers.SelectMany(answer => answer).Distinct()];
 
         // Judged across every source's answer, never one source at a time: any source's date is the name's.
-        IReadOnlySet<string> tooOld = SourceName.TooOld(every, episode);
+        IReadOnlySet<string> tooOld = SourceName.TooOld(every, dated);
         SourceName[] names = [.. every.Where(name => !tooOld.Contains(name.Title))];
 
         if (tooOld.Count > 0)
         {
-            taken.Namesake(episode.Key);
+            if (episode)
+            {
+                taken.Namesake(dated.Key);
+            }
 
             journal.Noted(
                 ActivityStage.Names,
@@ -319,8 +428,12 @@ public sealed class NameSources(
                 $"{tooOld.Count} names published more than a week before it aired were left out, from every source that gave them: another programme of the same name");
         }
 
-        journal.Counted(RunCounter.EpisodesAsked);
-        journal.Counted(RunCounter.NamesFound, names.Length);
+        if (episode)
+        {
+            journal.Counted(RunCounter.EpisodesAsked);
+            journal.Counted(RunCounter.NamesFound, names.Length);
+        }
+
         journal.Finished(ActivityStage.Names, subject, $"{names.Length} names");
 
         return names;
@@ -328,7 +441,7 @@ public sealed class NameSources(
 
     private async Task<SourceName[]> AskAsync(
         SourceDefinition search,
-        TrackedEpisode episode,
+        Func<ReleaseName, bool> keeps,
         string term,
         string subject,
         FeedNamesTaken taken,
@@ -360,11 +473,11 @@ public sealed class NameSources(
             }
 
             // A search answers with whatever it thinks is near, other episodes included. Only what names
-            // this episode is kept, exactly as for a feed.
+            // this episode, or this season's pack, is kept, exactly as for a feed.
             SourceName[] naming =
             [
                 .. reader.Read(result.Body!, address)
-                    .Where(row => EpisodeNaming.Names(ReleaseName.Parse(row.Title), episode.ShowTitle, episode.Key))
+                    .Where(row => keeps(ReleaseName.Parse(row.Title)))
                     .Select(row => new SourceName(row.Title, search.Name, row.Published)),
             ];
 
