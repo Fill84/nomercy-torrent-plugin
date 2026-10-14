@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
@@ -74,6 +75,13 @@ public sealed class Settings
 
     /// <summary>Shipped sources the owner switched off, by name.</summary>
     public List<string> DisabledDefaultSources { get; set; } = [];
+
+    /// <summary>The quietest line the plugin writes. GitHub issue #7.</summary>
+    /// <remarks>
+    /// Information, which is what the server's own log has always had from this plugin. Debug and Trace go
+    /// only to the plugin's own file, because the server lets no plugin line below Information through.
+    /// </remarks>
+    public LogLevel LogLevel { get; set; } = LogLevel.Information;
 }
 
 /// <summary>

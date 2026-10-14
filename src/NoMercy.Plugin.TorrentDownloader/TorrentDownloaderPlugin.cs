@@ -251,6 +251,18 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public SettingsStore Settings => _settings
         ?? throw new InvalidOperationException("The plugin has not been initialised, so it has no settings yet.");
 
+    /// <summary>
+    /// The one logger every part of the plugin is handed instead of the server's.
+    /// </summary>
+    /// <remarks>
+    /// The server's drops every line below Information, so a class handed that one has Debug lines that go
+    /// nowhere — GitHub issue #7. This one writes them to the plugin's own file at the owner's level.
+    /// </remarks>
+    public PluginLog Log => _log
+        ?? throw new InvalidOperationException("The plugin has not been initialised, so it has no log yet.");
+
+    private PluginLog? _log;
+
     public string Name => PluginIdentity.Name;
 
     public string Description => PluginIdentity.Description;
@@ -325,6 +337,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     {
         _context = context;
 
+        // An object and a path, no file yet: the folder is made when the first
+        // line is written, off this thread.
+        PluginLog log = new(context.Logger, Path.Combine(context.DataFolderPath, "logs"));
+        _log = log;
+
         // Objects, not I/O: nothing here opens a file, a socket or a database.
         // The settings are read when something asks for them, and the database
         // is created and migrated the first time it is really used.
@@ -346,7 +363,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         _runs = new(_database);
         _cadences = new(_database);
         _clock = new(_cadences, TimeProvider.System);
-        _live = new(context.Hub, _journal, context.Logger, CurrentCycle, told: _onlookers.Told);
+        _live = new(context.Hub, _journal, log, CurrentCycle, told: _onlookers.Told);
 
         // The page heartbeat beats while somebody is looking and at no other
         // time. It was a timer set to go off every second for the life of the
@@ -383,7 +400,53 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // folders are set after the plugin has started, and every part of a
         // start remembers whether it has run, so the second is the first that
         // does anything.
-        _settings.Saved += () => _ = Task.Run(() => StartUpAsync(Lifetime), CancellationToken.None);
+        _settings.Saved += saved =>
+        {
+            // On this thread and before anything else, so the save's own next
+            // line is already at the new level: an owner turning Debug on is
+            // chasing something, and a restart would lose what they were chasing.
+            Interlocked.Increment(ref _levelsChosen);
+            log.Level = saved.LogLevel;
+
+            _ = Task.Run(() => StartUpAsync(Lifetime), CancellationToken.None);
+        };
+
+        // From the moment a secret is stored, no line can carry it.
+        _settings.SecretStored += log.NeverSay;
+
+        // The level the owner chose last time, and every secret the store
+        // holds, read off this thread for the same reason the start is. Until
+        // it is read the level is Information, which is what the server's own
+        // log has always had from this plugin.
+        _ = Task.Run(() => SettleTheLogAsync(Lifetime), CancellationToken.None);
+    }
+
+    /// <summary>How many saves have set the level, so a slow first read cannot undo a save it raced with.</summary>
+    private int _levelsChosen;
+
+    /// <summary>Puts the stored level on the log, and teaches it every stored secret.</summary>
+    /// <remarks>
+    /// Secrets first: they matter whatever the level, and a Debug line about a tracker written before they
+    /// were learned is exactly the line that would carry one.
+    /// </remarks>
+    private async Task SettleTheLogAsync(CancellationToken ct)
+    {
+        try
+        {
+            await Log.LearnSecretsAsync(Context.Secrets, ct);
+
+            int before = Volatile.Read(ref _levelsChosen);
+            Settings stored = await Settings.LoadAsync(ct);
+
+            if (Volatile.Read(ref _levelsChosen) == before && PluginLog.Offered.Contains(stored.LogLevel))
+            {
+                Log.Level = stored.LogLevel;
+            }
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            _log?.LogWarning(wrong, "The log level could not be read, so it stays at {Level}: {Reason}", Log.Level, wrong.Message);
+        }
     }
 
     /// <summary>Where the server says it can write, or nothing on a server that will not say.</summary>
@@ -544,7 +607,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 // Searching now: it searches once more when it is done.
                 _again = true;
 
-                _context?.Logger.LogInformation(
+                _log?.LogInformation(
                     "{Why}, and a cycle is already open, so it was added to that one.", why);
 
                 return false;
@@ -559,7 +622,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 {
                     _finding = true;
 
-                    _context?.Logger.LogInformation(
+                    _log?.LogInformation(
                         "{Why}, and a cycle is waiting on its downloads, so it searches again.", why);
 
                     _cycling = Task.Run(() => CycleThroughAsync(open.Token), CancellationToken.None);
@@ -595,7 +658,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             _stop = stop;
             _stopped = false;
 
-            _context?.Logger.LogInformation("{Why}, so a cycle was started.", why);
+            _log?.LogInformation("{Why}, so a cycle was started.", why);
 
             // Kept, so a caller that wants the work done before it looks at the
             // result can wait for it. The button never does - an HTTP request
@@ -712,7 +775,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong)
         {
-            _context?.Logger.LogError(wrong, "The cycle stopped: {Reason}", wrong.Message);
+            _log?.LogError(wrong, "The cycle stopped: {Reason}", wrong.Message);
         }
         finally
         {
@@ -800,7 +863,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             }
             catch (Exception wrong)
             {
-                _context?.Logger.LogWarning(wrong, "Maintenance failed: {Reason}", wrong.Message);
+                _log?.LogWarning(wrong, "Maintenance failed: {Reason}", wrong.Message);
             }
         }
 
@@ -814,7 +877,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            _context?.Logger.LogWarning(wrong, "The cycle's finish was not written down: {Reason}", wrong.Message);
+            _log?.LogWarning(wrong, "The cycle's finish was not written down: {Reason}", wrong.Message);
         }
 
         // The cycle is over, and the pages say so.
@@ -848,7 +911,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // Being wrong here costs a cycle that stays open until the next
             // thing happens; being wrong the other way runs the folder sweep
             // while a download is in flight.
-            _context?.Logger.LogWarning(wrong, "What is still in hand could not be read: {Reason}", wrong.Message);
+            _log?.LogWarning(wrong, "What is still in hand could not be read: {Reason}", wrong.Message);
 
             return true;
         }
@@ -914,7 +977,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            _context?.Logger.LogWarning(
+            _log?.LogWarning(
                 wrong, "When the next cycle is due could not be worked out: {Reason}", wrong.Message);
         }
     }
@@ -954,14 +1017,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             await GrabsAsync(ct),
             library,
             await AppliedAsync(ct),
-            new Stager(_journal, Context.Logger),
+            new Stager(_journal, Log),
 
             // The encoder facade the context carries, which the server hands
             // over only to a plugin whose manifest names the encoder hook.
             // media-server #30 and #35 are what made it possible.
-            EncodeGateway.For(Context.Encoder, _journal, Context.Logger),
+            EncodeGateway.For(Context.Encoder, _journal, Log),
             _journal,
-            Context.Logger,
+            Log,
             time: null,
 
             // Where the server says what became of an encode. Without it a
@@ -1013,7 +1076,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             return null;
         }
 
-        _says = new(jobs, Context.Logger);
+        _says = new(jobs, Log);
 
         return _says;
     }
@@ -1032,7 +1095,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            _context?.Logger.LogWarning(wrong, "A transfers pass failed: {Reason}", wrong.Message);
+            _log?.LogWarning(wrong, "A transfers pass failed: {Reason}", wrong.Message);
         }
     }
 
@@ -1065,7 +1128,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong)
         {
-            _context?.Logger.LogWarning(wrong, "A transfers pass failed: {Reason}", wrong.Message);
+            _log?.LogWarning(wrong, "A transfers pass failed: {Reason}", wrong.Message);
         }
 
         // A pass is what turns a finished download into a staged file and a
@@ -1077,7 +1140,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            _context?.Logger.LogWarning(wrong, "Closing the cycle failed: {Reason}", wrong.Message);
+            _log?.LogWarning(wrong, "Closing the cycle failed: {Reason}", wrong.Message);
         }
 
         try
@@ -1086,7 +1149,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            _context?.Logger.LogWarning(wrong, "The next look at the transfers could not be set: {Reason}", wrong.Message);
+            _log?.LogWarning(wrong, "The next look at the transfers could not be set: {Reason}", wrong.Message);
         }
     }
 
@@ -1197,7 +1260,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
-            _context?.Logger.LogWarning(wrong, "Starting up failed: {Reason}", wrong.Message);
+            _log?.LogWarning(wrong, "Starting up failed: {Reason}", wrong.Message);
         }
     }
 
@@ -1272,7 +1335,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // the run meets when it reaches that host, which is what happened
             // before this pass existed at all. Letting it throw would lose the
             // whole cycle to a browser that would not start.
-            Context.Logger.LogWarning(
+            Log.LogWarning(
                 wrong,
                 "The challenges could not be cleared before the run, so each host meets its own as it is asked.");
         }
@@ -1403,7 +1466,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // nothing.
             how = RunEnd.Failed;
             _journal.Failed(ActivityStage.Decide, "the search cycle", wrong.Message);
-            _context?.Logger.LogError(wrong, "The search cycle stopped: {Reason}", wrong.Message);
+            _log?.LogError(wrong, "The search cycle stopped: {Reason}", wrong.Message);
         }
         finally
         {
@@ -1588,7 +1651,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         catch (Exception wrong)
         {
-            _context?.Logger.LogWarning(wrong, "Closing the stopped cycle failed: {Reason}", wrong.Message);
+            _log?.LogWarning(wrong, "Closing the stopped cycle failed: {Reason}", wrong.Message);
         }
     }
 
@@ -1795,7 +1858,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         if (!saved.Saved)
         {
-            _context?.Logger.LogWarning(
+            _log?.LogWarning(
                 "The trackers this cycle found could not be kept: {Reasons}",
                 string.Join(" ", saved.Errors));
         }
@@ -1891,7 +1954,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
             foreach (string infoHash in swept)
             {
-                Context.Logger.LogInformation(
+                Log.LogInformation(
                     "{Hash} was cleared from the download folder: no grab of this plugin's answers for it.",
                     infoHash);
             }
@@ -1988,7 +2051,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 _journal,
                 Shipped(),
                 engine: engine,
-                ledger: ledger);
+                ledger: ledger,
+                logger: Log);
         }
         finally
         {
@@ -2065,7 +2129,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // switch off.
                     new PortMapping([new UpnpMapper(_trackerHttp), new NatPmpMapper()]),
                     _journal,
-                    Context.Logger,
+                    Log,
                     new SocketTrackerTransport(_trackerHttp),
                     new SocketPeerDialler(
                         SocketPeerDialler.DefaultPatience,
@@ -2097,7 +2161,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // whether it had a torrent or not.
                     () => _engine?.Watching ?? false,
                     Moved,
-                    Context.Logger);
+                    Log);
 
                 // The client moving wakes a watch that went to rest over a page
                 // with nothing changing on it. A stalled torrent starting again
@@ -2186,7 +2250,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // that is not running, and a client that is not running has
                     // proved nothing either way.
                     _engine?.PortCondition ?? PortState.Unknown,
-                    ShowAdvanced);
+                    ShowAdvanced,
+                    Log.Folder);
 
             case Pages.ShowSettingsName:
                 return await ShowSettingsPageAsync(match!.Param("id"), ct);
@@ -2527,7 +2592,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private async Task<BrowserOff?> BrowserOffAsync(CancellationToken ct)
     {
-        if (new HiddenStages(Context.Logger).WhyNot is not string why)
+        if (new HiddenStages(Log).WhyNot is not string why)
         {
             return null;
         }
@@ -2627,7 +2692,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             // The page already has it. What is lost is only the next start's
             // memory of it, and that is not worth taking the run's ending down.
-            _context?.Logger.LogWarning(unwritten, "How the run ended could not be written down: {Reason}", unwritten.Message);
+            _log?.LogWarning(unwritten, "How the run ended could not be written down: {Reason}", unwritten.Message);
         }
     }
 
@@ -2640,8 +2705,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private IReadOnlyList<SourceDefinition> Shipped()
     {
-        return _shipped ??= new CatalogueLoader(
-            (_context ?? throw new InvalidOperationException("The plugin has not been initialised.")).Logger).Load();
+        return _shipped ??= new CatalogueLoader(Log).Load();
     }
 
     /// <summary>
@@ -2759,6 +2823,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // After the token, so anything stopping on it that publishes a last
         // change still has somewhere to publish it.
         _live?.Dispose();
+
+        // Last, so the lines the shutdown itself wrote are on disk too: the end
+        // of a log is where an owner looks first.
+        _log?.Flush();
     }
 
     /// <summary>
@@ -2773,7 +2841,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     {
         if (Interlocked.Exchange(ref said, 1) == 0)
         {
-            _context?.Logger.LogInformation("{Message}", message);
+            _log?.LogInformation("{Message}", message);
         }
     }
 
@@ -2794,7 +2862,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             return;
         }
 
-        _context?.Logger.LogInformation(
+        _log?.LogInformation(
             "{Name} {Version} awake.",
             PluginIdentity.Name,
             PluginIdentity.Version);

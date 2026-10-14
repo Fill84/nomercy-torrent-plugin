@@ -78,6 +78,28 @@ public static class Addresses
     /// <summary>What is written in place of a secret.</summary>
     public const string Blanked = "***";
 
+    /// <summary>A <c>name=value</c> pair anywhere in a line of text.</summary>
+    private static readonly Regex Pair = new(
+        @"(?<name>[\w.\-]+)=(?<value>[^&\s""'<>#]+)",
+        RegexOptions.CultureInvariant);
+
+    /// <summary>
+    /// <paramref name="text"/> with the value of every secret-named <c>name=value</c> in it replaced.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="Redact"/>'s rule for a line that is not an address: a log line written about a tracker or
+    /// an indexer names the address inside a sentence, and the rule has to hold there as well as in a
+    /// failure. The same names, so a parameter blanked in one place is blanked in the other.
+    /// </remarks>
+    public static string RedactText(string text)
+    {
+        return text.Contains('=', StringComparison.Ordinal)
+            ? Pair.Replace(text, pair => Secret.IsMatch(pair.Groups["name"].Value)
+                ? $"{pair.Groups["name"].Value}={Blanked}"
+                : pair.Value)
+            : text;
+    }
+
     /// <summary>
     /// <paramref name="address"/> with the value of every secret-named query
     /// parameter replaced.

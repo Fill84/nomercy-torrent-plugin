@@ -1,6 +1,8 @@
 using System.Globalization;
 
+using Microsoft.Extensions.Logging;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
 
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 
@@ -160,6 +162,10 @@ public static class SettingsEdit
             settings => Text(settings.Client.ResumeIntervalSeconds),
             (settings, value) => settings.Client.ResumeIntervalSeconds = Whole(value)),
 
+        ["logLevel"] = new(
+            settings => settings.LogLevel.ToString(),
+            (settings, value) => settings.LogLevel = Level(value)),
+
         // The boxes beside the preset lists, in megabytes a second because that
         // is the unit on the label. Declared after the byte keys and applied
         // after them, so what the owner typed wins over what the list offered.
@@ -236,6 +242,24 @@ public static class SettingsEdit
     private static EncryptionPolicy Policy(string value)
     {
         return Enum.Parse<EncryptionPolicy>(value.Trim(), ignoreCase: true);
+    }
+
+    /// <summary>One of the five levels the page offers, by name.</summary>
+    /// <remarks>
+    /// By name and from the list, never by <c>Enum.Parse</c> alone: that would take "None", which silences
+    /// the plugin's errors too, and "4", which is Error to a machine and nothing to the owner who typed it.
+    /// </remarks>
+    private static LogLevel Level(string value)
+    {
+        foreach (LogLevel level in PluginLog.Offered)
+        {
+            if (string.Equals(level.ToString(), value.Trim(), StringComparison.OrdinalIgnoreCase))
+            {
+                return level;
+            }
+        }
+
+        throw new ArgumentException($"'{value}' is not a log level the page offers.", nameof(value));
     }
 
     private static string Text(int value) => value.ToString(CultureInfo.InvariantCulture);

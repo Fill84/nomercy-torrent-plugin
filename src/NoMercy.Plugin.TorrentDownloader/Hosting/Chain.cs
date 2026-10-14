@@ -61,10 +61,14 @@ public sealed class Chain : IAsyncDisposable
         IReadOnlyList<SourceDefinition> shipped,
         HttpMessageHandler? handler = null,
         ITorrentEngine? engine = null,
-        ISourceLedger? ledger = null)
+        ISourceLedger? ledger = null,
+        ILogger? logger = null)
     {
         _context = context;
-        _logger = context.Logger;
+
+        // The plugin's own log when it hands one over, so the solver's Debug lines
+        // reach its file: the server's logger drops everything below Information.
+        _logger = logger ?? context.Logger;
         _journal = journal;
         _engine = engine;
         _ledger = ledger;

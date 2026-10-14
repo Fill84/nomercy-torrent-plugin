@@ -170,6 +170,15 @@ and a pack that was taken answered for every gap in the season it covered.
 | `MetadataTimeoutMinutes` | 5 | |
 | `ResumeIntervalSeconds` | 60 | named as `ResumeInterval` in `docs/06`; the number is `S5-12`'s |
 | `Encryption` | allowed | not required |
+| `LogLevel` | Information | Error, Warning, Information, Debug or Trace; nothing else is stored. A line below it is written nowhere. Every line at or above it goes to the plugin's own file, `logs/torrent-downloader-<yyyy-MM-dd>.log` under the plugin's data folder (UTC date, one a day, the newest seven kept); Information and above go to the server's log as well. A save applies it to the next line, with no restart |
+
+**The log level, 14 October 2026 (GitHub issue #7).** The server lets no plugin line below Information
+through and a plugin cannot change that, so Debug and Trace go to a file of the plugin's own — the
+owner's choice that day. Error: the plugin cannot do its job. Warning: one item failed and the plugin
+goes on. Information: one line per step the owner sees — search, grab, complete, move. Debug: the
+decision behind each step. Trace: wire detail. No line, in the file or the server's log, carries a
+secret: every secret-named parameter is blanked (`docs/05-sources.md` § Fetching), and so is every value
+the secret store holds, wherever it stands in the line.
 
 **Quality, codec, specials and tags are not settings of the plugin.** The global profile —
 `IncludeSpecials`, `MaximumResolution`, `Codec`, `RequireCodecTag`, `EnglishOnly`, `ExcludeTerms` —

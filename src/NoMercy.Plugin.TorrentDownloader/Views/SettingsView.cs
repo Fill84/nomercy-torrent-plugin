@@ -51,7 +51,8 @@ public static class SettingsView
         IReadOnlyCollection<string> secretsSet,
         IReadOnlyList<string> problems,
         PortState port = PortState.Unknown,
-        bool advanced = false)
+        bool advanced = false,
+        string? logFolder = null)
     {
         HashSet<string> present = new(secretsSet, StringComparer.Ordinal);
 
@@ -101,6 +102,7 @@ public static class SettingsView
                 "Save",
                 PluginActionIntent.CallPlugin(SaveAction, null, PluginActionTransport.Rest),
                 [.. fields]),
+            .. advanced && logFolder is not null ? [LogFolder(logFolder)] : Array.Empty<PluginComponent>(),
             Port(settings, port),
             TrackerList(settings, present, privately),
             Running(),
@@ -422,7 +424,39 @@ public static class SettingsView
                 Type = PluginFormFieldType.Number,
                 Value = settings.Client.ResumeIntervalSeconds,
             },
-            Cron("cadences.cycle", "Starting a cycle, as an expression", settings.Cadences.Cycle)];
+            Cron("cadences.cycle", "Starting a cycle, as an expression", settings.Cadences.Cycle),
+
+            // Last, so the line naming the log file's folder, drawn straight
+            // after the form, sits under it. GitHub issue #7.
+            new PluginFormField
+            {
+                Name = "logLevel",
+                Label = "Log level",
+                Type = PluginFormFieldType.Select,
+                Value = settings.LogLevel.ToString(),
+                Options =
+                [
+                    .. PluginLog.Offered.Select(level => new PluginFormOption
+                    {
+                        Label = level.ToString(),
+                        Value = level.ToString(),
+                    }),
+                ],
+            }];
+    }
+
+    /// <summary>Where the log file is, so an owner who turns on Debug knows where to read it.</summary>
+    /// <remarks>
+    /// Debug and Trace never reach the server's log — the server lets no plugin line below Information
+    /// through — so without this the owner would set Debug, look in the server's log, and see nothing more.
+    /// </remarks>
+    private static PluginComponent LogFolder(string folder)
+    {
+        return Ui.Text(
+            "log-folder",
+            $"The log file is in {folder}, one a day, the newest {LogFile.DaysKept} kept. "
+            + "Debug and Trace are written there and nowhere else.",
+            "caption");
     }
 
     /// <summary>One cadence, typed out, for whoever wants it.</summary>

@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
@@ -156,6 +157,13 @@ public sealed class SettingsStore
             }
         }
 
+        // The JSON endpoint can carry any number; the page offers five names. None would silence the
+        // plugin's errors as well as its chatter, and Critical is a level nothing here writes.
+        if (!PluginLog.Offered.Contains(settings.LogLevel))
+        {
+            errors.Add($"The log level '{settings.LogLevel}' is not one of {string.Join(", ", PluginLog.Offered)}.");
+        }
+
         // Asked once, and only used where a folder was refused: a save that
         // passes says nothing about storage at all.
         int before = errors.Count;
@@ -196,8 +204,10 @@ public sealed class SettingsStore
         _asRead = null;
 
         // After the store has forgotten, so a listener that reads the settings
-        // back reads what was just written.
-        Saved?.Invoke();
+        // back reads what was just written. Handed what was saved as well, so a
+        // listener that must act before the next line is written — the log
+        // level — has nothing to wait for.
+        Saved?.Invoke(settings);
 
         return new(true, errors, warnings);
     }
@@ -209,11 +219,20 @@ public sealed class SettingsStore
     /// has started. Until contract 12 the host's own tick brought the start round
     /// again; a plugin that is told nothing once it is loaded has to hear it here.
     /// </remarks>
-    public event Action? Saved;
+    public event Action<Settings>? Saved;
+
+    /// <summary>Raised with a secret's value as it is stored, before the store is even asked.</summary>
+    /// <remarks>
+    /// For the plugin's log, which blanks every secret it knows from every line. Raised first, so there is
+    /// no moment in which the secret is stored and a line could still carry it.
+    /// </remarks>
+    public event Action<string>? SecretStored;
 
     /// <summary>Stores a secret. It never travels through <see cref="Settings"/>.</summary>
     public Task SetSecretAsync(string key, string value, CancellationToken ct)
     {
+        SecretStored?.Invoke(value);
+
         return _secrets.SetAsync(key, value, ct);
     }
 

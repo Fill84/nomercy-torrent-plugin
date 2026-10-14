@@ -182,6 +182,87 @@ public class SecretsNeverEscapeTests
         }
     }
 
+    /// <remarks>
+    /// <para>
+    /// And the plugin's own log file (GitHub issue #7), which holds the Debug and Trace lines the server never
+    /// sees — the lines about trackers, where an announce address carrying a passkey is said.
+    /// </para>
+    /// <para>
+    /// A secret stored before the plugin started is known once it has started; one set on the page is known
+    /// from the moment it is set. Each is handed to a line raw, as a passkey in an announce path, which no
+    /// rule about parameter names can find.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task NoSecretTheStoreHoldsReachesThePluginsOwnLogFile()
+    {
+        using TorrentDownloaderPlugin plugin = new();
+        FakePluginContext context = Seeded();
+
+        plugin.Initialize(context);
+
+        // Saved, as the owner would, so the start reading the stored level cannot put it back.
+        await plugin.Settings.SaveAsync(
+            new Settings
+            {
+                IncompleteFolder = Path.GetTempPath(),
+                IntakeFolder = Path.GetTempPath(),
+                LogLevel = Microsoft.Extensions.Logging.LogLevel.Trace,
+            },
+            CancellationToken.None);
+
+        // Started is not instant, so this asks until the start has learned what the store held — and fails by
+        // timing out if it never does. Each round's lines carry their own mark, so a line the start wrote in
+        // between cannot stand in for one of them.
+        using CancellationTokenSource giving = new(Hang.Limit);
+
+        for (int round = 0; !Clean(Said(plugin, round, Secrets), Secrets); round++)
+        {
+            await Task.Delay(TimeSpan.FromMilliseconds(20), giving.Token);
+        }
+
+        // And one set on the page is known from the moment it is set, with no start in between.
+        const string fresh = "f00dfacecafe0123456789abcdef4242";
+
+        await plugin.Settings.SetSecretAsync(SettingsStore.TrackerPasskey("another-tracker"), fresh, CancellationToken.None);
+
+        IReadOnlyList<string> after = Said(plugin, -1, [fresh]);
+
+        Assert.True(Clean(after, [fresh]), string.Join("\n", after));
+        Assert.Contains("tracker.example", after[0], StringComparison.Ordinal);
+    }
+
+    /// <summary>One line per secret was written, and none of them carries one.</summary>
+    private static bool Clean(IReadOnlyList<string> lines, IReadOnlyList<string> secrets)
+    {
+        return lines.Count == secrets.Count
+               && lines.All(line => secrets.All(secret => !line.Contains(secret, StringComparison.OrdinalIgnoreCase)));
+    }
+
+    /// <summary>Hands each secret to a Debug line about a tracker, and reads back the lines that round wrote.</summary>
+    private static IReadOnlyList<string> Said(TorrentDownloaderPlugin plugin, int round, IReadOnlyList<string> secrets)
+    {
+        string mark = $"round-{round}-";
+
+        foreach (string secret in secrets)
+        {
+            Microsoft.Extensions.Logging.LoggerExtensions.LogDebug(
+                plugin.Log,
+                "{Mark} announcing to {Tracker}",
+                mark,
+                $"https://tracker.example/{secret}/announce");
+        }
+
+        plugin.Log.Flush();
+
+        return
+        [
+            .. (Directory.Exists(plugin.Log.Folder) ? Directory.GetFiles(plugin.Log.Folder) : [])
+                .SelectMany(File.ReadAllLines)
+                .Where(line => line.Contains(mark, StringComparison.Ordinal)),
+        ];
+    }
+
     /// <summary>Every route the plugin will render.</summary>
     private static string[] Routes =>
         [Pages.OverviewRoute, Pages.SettingsRoute, Pages.ActivityRoute, Pages.QueueRoute, "/nonsense"];

@@ -292,7 +292,12 @@ public sealed class TheChainIsJoinedTests : IDisposable
         }
 
         Assert.Contains(context.Log.Lines, line => line.Contains("No folders are configured", StringComparison.Ordinal));
-        Assert.False(Directory.Exists(_folder), "a plugin with no folders configured touched the disk.");
+
+        // Its own log is the one thing it writes: the line just heard went to the plugin's log file as well
+        // (GitHub issue #7). Nothing else — no database, no browser, no download.
+        Assert.True(
+            !Directory.Exists(_folder) || Directory.EnumerateFileSystemEntries(_folder).All(entry => Path.GetFileName(entry) == "logs"),
+            "a plugin with no folders configured touched the disk.");
     }
 
     /// <remarks>
