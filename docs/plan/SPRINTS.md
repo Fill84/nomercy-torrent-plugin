@@ -3178,6 +3178,256 @@ the search never started for a tracked episode, the refusal of an untracked epis
 of a run never written down. The build, the format check and five full runs of the suite are clean:
 1,374 tests a run, 22 September 2026.
 
+## S14 · The seven GitHub issues of 13 October 2026
+
+Fill84/nomercy-torrent-plugin#1 to #7, filed by Stoney on 13 October 2026. The owner's word of
+14 October 2026: fix them. The owner's choices that day: Debug and Trace lines go to a log file of the
+plugin's own, a media-server issue asks for `xvfb` in the server's Docker images, and each GitHub issue
+is closed with a comment naming its commit once its slice is pushed. Two of the issues reverse earlier
+decisions of the owner's — #1 the 15 September 2026 rule that a pack is not searched for, #2 the
+12 September 2026 rule that there is no seeder gate — and the owner's word to fix them is the decision
+to reverse them.
+
+**Facts read off the media server's `dev` on 14 October 2026**, so they are not looked for again:
+
+- `PluginViewRequest.Query` carries the page request's query (`PluginUiController.cs:272`, everything
+  but `route` and `surface`). The web app's `PluginScreen.vue` asks for a view with only `route`,
+  `surface` and `input`, so a query on the page's own address never reaches the plugin today. **A page
+  state that has to survive reload and back goes in the path.**
+- The SDK has no tab component and no sort, filter or paging field on a table (media-server #593 asks
+  for them, open).
+- The server's minimum log level is Information for every category, plugins included
+  (`WebHostFactory.cs:37`), and a plugin cannot change it. Out of process the plugin's logger is a plain
+  console logger at Information (`RemotePluginContext.cs:75`). Plugins run in-process by default.
+- The server stopped code-scanning plugins at load and install on 8 October 2026 (`d9afd5bd3`);
+  `System.Diagnostics.Process` is an analyzer warning (`NMP0004`) and `IPluginProcess.SpawnAsync` exists.
+  `IPluginBrowser` exists only as an interface that every host refuses.
+- No server Dockerfile installs `xvfb` or a browser. The runtime images work in `/app`.
+
+Order: the two faults first (#3, #6), then the log level, which every later slice uses (#7), then #2,
+#1, and the pages last — tabs (#4) before sort and filter (#5), so that a page shows one table at a time
+and an unscoped `sort` has one table to mean.
+
+## S14-01 · A finished download always reaches the intake folder (#3)
+
+**Read first:** `docs/specs/run.md` § When a download finishes, `docs/06-torrent-client.md` § around
+line 370, `TorrentDownloaderPlugin.cs` `TransfersGuardedAsync` / `StartTransfers` /
+`ArmEncodeCheckAsync`, `Hosting/Transfers.cs` `TickAsync` and `StageAsync`, `Hosting/Stager.cs`.
+
+**What reading the code found.** Two ways a finished download stays in the incomplete folder:
+
+1. **A lost wake-up.** `TransfersGuardedAsync` sets `_transfersAgain` only *after* `TryEnter` failed.
+   If the running pass reads the flag in its `while`, leaves the guard and reads it again before the
+   refused caller writes it, the flag is set with nobody left to act on it. The `Completed` event that
+   lost the race is never repeated.
+2. **No second look.** A pass runs only on an event: a completion, a give-up, a grab, a start, or the
+   one-minute timer that exists only while a grab waits on an encode. A finished download whose staging
+   did not happen on the pass its completion started — a file still held, a refused move, an exception
+   swallowed per torrent — is never looked at again until something unrelated happens.
+
+**Steps**
+
+1. Tests (red first) for both: a completion that arrives while a pass is finishing is staged; a finished
+   download whose first staging attempt fails is staged by a later pass without any new event.
+2. Mark the wish for another pass before trying the guard, so the holder's last read after leaving
+   always sees it.
+3. A transfers pass runs at the start of every cycle as well (the cadence is the safety net), and the
+   one-minute timer is armed while any grab is waiting on an encode **or** a finished download is still
+   not staged.
+4. Every failed move or copy logs a Warning naming the path and the reason. A pass that fails logs it
+   the same way.
+5. Cross-volume: a test proves a finished download reaches the intake folder on the same volume (a move)
+   and on another volume (a copy). On Linux a second file system is at hand (`/dev/shm` is `tmpfs`); on
+   Windows the copy path is reached the way the existing seeding-copy test reaches it. Whatever proves
+   the second volume for real is what is used; a test that only proves a branch is taken is not enough.
+6. `docs/specs/run.md` says a pass runs at every cycle's start and every minute while a finished
+   download waits to be staged.
+
+**Done when** the tests are green and were red, the gates are clean, and #3 is closed with a comment.
+
+## S14-02 · No Xvfb, no browser, one warning (#6)
+
+**Read first:** `docs/07-solver.md`, `Solver/HiddenStages.cs`, `Solver/XvfbStage.cs`,
+`Solver/Browser.cs`, `Hosting/ChallengeAwareFetch.cs`, `Views/SourcesView.cs`.
+
+**The fault.** On a Linux host without `Xvfb` (the server's Docker images) `HiddenStages` still picks
+the Xvfb stage, `XvfbStage` calls `Process.Start("Xvfb")`, and every search that needs the browser
+fails with ".NET could not start 'Xvfb' with working directory /app".
+
+**Steps**
+
+1. Tests (red first): on Linux with no `Xvfb` on `PATH` the plugin cannot hide a browser and says why
+   in plain words — "Xvfb is not installed, so sources behind a challenge are off."; the warning is
+   logged once per plugin lifetime, not per search; a source that needs the browser is skipped and
+   every other source still answers; the Sources page says which sources are off and why.
+2. `HiddenStages` decides from the operating system **and** whether `Xvfb` is found on `PATH` (an
+   executable file named `Xvfb` in one of `PATH`'s folders). The decision stays a pure function of its
+   inputs so it is testable on Windows.
+3. The macOS path that exists already is the model: no browser, gated sources skipped, a reason.
+4. `docs/07-solver.md` gains the Linux-without-Xvfb row.
+5. The process stays `System.Diagnostics.Process`. Moving to `IPluginProcess.SpawnAsync` needs a
+   manifest capability the owner approves and binaries named in the manifest; it is not this slice.
+
+**Outside this repository** (the owner's word of 14 October 2026): an issue on
+NoMercy-Entertainment/nomercy-media-server asking for `xvfb` — and the libraries Chrome needs to run —
+in the Docker images, saying why headless is not an answer (`docs/07-solver.md` § Headless is not used).
+
+**Done when** the tests are green and were red, the gates are clean, the media-server issue is filed,
+and #6 is closed with a comment.
+
+## S14-03 · A log level the owner sets, and a log file that holds it (#7)
+
+**Read first:** every `Log*` call in `src/` (count them by level first), `Configuration/Settings*.cs`,
+`Views/SettingsView.cs`, `TorrentDownloaderPlugin.cs` where `Context.Logger` is handed out, and the
+secrets rule in `CLAUDE.md`.
+
+**What the owner chose** (14 October 2026): Debug and Trace go to a log file of the plugin's own,
+because the server lets no plugin line below Information through.
+
+**Steps**
+
+1. Tests (red first): the level setting defaults to Information and offers Error, Warning, Information,
+   Debug and Trace; a line below the chosen level is written nowhere; a line at or above it is written
+   to the plugin's log file; a line at Information or above still goes to the server's logger as well; a
+   change on the Settings page applies to the next line written, with no restart; a passkey or API key
+   handed to a line never reaches the file.
+2. One logger of the plugin's own wraps the server's: it filters by the setting, writes every line it
+   lets through to `logs/torrent-downloader-<yyyy-MM-dd>.log` under the plugin's data folder (UTC date,
+   one file a day, the newest seven kept), and passes Information and above on to the server. Every
+   class that logs gets this logger instead of `Context.Logger`.
+3. The setting sits under **Advanced** on the Settings page, with the log file's folder written under
+   it so the owner knows where to look.
+4. Every existing line gets the level that matches it — Error: the plugin cannot do its job; Warning:
+   one item failed and the plugin goes on; Information: one line per step the owner sees (search, grab,
+   complete, move); Debug: the decision behind each step; Trace: wire detail.
+5. Debug lines where the issue names silence: DHT, peers, trackers, piece picking, the browser solver,
+   the completion transfer. The BitTorrent project gets a logger where it has none.
+6. `docs/04-domain.md` § Settings gains `LogLevel`; `docs/08-ui.md` § Settings names it.
+
+**Done when** the tests are green and were red, the gates are clean, and #7 is closed with a comment.
+
+## S14-04 · A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
+
+**Read first:** `docs/04-domain.md` § the seeder gate, `docs/specs/indexer-search.md` § The winner,
+`docs/06-torrent-client.md` § the stall rule, `Core/Pipeline/IndexerRound.cs`,
+`Bittorrent/Pieces/PiecePicker.cs` (`Availability`), `Bittorrent/Engine/TorrentRun.cs`,
+`Hosting/BittorrentEngine.cs` (`GaveUp`), `Views/ActivityView.cs`, `Views/DownloadsView.cs`.
+
+**The rule, replacing the owner's of 12 September 2026:**
+
+1. A merged torrent whose every result reports nought seeders is not offered to the client. A result
+   with no seeder count is not nought. The next merged torrent in the same order is the winner instead,
+   as when a winner's magnet cannot be read. When none is left, the episode is not grabbed, the
+   Activity and History pages say "no seeders", and the episode is searched for again on the next run —
+   which is how an episode that has only just aired gets its second chance.
+2. A running torrent that is still missing a wanted piece no connected peer holds — swarm availability
+   below one — for `StallMinutes` on end is stopped, its hash is refused like any failed download, the
+   page says "cannot complete", and its episode is searched for again. The window is `StallMinutes`
+   because a peer holding the missing piece may still turn up; with no peers at all the stall rule that
+   exists already applies.
+
+**Steps**
+
+1. Tests (red first): nought seeders on every indexer is not started and the next copy is; a merged
+   torrent with one indexer reporting seeders is started; nothing seeded at all leaves the episode for
+   the next run with "no seeders"; a session whose wanted piece no peer holds for `StallMinutes` is
+   stopped and refused with "cannot complete"; one where a peer with the piece arrives inside the window
+   carries on. Rows from real captures; the swarm from the session tests' own peers.
+2. The gate in the winner's choice, the availability watch in the client, the reasons on the pages.
+3. `docs/04-domain.md`, `docs/specs/indexer-search.md` and `docs/06-torrent-client.md` state the new
+   rule and the date it replaced the old one.
+
+**Done when** the tests are green and were red, the gates are clean, and #2 is closed with a comment.
+
+## S14-05 · A season with several gaps takes a pack (#1)
+
+**Read first:** `docs/04-domain.md` § Season packs and the name table, `docs/specs/release-names.md`,
+`docs/specs/indexer-search.md`, `docs/specs/run.md`, `Core/Pipeline/SearchCycle.cs`,
+`Core/Pipeline/NameSources.cs`, `Core/Pipeline/IndexerRound.cs`, `Core/Naming/ReleaseName.cs`,
+`Core/Pipeline/Recovery.cs` (`StoredDownload.Covers`), `Hosting/Transfers.cs` (`StageAsync`),
+`Bittorrent/Metadata/TorrentMetadata.cs` (`PiecesOf`), and the staging of a torrent added by hand
+(which already reads the episode from each file's name).
+
+**The rule, replacing the owner's of 15 September 2026:**
+
+1. When two or more aired episodes of one season of a show are being searched for, a pack of that
+   season is looked for first: pack release names (`Show.S03.…`, no episode) from the feeds and from the
+   name sources' search for `Show S03`, judged against the show's settings exactly as an episode's name
+   is, and searched on the indexers exactly as an episode's name is.
+2. A pack that gives a torrent wins over the season's single episodes, and its grab covers every
+   episode of the season being searched for.
+3. Once its metadata is in, the client downloads only the video files that name an episode being
+   searched for; an episode with a file in the library is not downloaded again. An episode the pack
+   turns out not to hold stays missing and is searched for singly.
+4. No pack found, or only one episode of the season missing: the single episodes, as today.
+5. A pack name is dated by the same rule as an episode name, against the latest episode of the season it
+   would cover.
+
+**Steps**
+
+1. Tests (red first), on real captured feeds and indexer pages (capture new ones where none holds a
+   pack; `tests/fixtures/dark-matter-s01-pack.txt` and the Classroom of the Elite batch exist): a season
+   with several gaps takes the pack; a season with one gap takes the single episode; no pack found falls
+   back to the singles; the pack's files already in the library are not downloaded; an episode the pack
+   does not hold is searched for singly afterwards.
+2. The pack search in the cycle, the pack's grab with all its episodes, the file selection after
+   metadata, staging per file (it exists for batches added by hand).
+3. `docs/04-domain.md` § Season packs and the name table, and `docs/specs/release-names.md`, state the
+   new rule.
+
+**Done when** the tests are green and were red, the gates are clean, and #1 is closed with a comment.
+
+## S14-06 · A page with two or more tables shows them as tabs (#4)
+
+**Read first:** `docs/08-ui.md`, `docs/specs/pages.md`, `Views/Pages.cs` (the navigation is already a
+row of buttons that navigate), `Views/Ui.cs`, `Views/ActivityView.cs`, `Views/DownloadsView.cs`,
+`Views/QueueView.cs`, `Views/OverviewView.cs`, `Controllers/PagesController.cs`, and
+`EveryPageIsTheSameShellTests`.
+
+**The pages.** Activity (now, sources, downloads), Downloads (two tables), Queue (looked for, waiting to
+air) and the overview (one table per library).
+
+**Steps**
+
+1. Tests (red first): each of those pages draws a row of tab buttons, one per table, labelled with the
+   table's name and its row count where the count is known ("Looked for (12)"); only the chosen tab's
+   table is drawn; the chosen tab is marked as the navigation marks its page; the tab is read from the
+   path, so the same address draws the same tab; the first tab is drawn when the path names none or one
+   that does not exist.
+2. The tab goes in the path, not the query: the web app forwards only the path (see § S14 facts). Each
+   page gains a route with the tab in it (for example `/queue/waiting`), declared in `Pages.Routes`, and
+   the plugin's own navigation still marks the page. The overview's tabs are its libraries and use the
+   library routes that exist.
+3. Tabs are buttons in a row, as the navigation is, so they are focusable on TV and the D-pad moves along
+   them the way it moves along the navigation.
+4. `docs/specs/pages.md` (the Queue's two half-height lists become two tabs) and `docs/08-ui.md` state it.
+
+**Done when** the tests are green and were red, the gates are clean, and #4 is closed with a comment.
+
+## S14-07 · Every table answers sort, filter and paging (#5)
+
+**Read first:** media-server #593, the views of every table, `PluginViewRequest` in the SDK the plugin
+builds against (it carries `Query`), `Controllers/PagesController.cs`.
+
+**The plugin side of #593.** The contract has no fields yet; the query reaches the plugin already.
+
+**Steps**
+
+1. Tests per table (red first): `sort=<column key>&order=asc|desc` sorts; `filter=<text>` keeps the rows
+   whose shown text contains it, case set aside; `page` and `pageSize` give that page, after sorting and
+   filtering, with the total of matching rows said; page 2 after a sort continues page 1's order; an
+   unknown sort key, an order that is neither, or a page past the end falls back to the default order or
+   the last page and never fails.
+2. The keys are #593's words: `sort`, `order`, `filter`, `page`, `pageSize`. A page shows one table at a
+   time after S14-06, so the keys apply to the table shown. The plugin's own paging in the path (the
+   overview's library pages) keeps working; a query page wins over it when both are given.
+3. Once #593 lands the contract fields are used; until then nothing on the page changes for a client
+   that sends no query.
+4. `docs/specs/pages.md` states it.
+
+**Done when** the tests are green and were red, the gates are clean, and #5 is closed with a comment
+that says the client side waits on #593.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 None of these has a fix that belongs in this plugin.

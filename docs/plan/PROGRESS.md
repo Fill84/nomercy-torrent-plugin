@@ -4,6 +4,12 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
+to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
+download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
+plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
+`S14-07` (#5, sort, filter and paging). **Current: `S14-01`.**
+
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
 installed on beast-unit, where it has been loaded and running without a warning since 18:04Z. No slice
@@ -793,6 +799,15 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S12-08` The Sources page owns every source, and a private tracker is not editable
 - [x] `S12-09` One Save, and a list that keeps what is stored
 - [ ] `S12-10` A finished download says so, instead of being found by a sweep
+
+### Sprint 14 — The seven GitHub issues of 13 October 2026
+- [ ] `S14-01` A finished download always reaches the intake folder (#3)
+- [ ] `S14-02` No Xvfb, no browser, one warning (#6)
+- [ ] `S14-03` A log level the owner sets, and a log file that holds it (#7)
+- [ ] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
+- [ ] `S14-05` A season with several gaps takes a pack (#1)
+- [ ] `S14-06` A page with two or more tables shows them as tabs (#4)
+- [ ] `S14-07` Every table answers sort, filter and paging (#5)
 
 ## Log
 
