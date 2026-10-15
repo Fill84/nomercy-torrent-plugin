@@ -3603,6 +3603,13 @@ media-server `dev` (read only), `.forgejo/workflows/build.yml` for the folder th
 
 **Done when** the tests are green and were red, and the list holds what #476 lists.
 
+**As done** (15 October 2026): `Scan/MarketplaceScan.cs`, seven rule tests on assemblies compiled with
+Roslyn (`Scan/CompiledAssembly.cs`; the two "is not a finding" tests were seen to fail with their
+exemption taken out), and `TheMarketplaceScanTests` over `src/…/bin/<configuration>/net10.0`, red on an
+empty list. The 330 findings it lists hold, file by file, the counts #476 gives (21, 1, 11, 12, 246, 1,
+1, 1, 1, 24, 11). A pointer local is only kept by the optimiser when it is used in a loop, so the sample
+walks a fixed array.
+
 ## S16-02 · Files without `DeviceIoControl`
 
 **Read first:** `docs/06-torrent-client.md` § around line 172, `Bittorrent/Pieces/TorrentDisk.cs`.

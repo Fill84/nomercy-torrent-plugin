@@ -6,7 +6,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
-by us.** `SPRINTS.md` § S16. Current: **`S16-01`**.
+by us.** `SPRINTS.md` § S16. Current: **`S16-02`**. The browser is asked for in media-server #601.
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
@@ -880,7 +880,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S15-05` 0.8.1 released on the owner's word, after the list of what changes
 
 ### Sprint 16 — Through the SDK: what the marketplace scan refuses (media-server #476)
-- [ ] `S16-01` The marketplace scan, run on every build
+- [x] `S16-01` The marketplace scan, run on every build
 - [ ] `S16-02` Files without `DeviceIoControl`
 - [ ] `S16-03` Migrations and sources read without reflection
 - [ ] `S16-04` The database is the SDK's, and every row comes along
@@ -891,6 +891,11 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S16-01` (15 October 2026):** `TheMarketplaceScanTests` runs the marketplace's rule list over the
+  plugin's build output and holds it to `tests/…/Scan/expected-findings.txt` (330 lines, the same counts
+  per file as #476). Every later S16 slice removes its lines from that file. On this machine `dotnet` on
+  `PATH` is SDK 8; the .NET 10 SDK is `~/.dotnet/dotnet`.
 
 - **The availability-window engine test no longer fails one run in ten under load (15 October 2026).** Two
   causes. The test moved the clock once the peer count said one, before the client had heard the peer go,
