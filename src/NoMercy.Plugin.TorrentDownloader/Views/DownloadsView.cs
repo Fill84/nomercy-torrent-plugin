@@ -10,8 +10,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Views;
 /// <summary>One row of the Downloads page: what was grabbed and what the client says about it.</summary>
 /// <param name="Grab">What this plugin grabbed.</param>
 /// <param name="Transfer">What the client says, or null when it has not said anything yet.</param>
-/// <param name="Destination">Where the bytes are landing.</param>
-public sealed record DownloadRow(StoredDownload Grab, TorrentStatus? Transfer, string Destination)
+public sealed record DownloadRow(StoredDownload Grab, TorrentStatus? Transfer)
 {
     /// <summary>What the server last said went wrong with this grab's encode, or null.</summary>
     /// <remarks>
@@ -172,7 +171,10 @@ public static class DownloadsView
                 // unknowns read "—" is the one thing this page is shaped
                 // against, so the page says it itself.
                 new() { Key = "left", Label = "Left" },
-                new() { Key = "destination", Label = "Destination" },
+
+                // No Destination: every download lands in the same incomplete folder, so a column naming it
+                // said nothing about its row, and with it the table was wider than the page. The owner's
+                // decision of 15 October 2026.
                 new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
             ],
             rows,
@@ -202,7 +204,6 @@ public static class DownloadsView
                     ["ratio"] = row.Transfer?.Ratio is double ratio
                         ? ratio.ToString("0.00", CultureInfo.InvariantCulture)
                         : Unknown,
-                    ["destination"] = row.Destination,
                     ["controls"] = Controls(row),
                 }),
             "Nothing has been grabbed.",
@@ -222,17 +223,15 @@ public static class DownloadsView
                 ["ratio"] = row => row.Transfer?.Ratio,
             },
 
-            // Ten columns at the 1,600 px of LongCells, each at its widest real content: Progress "45.3% of
+            // Nine columns at the 1,600 px of LongCells, each at its widest real content: Progress "45.3% of
             // 2.7 GB (1.2 GB in)" 267 px, Rate "12.3 MB/s ↓ 1.2 MB/s ↑" 222, Seeds and Peers "12 of 300"
-            // 105 each, Ratio and Left at their headings 65 and 69, the two buttons 150: 983 px before the
-            // three below. State keeps every state the page writes itself whole, "grabbed, not started
-            // (downloading)" at 34 characters, and a destination shows its last folder in 16. The release
-            // has 29, which fits only without the Destination column: with it the row is about 1,766 px.
+            // 105 each, Ratio and Left at their headings 65 and 69, the two buttons 150: 983 px. State keeps
+            // every state the page writes itself whole, "grabbed, not started (downloading)" at 34
+            // characters, 330 px. The release has the 287 px left, 29 characters: a row of 1,598 px.
             longColumns:
             [
                 new("release", 29, Cut.AtWord),
                 new("state", 34),
-                new("destination", 16, Cut.FromFront),
             ]);
     }
 

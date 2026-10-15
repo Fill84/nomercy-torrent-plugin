@@ -47,18 +47,15 @@
 - A long column holds a set number of characters, "…" included: a source's refusal 77; on the History
   page the release a line is about 60 and the reason 77; on the Activity page a note 77, and in the
   table of what is in flight the episode 83 and what it waits on 77; on the Downloads page the release
-  29, the state 34 and the destination 16.
+  29 and the state 34.
 - A refusal, a reason, a note or a download's state whose text is longer than its column, or holds an
   address, shows the text's first sentence, up to the first address, and "…". A first sentence longer
   than the cell is cut after the last whole word that fits.
 - A release name longer than its column is cut after the last space, dot, dash or underscore that fits,
   and "…". A full stop in a release name is not the end of it.
-- A destination longer than its column shows "…" and its last folder, and only the end of that folder
-  when the folder alone is too long.
 - An address is never in a cell.
 - The whole text of each cell drawn short stands under the table as a line of its own, in the order of
-  the rows, and a text that is under the table already is not said twice. On a page with tabs the lines
-  stand under the chosen tab's table.
+  the rows. On a page with tabs the lines stand under the chosen tab's table.
 - A text that fits and holds no address is the cell as it is, with no line under the table.
 - `filter` and `sort` read the whole text, so a row is found by a word that is only in the line under
   the table.
@@ -99,6 +96,8 @@
 - The Downloads, History and Sources pages show what they show, unchanged by the show list.
 - The History page holds what became of a grab — decided, grabbed, dispatched, failed — and no
   refusals.
+- The Downloads table has no column for where a download lands: every download lands in the incomplete
+  folder the settings name.
 - On the Downloads page the field that takes a magnet or a .torrent stands under the list of
   downloads, and the list scrolls within its own height rather than pushing the field down.
 - The plugin has no separate Shows page. The overview page lists the shows.

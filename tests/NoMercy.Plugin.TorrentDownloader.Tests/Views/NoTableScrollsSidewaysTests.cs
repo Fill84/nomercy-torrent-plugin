@@ -215,7 +215,7 @@ public sealed class NoTableScrollsSidewaysTests
     }
 
     /// <remarks>
-    /// The Downloads state carries the same encode reason after "encoding", in a table of ten columns that
+    /// The Downloads state carries the same encode reason after "encoding", in a table of nine columns that
     /// has the least room of any for it: 34 characters, the longest state the page writes itself.
     /// </remarks>
     [Fact]
@@ -223,8 +223,7 @@ public sealed class NoTableScrollsSidewaysTests
     {
         DownloadRow encoding = new(
             new("8f2c", "magnet:?xt=urn:btih:8f2c", ShortRelease, GrabState.Dispatched),
-            null,
-            "D:\\incomplete")
+            null)
         {
             EncodeFailure = EncodeFailing,
         };
@@ -242,46 +241,35 @@ public sealed class NoTableScrollsSidewaysTests
     [Fact]
     public void AReleaseNameInDownloadsIsCutAtADotAndStandsWholeUnderTheTable()
     {
-        PluginView view = DownloadsView.Render([Grabbed("a1", LongRelease, "D:\\incomplete")]);
+        PluginView view = DownloadsView.Render([Grabbed("a1", LongRelease)]);
 
         Assert.Equal(["Lucky.S01E04.Too.Close.to…"], Cells(view, DownloadsView.TableId, "release"));
         Assert.Equal(["grabbed, not started (downloading)"], Cells(view, DownloadsView.TableId, "state"));
-        Assert.Equal(["D:\\incomplete"], Cells(view, DownloadsView.TableId, "destination"));
         Assert.Equal([LongRelease], Under(view, DownloadsView.TableId));
     }
 
     [Fact]
     public void AShortReleaseNameIsUnchangedAndHasNoLineUnderTheTable()
     {
-        PluginView view = DownloadsView.Render([Grabbed("a1", ShortRelease, "D:\\incomplete")]);
+        PluginView view = DownloadsView.Render([Grabbed("a1", ShortRelease)]);
 
         Assert.Equal([ShortRelease], Cells(view, DownloadsView.TableId, "release"));
         Assert.Empty(Under(view, DownloadsView.TableId));
     }
 
     /// <remarks>
-    /// Every row lands in the same folder, so its whole path stands under the table once, not once a row.
+    /// The owner's decision of 15 October 2026: every download lands in the same incomplete folder, so a
+    /// column naming it says nothing about the row it is on, and the ten columns did not fit at 1,600 px.
     /// </remarks>
     [Fact]
-    public void ADestinationShowsItsLastFolderAndStandsWholeUnderTheTableOnce()
+    public void TheDownloadsTableHasNoDestinationColumn()
     {
-        const string folder = "D:\\Torrents\\NoMercy\\incomplete";
+        PluginComponent table = Rendered.ById(DownloadsView.Render([Grabbed("a1", ShortRelease)]), DownloadsView.TableId);
 
-        PluginView view = DownloadsView.Render([Grabbed("a1", ShortRelease, folder), Grabbed("b2", "Fish.S03E01.480p.x264-mSD", folder)]);
-
-        Assert.Equal(["…\\incomplete", "…\\incomplete"], Cells(view, DownloadsView.TableId, "destination"));
-        Assert.Equal([folder], Under(view, DownloadsView.TableId));
-    }
-
-    [Fact]
-    public void ALastFolderLongerThanTheCellIsCutFromTheFront()
-    {
-        const string folder = "D:\\nomercy_finished_downloads";
-
-        PluginView view = DownloadsView.Render([Grabbed("a1", ShortRelease, folder)]);
-
-        Assert.Equal(["…ished_downloads"], Cells(view, DownloadsView.TableId, "destination"));
-        Assert.Equal([folder], Under(view, DownloadsView.TableId));
+        Assert.DoesNotContain(
+            (IEnumerable<PluginTableColumn>)table.Props["columns"]!,
+            column => column.Key == "destination");
+        Assert.All(table.Items, row => Assert.False(row.Props.ContainsKey("destination")));
     }
 
     /// <remarks>
@@ -332,9 +320,9 @@ public sealed class NoTableScrollsSidewaysTests
         Assert.Equal(["Silo S03E06 The Drive 1080P ATVP WEB-DL DDP5.1 Atmos. X265…"], Cells(view, HistoryView.TableId, "subject"));
     }
 
-    private static DownloadRow Grabbed(string hash, string release, string destination)
+    private static DownloadRow Grabbed(string hash, string release)
     {
-        return new(new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Downloading), null, destination);
+        return new(new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Downloading), null);
     }
 
     private static SourceReport Source(string name, string refusal)

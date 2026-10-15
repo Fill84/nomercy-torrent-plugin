@@ -5,7 +5,7 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
-is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done, but for the owner's choice of a Downloads column to drop), `S15-03` a show downloads only a release
+is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
 the sources name (anime keeps its search by show and episode), `S15-04` a wrong episode the plugin
 delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1. **Current: `S15-03`.**
 Nothing is tagged before the owner has seen it.
@@ -842,6 +842,10 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **`S15-02` Downloads has no Destination column (15 October 2026, the owner's decision).** Column, cell
+  and `DownloadRow.Destination` gone, with the path cut (`Cut.FromFront`) and the once-only lines that
+  existed only for it. Downloads now measures 1,598 px at its widest real content; the release keeps 29
+  characters, the room the other eight columns leave. Every table fits at 1,600 px.
 - **`S15-02` every table measured (15 October 2026).** `Views/LongCells` holds the rule with a cap and a
   cut per column: first sentence (refusal, reason, note, state), at a word (release names, never at a
   full stop) or the last folder (destination); each whole text once under the table. Downloads cuts
@@ -2594,6 +2598,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, the owner: the Destination column goes from the Downloads table.** Every row showed
+  the same incomplete folder of the settings, so it said nothing about its row, and with it the table was
+  about 1,766 px at its widest real content against the 1,600 of the owner's screen. Removed outright, not
+  hidden: no field on `DownloadRow`, no cut for paths. The freed width is the Release cell's: 29
+  characters is all the other eight columns leave (`docs/08-ui.md` § Long text), so a release name of
+  more than 29 is still cut at its last dot that fits and stands whole under the table.
 
 - **15 October 2026, `S15-02`: every table is measured at 1,600 px, and each long column has its own
   cap.** The 80 of the entry below left out the reason cell's own 24 px of padding: History leaves 718 px

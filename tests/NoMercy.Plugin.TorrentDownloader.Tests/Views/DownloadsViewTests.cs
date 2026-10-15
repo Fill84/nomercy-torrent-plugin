@@ -22,7 +22,7 @@ public class DownloadsViewTests
     [Fact]
     public void AGrabWithNoTransferYetStillGetsARowThatSaysSo()
     {
-        PluginView view = DownloadsView.Render([new(Grab(), null, "D:\\incomplete")]);
+        PluginView view = DownloadsView.Render([new(Grab(), null)]);
 
         string row = string.Join(" ", Rendered.EveryValue(view));
 
@@ -43,11 +43,11 @@ public class DownloadsViewTests
     }
 
     /// <remarks>
-    /// Everything the page is for, from a store: progress, rate, peers, seeds,
-    /// ratio and where the bytes are landing.
+    /// Everything the page is for, from a store: progress, rate, peers, seeds
+    /// and ratio.
     /// </remarks>
     [Fact]
-    public void ProgressRatePeersSeedsRatioAndDestinationAllRenderFromTheStore()
+    public void ProgressRatePeersSeedsAndRatioAllRenderFromTheStore()
     {
         PluginView view = DownloadsView.Render(
         [
@@ -68,8 +68,7 @@ public class DownloadsViewTests
                     Error: null,
 
                     // Nine seeds and fifteen leechers, each its own count.
-                    Leechers: 15),
-                "D:\\incomplete"),
+                    Leechers: 15)),
         ]);
 
         string row = string.Join(" ", Rendered.EveryValue(view));
@@ -78,7 +77,6 @@ public class DownloadsViewTests
         Assert.Contains("5 MB/s", row, StringComparison.Ordinal);
         Assert.Contains("512 KB/s", row, StringComparison.Ordinal);
         Assert.Contains("0.35", row, StringComparison.Ordinal);
-        Assert.Contains("D:\\incomplete", row, StringComparison.Ordinal);
 
         // Nine seeds, and twenty-four connections of which nine are seeds, so
         // fifteen leechers. The peers column counts leechers: this used to
@@ -99,8 +97,7 @@ public class DownloadsViewTests
         [
             new(
                 Grab(),
-                new(Hash, null, TorrentState.FetchingMetadata, 0, null, 0, 0, 0, 0, null, null, null),
-                "D:\\incomplete"),
+                new(Hash, null, TorrentState.FetchingMetadata, 0, null, 0, 0, 0, 0, null, null, null)),
         ]);
 
         string row = string.Join(" ", Rendered.EveryValue(view));
@@ -114,8 +111,7 @@ public class DownloadsViewTests
         [
             new(
                 Grab(),
-                new(Hash, null, TorrentState.Checking, 0, 0, 0, 0, 0, 0, null, null, null),
-                "D:\\incomplete"),
+                new(Hash, null, TorrentState.Checking, 0, 0, 0, 0, 0, 0, null, null, null)),
         ]);
 
         Assert.DoesNotContain("%", string.Join(" ", Rendered.EveryValue(empty)), StringComparison.Ordinal);
@@ -146,8 +142,7 @@ public class DownloadsViewTests
                     0,
                     null,
                     null,
-                    null),
-                @"D:\incomplete"),
+                    null)),
         ]);
 
         string drawn = string.Join(" ", Rendered.EveryValue(view));
@@ -180,8 +175,7 @@ public class DownloadsViewTests
                     0,
                     null,
                     null,
-                    "No peer sent its metadata within 5 minutes."),
-                "D:\\incomplete"),
+                    "No peer sent its metadata within 5 minutes.")),
         ]);
 
         Assert.Contains(
@@ -201,7 +195,7 @@ public class DownloadsViewTests
     {
         PluginView view = DownloadsView.Render(
         [
-            new(Grab() with { State = GrabState.Dispatched }, null, "D:\\incomplete")
+            new(Grab() with { State = GrabState.Dispatched }, null)
             {
                 EncodeFailure = "the server's last attempt failed: the source has no audio stream",
             },
@@ -309,8 +303,7 @@ public class DownloadsViewTests
                     Ratio: 0,
                     Eta: null,
                     Error: null,
-                    Arrived: 8_700_000),
-                "D:\\incomplete"),
+                    Arrived: 8_700_000)),
         ]);
 
         string row = string.Join(" ", Rendered.EveryValue(view));
@@ -345,8 +338,7 @@ public class DownloadsViewTests
                     Ratio: 0.35,
                     Eta: null,
                     Error: null,
-                    Arrived: 2_000_000_000),
-                "D:\\incomplete"),
+                    Arrived: 2_000_000_000)),
         ]);
 
         string row = string.Join(" ", Rendered.EveryValue(view));
@@ -386,8 +378,7 @@ public class DownloadsViewTests
 
                     // A handful of bytes more than the file, which is what
                     // re-requesting a block that failed its hash costs.
-                    Arrived: 2_870_004_096),
-                @"D:\incomplete"),
+                    Arrived: 2_870_004_096)),
         ]);
 
         string row = string.Join(" ", Rendered.EveryValue(view));
@@ -437,8 +428,7 @@ public class DownloadsViewTests
                     Error: null,
                     SwarmSeeds: 52,
                     SwarmPeers: 110,
-                    Leechers: 8),
-                @"D:\incomplete"),
+                    Leechers: 8)),
         ]);
 
         IReadOnlyList<string> cells = [.. Rendered.EveryValue(view)];
@@ -486,8 +476,7 @@ public class DownloadsViewTests
                     Ratio: 0.35,
                     Eta: TimeSpan.FromMinutes(7),
                     Error: null,
-                    Leechers: 15),
-                @"D:\incomplete"),
+                    Leechers: 15)),
         ]);
 
         string row = string.Join(" ", Rendered.EveryValue(view));
@@ -520,8 +509,7 @@ public class DownloadsViewTests
                     Ratio: 0,
                     Eta: null,
                     Error: null,
-                    Leechers: 3),
-                @"D:\incomplete"),
+                    Leechers: 3)),
         ]);
 
         Assert.Contains(Rendered.EveryValue(view), one => one == "—");

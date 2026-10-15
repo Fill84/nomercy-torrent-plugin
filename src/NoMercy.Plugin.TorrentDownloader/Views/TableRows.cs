@@ -14,8 +14,8 @@ public sealed record TablePaging(int PageSize, int Page);
 /// <param name="Pages">How many pages the matching rows make; one for a table that does not page.</param>
 /// <param name="EmptyMessage">What the table says when it draws no row.</param>
 /// <param name="Lines">
-/// The whole text of every long cell drawn short, a line each and each text once, in the order of the rows
-/// drawn: what stands under the table.
+/// The whole text of every long cell drawn short, a line each, in the order of the rows drawn: what stands
+/// under the table.
 /// </param>
 public sealed record ShownRows(
     IReadOnlyList<PluginComponent> Rows,
@@ -136,11 +136,10 @@ public static class TableRows
             .. columns.SelectMany(column => (longColumns ?? []).Where(longColumn => longColumn.Key == column.Key)),
         ];
         List<PluginComponent> lines = [];
-        HashSet<string> said = new(StringComparer.Ordinal);
 
         // Short only now, on the rows drawn: the filter and the sort above read the whole text.
         PluginComponent[] shownRows =
-            [.. ordered.Skip((page - 1) * size).Take(size).Select(one => LongCells.Shortened(one.Row, longs, lines, said))];
+            [.. ordered.Skip((page - 1) * size).Take(size).Select(one => LongCells.Shortened(one.Row, longs, lines))];
 
         return new(
             shownRows,

@@ -164,7 +164,6 @@ public class ControlsOnPagesTests
                 Seeds: 1,
                 Ratio: 0.1,
                 Eta: null,
-                Error: null),
-            @"C:\downloads");
+                Error: null));
     }
 }

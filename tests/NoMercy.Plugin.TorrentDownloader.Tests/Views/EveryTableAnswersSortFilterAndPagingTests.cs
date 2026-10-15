@@ -563,7 +563,7 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
         return
         [
             Download("Silo", gigabyte / 10, gigabyte, 2 * 1024 * 1024),
-            new(new("fallout", "magnet:?xt=urn:btih:fallout", "Fallout", GrabState.Grabbed), null, "D:\\incomplete"),
+            new(new("fallout", "magnet:?xt=urn:btih:fallout", "Fallout", GrabState.Grabbed), null),
             Download("Andor", gigabyte * 9 / 100, gigabyte, 900 * 1024),
         ];
     }
@@ -574,8 +574,7 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
 
         return new(
             new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Downloading),
-            new(hash, release, TorrentState.Downloading, done, total, rate, 0, 4, 2, 0.1, TimeSpan.FromMinutes(5), null),
-            "D:\\incomplete");
+            new(hash, release, TorrentState.Downloading, done, total, rate, 0, 4, 2, 0.1, TimeSpan.FromMinutes(5), null));
     }
 
     private static IReadOnlyList<string?> Releases(PluginView page)

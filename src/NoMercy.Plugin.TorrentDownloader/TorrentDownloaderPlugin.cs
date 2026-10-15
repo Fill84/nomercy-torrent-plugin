@@ -2608,7 +2608,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private async Task<IReadOnlyList<DownloadRow>> DownloadRowsAsync(CancellationToken ct)
     {
-        Settings settings = await Settings.LoadAsync(ct);
         IReadOnlyList<StoredDownload> grabbed = await (await GrabsAsync(ct)).OpenAsync(ct);
 
         Dictionary<string, TorrentStatus> byHash = new(StringComparer.OrdinalIgnoreCase);
@@ -2620,10 +2619,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         return
         [
-            .. grabbed.Select(one => new DownloadRow(
-                one,
-                byHash.GetValueOrDefault(one.InfoHash),
-                settings.IncompleteFolder)
+            .. grabbed.Select(one => new DownloadRow(one, byHash.GetValueOrDefault(one.InfoHash))
             {
                 EncodeFailure = _transfers?.FailureOf(one.InfoHash),
             }),

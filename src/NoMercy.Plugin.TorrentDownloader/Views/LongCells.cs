@@ -16,9 +16,6 @@ public enum Cut
     /// Robot").
     /// </summary>
     AtWord,
-
-    /// <summary>The end of a path, its last folder or file, cut from the front when that is too long.</summary>
-    FromFront,
 }
 
 /// <summary>A column whose text can be longer than the table has room for.</summary>
@@ -66,9 +63,6 @@ public static class LongCells
     /// <summary>Where a word of a release name ends.</summary>
     private static readonly char[] NameBreaks = [' ', '.', '-', '_'];
 
-    /// <summary>What separates the folders of a path, on Windows and elsewhere.</summary>
-    private static readonly char[] PathBreaks = ['\\', '/'];
-
     /// <summary>What a cell of <paramref name="column"/> shows of <paramref name="text"/>.</summary>
     /// <remarks>
     /// <para>
@@ -94,11 +88,6 @@ public static class LongCells
         // One character is the "…".
         int room = column.Characters - 1;
 
-        if (column.Cut == Cut.FromFront)
-        {
-            return "…" + End(text, room);
-        }
-
         string said = address.Success ? text[..address.Index] : text;
 
         if (column.Cut == Cut.FirstSentence && SentenceEnd.Match(said) is { Success: true } end)
@@ -121,17 +110,9 @@ public static class LongCells
 
     /// <summary>
     /// <paramref name="row"/> with its long cells drawn short, and the whole of each such text added to
-    /// <paramref name="lines"/> unless it is there already.
+    /// <paramref name="lines"/>.
     /// </summary>
-    /// <remarks>
-    /// Once, not once a row: every download lands in the same folder, and the same path under the table
-    /// for each of them is a list of one thing.
-    /// </remarks>
-    internal static PluginComponent Shortened(
-        PluginComponent row,
-        IReadOnlyList<LongColumn> columns,
-        List<PluginComponent> lines,
-        HashSet<string> said)
+    internal static PluginComponent Shortened(PluginComponent row, IReadOnlyList<LongColumn> columns, List<PluginComponent> lines)
     {
         Dictionary<string, object?>? cells = null;
 
@@ -153,10 +134,7 @@ public static class LongCells
             cells[column.Key] = cell;
 
             // Its id is the row's and the column's, which no other line shares.
-            if (said.Add(whole))
-            {
-                lines.Add(Ui.Text($"{row.Id}-{column.Key}", whole));
-            }
+            lines.Add(Ui.Text($"{row.Id}-{column.Key}", whole));
         }
 
         return cells is null
@@ -169,20 +147,5 @@ public static class LongCells
                 Action = row.Action,
                 Items = row.Items,
             };
-    }
-
-    /// <summary>The last folder or file of <paramref name="path"/>, with the separator before it, in at most <paramref name="room"/>.</summary>
-    /// <remarks>
-    /// The end is what tells one folder from another; "D:\Torrents\NoMercy\" is the same on every path an
-    /// owner would set. Too long even so, it keeps its last characters, since the end of a name is what
-    /// was left to read.
-    /// </remarks>
-    private static string End(string path, int room)
-    {
-        string trimmed = path.TrimEnd(PathBreaks);
-        int separator = trimmed.LastIndexOfAny(PathBreaks);
-        string last = separator >= 0 ? trimmed[separator..] : trimmed;
-
-        return last.Length <= room ? last : last[^room..];
     }
 }
