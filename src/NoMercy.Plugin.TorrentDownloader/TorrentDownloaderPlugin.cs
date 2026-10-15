@@ -1368,7 +1368,17 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     tracked,
                     grabs,
                     await EpisodesAsync(ct),
-                    () => DateTimeOffset.UtcNow)).RunAsync(
+                    () => DateTimeOffset.UtcNow,
+
+                    // Started and not waited on: the run goes on to the next
+                    // episode while the pass puts back a torrent stopped
+                    // before its row existed (CycleWriter says when that is).
+                    handedOver: _ =>
+                    {
+                        StartTransfers();
+
+                        return Task.CompletedTask;
+                    })).RunAsync(
                 tracked,
                 new(
                     // What applies to each show, read once for the run: the

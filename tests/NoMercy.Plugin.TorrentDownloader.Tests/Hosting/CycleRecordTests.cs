@@ -1,5 +1,6 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Storage;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
@@ -40,6 +41,84 @@ public class CycleRecordTests : IDisposable
         Assert.Equal("Silo.S03E06.1080p.WEB.H264-CAKES", stored.ReleaseTitle);
         Assert.StartsWith("magnet:?xt=urn:btih:", stored.Magnet, StringComparison.Ordinal);
         Assert.Equal(2, stored.Covers.Count);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent handed to the client is in the client once its row is written.</strong> The client
+    /// takes the torrent before the run writes its grab down, and a pass in that gap finds a torrent the store
+    /// does not know, stops it and keeps its files. The row then answers for a torrent nothing holds, and
+    /// nothing put it back until the next run, a whole cadence later.
+    /// </para>
+    /// <para>
+    /// So writing a handed-over decision starts a pass, and that pass finds the row without its torrent and
+    /// hands it back. Here the pass in the gap has already stopped it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentStoppedBeforeItsGrabWasWrittenIsBackInTheClientOnceItIs()
+    {
+        GrabRepository grabs = await Repository();
+        StandingEngine engine = new StandingEngine().Holding(Downloading());
+        Transfers transfers = Transfers(engine, grabs);
+        string incomplete = Path.Combine(_folder, "incomplete");
+        string intake = Path.Combine(_folder, "intake");
+
+        // The pass in the gap: the client has it, the store does not.
+        await transfers.TickAsync(incomplete, intake, CancellationToken.None);
+
+        Assert.Empty(await engine.StatusAsync(CancellationToken.None));
+
+        CycleWriter writer = new(
+            [Tracked],
+            grabs,
+            new EpisodeRepository(new Store(_folder)),
+            () => When,
+            handedOver: ct => transfers.TickAsync(incomplete, intake, ct));
+
+        await writer.DecidedAsync(Taken, CancellationToken.None);
+
+        TorrentRequest back = Assert.Single(engine.Taken);
+
+        Assert.Equal(Taken.Magnet, back.Source);
+    }
+
+    /// <summary>The torrent as the client reports it a moment after taking it.</summary>
+    private static TorrentStatus Downloading()
+    {
+        return new(
+            Hash,
+            "Silo.S03E06.1080p.WEB.H264-CAKES",
+            TorrentState.Downloading,
+            BytesDone: 0,
+            BytesTotal: 900_000_000,
+            DownloadRateBytesPerSecond: 0,
+            UploadRateBytesPerSecond: 0,
+            Peers: 0,
+            Seeds: 0,
+            Ratio: null,
+            Eta: null,
+            Error: null);
+    }
+
+    private static Transfers Transfers(StandingEngine engine, GrabRepository grabs)
+    {
+        FakeProvider server = new();
+        FakeLibraryQuery query = new FakeLibraryQuery()
+            .Library("01KZGKX2G0966V80H26EKGG5T1", "Television", "tv")
+            .Show(41, "Silo", "01KZGKX2G0966V80H26EKGG5T1", year: 2023);
+
+        return new(
+            engine,
+            grabs,
+            new HostLibrary(query),
+            AppliedToEveryShow.Searched,
+            new Stager(server.Journal, server.Log),
+            EncodeGateway.For(server.Encoder, server.Journal, server.Log),
+            server.Journal,
+            server.Log,
+            TimeProvider.System,
+            null);
     }
 
     /// <remarks>

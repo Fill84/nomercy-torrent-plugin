@@ -76,8 +76,8 @@
   a file named for the episode under another episode and the server has not said the encode is still
   running. The server says nothing about an encode it skips because every output already exists.
 - The plugin looks at what the download client holds when the client says a download finished, at the
-  start of every run, and every minute while a finished download waits to be staged or a grab waits on
-  an encode. A plugin with nothing waiting looks at nothing between runs.
+  start of every run, once a torrent the client was handed has its grab written down, and every minute
+  while a finished download waits to be staged or a grab waits on an encode. A plugin with nothing waiting looks at nothing between runs.
 - A download that finishes while the plugin is looking is looked at again before that look ends.
 - A finished download whose staging fails stays where it is and is staged by a later look, with nothing
   else happening.
