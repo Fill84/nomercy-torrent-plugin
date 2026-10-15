@@ -39,7 +39,6 @@ public sealed class FakeTorrentEngine : ITorrentEngine
                 BytesDone: 0,
                 BytesTotal: null,
                 DownloadRateBytesPerSecond: 0,
-                UploadRateBytesPerSecond: 0,
                 Peers: 0,
                 Seeds: 0,
                 Ratio: null,

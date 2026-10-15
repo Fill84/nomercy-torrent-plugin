@@ -842,6 +842,10 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **`S15-02` three digits before a unit, narrower dot rule (15 October 2026).** `DownloadsView.Bytes`
+  moves to the next unit at 1000; Release 44. A dot before a number ends a word unless it is inside one
+  ("H.265", "DD5.1"). `TorrentStatus.UploadRateBytesPerSecond` and `Arrived` removed, `Drawn` no longer
+  carries the upload rate. The cell-width fallback and the overview's lines-before-paging have tests.
 - **`S15-02` Downloads Progress and Rate shortened, Stages capped (15 October 2026, the owner's
   decision).** Progress is "45.3% of 23.4 GB", Rate the download rate only; the Release cell keeps 45
   characters. The Stages "So far" cell is cut after the last whole " · " part at 164 characters, the
@@ -2608,6 +2612,17 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, `S15-02`: no size or rate on Downloads has four digits before its unit, and the
+  release keeps 44.** Counted in 1024s as before, the next unit from 1000 of one ("0.98 MB/s", not
+  "1005.9 KB/s"), so the widest figures are "999.9 KB/s" and "999.9 GB". Base 1024 is kept because every
+  figure the owner has read on this page was in it; only the band from 1000 to 1023 changes. Measured with
+  a 4K season pack's "45.3% of 234.5 GB" the other columns leave 44 characters, one fewer than the 45 of the
+  entry below. A release name is cut at a dot before a number unless the dot is inside one: after a single
+  letter ("H.265") or with one digit after a digit ("DD5.1"); "McGovern.S01E01.1080p" is cut after its
+  episode. `TorrentStatus` lost `UploadRateBytesPerSecond` and `Arrived`, which no shipped code read once
+  the page stopped drawing them; the engine test that waited on `Arrived` waits on `Drawn`, which the
+  heartbeat reads and which carries the bytes that came in.
 
 - **15 October 2026, the owner: Downloads' Progress loses its "(… in)" and Rate shows the download rate
   only.** The percentage already says how far a download is, and nothing on a public swarm is ever

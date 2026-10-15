@@ -229,15 +229,16 @@ public static class DownloadsView
                 ["ratio"] = row => row.Transfer?.Ratio,
             },
 
-            // Nine columns at the 1,600 px of LongCells, each at its widest real content: Progress for a
-            // season pack "45.3% of 23.4 GB" 168 px, Rate "345.6 KB/s" 114, Seeds and Peers against a
-            // five-digit swarm "120 of 12345" 132 each (the captures hold swarms of 2602), Ratio "12.34"
-            // and Left "59.5m" 69 each, the two buttons 150: 834 px. State keeps every state the page
-            // writes itself whole, "grabbed, not started (downloading)" at 34 characters, 330 px. The
-            // release has the 436 px left, 45 characters: a row of 1,593 px.
+            // Nine columns at the 1,600 px of LongCells, each at its widest real content: Progress for a 4K
+            // season pack "45.3% of 234.5 GB" 177 px (Bytes never draws four digits before a unit), Rate
+            // "999.9 KB/s" 114, Seeds and Peers against a five-digit swarm "120 of 12345" 132 each (the
+            // captures hold swarms of 2602), Ratio "12.34" and Left "59.5m" 69 each, the two buttons 150:
+            // 843 px. State keeps every state the page writes itself whole, "grabbed, not started
+            // (downloading)" at 34 characters, 330 px. The release has the 427 px left, 44 characters: a
+            // row of 1,593 px.
             longColumns:
             [
-                new("release", 45, Cut.AtWord),
+                new("release", 44, Cut.AtWord),
                 new("state", 34),
             ]);
     }
@@ -379,15 +380,23 @@ public static class DownloadsView
         double size = bytes;
         int unit = 0;
 
-        while (size >= 1024 && unit < units.Length - 1)
+        // Counted in 1024s as before, but the next unit from 1000 of this one, so no figure has four digits
+        // before its unit: "1005.9 KB/s" and "1020.4 MB" made the Rate and Progress columns wider than the
+        // page was measured at (docs/08-ui.md § Long text). 1000 is what it rounds to that counts, so 999.97
+        // is not drawn as "1000".
+        while (Math.Round(size, 1) >= 1000 && unit < units.Length - 1)
         {
             size /= 1024;
             unit++;
         }
 
+        // Below one of the new unit, two decimals: "0.98 MB" rather than a "1 MB" that is 2% wrong. Never
+        // longer than "999.9 KB", which is what the columns are measured at.
+        string format = unit > 0 && size < 1 ? "0.##" : "0.#";
+
         // Invariant, like every other number a person reads here: a figure
         // whose meaning depends on the server's locale cannot be quoted back.
-        return string.Create(CultureInfo.InvariantCulture, $"{size:0.#} {units[unit]}");
+        return string.Create(CultureInfo.InvariantCulture, $"{size.ToString(format, CultureInfo.InvariantCulture)} {units[unit]}");
     }
 }
 

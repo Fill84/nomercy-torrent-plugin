@@ -574,7 +574,7 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
 
         return new(
             new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Downloading),
-            new(hash, release, TorrentState.Downloading, done, total, rate, 0, 4, 2, 0.1, TimeSpan.FromMinutes(5), null));
+            new(hash, release, TorrentState.Downloading, done, total, rate, 4, 2, 0.1, TimeSpan.FromMinutes(5), null));
     }
 
     private static IReadOnlyList<string?> Releases(PluginView page)

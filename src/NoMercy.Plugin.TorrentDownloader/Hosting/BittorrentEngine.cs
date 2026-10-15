@@ -1516,6 +1516,9 @@ public sealed class BittorrentEngine(
                 {
                     RunProgress progress = held.Run.Progress();
 
+                    // Downloaded and Uploaded are what the Ratio column is worked out from. No rate going
+                    // out: the page draws the download rate only, since the owner's decision of 15 October
+                    // 2026, and an upload moving would push a page that shows nothing new.
                     said.Append(infoHash).Append(':')
                         .Append(State(held, progress)).Append(':')
                         .Append(progress.BytesDone).Append(':')
@@ -1523,7 +1526,6 @@ public sealed class BittorrentEngine(
                         .Append(progress.Downloaded).Append(':')
                         .Append(progress.Uploaded).Append(':')
                         .Append((long)progress.DownloadRateBytesPerSecond).Append(':')
-                        .Append((long)progress.UploadRateBytesPerSecond).Append(':')
                         .Append(progress.Seeds).Append(':')
                         .Append(progress.Leechers).Append(':')
                         .Append(progress.ChokedBy).Append(':')
@@ -2215,7 +2217,6 @@ public sealed class BittorrentEngine(
             progress.BytesDone,
             progress.BytesTotal,
             progress.DownloadRateBytesPerSecond,
-            progress.UploadRateBytesPerSecond,
             progress.Peers,
             progress.Seeds,
 
@@ -2239,11 +2240,6 @@ public sealed class BittorrentEngine(
             // 1.2 GB executable named after an episode, on 22 August 2026 —
             // came round again every six hours for as long as the plugin ran.
             held.ErrorIsTheRelease,
-
-            // Bytes in, whole pieces or not. Drawn where it is ahead of what is
-            // verified, which is the only case in which a torrent looks stopped
-            // while it is not.
-            progress.Downloaded,
 
             // Counted as leechers, never a total with the seeds taken off it.
             progress.Leechers);

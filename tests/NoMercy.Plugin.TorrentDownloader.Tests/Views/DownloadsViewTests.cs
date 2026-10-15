@@ -60,7 +60,6 @@ public class DownloadsViewTests
                     BytesDone: 2_000_000_000,
                     BytesTotal: 4_000_000_000,
                     DownloadRateBytesPerSecond: 5 * 1024 * 1024,
-                    UploadRateBytesPerSecond: 512 * 1024,
                     Peers: 24,
                     Seeds: 9,
                     Ratio: 0.35,
@@ -99,7 +98,7 @@ public class DownloadsViewTests
         [
             new(
                 Grab(),
-                new(Hash, null, TorrentState.FetchingMetadata, 0, null, 0, 0, 0, 0, null, null, null)),
+                new(Hash, null, TorrentState.FetchingMetadata, 0, null, 0, 0, 0, null, null, null)),
         ]);
 
         string row = string.Join(" ", Rendered.EveryValue(view));
@@ -113,7 +112,7 @@ public class DownloadsViewTests
         [
             new(
                 Grab(),
-                new(Hash, null, TorrentState.Checking, 0, 0, 0, 0, 0, 0, null, null, null)),
+                new(Hash, null, TorrentState.Checking, 0, 0, 0, 0, 0, null, null, null)),
         ]);
 
         Assert.DoesNotContain("%", string.Join(" ", Rendered.EveryValue(empty)), StringComparison.Ordinal);
@@ -171,7 +170,6 @@ public class DownloadsViewTests
                     TorrentState.Error,
                     0,
                     null,
-                    0,
                     0,
                     0,
                     0,
@@ -288,13 +286,11 @@ public class DownloadsViewTests
                     BytesDone: 0,
                     BytesTotal: 2_870_000_000,
                     DownloadRateBytesPerSecond: 0,
-                    UploadRateBytesPerSecond: 0,
                     Peers: 1,
                     Seeds: 1,
                     Ratio: 0,
                     Eta: null,
-                    Error: null,
-                    Arrived: 8_700_000)),
+                    Error: null)),
         ]);
 
         PluginComponent row = Assert.Single(Rendered.ById(view, DownloadsView.TableId).Items);
@@ -331,7 +327,6 @@ public class DownloadsViewTests
                     BytesDone: 1_000_000_000,
                     BytesTotal: 4_000_000_000,
                     DownloadRateBytesPerSecond: 0,
-                    UploadRateBytesPerSecond: 0,
 
                     // Two populations, each counted as itself: three seeds and
                     // eight leechers, over eleven connections. Neither number
@@ -385,7 +380,6 @@ public class DownloadsViewTests
                     BytesDone: 2_000_000_000,
                     BytesTotal: 4_000_000_000,
                     DownloadRateBytesPerSecond: 5 * 1024 * 1024,
-                    UploadRateBytesPerSecond: 0,
                     Peers: 24,
                     Seeds: 9,
                     Ratio: 0.35,
@@ -418,7 +412,6 @@ public class DownloadsViewTests
                     BytesDone: 1_000_000,
                     BytesTotal: 4_000_000_000,
                     DownloadRateBytesPerSecond: 0,
-                    UploadRateBytesPerSecond: 0,
                     Peers: 3,
                     Seeds: 0,
                     Ratio: 0,

@@ -205,6 +205,6 @@ public class RecoveryTests
         long? total,
         TorrentState state = TorrentState.Downloading)
     {
-        return new(hash, "Silo S03E06 1080p", state, done, total, 0, 0, 0, 0, null, null, null);
+        return new(hash, "Silo S03E06 1080p", state, done, total, 0, 0, 0, null, null, null);
     }
 }

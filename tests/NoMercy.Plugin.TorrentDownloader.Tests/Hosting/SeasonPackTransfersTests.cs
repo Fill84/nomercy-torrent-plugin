@@ -128,7 +128,6 @@ public sealed class SeasonPackTransfersTests : IDisposable
             BytesDone: 0,
             BytesTotal: 8L * 1024 * 1024 * 1024,
             DownloadRateBytesPerSecond: 0,
-            UploadRateBytesPerSecond: 0,
             Peers: 3,
             Seeds: 1,
             Ratio: null,

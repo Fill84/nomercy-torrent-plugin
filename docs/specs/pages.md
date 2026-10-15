@@ -47,16 +47,19 @@
 - A long column holds a set number of characters, "…" included: on the overview a show's title 48 and
   its tags 48; a source's refusal 77; on the History page the release a line is about 60 and the reason
   77; on the Activity page a note 77, and in the table of what is in flight the episode 83 and what it
-  waits on 77, and the counts of a stage 164; on the Downloads page the release 45 and the state 34.
+  waits on 77, and the counts of a stage 164; on the Downloads page the release 44 and the state 34.
 - A stage's counts longer than their column are cut after the last whole count, the counts being joined
   by " · ", and "…".
 - A refusal, a reason, a note or a download's state whose text is longer than its column, or holds a
   web address, shows the text's first sentence, up to the first web address, and "…". A first sentence
   longer than the cell is cut after the last whole word that fits.
 - A release name, a show's title or a tag list longer than its column is cut after the last space, dash,
-  underscore or dot that fits, and "…". A full stop in a release name is not the end of it, and a dot
-  before a digit, as in "H.265" or "DD5.1", is inside a word. A text with nowhere to cut, such as an info
-  hash, is cut where the cell ends.
+  underscore or dot that fits, and "…". A full stop in a release name is not the end of it. A dot after
+  a single letter, as in "H.265", or with a digit before it and one digit after, as in "DD5.1", is
+  inside a word; any other dot ends a word, as in "McGovern.S01E01.1080p". A text with nowhere to cut is
+  cut where the cell ends.
+- A size or a rate on the Downloads page never has more than three digits before its unit: from 1000 of
+  a unit it is said in the next, below one of that unit with two decimals, as in "0.98 MB/s".
 - A web address (http or https) is never in a cell. A host and port such as "(torrentz2.nz:443)" is not
   a web address.
 - The whole text of each cell drawn short stands under the table as a line of its own, in the order of

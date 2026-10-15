@@ -167,9 +167,17 @@ public static class LongCells
     /// dash, an underscore, or a dot that is not inside a number.
     /// </summary>
     /// <remarks>
-    /// A dot before a digit is inside a word — "H.265", "DD5.1", "2.0" — and cutting there leaves "H" or
-    /// "DD5" on the page, which reads as something else. -1 when there is no such place, and the name is
-    /// cut where the cell ends.
+    /// <para>
+    /// A dot is inside a number in two shapes only: after a single letter ("H.265", "H.264"), and with a
+    /// digit before it and one digit after ("DD5.1", "2.0"). Cut there, "H" or "DD5" stands on the page and
+    /// reads as something else.
+    /// </para>
+    /// <para>
+    /// Every other dot before a digit ends a word: "See.It.2160p", "McGovern.S01E01.1080p" — a digit on both
+    /// sides, but four after it — and "Colbert.2024". Treating those as one word too cut "The.Big.Deal.with.
+    /// Steph.McGovern.S01E01.1080p…" before its episode.
+    /// </para>
+    /// <para>-1 when there is no such place, and the name is cut where the cell ends.</para>
     /// </remarks>
     private static int LastNameBreak(string name, int from)
     {
@@ -182,14 +190,26 @@ public static class LongCells
                 return at;
             }
 
-            bool insideANumber = at + 1 < name.Length && char.IsDigit(name[at + 1]) && char.IsLetterOrDigit(name[at - 1]);
-
-            if (here == '.' && !insideANumber)
+            if (here == '.' && !InsideANumber(name, at))
             {
                 return at;
             }
         }
 
         return -1;
+    }
+
+    /// <summary>Whether the dot at <paramref name="at"/> is inside "H.265" or "DD5.1".</summary>
+    private static bool InsideANumber(string name, int at)
+    {
+        if (at + 1 >= name.Length || !char.IsDigit(name[at + 1]))
+        {
+            return false;
+        }
+
+        bool singleLetterBefore = char.IsLetter(name[at - 1]) && (at < 2 || !char.IsLetterOrDigit(name[at - 2]));
+        bool oneDigitAfterADigit = char.IsDigit(name[at - 1]) && (at + 2 >= name.Length || !char.IsDigit(name[at + 2]));
+
+        return singleLetterBefore || oneDigitAfterADigit;
     }
 }

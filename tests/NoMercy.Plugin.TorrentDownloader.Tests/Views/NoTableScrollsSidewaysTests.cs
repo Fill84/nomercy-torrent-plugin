@@ -238,7 +238,7 @@ public sealed class NoTableScrollsSidewaysTests
 
     /// <remarks>
     /// "grabbed, not started (downloading)" is 34 characters, the longest state the page writes itself, and
-    /// is drawn whole. The release has 45 characters: what the other columns leave at their widest.
+    /// is drawn whole. The release has 44 characters: what the other columns leave at their widest.
     /// </remarks>
     [Fact]
     public void AReleaseNameInDownloadsIsCutAtADotAndStandsWholeUnderTheTable()
@@ -262,6 +262,89 @@ public sealed class NoTableScrollsSidewaysTests
         PluginView view = DownloadsView.Render([Grabbed(hash, hash)]);
 
         Assert.Equal([hash], Cells(view, DownloadsView.TableId, "release"));
+    }
+
+    /// <remarks>
+    /// A dot between a word and a number ends the word: "McGovern.S01E01.1080p" (EZTV's latest,
+    /// <c>eztv-latest.json</c>) is cut after the episode, not before it, and "MULTI.DV.2160p" (srrDB's feed)
+    /// after "DV".
+    /// </remarks>
+    [Theory]
+    [InlineData("The.Big.Deal.with.Steph.McGovern.S01E01.1080p.HDTV.H264-DARKFLiX", "The.Big.Deal.with.Steph.McGovern.S01E01…")]
+    [InlineData("All.the.Truth.in.My.Lies.S01E01.MULTI.DV.2160p.WEB.H265-HiggsBoson", "All.the.Truth.in.My.Lies.S01E01.MULTI.DV…")]
+    public void ADotBeforeANumberThatIsAWordOfItsOwnIsWhereANameIsCut(string release, string cell)
+    {
+        Assert.Equal([cell], Cells(DownloadsView.Render([Grabbed("a1", release)]), DownloadsView.TableId, "release"));
+    }
+
+    /// <remarks>
+    /// "DDP5.1" is one word, and so is "H.265" (the Now table's test): a dot with a digit on both sides and
+    /// one digit after it, or a single letter before it, is inside a number. The Silo name is in the
+    /// captures (<c>silo8-limetorrents.html</c>).
+    /// </remarks>
+    [Fact]
+    public void ADotInsideANumberIsNotWhereANameIsCut()
+    {
+        const string release = "Silo.S03E08.Gray.Goo.1080p.ATVP.WEB-DL.DDP5.1.ENG.ITA.Atmos.H265-TBK";
+
+        Assert.Equal(["Silo.S03E08.Gray.Goo.1080p.ATVP.WEB-DL…"], Cells(DownloadsView.Render([Grabbed("a1", release)]), DownloadsView.TableId, "release"));
+    }
+
+    /// <remarks>
+    /// A name with nowhere to cut is cut where the cell ends. No name the plugin itself records has none, so
+    /// the text is the TorrentGalaxy capture's magnet name as it stands in the page, before it is decoded
+    /// (<c>round-silo-torrentgalaxy-detail-eztv.html</c>): 58 characters and not one space, dot, dash or
+    /// underscore.
+    /// </remarks>
+    [Fact]
+    public void ANameWithNowhereToCutIsCutWhereTheCellEnds()
+    {
+        const string release = "Silo%20S02E01%201080p%20WEB%20H264%20SuccessfulCrab%20EZTV";
+
+        Assert.Equal(["Silo%20S02E01%201080p%20WEB%20H264%20Succes…"], Cells(DownloadsView.Render([Grabbed("a1", release)]), DownloadsView.TableId, "release"));
+    }
+
+    /// <remarks>
+    /// Sizes and rates are counted in 1024s, so a figure between 1000 and 1023 of a unit drew four digits
+    /// ("1005.9 KB/s") and the column was wider than it was measured at. From 1000 the next unit is used,
+    /// with two decimals below one.
+    /// </remarks>
+    [Fact]
+    public void NoFigureOnTheDownloadsPageHasMoreThanThreeDigitsBeforeItsUnit()
+    {
+        DownloadRow row = new(
+            new("a1", "magnet:?xt=urn:btih:a1", ShortRelease, GrabState.Downloading),
+            new("a1", ShortRelease, TorrentState.Downloading, 525_000_000, 1_050_000_000, 1_030_000, 4, 2, 0.1, TimeSpan.FromMinutes(5), null));
+
+        PluginView view = DownloadsView.Render([row]);
+
+        Assert.Equal(["0.98 MB/s"], Cells(view, DownloadsView.TableId, "rate"));
+        Assert.Equal(["50% of 0.98 GB"], Cells(view, DownloadsView.TableId, "progress"));
+    }
+
+    /// <remarks>
+    /// On a library of more than one page the lines are about the rows drawn, so they stand between the
+    /// table and the line that says which page this is.
+    /// </remarks>
+    [Fact]
+    public void TheOverviewsLinesStandBetweenItsTableAndItsPagingLine()
+    {
+        const string library = "01HQ5W4GAVF30N10RT6XCF6AJQ";
+        const string title = "I've Been Killing Slimes for 300 Years and Maxed Out My Level";
+        LibraryPreferences anime = new(library) { Quality = "1080p" };
+        ShowListing[] shows =
+        [
+            // Fifty that sort before the long title, so it is the one show of the second page.
+            .. Enumerable.Range(1, OverviewView.PageSize).Select(id => Listing(library, anime, id, $"Aaa {id:000}")),
+            Listing(library, anime, 999, title),
+        ];
+
+        PluginView view = OverviewView.Render(new(false, null, null), [new(new(library, "Anime", LibraryKind.Anime), anime, shows)], library, page: 2);
+        PluginComponent[] page = [.. view.Components ?? []];
+        int table = Array.FindIndex(page, component => component.Id == OverviewView.TableId(library));
+
+        Assert.Equal([title], Under(view, OverviewView.TableId(library)));
+        Assert.Equal($"library-{library}-paging", page[table + 2].Id);
     }
 
     /// <remarks>
@@ -439,6 +522,14 @@ public sealed class NoTableScrollsSidewaysTests
         return new(new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Downloading), null);
     }
 
+    /// <summary>A show of the library, switched on, with nothing set on itself.</summary>
+    private static ShowListing Listing(string library, LibraryPreferences preferences, int id, string title)
+    {
+        ShowSettings settings = new(id) { SwitchedOn = true };
+
+        return new(new(id, title, 2021, library, "Anime", LibraryKind.Anime, $"/{id}"), settings, EffectiveSettings.Of(settings, preferences), 1);
+    }
+
     /// <summary>A grab the client holds no transfer for, in the state the plugin stored.</summary>
     private static DownloadRow Waiting(string hash, GrabState state)
     {
@@ -450,7 +541,7 @@ public sealed class NoTableScrollsSidewaysTests
     {
         return new(
             new(hash, $"magnet:?xt=urn:btih:{hash}", ShortRelease, GrabState.Downloading),
-            new(hash, ShortRelease, state, 0, null, 0, 0, 0, 0, null, null, null));
+            new(hash, ShortRelease, state, 0, null, 0, 0, 0, null, null, null));
     }
 
     /// <summary>A download the client paused with an error of its own, as the engine says it.</summary>
@@ -458,7 +549,7 @@ public sealed class NoTableScrollsSidewaysTests
     {
         return new(
             new(hash, $"magnet:?xt=urn:btih:{hash}", ShortRelease, GrabState.Downloading),
-            new(hash, ShortRelease, TorrentState.Paused, 0, null, 0, 0, 0, 0, null, null, error));
+            new(hash, ShortRelease, TorrentState.Paused, 0, null, 0, 0, 0, null, null, error));
     }
 
     /// <summary>The lines of text after the Downloads page's field, which is where its whole texts stand.</summary>

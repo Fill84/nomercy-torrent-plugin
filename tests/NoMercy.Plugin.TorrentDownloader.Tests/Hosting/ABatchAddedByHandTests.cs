@@ -165,7 +165,6 @@ public sealed class ABatchAddedByHandTests : IDisposable
             BytesDone: torrent.TotalLength,
             BytesTotal: torrent.TotalLength,
             DownloadRateBytesPerSecond: 0,
-            UploadRateBytesPerSecond: 0,
             Peers: 0,
             Seeds: 0,
             Ratio: 1.0,

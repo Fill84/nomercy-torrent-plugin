@@ -206,7 +206,6 @@ public sealed class TheSwitchDecidesTests : IDisposable
             BytesDone: 10_000,
             BytesTotal: 900_000_000,
             DownloadRateBytesPerSecond: 1_000,
-            UploadRateBytesPerSecond: 0,
             Peers: 3,
             Seeds: 2,
             Ratio: 0,

@@ -159,7 +159,6 @@ public class ControlsOnPagesTests
                 BytesDone: 100,
                 BytesTotal: 200,
                 DownloadRateBytesPerSecond: 1,
-                UploadRateBytesPerSecond: 0,
                 Peers: 2,
                 Seeds: 1,
                 Ratio: 0.1,

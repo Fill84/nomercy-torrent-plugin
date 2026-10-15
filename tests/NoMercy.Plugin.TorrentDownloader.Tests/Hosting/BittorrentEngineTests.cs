@@ -2356,17 +2356,22 @@ public class BittorrentEngineTests : IDisposable
     /// Moves the clock a <see cref="Step"/> at a time and waits after each for the piece it released to
     /// arrive, so the next step is not taken before the bytes the last one let go.
     /// </summary>
+    /// <remarks>
+    /// Waited on through <see cref="BittorrentEngine.Drawn"/>, which the heartbeat reads to know when the
+    /// Downloads page changed: it carries the bytes that have come in, whole pieces or not, so it moves when
+    /// the released bytes land.
+    /// </remarks>
     private static async Task ReceivingAsync(BittorrentEngine engine, FakeTimeProvider clock, int steps, CancellationToken ct)
     {
         for (int step = 0; step < steps; step++)
         {
-            long before = (await engine.StatusAsync(ct))[0].Arrived;
+            string before = engine.Drawn;
 
             clock.Advance(Step);
 
             DateTimeOffset giveUpAt = DateTimeOffset.UtcNow.AddSeconds(1);
 
-            while ((await engine.StatusAsync(ct))[0].Arrived == before && DateTimeOffset.UtcNow < giveUpAt)
+            while (engine.Drawn == before && DateTimeOffset.UtcNow < giveUpAt)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(5), ct);
             }

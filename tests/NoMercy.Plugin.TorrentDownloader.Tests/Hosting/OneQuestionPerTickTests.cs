@@ -181,7 +181,6 @@ public class OneQuestionPerTickTests : IDisposable
             BytesDone: Length,
             BytesTotal: Length,
             DownloadRateBytesPerSecond: 0,
-            UploadRateBytesPerSecond: 0,
             Peers: 3,
             Seeds: 2,
             Ratio: 0.4,

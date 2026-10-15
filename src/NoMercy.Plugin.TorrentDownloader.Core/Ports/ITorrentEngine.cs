@@ -99,7 +99,6 @@ public sealed record TorrentFile(string Path, long Length);
 /// <param name="BytesDone">How much is on disk and verified.</param>
 /// <param name="BytesTotal">How big it is, or null while nothing knows.</param>
 /// <param name="DownloadRateBytesPerSecond">Measured, not averaged over the whole transfer.</param>
-/// <param name="UploadRateBytesPerSecond">The same, going out.</param>
 /// <param name="Peers">How many connections there are, of every kind.</param>
 /// <param name="Leechers">
 /// How many of them are still downloading. A seed has all of it and a leecher
@@ -117,13 +116,6 @@ public sealed record TorrentFile(string Path, long Length);
 /// nought is a dead release.
 /// </param>
 /// <param name="SwarmPeers">The same for the peers still downloading it.</param>
-/// <param name="Arrived">
-/// Bytes of pieces that have come in, whole or not. Ahead of
-/// <paramref name="BytesDone"/> while pieces are still being filled: a piece
-/// counts only once it is complete and hashes right, so a torrent taking
-/// megabytes off a slow swarm can sit at nought verified for hours and be
-/// telling the truth.
-/// </param>
 /// <param name="ErrorIsTheRelease">
 /// Whether <paramref name="Error"/> is a property of the release or of this
 /// moment. "There is no video file in it" is true of that torrent for ever and
@@ -141,7 +133,6 @@ public sealed record TorrentStatus(
     long BytesDone,
     long? BytesTotal,
     double DownloadRateBytesPerSecond,
-    double UploadRateBytesPerSecond,
     int Peers,
     int Seeds,
     double? Ratio,
@@ -150,7 +141,6 @@ public sealed record TorrentStatus(
     int? SwarmSeeds = null,
     int? SwarmPeers = null,
     bool ErrorIsTheRelease = false,
-    long Arrived = 0,
     int Leechers = 0);
 
 /// <summary>

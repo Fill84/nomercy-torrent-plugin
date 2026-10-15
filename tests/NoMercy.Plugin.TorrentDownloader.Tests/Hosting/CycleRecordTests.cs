@@ -93,7 +93,6 @@ public class CycleRecordTests : IDisposable
             BytesDone: 0,
             BytesTotal: 900_000_000,
             DownloadRateBytesPerSecond: 0,
-            UploadRateBytesPerSecond: 0,
             Peers: 0,
             Seeds: 0,
             Ratio: null,
