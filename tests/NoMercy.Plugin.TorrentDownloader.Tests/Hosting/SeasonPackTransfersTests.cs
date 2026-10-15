@@ -56,6 +56,26 @@ public sealed class SeasonPackTransfersTests : IDisposable
     }
 
     /// <remarks>
+    /// And a pack that is already whole when it is first looked at — it finished while the server was down, or
+    /// before its metadata was read on a pass — lets go of episode ten on the pass that stages it, so ten is
+    /// neither staged nor waited for, and the next run searches for it.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeAFinishedPackDoesNotHoldIsLetGoOfAsItIsStaged()
+    {
+        GrabRepository grabs = await GrabsAsync();
+        StandingEngine engine = new StandingEngine().Holding(
+            Downloading() with { State = TorrentState.Finished, BytesDone = 8L * 1024 * 1024 * 1024 },
+            [.. Files()]);
+
+        await Transfers(engine, grabs).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        StoredDownload pack = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.Equal([new EpisodeKey(DarkMatter, 1, 3)], pack.Covers);
+    }
+
+    /// <remarks>
     /// A pack the client lost — a restart — is added back for the same episodes, so it goes on downloading only
     /// their videos.
     /// </remarks>

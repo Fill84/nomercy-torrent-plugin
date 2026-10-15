@@ -87,6 +87,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     public TimeSpan LookAgainInterval { get; init; } = TimeSpan.FromMinutes(1);
 
+    /// <summary>How this machine hides a browser window, when a test says so; null asks the machine.</summary>
+    /// <remarks>
+    /// A machine with no browser — the server's Docker images — is one the tests otherwise never run on, and
+    /// what the plugin does there is skip the sources behind a challenge and say so. Nothing on a server sets it.
+    /// </remarks>
+    public Hiding? BrowserHiding { get; init; }
+
     /// <summary>
     /// What the overview is being narrowed to, or null for every show.
     /// </summary>
@@ -2081,7 +2088,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 Shipped(),
                 engine: engine,
                 ledger: ledger,
-                logger: Log);
+                logger: Log,
+                hiding: BrowserHiding);
         }
         finally
         {
@@ -2632,7 +2640,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     private async Task<BrowserOff?> BrowserOffAsync(CancellationToken ct)
     {
-        if (new HiddenStages(Log).WhyNot is not string why)
+        if (new HiddenStages(Log, BrowserHiding).WhyNot is not string why)
         {
             return null;
         }

@@ -62,7 +62,8 @@ public sealed class Chain : IAsyncDisposable
         HttpMessageHandler? handler = null,
         ITorrentEngine? engine = null,
         ISourceLedger? ledger = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        Hiding? hiding = null)
     {
         _context = context;
 
@@ -78,7 +79,9 @@ public sealed class Chain : IAsyncDisposable
         _http = handler is null ? new() : new(handler);
         _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgent);
 
-        _stages = new(_logger);
+        // Asked of the machine unless a test says what the machine is: a machine with no browser is one the
+        // tests otherwise only meet on the server's Docker images.
+        _stages = new(_logger, hiding);
         _browser = new(
             new BrowserInstall(Path.Combine(context.DataFolderPath, "browser"), new PuppeteerBrowserDownloader(), _logger),
             _stages,

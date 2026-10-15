@@ -1,6 +1,13 @@
+using System.Net;
 using Microsoft.Extensions.Logging;
+using NoMercy.Plugin.TorrentDownloader.Configuration;
+using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Solver;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using NoMercy.Plugin.TorrentDownloader.Views;
+using NoMercy.PluginSdk.Abstractions;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Solver;
@@ -178,12 +185,94 @@ public class TheBrowserIsOffWithoutXvfbTests : IDisposable
         Assert.DoesNotContain(log.Entries, entry => entry.Level >= LogLevel.Warning);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>With no browser, the pass that clears challenges before a run stops at finding them, and says
+    /// why.</strong> 1337x answers the plain question with its challenge, so it needs a browser; there is
+    /// none to start, and starting one anyway only repeats the refusal the Sources page already shows.
+    /// </para>
+    /// <para>
+    /// 1337x is the one source left on, its interstitial the page it really answered with.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task WithNoBrowserTheChallengesBeforeARunAreFoundAndNotClearedAndThePassSaysWhy()
+    {
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(new CapturingLogger()).Load();
+        Settings settings = new();
+
+        foreach (SourceDefinition other in shipped.Where(one => one.Name != "1337x"))
+        {
+            settings.DisabledDefaultSources.Add(other.Name);
+        }
+
+        SourceDefinition gated = shipped.Single(one => one.Name == "1337x");
+        Uri address = new((gated.SearchAddress ?? gated.Url).Replace("{query}", "a", StringComparison.Ordinal));
+
+        FakeHttp http = new FakeHttp().Answers(
+            HttpStatusCode.Forbidden,
+            Fixture("cloudflare-interstitial-1337x.html"),
+            (CloudflareChallenge.MitigatedHeader, "challenge"));
+
+        FakeGrants grants = new();
+        grants.Grant(address.Host);
+
+        ActivityJournal journal = new();
+
+        await using Chain chain = new(
+            new FakePluginContext { DataFolderPath = _folder, Permits = grants },
+            journal,
+            shipped,
+            http,
+            hiding: Hiding.NoXvfb);
+
+        await chain.ClearTheWayAsync(settings, CancellationToken.None);
+
+        IReadOnlyList<ActivityEvent> clearance =
+            [.. journal.Snapshot().History.Where(one => one.Stage == ActivityStage.Clearance)];
+
+        Assert.Single(http.Attempts);
+        Assert.Contains(clearance, one => one.Detail == Why);
+        Assert.DoesNotContain(clearance, one => (one.Detail ?? string.Empty).Contains("cleared", StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// <strong>The Sources page says which sources the missing browser has switched off, and why.</strong>
+    /// Above the table, where the owner looks first, and on each of their rows.
+    /// </remarks>
+    [Fact]
+    public async Task TheSourcesPageSaysWhichSourcesAreOffWithNoBrowserAndWhy()
+    {
+        using TorrentDownloaderPlugin plugin = new() { BrowserHiding = Hiding.NoXvfb };
+
+        plugin.Initialize(new FakePluginContext { DataFolderPath = _folder });
+
+        PluginView view = await plugin.GetViewAsync(Requests.View(Pages.SourcesRoute), CancellationToken.None);
+
+        string words = string.Join(" ", Rendered.EveryValue(view));
+
+        Assert.Contains($"{Why} Off:", words, StringComparison.Ordinal);
+        Assert.Contains("1337x", words, StringComparison.Ordinal);
+    }
+
+    private static string Fixture(string name)
+    {
+        DirectoryInfo? directory = new(AppContext.BaseDirectory);
+
+        while (directory is not null
+               && !File.Exists(Path.Combine(directory.FullName, "NoMercy.Plugin.TorrentDownloader.sln")))
+        {
+            directory = directory.Parent;
+        }
+
+        return File.ReadAllText(Path.Combine(directory!.FullName, "tests", "fixtures", name));
+    }
+
     public void Dispose()
     {
-        if (Directory.Exists(_folder))
-        {
-            Directory.Delete(_folder, recursive: true);
-        }
+        // Through the helper every store test uses: the Sources page reads the plugin's database, and SQLite's
+        // pool can still be holding the file when the test is over.
+        TemporaryFolder.Forget(_folder);
 
         GC.SuppressFinalize(this);
     }
