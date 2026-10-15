@@ -292,6 +292,65 @@ public class RateLimitTests
         await limits.PassAsync(downloading: false, Ubuntu, 64 * Megabyte, CancellationToken.None);
     }
 
+    /// <remarks>
+    /// <para>
+    /// One set of limits is shared by every peer of every torrent, and each peer's conversation runs on a
+    /// thread of its own, so two blocks arriving at once ask at once. A second's allowance is handed out once
+    /// however many ask for it: two peers that each took the whole of it would double the owner's limit.
+    /// </para>
+    /// <para>
+    /// The buckets were a plain dictionary and two plain numbers with nothing between the peers. Two peers
+    /// both found the bucket full and both took it; two first blocks of a torrent both found it had no bucket
+    /// and wrote the dictionary at once, which corrupted it and threw — out of the conversation of the peer
+    /// that had just delivered a block, dropping it. That is the engine test that lost its only remaining peer
+    /// one run in a few hundred (15 October 2026).
+    /// </para>
+    /// <para>
+    /// The clock here has the two askers wait for each other wherever they read it, so they are inside the
+    /// limits at the same moment every run rather than once in a while. Once one of them has waited and the
+    /// other never came — which is what one asker at a time looks like — it stops making anybody wait.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TwoPeersAskingAtTheSameMomentShareOneSecondsAllowance()
+    {
+        MeetingClock clock = new(Start);
+        RateLimits limits = new(clock) { Download = { BytesPerSecond = Megabyte } };
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        clock.Meet();
+
+        Task<long> one = Task.Factory.StartNew(() => limits.TakeDownload(Ubuntu, Megabyte), TaskCreationOptions.LongRunning);
+        Task<long> other = Task.Factory.StartNew(() => limits.TakeDownload(Ubuntu, Megabyte), TaskCreationOptions.LongRunning);
+
+        long[] taken = await Task.WhenAll(one, other);
+
+        Assert.Equal(Megabyte, taken.Sum());
+    }
+
+    /// <summary>A test clock that, once told to, has two readers wait for each other before either is answered.</summary>
+    private sealed class MeetingClock(DateTimeOffset start) : FakeTimeProvider(start)
+    {
+        private readonly Barrier _two = new(2);
+
+        private volatile bool _meeting;
+
+        /// <summary>From now on, until a reader waits in vain.</summary>
+        public void Meet() => _meeting = true;
+
+        public override DateTimeOffset GetUtcNow()
+        {
+            // Long enough for a thread that has been started to arrive on a loaded machine; a reader left
+            // waiting this long is alone, and the meeting is over.
+            if (_meeting && !_two.SignalAndWait(TimeSpan.FromSeconds(2)))
+            {
+                _meeting = false;
+            }
+
+            return base.GetUtcNow();
+        }
+    }
+
     private const long Megabyte = 1024 * 1024;
 
     private const string Ubuntu = "D160B8D8EA35A5B4E52837468FC8F03D55CEF1F7";

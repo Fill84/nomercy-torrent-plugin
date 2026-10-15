@@ -119,6 +119,22 @@ public sealed class RateLimits(TimeProvider time)
     private readonly Dictionary<string, TokenBucket> _download = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, TokenBucket> _upload = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>Held while a bucket is found or made, and while two buckets agree and are charged.</summary>
+    /// <remarks>
+    /// <para>
+    /// One of these is shared by every peer of every torrent, and every peer's conversation asks it from a
+    /// thread of its own. Without this, two peers asking at the same moment both found the bucket full and
+    /// both took it — twice the owner's limit — and the first blocks of a torrent from two peers wrote the
+    /// dictionary at once, corrupted it, and threw out of the conversation of the peer that had just
+    /// delivered a block, which dropped that peer (15 October 2026).
+    /// </para>
+    /// <para>
+    /// The buckets read the clock inside it. Nothing that holds the client's lock or a session's ever asks
+    /// for a rate, so a thread waiting here cannot be part of a circle with one of them.
+    /// </para>
+    /// </remarks>
+    private readonly Lock _gate = new();
+
     /// <summary>The whole client's download limit, in bytes a second. Nought is unlimited.</summary>
     public TokenBucket Download { get; } = new(0, time);
 
@@ -128,14 +144,20 @@ public sealed class RateLimits(TimeProvider time)
     /// <summary>Sets what one torrent may have, creating its buckets if it has none.</summary>
     public void ForTorrent(string infoHash, long download, long upload)
     {
-        Bucket(_download, infoHash).BytesPerSecond = download;
-        Bucket(_upload, infoHash).BytesPerSecond = upload;
+        lock (_gate)
+        {
+            Bucket(_download, infoHash).BytesPerSecond = download;
+            Bucket(_upload, infoHash).BytesPerSecond = upload;
+        }
     }
 
     /// <summary>How much this torrent may read now.</summary>
     public long TakeDownload(string infoHash, long wanted)
     {
-        return Take(Download, Bucket(_download, infoHash), wanted);
+        lock (_gate)
+        {
+            return Take(Download, Bucket(_download, infoHash), wanted);
+        }
     }
 
     /// <summary>
@@ -160,7 +182,13 @@ public sealed class RateLimits(TimeProvider time)
                 return;
             }
 
-            TimeSpan waiting = downloading ? Download.Until(bytes) : Upload.Until(bytes);
+            TimeSpan waiting;
+
+            // Asking refills the bucket, which is a change to it like any other.
+            lock (_gate)
+            {
+                waiting = downloading ? Download.Until(bytes) : Upload.Until(bytes);
+            }
 
             // Never nothing, or a limit that cannot be met this instant becomes
             // a loop that spins until it can.
@@ -173,7 +201,10 @@ public sealed class RateLimits(TimeProvider time)
     /// <summary>How much this torrent may send now.</summary>
     public long TakeUpload(string infoHash, long wanted)
     {
-        return Take(Upload, Bucket(_upload, infoHash), wanted);
+        lock (_gate)
+        {
+            return Take(Upload, Bucket(_upload, infoHash), wanted);
+        }
     }
 
     /// <summary>The lower of the two, charged to both.</summary>
