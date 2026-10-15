@@ -3552,6 +3552,145 @@ the plugin deletes.
    watched, both forges carry the same package, `repository.json` names 0.8.1, and the
    `nomercy-plugins` catalogue workflow is started so the catalogue shows it at once.
 
+## S16 · Through the SDK: what the marketplace scan refuses (media-server #476)
+
+Stoney filed media-server #476 on our name: the marketplace's code scan (`PluginCodeScanner`, media-server
+`dev`) refuses this plugin for P/Invoke, `Process`, reflection and the libraries it ships. The server
+stopped scanning at load and install on 8 October 2026 (media-server #504, `d9afd5bd3`), so the plugin
+loads; the marketplace refuses it. Before 1.0 the rule is security over compatibility: no allowlist, the
+plugin changes. **The owner's word, 15 October 2026:** solve all of it; the challenge solver stays; what
+the media server must provide is asked for as an issue there, never changed there by us.
+
+**Facts read off media-server `dev` on 15 October 2026**, so they are not looked for again:
+
+- The rule list is `src/NoMercy.Plugins/Verification/PluginCodeScanner.cs`: banned namespaces
+  `System.Reflection.` (but `*Attribute` and `AssemblyName`), `System.Runtime.InteropServices.` (but
+  `*Attribute` and the compiler-emitted `MemoryMarshal`/`CollectionsMarshal` span helpers),
+  `System.Runtime.Loader`, `Microsoft.CSharp.RuntimeBinder`; banned types `System.AppDomain`,
+  `System.Activator`, `System.Diagnostics.Process`, `System.Diagnostics.ProcessStartInfo`; banned members
+  `Type::GetType`, `Environment::Exit`, `Environment::FailFast`, `Delegate::DynamicInvoke`,
+  `LambdaExpression::Compile`, ``Expression`1::Compile``; `MemberInfo` only for `get_Name`; any P/Invoke
+  or native method; pointers in fields, signatures or locals; `calli`; an image that is not IL only. Every
+  file in the plugin folder that is a PE image is scanned, except a shared assembly under its own name.
+- `IPluginContext.Storage.OpenDatabaseAsync(name)` is wired in process (`PluginContextFactory.HostStorage`)
+  since server 0.1.526; beast-unit runs 0.1.575. It opens `plugins/data/<plugin id>/<name>.sqlite` on one
+  `SqliteConnection` with no lock, keeps its count of applied migrations in `__nomercy_plugin_schema
+  (applied INTEGER)` — `MigrateAsync(statements)` runs `statements[MAX(applied)..]`, one transaction each,
+  and inserts `index + 1` — and offers no transaction to the plugin. Out of process
+  (`RemoteStorage.OpenDatabaseAsync`) it refuses "not yet".
+- `IPluginContext.Browser` is refused by every host. `IPluginBrowserPage` has `GotoAsync`, `WaitForAsync`,
+  `ContentAsync`, `CookiesAsync`; `PluginBrowserOptions` has `Timeout`, `UserAgent`, `Referer`, `Locale`.
+- `PuppeteerSharp` brings `WebDriverBiDi` and `Microsoft.IO.RecyclableMemoryStream`.
+
+Order: the check first, so every later slice proves what it removed; then what is ours alone; then the
+database, which carries the owner's data; the browser last, because it waits on the media server.
+
+## S16-01 · The marketplace scan, run on every build
+
+**Read first:** this sprint's facts, `PluginCodeScanner.cs` and `CodeScanVerificationStage.cs` on
+media-server `dev` (read only), `.forgejo/workflows/build.yml` for the folder that is packed.
+
+**Steps**
+
+1. A test helper `MarketplaceScan` in `tests/NoMercy.Plugin.TorrentDownloader.Tests/Scan/`, written here
+   with `System.Reflection.Metadata` from the rule list above, answers one finding per line in the
+   server's words (`<file>: references banned type System.Diagnostics.Process`).
+2. Tests (red first), each on a small assembly compiled in the test from source: a P/Invoke is found;
+   `Process` is found; `ex.GetType().Name` is not; a collection expression into a span is not.
+3. `TheMarketplaceScanTests`: the plugin's build output gives exactly the findings in
+   `Scan/expected-findings.txt`. A new finding fails it; a finding that went away fails it too, so the list
+   can only shrink by being edited. Red first with an empty list.
+
+**Done when** the tests are green and were red, and the list holds what #476 lists.
+
+## S16-02 · Files without `DeviceIoControl`
+
+**Read first:** `docs/06-torrent-client.md` § around line 172, `Bittorrent/Pieces/TorrentDisk.cs`.
+
+**Steps**
+
+1. Measure on Windows (NTFS), in an integration test: a 4 GiB file written in random piece order, sparse
+   and not sparse — wall time and bytes written. On NTFS a write past the valid data length zero-fills the
+   gap, which is what the sparse flag was for.
+2. The numbers go under **Decisions**. When the run without the flag is no slower in a way a download
+   would notice: remove `DeviceIoControl`, and the spec says files are created at full size. When it is:
+   the flag becomes an SDK capability request on the media server, and the call stays until it ships.
+3. `expected-findings.txt` loses `Sparse.DeviceIoControl`.
+
+## S16-03 · Migrations and sources read without reflection
+
+**Read first:** `Storage/Store.cs`, `Configuration/CatalogueLoader.cs`, `docs/01-plugin.md` § the folders.
+
+`sources.json` and `Storage/Migrations/*.sql` stay the files people edit and tools read. The build turns
+them into code: an MSBuild step writes `ShippedSources.g.cs` (the catalogue as a raw string) and
+`ShippedMigrations.g.cs` (the migrations in number order) into `obj/`, so nothing looks for its own folder.
+
+**Steps**
+
+1. Tests (red first): the catalogue loads with no `sources.json` beside the assembly and has at least
+   `CatalogueLoader.Fewest` sources; the migrations come out in number order, seventeen of them, each the
+   text of its file; a migration file whose name does not start with a number fails the build.
+2. `CatalogueLoader` and `Store` read the generated code; `sources.json` no longer travels;
+   `docs/01-plugin.md` says so (§ the folders, § files that travel).
+3. `typeof(...).Assembly` is gone from `Store` and `CatalogueLoader` (`UnobservedContexts` keeps one until
+   S16-06).
+
+## S16-04 · The database is the SDK's, and every row comes along
+
+**Read first:** this sprint's facts, `Storage/*.cs`, `TorrentDownloaderPlugin.cs` (`DatabaseAsync`),
+`docs/09-host-contract.md`.
+
+**Steps**
+
+1. A test double `HostShapedDatabase` implements `IPluginDatabase` over one `SqliteConnection` exactly as
+   the host's `PluginDatabase` does (the facts above); `docs/09-host-contract.md` names those facts with
+   the server file they were read from.
+2. Tests (red first), on a database written by the 0.8.1 migrations with rows in every table: the carry-over
+   renames `torrent-downloader.db` (and its `-wal`; `-shm` is deleted) to `torrent-downloader.sqlite`, sets
+   `__nomercy_plugin_schema` to the old `user_version`, and every row reads back the same; `MigrateAsync`
+   then applies nothing twice and a new eighteenth migration once; a fresh install gets all seventeen; a
+   file that cannot be moved (held open) leaves both files untouched, the plugin says "restart the server
+   to finish the update", and no new empty database is made; two writers at once do not interleave; a
+   write that throws half way leaves nothing of itself.
+3. `Store` holds one `IPluginDatabase` behind one gate. A write that needs several statements runs
+   `BEGIN IMMEDIATE` … `COMMIT` (or `ROLLBACK`) inside the gate. `PRAGMA foreign_keys=ON` and
+   `journal_mode=WAL` are set once on open.
+4. Every repository reads rows as `IReadOnlyDictionary<string, object?>`; `Microsoft.Data.Sqlite` leaves
+   the plugin's references (the tests keep it for the double and the 0.8.1 fixture).
+5. `expected-findings.txt` loses `Microsoft.Data.Sqlite.dll`, `SQLitePCLRaw.*` and the three `e_sqlite3.dll`.
+
+## S16-05 · The browser the solver needs, asked of the media server
+
+An issue on NoMercy-Entertainment/nomercy-media-server, linking #476 and #597, asking for
+`IPluginContext.Browser` on the in-process host with what `docs/07-solver.md` measured and `IBrowserTab`
+uses: a real browser in a window nobody sees (headless does not pass a managed challenge); reload; the
+document's content type; whether the body is there yet; a fetch from inside the page that answers the
+body; the user agent the page presents; the cookies; the page surviving its own navigation; one browser
+per plugin, killed with the plugin; and a way to ask whether a browser is available here, with the reason
+when it is not. Also asked: `OpenDatabaseAsync` out of process.
+
+**Done when** the issue is filed and linked from #476 and from **Blocked**.
+
+**As done** (15 October 2026): media-server #601; #476 carries the plan in a comment.
+
+## S16-06 · The solver on `IPluginBrowser`
+
+**Waits on** the S16-05 issue shipping in a server release.
+
+**Steps**
+
+1. `IBrowserTab` and `IBrowserTabs` are implemented over `IPluginBrowser`; the policy above them
+   (`BrowserSolver`, `ChallengeAwareFetch`) and its tests do not change.
+2. `PuppeteerTabs`, `UnobservedContexts`, `BrowserInstall`, `IdleBrowser`, `DiesWithTheServer`,
+   `WindowsDesktopStage`, `XvfbStage`, `XvfbLookup`, `HiddenStages`, `IHiddenStage` and the `PuppeteerSharp`
+   reference are removed; "sources behind a challenge are off" comes from the host's answer.
+3. `expected-findings.txt` is empty; #476 is closed with a comment.
+
+## S16-07 · Seen on beast-unit, then a version
+
+Built as S15-05: the owner sees what changes, the carry-over is watched on beast-unit's own database,
+and a version is released only on the owner's word.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 None of these has a fix that belongs in this plugin.

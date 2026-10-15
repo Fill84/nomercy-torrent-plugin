@@ -4,6 +4,10 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
+solver stays, and what the media server must provide is asked for there as an issue, never changed there
+by us.** `SPRINTS.md` § S16. Current: **`S16-01`**.
+
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
 the sources name (done; anime keeps its search by show and episode), `S15-04` a wrong episode the plugin
@@ -687,6 +691,11 @@ looking and goes stale on its own when the last page closes.
 
 ## Blocked
 
+- **`S16-06`, the solver on `IPluginBrowser`, waits on media-server #601** (filed 15 October 2026): every
+  host refuses `IPluginContext.Browser`, and the interface lacks reload, content type, readiness, the
+  in-page fetch, the user agent and availability. Until it ships the solver stays on PuppeteerSharp and
+  the marketplace scan keeps refusing the `Solver/` findings of #476.
+
 **Nothing is blocked on a deploy any more.** That paragraph said the first install went over with
 every hash matching and the plugin still could not load. The cause was found and fixed on 21 August
 2026, it has deployed cleanly on every stop since, and on 25 August it delivered an episode end to
@@ -869,6 +878,15 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S15-03` A show downloads only a release the sources name
 - [ ] `S15-04` A wrong episode the plugin delivered is replaced on its own — on `feat/replace-delivered`, waits for media-server #599 and #600
 - [x] `S15-05` 0.8.1 released on the owner's word, after the list of what changes
+
+### Sprint 16 — Through the SDK: what the marketplace scan refuses (media-server #476)
+- [ ] `S16-01` The marketplace scan, run on every build
+- [ ] `S16-02` Files without `DeviceIoControl`
+- [ ] `S16-03` Migrations and sources read without reflection
+- [ ] `S16-04` The database is the SDK's, and every row comes along
+- [x] `S16-05` The browser the solver needs, asked of the media server — #601
+- [ ] `S16-06` The solver on `IPluginBrowser` — waits on media-server #601
+- [ ] `S16-07` Seen on beast-unit, then a version
 
 ## Log
 
