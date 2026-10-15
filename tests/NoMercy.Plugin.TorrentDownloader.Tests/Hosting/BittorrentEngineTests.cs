@@ -1985,15 +1985,21 @@ public class BittorrentEngineTests : IDisposable
     /// <para>
     /// The peer is a real connection on this machine, dialled in by this client's own dialler, that has
     /// nothing of the torrent — a leecher at nought per cent. The window opens at the first reading with it
-    /// connected, a minute after it arrived, so the download is still running thirty minutes in and stopped
-    /// by thirty-one.
+    /// connected, a minute after the client hears it arrive, so the download is still running thirty minutes
+    /// in and stopped by thirty-one.
+    /// </para>
+    /// <para>
+    /// Counted from when the client heard of the peer, which is when it asks for that reading, and not from
+    /// when the peer count says one. The session counts the peer before it tells the client a peer arrived,
+    /// so under load the first minute could pass before the reading was asked for: the window then opened a
+    /// minute later than the test assumed, and the stop it checked at thirty-one was due at thirty-two.
     /// </para>
     /// </remarks>
     [Fact]
     public async Task ADownloadNoConnectedPeerCanFinishIsStoppedAfterStallMinutes()
     {
         using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
-        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero));
+        ArmingClock clock = new(new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero));
 
         using BittorrentEngine engine = new(
             0, TimeSpan.FromHours(12), TimeSpan.FromMinutes(30), Together, Seeding, 0, 0, null,
@@ -2009,6 +2015,9 @@ public class BittorrentEngineTests : IDisposable
         using PeerConnection leecher = await DialInAsync(engine, handle, stopping.Token);
 
         await Until(async () => (await engine.StatusAsync(stopping.Token))[0].Peers == 1, stopping.Token);
+
+        // The reading a minute from now, which is the client having heard of the peer.
+        await Until(() => Task.FromResult(clock.ArmedFor(TimeSpan.FromMinutes(1))), stopping.Token);
 
         await StillRunningAsync(engine, clock, minutes: 30, stopping.Token);
 
@@ -2378,6 +2387,54 @@ public class BittorrentEngineTests : IDisposable
             TorrentStatus status = (await engine.StatusAsync(ct))[0];
 
             Assert.True(status.Error is null, $"stopped a minute after {minute}: {status.Error}");
+        }
+    }
+
+    /// <summary>A test clock that remembers how far ahead the client set its own wake timer, each time.</summary>
+    /// <remarks>
+    /// The client asks for a reading of what its peers hold by setting its wake timer, and nothing else it
+    /// does says that it has asked. Waiting on that timer, rather than on something that happens before it,
+    /// is what keeps a test that moves the clock from moving it before the client has caught up. Only the
+    /// client's own: a session waiting a minute to announce again sets a timer of a minute too.
+    /// </remarks>
+    private sealed class ArmingClock(DateTimeOffset start) : FakeTimeProvider(start)
+    {
+        private readonly List<TimeSpan> _armed = [];
+
+        /// <summary>Whether the client set its wake timer to fire this far after the moment it set it.</summary>
+        public bool ArmedFor(TimeSpan due)
+        {
+            lock (_armed)
+            {
+                return _armed.Contains(due);
+            }
+        }
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            if (SetByTheClient(callback.Method.DeclaringType))
+            {
+                lock (_armed)
+                {
+                    _armed.Add(dueTime);
+                }
+            }
+
+            return base.CreateTimer(callback, state, dueTime, period);
+        }
+
+        /// <summary>Whether a callback was written inside <see cref="BittorrentEngine"/>, closures included.</summary>
+        private static bool SetByTheClient(Type? declaring)
+        {
+            for (Type? type = declaring; type is not null; type = type.DeclaringType)
+            {
+                if (type == typeof(BittorrentEngine))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
     }
 
