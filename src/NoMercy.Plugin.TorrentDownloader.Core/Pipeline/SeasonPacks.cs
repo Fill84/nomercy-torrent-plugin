@@ -23,6 +23,9 @@ public static class SeasonPacks
         return
         [
             .. searched
+                // Missing only. An episode to be replaced is not a gap — the library has it — and its
+                // replacement is one release for one episode, whose old encode is recycled for that episode
+                // alone before it is encoded.
                 .Where(episode => episode.State == EpisodeState.Missing)
                 .GroupBy(episode => (episode.Key.ShowId, episode.Key.Season))
                 .Where(season => season.Count() >= 2)

@@ -56,18 +56,22 @@ public sealed class EpisodeRepository(Store database)
 
                         INSERT INTO episodes
                             (show_id, season, episode, show_title, show_year, library_type,
-                             absolute, episode_title, air_date, state, attempts, last_search_at)
+                             absolute, episode_title, air_date, state, attempts, last_search_at,
+                             replaces_hash, replaces_release)
                         VALUES
                             ($show, $season, $episode, $showTitle, $showYear, $libraryType,
-                             $absolute, $episodeTitle, $airDate, $state, 0, NULL)
+                             $absolute, $episodeTitle, $airDate, $state, 0, NULL,
+                             $replacesHash, $replacesRelease)
                         ON CONFLICT (show_id, season, episode) DO UPDATE SET
-                            show_title    = excluded.show_title,
-                            show_year     = excluded.show_year,
-                            library_type  = excluded.library_type,
-                            absolute      = excluded.absolute,
-                            episode_title = excluded.episode_title,
-                            air_date      = excluded.air_date,
-                            state         = excluded.state;
+                            show_title       = excluded.show_title,
+                            show_year        = excluded.show_year,
+                            library_type     = excluded.library_type,
+                            absolute         = excluded.absolute,
+                            episode_title    = excluded.episode_title,
+                            air_date         = excluded.air_date,
+                            state            = excluded.state,
+                            replaces_hash    = excluded.replaces_hash,
+                            replaces_release = excluded.replaces_release;
                         """,
                         new Dictionary<string, object?>
                         {
@@ -81,6 +85,8 @@ public sealed class EpisodeRepository(Store database)
                             ["$episodeTitle"] = episode.EpisodeTitle,
                             ["$airDate"] = episode.AirDate?.ToString("O"),
                             ["$state"] = EpisodeStates.ToStored(episode.State),
+                            ["$replacesHash"] = episode.Replaces?.InfoHash,
+                            ["$replacesRelease"] = episode.Replaces?.Release,
                         },
                         ct);
                 }
@@ -112,7 +118,8 @@ public sealed class EpisodeRepository(Store database)
         IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
             SELECT show_id, season, episode, show_title, show_year, library_type,
-                   absolute, episode_title, air_date, state, attempts, last_search_at
+                   absolute, episode_title, air_date, state, attempts, last_search_at,
+                   replaces_hash, replaces_release
             FROM episodes
             ORDER BY show_id, season, episode;
             """,
@@ -161,7 +168,12 @@ public sealed class EpisodeRepository(Store database)
             EpisodeStates.FromStored(row.Text("state")),
             row.IntOrNull("absolute"),
             row.Int("attempts"),
-            row.TextOrNull("last_search_at") is string searched ? DateTimeOffset.Parse(searched) : null);
+            row.TextOrNull("last_search_at") is string searched ? DateTimeOffset.Parse(searched) : null)
+        {
+            Replaces = row.TextOrNull("replaces_hash") is string hash && row.TextOrNull("replaces_release") is string release
+                ? new(hash, release)
+                : null,
+        };
     }
 
     private static string LibraryTypeOf(LibraryKind kind)

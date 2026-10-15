@@ -63,6 +63,23 @@ public sealed class FeedNamesTests
     }
 
     /// <remarks>
+    /// An episode to be replaced takes its feed names exactly as a missing one does: it is searched for by
+    /// release name like a missing one (the owner's rule of 15 October 2026). Sabotage: taking feed names
+    /// for missing episodes only leaves it none.
+    /// </remarks>
+    [Fact]
+    public async Task AFeedNameIsTakenForAnEpisodeToBeReplacedToo()
+    {
+        FakeFetch fetch = new FakeFetch().AnsweringFeeds();
+
+        TrackedEpisode allAmerican = Episode(2, "All American", 8, 11, EpisodeState.Replace, year: 2018);
+
+        FeedNamesTaken taken = await Over(fetch).ReadFeedsAsync([allAmerican], CancellationToken.None);
+
+        Assert.Equal(["All American S08E11 1080p WEB H264-GGWP"], taken.For(allAmerican.Key).Select(name => name.Title));
+    }
+
+    /// <remarks>
     /// A release name without an episode number, such as a season pack, names no episode — so it is not
     /// taken for one, even for a season whose every episode is being searched for. It is that season's pack
     /// name instead (<c>SeasonPackNamesTests</c>).

@@ -126,6 +126,35 @@ public sealed record StoredDownload(string InfoHash, string Magnet, string Relea
     /// restart. Null is the ordinary folder.
     /// </remarks>
     public string? Folder { get; init; }
+
+    /// <summary>When the torrent was taken on, or taken on again.</summary>
+    /// <remarks>
+    /// What bounds the files a delivery caused: nothing its encode wrote can be older than the grab.
+    /// </remarks>
+    public DateTimeOffset GrabbedAt { get; init; }
+
+    /// <summary>
+    /// Whether its release is a name a name source gave; null for a grab recorded before this was written
+    /// down, and not yet checked against the name sources.
+    /// </summary>
+    /// <remarks>
+    /// The owner's rule of 15 October 2026: a show's episode delivered from a release no name source names is
+    /// replaced on its own. False for an anime's grab found by show and episode, which is never replaced.
+    /// </remarks>
+    public bool? Named { get; init; }
+
+    /// <summary>The info hash of the delivery this grab replaces, or null for a grab that replaces nothing.</summary>
+    public string? Replaces { get; init; }
+
+    /// <summary>
+    /// When the encoded files of the delivery this grab replaces went to the server's recycle area, or null
+    /// while they have not.
+    /// </summary>
+    /// <remarks>
+    /// Written once, before the encode is asked for, so a later look never recycles again — by then the
+    /// folder holds what the new encode is writing.
+    /// </remarks>
+    public DateTimeOffset? RecycledAt { get; init; }
 }
 
 /// <summary>

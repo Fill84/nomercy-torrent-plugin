@@ -40,4 +40,20 @@ public sealed record TrackedEpisode(
     EpisodeState State,
     int? Absolute = null,
     int Attempts = 0,
-    DateTimeOffset? LastSearchAt = null);
+    DateTimeOffset? LastSearchAt = null)
+{
+    /// <summary>
+    /// The plugin's own delivery this episode is to be replaced over, for an episode in
+    /// <see cref="EpisodeState.Replace"/>; null for every other.
+    /// </summary>
+    /// <remarks>
+    /// Carried so the grab that replaces it can name the delivery whose encoded files go to the server's
+    /// recycle area, and so the Queue page can say which release is being replaced.
+    /// </remarks>
+    public Replacing? Replaces { get; init; }
+}
+
+/// <summary>A delivery of the plugin's that an episode is to be replaced over.</summary>
+/// <param name="InfoHash">The torrent that delivered it, as its grab is recorded.</param>
+/// <param name="Release">What that release was called.</param>
+public sealed record Replacing(string InfoHash, string Release);

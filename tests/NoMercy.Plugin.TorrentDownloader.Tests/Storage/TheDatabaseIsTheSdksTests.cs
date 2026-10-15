@@ -66,14 +66,15 @@ public sealed class TheDatabaseIsTheSdksTests : IDisposable
         }
 
         // Counted as applied, so the host never runs 001-initial over tables
-        // that are already there — which would fail the plugin's first open.
-        Assert.Equal(OldDatabase.Migrations, await Counted());
+        // that are already there — which would fail the plugin's first open —
+        // and runs every migration after 0.8.1's, once.
+        Assert.Equal(MigrationNumbers().Count, await Counted());
         Assert.False(File.Exists(Path.Combine(_folder, OldDatabase.FileName)));
 
         // And opening it again changes nothing and refuses nothing.
         await using Store again = TestStore.In(_folder);
         await again.MigrateAsync(CancellationToken.None);
-        Assert.Equal(OldDatabase.Migrations, await Counted());
+        Assert.Equal(MigrationNumbers().Count, await Counted());
         Assert.Single(await new EpisodeRepository(again).AllAsync(CancellationToken.None));
     }
 
@@ -83,7 +84,7 @@ public sealed class TheDatabaseIsTheSdksTests : IDisposable
         await using Store store = TestStore.In(_folder);
         await store.MigrateAsync(CancellationToken.None);
 
-        Assert.Equal(OldDatabase.Migrations, await Counted());
+        Assert.Equal(MigrationNumbers().Count, await Counted());
         Assert.Empty(await new EpisodeRepository(store).AllAsync(CancellationToken.None));
     }
 

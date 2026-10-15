@@ -4,7 +4,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 
 /// <summary>
 /// A database exactly as 0.8.1 leaves one: <c>torrent-downloader.db</c>, in WAL
-/// mode, every migration of <c>Storage/Migrations</c> run in number order with
+/// mode, the seventeen migrations of <c>Storage/Migrations</c> that 0.8.1 shipped run in number order with
 /// <c>PRAGMA user_version</c> set to its number inside the same transaction, and
 /// one known row in every table.
 /// </summary>
@@ -19,8 +19,11 @@ public static class OldDatabase
 
     public const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";
 
-    /// <summary>The migrations 0.8.1 ships, from the repository's own files.</summary>
-    public static int Migrations => MigrationFiles().Count;
+    /// <summary>
+    /// How many migrations 0.8.1 shipped: the files numbered up to this, from the repository's own. Every
+    /// one after it is a later version's, and runs only after the carry-over.
+    /// </summary>
+    public const int Migrations = 17;
 
     /// <summary>Writes it into <paramref name="folder"/> and closes it, as a server that stopped cleanly does.</summary>
     public static void Write(string folder)
@@ -144,6 +147,7 @@ public static class OldDatabase
 
         return [.. Directory.EnumerateFiles(folder, "*.sql")
             .Select(path => (Number: long.Parse(new string([.. Path.GetFileName(path).TakeWhile(char.IsAsciiDigit)])), Sql: File.ReadAllText(path)))
+            .Where(migration => migration.Number <= Migrations)
             .OrderBy(migration => migration.Number)];
     }
 

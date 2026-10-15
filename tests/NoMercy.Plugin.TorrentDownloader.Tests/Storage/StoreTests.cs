@@ -9,6 +9,16 @@ public class StoreTests : IDisposable
     private readonly string _folder =
         Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
 
+    /// <summary>The columns 018 adds, taken away so a database rolled back past it is one 018 can run on again.</summary>
+    private const string Before018 =
+        """
+        ALTER TABLE grabs DROP COLUMN named;
+        ALTER TABLE grabs DROP COLUMN replaces;
+        ALTER TABLE grabs DROP COLUMN recycled_at;
+        ALTER TABLE episodes DROP COLUMN replaces_hash;
+        ALTER TABLE episodes DROP COLUMN replaces_release;
+        """;
+
     /// <remarks>
     /// Migrations run at every startup, and the plugin loads on every server
     /// start. A runner that was not idempotent would fail on the second start
@@ -129,6 +139,9 @@ public class StoreTests : IDisposable
         // so the state this test is pretending to be in has to lack it.
         await database.ExecuteAsync("ALTER TABLE grabs DROP COLUMN encode_jobs;", null, CancellationToken.None);
 
+        // And the five 018 adds, for the same reason.
+        await database.ExecuteAsync(Before018, null, CancellationToken.None);
+
         await database.MigrateAsync(CancellationToken.None);
 
         Dictionary<string, long> left = (await database.QueryAsync(
@@ -240,6 +253,9 @@ public class StoreTests : IDisposable
         // direction: the second run adds it again, and SQLite has no ADD COLUMN
         // IF NOT EXISTS either.
         await database.ExecuteAsync("ALTER TABLE grabs DROP COLUMN encode_jobs;", null, CancellationToken.None);
+
+        // And the five 018 adds, for the same reason.
+        await database.ExecuteAsync(Before018, null, CancellationToken.None);
 
         // And the other way about for 015, which adds two columns: they are
         // there already, so the pretended state has to be without them.

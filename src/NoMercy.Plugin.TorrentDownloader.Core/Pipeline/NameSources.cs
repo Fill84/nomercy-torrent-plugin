@@ -98,6 +98,9 @@ public sealed class FeedNamesTaken(
     /// <summary>No names, and nothing failed: a fresh one each time, because a run writes into it.</summary>
     public static FeedNamesTaken None => new(new Dictionary<EpisodeKey, IReadOnlyList<SourceName>>());
 
+    /// <summary>Whether any name source failed in the run, so what the run was told is not everything there is.</summary>
+    public bool AnyFailed => !_failed.IsEmpty;
+
     /// <summary>Whether this name source failed earlier in the run, and so gives no names in it.</summary>
     public bool Failed(string source)
     {
@@ -296,7 +299,9 @@ public sealed class NameSources(
         IReadOnlyList<TrackedEpisode> episodes,
         HashSet<EpisodeKey> namesakes)
     {
-        TrackedEpisode[] searched = [.. episodes.Where(episode => episode.State == EpisodeState.Missing)];
+        // An episode to be replaced takes its names as a missing one does: it is searched for by release name
+        // like a missing one (the owner's rule of 15 October 2026).
+        TrackedEpisode[] searched = [.. episodes.Where(episode => episode.State is EpisodeState.Missing or EpisodeState.Replace)];
         Dictionary<EpisodeKey, IReadOnlyList<SourceName>> taken = [];
 
         foreach (TrackedEpisode episode in searched)

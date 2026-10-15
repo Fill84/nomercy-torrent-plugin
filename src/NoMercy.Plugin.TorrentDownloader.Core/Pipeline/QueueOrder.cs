@@ -35,9 +35,10 @@ public static class QueueOrder
         [
             .. episodes
                 // Only what is being looked for. An unaired episode would be
-                // asked about before it exists; an unavailable one has been
-                // given up on until the next maintenance pass puts it back.
-                .Where(episode => episode.State == EpisodeState.Missing)
+                // asked about before it exists. An episode to be replaced is
+                // looked for like a missing one (the owner's rule of
+                // 15 October 2026), by release name only.
+                .Where(episode => episode.State is EpisodeState.Missing or EpisodeState.Replace)
                 .OrderBy(episode => episode.ShowTitle, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(episode => episode.Key.ShowId)
                 .ThenBy(episode => episode.Key.Season)

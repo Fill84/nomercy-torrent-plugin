@@ -32,6 +32,18 @@ public enum EpisodeState
 
     /// <summary>Aired, and the library has no file. This is the work.</summary>
     Missing,
+
+    /// <summary>
+    /// The library has a file, and it is one the plugin delivered from a release no name source names.
+    /// </summary>
+    /// <remarks>
+    /// The owner's rule of 15 October 2026: such an episode is replaced on its own. It is searched for by
+    /// release name as a missing one is, and it is not missing — the library has a file — so the overview
+    /// does not count it as missing. South Park S29E03 was delivered that day from
+    /// <c>South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM</c>, a capture with the intro missing, three hours
+    /// before the name sources named a real release of it.
+    /// </remarks>
+    Replace,
 }
 
 /// <summary>The state names as they are stored, which are not the C# names.</summary>
@@ -44,6 +56,7 @@ public static class EpisodeStates
 {
     public const string NotAired = "notaired";
     public const string Missing = "missing";
+    public const string Replace = "replace";
 
     public static string ToStored(EpisodeState state)
     {
@@ -51,6 +64,7 @@ public static class EpisodeStates
         {
             EpisodeState.NotAired => NotAired,
             EpisodeState.Missing => Missing,
+            EpisodeState.Replace => Replace,
             _ => throw new ArgumentOutOfRangeException(nameof(state), state, "No stored name for this state."),
         };
     }
@@ -61,6 +75,7 @@ public static class EpisodeStates
         {
             NotAired => EpisodeState.NotAired,
             Missing => EpisodeState.Missing,
+            Replace => EpisodeState.Replace,
             // A row still saying 'unavailable' is one migration 009 missed —
             // every row on disk should have been rewritten before this ever
             // runs. Refusing is better than quietly filing it as missing and

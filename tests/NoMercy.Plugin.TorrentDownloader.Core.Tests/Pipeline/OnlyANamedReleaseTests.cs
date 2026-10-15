@@ -166,6 +166,54 @@ public class OnlyANamedReleaseTests
         Assert.Equal("Nyaa", outcome.Source);
         Assert.Equal("D8FA5AC1CE27DAB1F07F0C93111C5763908182E8", outcome.InfoHash);
         Assert.Single(engine.Taken);
+
+        // Not a name any source gave, and written down so: an anime's grab is never replaced for it, but a
+        // show's would be (ReplaceMarkingTests).
+        Assert.False(outcome.Named);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>An episode to be replaced is searched for by release name, as a missing one is, and only by
+    /// name</strong> (the owner's rule of 15 October 2026). This is S29E03 after the ViETNAM delivery: the
+    /// library has a file, the episode is tracked to be replaced, and once the name sources name CAKES's
+    /// release that release is put to the indexers and taken. The show and episode alone are never asked, so
+    /// ViETNAM's torrent — on both indexers — is never found again.
+    /// </para>
+    /// <para>
+    /// And the grab says its release is a name a source gave, which is what keeps the replacement from being
+    /// marked in its turn. Sabotage: leaving an episode to be replaced out of the queue, as only missing ones
+    /// were before, decides nothing for it at all.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeToBeReplacedIsSearchedForByTheNameTheSourcesGiveAndOnlyByIt()
+    {
+        FakeFetch fetch = Indexers(AnsweringSearches(new FakeFetch().AnsweringFeeds(), "s29e03"));
+        FakeTorrentEngine engine = new();
+
+        TrackedEpisode toReplace = SouthPark with
+        {
+            State = EpisodeState.Replace,
+            Replaces = new("7445E4910B7A4D7E1F3C35D5A4A9C2E1B0C0FFEE", "South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM"),
+        };
+
+        CycleReport report = await Cycle(fetch, new ActivityJournal(), engine, [LimeTorrents, IndexerSites.ThePirateBay])
+            .RunAsync([toReplace], new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"), CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal(Cakes, outcome.Release);
+        Assert.Equal(CakesHash, outcome.InfoHash);
+        Assert.True(outcome.Named);
+
+        Assert.DoesNotContain(
+            fetch.Asked,
+            address => address.ToString() == IndexerSites.Exact(LimeTorrents, "South Park S29E03")
+                       || address.ToString() == IndexerSites.Words(LimeTorrents, "South Park S29E03")
+                       || address.ToString() == IndexerSites.Exact(IndexerSites.ThePirateBay, "South Park S29E03")
+                       || address.ToString() == IndexerSites.Words(IndexerSites.ThePirateBay, "South Park S29E03"));
     }
 
     /// <summary>The four name sources' searches for South Park's episode of season 29.</summary>

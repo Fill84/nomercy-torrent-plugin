@@ -22,7 +22,18 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 /// is where the plugin's own bookkeeping is kept.
 /// </para>
 /// </remarks>
-public sealed class MissingRefresh(ILibrary library, IAppliedSettings settings, TimeProvider time)
+/// <param name="library">The library, the only source of what exists.</param>
+/// <param name="settings">Which shows are switched on.</param>
+/// <param name="time">What day it is.</param>
+/// <param name="delivered">
+/// The plugin's own grabs, for which episode it delivered from a release no name source names. None is
+/// nothing delivered, so nothing to replace.
+/// </param>
+public sealed class MissingRefresh(
+    ILibrary library,
+    IAppliedSettings settings,
+    TimeProvider time,
+    IReadOnlyList<StoredDownload>? delivered = null)
 {
     /// <summary>
     /// Every episode that should have a row, with the state the library says it
@@ -82,14 +93,10 @@ public sealed class MissingRefresh(ILibrary library, IAppliedSettings settings, 
                     continue;
                 }
 
-                // An episode the library has is not tracked at all: presence is
-                // the absence of a row, so there is no second opinion about it
-                // to go stale or disagree.
-                if (episode.HasFile)
-                {
-                    continue;
-                }
-
+                // An episode the library has is not missing: presence is the
+                // absence of a missing row, so there is no second opinion about
+                // it to go stale or disagree.
+                //
                 // Nor is one whose file is in the library under its own name,
                 // registered by the server against another row. South Park
                 // S15E12's encode sits in South.Park.S15E12/ attached to season 0
@@ -97,10 +104,37 @@ public sealed class MissingRefresh(ILibrary library, IAppliedSettings settings, 
                 // downloaded again and again, and the encoder skipped every copy
                 // because its outputs were already there. The name is the proof
                 // Landed reads once an encode is over.
-                files ??= await library.GetFilesAsync(show.Id, ct);
+                bool present = episode.HasFile;
 
-                if (Landed.Wrote(episode.Key, files))
+                if (!present)
                 {
+                    files ??= await library.GetFilesAsync(show.Id, ct);
+                    present = Landed.Wrote(episode.Key, files);
+                }
+
+                if (present)
+                {
+                    // Tracked only to be replaced: a show's episode the plugin
+                    // delivered from a release no name source names (the
+                    // owner's rule of 15 October 2026). An anime never is — no
+                    // name source lists fansubs, so its search by show and
+                    // episode is what it is meant to get.
+                    if (show.Kind == LibraryKind.Television
+                        && Replacement.Marked(delivered, episode.Key) is Replacing replacing)
+                    {
+                        tracked.Add(new TrackedEpisode(
+                            episode.Key,
+                            show.Title,
+                            show.Year,
+                            show.Kind,
+                            episode.Title,
+                            episode.AirDate,
+                            EpisodeState.Replace)
+                        {
+                            Replaces = replacing,
+                        });
+                    }
+
                     continue;
                 }
 

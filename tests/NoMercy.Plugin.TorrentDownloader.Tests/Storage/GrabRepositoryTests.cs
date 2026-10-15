@@ -50,6 +50,63 @@ public class GrabRepositoryTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A grab says whether its release is a name a name source gave, which delivery it replaces,
+    /// when it was taken on, and when the delivery it replaces went to the recycle area</strong> — the
+    /// owner's rule of 15 October 2026 needs all four after a restart. A grab recorded before this was kept
+    /// says nothing either way, and is checked once; the answer is written down so it is not asked again.
+    /// </para>
+    /// <para>
+    /// And a failure puts back to missing only what was missing: an episode to be replaced has a file and is
+    /// not missing, so the overview never counts it as missing while its replacement is being looked for again.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AGrabKeepsWhereItsReleaseCameFromAndWhatItReplaces()
+    {
+        Store database = Store();
+        GrabRepository grabs = new(database);
+        EpisodeRepository episodes = new(database);
+
+        await episodes.ReplaceAsync([Tracked(1) with { State = EpisodeState.Replace, Replaces = new(Other, "Silo S03E01 HDTV") }], CancellationToken.None);
+
+        await grabs.RecordAsync(
+            Episode(1),
+            "Silo",
+            "Silo.S03E01.1080p.WEB.H264-CAKES",
+            "LimeTorrents",
+            Hash,
+            $"magnet:?xt=urn:btih:{Hash}",
+            [Episode(1)],
+            When,
+            CancellationToken.None,
+            named: true,
+            replaces: Other);
+
+        await Record(grabs, Other, [Episode(2)]);
+        await grabs.NamedAsync(Other, false, CancellationToken.None);
+        await grabs.RecycledAsync(Hash, When.AddHours(2), CancellationToken.None);
+
+        IReadOnlyList<StoredDownload> every = await grabs.EveryAsync(CancellationToken.None);
+        StoredDownload replacing = Assert.Single(every, one => one.InfoHash == Hash);
+        StoredDownload checkedOnce = Assert.Single(every, one => one.InfoHash == Other);
+
+        Assert.True(replacing.Named);
+        Assert.Equal(Other, replacing.Replaces);
+        Assert.Equal(When, replacing.GrabbedAt);
+        Assert.Equal(When.AddHours(2), replacing.RecycledAt);
+        Assert.False(checkedOnce.Named);
+        Assert.Null(checkedOnce.Replaces);
+
+        await grabs.FailedAsync(Hash, "no peer sent its metadata", When, When.AddHours(6), CancellationToken.None);
+
+        TrackedEpisode still = Assert.Single(await episodes.AllAsync(CancellationToken.None));
+
+        Assert.Equal(EpisodeState.Replace, still.State);
+        Assert.Equal(new Replacing(Other, "Silo S03E01 HDTV"), still.Replaces);
+    }
+
+    /// <remarks>
     /// Recovery reads what is open. Anything done with — staged, or failed and
     /// blacklisted — is not something to re-add on the next restart.
     /// </remarks>

@@ -70,6 +70,14 @@ public sealed record EpisodeOutcome(
     /// they were.
     /// </remarks>
     public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
+
+    /// <summary>Whether the release taken is a name a name source gave.</summary>
+    /// <remarks>
+    /// Written down with the grab: a show's episode delivered from a release no name source names is replaced
+    /// on its own (the owner's rule of 15 October 2026). False for an anime's torrent found by show and
+    /// episode, which no name source lists.
+    /// </remarks>
+    public bool Named { get; init; }
 }
 
 /// <summary>
@@ -512,7 +520,7 @@ public sealed class SearchCycle(
             HashSet<string> titles = new(group, StringComparer.Ordinal);
             RankedTorrent[] inGroup = [.. ranked.Where(torrent => titles.Contains(torrent.Torrent.Title))];
 
-            if (await TakeAsync(episode, inGroup, decisions, options, subject, trackers, refused, unseeded, ct) is EpisodeOutcome taken)
+            if (await TakeAsync(episode, inGroup, decisions, options, subject, trackers, refused, unseeded, ct, named: false) is EpisodeOutcome taken)
             {
                 return taken;
             }
@@ -553,7 +561,8 @@ public sealed class SearchCycle(
         List<string> refused,
         List<EpisodeOutcome> unseeded,
         CancellationToken ct,
-        IReadOnlyList<TrackedEpisode>? covering = null)
+        IReadOnlyList<TrackedEpisode>? covering = null,
+        bool named = true)
     {
         // The episode itself, or every episode of the season a pack is taken for.
         IReadOnlyList<TrackedEpisode> answersFor = covering ?? [episode];
@@ -625,6 +634,10 @@ public sealed class SearchCycle(
             {
                 Searched = true,
                 Considered = AheadOf(candidate, ranked),
+
+                // A release name's round and a pack's put a source's name to the indexers; only an anime's
+                // search by show and episode does not.
+                Named = named,
             };
         }
 

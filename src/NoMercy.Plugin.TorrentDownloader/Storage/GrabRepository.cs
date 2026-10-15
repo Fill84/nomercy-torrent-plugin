@@ -79,14 +79,18 @@ public sealed class GrabRepository(Store database)
         IReadOnlyList<EpisodeKey> covers,
         DateTimeOffset at,
         CancellationToken ct,
-        string? folder = null)
+        string? folder = null,
+        bool? named = null,
+        string? replaces = null)
     {
         _ = showTitle;
 
+        // named and replaces with the rest: a torrent taken on again is taken for this decision, and the
+        // replacement's recycling is its own, so it starts again from nothing.
         await database.ExecuteAsync(
             """
-            INSERT INTO grabs (show_id, season, episode, release_title, info_hash, source, magnet, grabbed_at, state, covers, folder)
-            VALUES ($show, $season, $episode, $release, $hash, $source, $magnet, $at, $state, $covers, $folder)
+            INSERT INTO grabs (show_id, season, episode, release_title, info_hash, source, magnet, grabbed_at, state, covers, folder, named, replaces)
+            VALUES ($show, $season, $episode, $release, $hash, $source, $magnet, $at, $state, $covers, $folder, $named, $replaces)
             ON CONFLICT (info_hash) DO UPDATE SET
                 release_title = excluded.release_title,
                 source        = excluded.source,
@@ -95,6 +99,9 @@ public sealed class GrabRepository(Store database)
                 state         = excluded.state,
                 covers        = excluded.covers,
                 folder        = excluded.folder,
+                named         = excluded.named,
+                replaces      = excluded.replaces,
+                recycled_at   = NULL,
                 staged_path   = NULL
             -- Failed or done, never open: a grab still running is the first
             -- recording of this torrent and it wins. Done is taken on again
@@ -123,6 +130,8 @@ public sealed class GrabRepository(Store database)
                 ["$state"] = nameof(GrabState.Grabbed).ToLowerInvariant(),
                 ["$covers"] = JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })),
                 ["$folder"] = folder,
+                ["$named"] = named is bool known ? (known ? 1 : 0) : null,
+                ["$replaces"] = replaces?.ToUpperInvariant(),
             },
             ct);
     }
@@ -143,7 +152,8 @@ public sealed class GrabRepository(Store database)
     {
         IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source,
+                   grabbed_at, named, replaces, recycled_at FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed', 'lost');
             """,
             null,
@@ -165,7 +175,8 @@ public sealed class GrabRepository(Store database)
     {
         IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source,
+                   grabbed_at, named, replaces, recycled_at FROM grabs
             WHERE info_hash IS NOT NULL;
             """,
             null,
@@ -196,7 +207,43 @@ public sealed class GrabRepository(Store database)
             Folder = row.TextOrNull("folder"),
             EncodeJobs = row.TextOrNull("encode_jobs") is string jobs ? Jobs(jobs) : new Dictionary<EpisodeKey, string>(),
             ByHand = row.TextOrNull("source") == ByHandSource,
+            GrabbedAt = DateTimeOffset.Parse(row.Text("grabbed_at"), CultureInfo.InvariantCulture),
+            Named = row.FlagOrNull("named"),
+            Replaces = row.TextOrNull("replaces"),
+            RecycledAt = row.TextOrNull("recycled_at") is string recycled
+                ? DateTimeOffset.Parse(recycled, CultureInfo.InvariantCulture)
+                : null,
         };
+    }
+
+    /// <summary>Writes down, once, whether a grab recorded before this was kept has a release a name source names.</summary>
+    /// <remarks>
+    /// Only over nothing: a grab that already says where its release came from was told by the run that took
+    /// it, and that is not the check's to overwrite.
+    /// </remarks>
+    public async Task NamedAsync(string infoHash, bool named, CancellationToken ct)
+    {
+        await database.ExecuteAsync(
+            "UPDATE grabs SET named = $named WHERE info_hash = $hash AND named IS NULL;",
+            new Dictionary<string, object?>
+            {
+                ["$named"] = named ? 1 : 0,
+                ["$hash"] = infoHash.ToUpperInvariant(),
+            },
+            ct);
+    }
+
+    /// <summary>Writes down that the encoded files of the delivery a grab replaces went to the recycle area.</summary>
+    public async Task RecycledAsync(string infoHash, DateTimeOffset at, CancellationToken ct)
+    {
+        await database.ExecuteAsync(
+            "UPDATE grabs SET recycled_at = $at WHERE info_hash = $hash;",
+            new Dictionary<string, object?>
+            {
+                ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+                ["$hash"] = infoHash.ToUpperInvariant(),
+            },
+            ct);
     }
 
     /// <summary>The source a torrent the owner added by hand is recorded under.</summary>
@@ -498,6 +545,10 @@ public sealed class GrabRepository(Store database)
     }
 
     /// <summary>Every episode in <paramref name="covered"/> back to missing, unless it has not aired.</summary>
+    /// <remarks>
+    /// An episode to be replaced stays so, whether the download failed or the owner cancelled it: the library
+    /// has its file, and the overview counts as missing only what has none.
+    /// </remarks>
     private static async Task BackToMissingAsync(StoreSession session, IReadOnlyList<EpisodeKey> covered, CancellationToken ct)
     {
         foreach (EpisodeKey episode in covered)
@@ -505,7 +556,8 @@ public sealed class GrabRepository(Store database)
             await session.ExecuteAsync(
                 """
                 UPDATE episodes SET state = $state
-                WHERE show_id = $show AND season = $season AND episode = $episode AND state <> 'notaired';
+                WHERE show_id = $show AND season = $season AND episode = $episode
+                  AND state NOT IN ('notaired', 'replace');
                 """,
                 new Dictionary<string, object?>
                 {
