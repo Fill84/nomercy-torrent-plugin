@@ -338,7 +338,7 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
     }
 
     /// <remarks>
-    /// The controller's ruling for S14-07, fix round 1: Previous and Next go to the page in the path, fifty
+    /// Decided for S14-07: Previous and Next go to the page in the path, fifty
     /// to a page and with no query on it, so under a query of ten to a page the Next of page 2 drew shows
     /// 101 to 150 and dropped the sort and the filter. A client paging by query pages by query; the page
     /// says where it is and how many match, and offers no button that would take it somewhere else.
@@ -381,7 +381,7 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
     }
 
     /// <remarks>
-    /// The controller's ruling for S14-07: a page holds at most what the table holds by itself, fifty
+    /// Decided for S14-07: a page holds at most what the table holds by itself, fifty
     /// shows, so no client can have the plugin draw a library of thousands at once. A size out of range,
     /// or not a number, is the table's own.
     /// </remarks>

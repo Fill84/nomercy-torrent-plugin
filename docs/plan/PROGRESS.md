@@ -824,7 +824,7 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   past the end is the last, and under any key the paging line adds "· N shows". An unknown key or order is
   the table's own order; with no key every page is as it was. Tab counts stay the tables' totals.
   `PagesController` now passes the request's query on, built as the server builds it; keys are read
-  whatever their case. Review fix round 1: under any key the overview draws no Previous or Next (they went
+  whatever their case. Under any key the overview draws no Previous or Next (they went
   to the path page at 50 with no query), the Queue's episode sort compares titles ordinal-ignore-case
   rather than by the server's culture. For the final review: #5 is to be closed with a comment that the
   client side waits on media-server #593.
@@ -875,8 +875,8 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   reading with a peer and an unheld piece stops the run with "Cannot complete: …" (not
   `ErrorIsTheRelease`, so `Transfers` refuses it for six hours) and raises `GaveUp`. A resume or a slot
   coming free clears it. `Owed` includes the reading and the window's end while that end is ahead — a
-  passed end re-owed at once spun the fake clock's timer for ever. Fix round 1 of review: the first
-  version read once, at the end, of a window opened when the session did, so a seed connected for the
+  passed end re-owed at once spun the fake clock's timer for ever. Corrected before it was pushed: the
+  first version read once, at the end, of a window opened when the session did, so a seed connected for the
   first twenty-nine minutes was invisible. Debug lines when a window opens and closes, a Warning when it
   stops one. The brief was wrong on one point: `PiecePicker.Availability` counts nobody between picks
   (see **Decisions**). `ByShowAndEpisodeTests.AResultUploadedAsTheEpisodeAiredWinsTheRoundForIt` asks the
@@ -900,7 +900,7 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   hash or re-offered, and the endgame. Re-levelled to the issue's rule: Information is search, grab,
   complete and move (`SearchSummary`, `Transfers` "finished downloading", `Stager` "moved/copied into");
   port mapping, DHT counts, the per-announce swarm line, the solver's start and close went to Debug; no
-  encoder is an Error. The controller's ruling: a staging failure that repeats each pass is a Warning and
+  encoder is an Error. Decided 14 October 2026: a staging failure that repeats each pass is a Warning and
   a History entry once and Debug after, until it succeeds or the reason changes (`Hosting/SaidBefore`, in
   memory, 512 items). For the next slices: log new lines through `Log` at the issue's levels, and a line
   that repeats every pass uses `SaidBefore`. `InitialiseReturnsAndTheStartRunsOnItsOwn` now allows the
@@ -2522,13 +2522,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 ## Decisions
 
-- **15 October 2026, the controller's ruling for `S14-07` on `pageSize`.** A query's `pageSize` is honoured
+- **15 October 2026, `S14-07`: `pageSize` and paging under a query.** A query's `pageSize` is honoured
   between 1 and the table's own page size (the overview's 50) and never above it, so a client cannot have
   the plugin draw an unbounded page; a size out of range or not a number is the table's own. A table that
   does not page today ignores `page` and `pageSize`. Two readings made here: a value a row does not know
   ("never", "—", "not counted") sorts after the known ones in either order, and the overview's paging line
   says how many shows match only under a query, so a client that sends none sees the page unchanged.
-  The controller's ruling in review fix round 1: under any query key the overview draws no Previous or
+  Under any query key the overview draws no Previous or
   Next, only "page X of Y · N shows" — a client paging by query pages by query; without a query the
   buttons are as before. Tab counts are the tables' totals and do not follow the filter.
 
@@ -2542,7 +2542,7 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 - **14 October 2026, GitHub issue #1 replaced the owner's rule of 15 September 2026 that a pack is not
   searched for.** The owner's word that day was to fix the seven issues, and fixing #1 is the decision to
-  reverse it (`docs/04-domain.md` § Season packs). The controller's rulings for `S14-05`, applied as given:
+  reverse it (`docs/04-domain.md` § Season packs). Decided for `S14-05`:
   *several* is two or more aired episodes of one season searched for in the run (missing, show switched on
   with a quality, not covered by an open grab); a pack is the `Sxx` form with no episode, for tv and anime
   alike, and anime batches (`01~12`, `Batch`, `Complete`) stay not searched for; the pack is looked for when

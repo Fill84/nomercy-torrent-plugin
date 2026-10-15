@@ -5,8 +5,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Since S14-01 a finished download whose staging failed is tried again every minute, and the controller's
-/// ruling of 14 October 2026 is that a failure repeating on the same item is a Warning the first time and
+/// Since S14-01 a finished download whose staging failed is tried again every minute, and the decision of
+/// 14 October 2026 is that a failure repeating on the same item is a Warning the first time and
 /// Debug on each identical repeat, until it succeeds or the failure changes. Without it a stuck download
 /// put the same Warning into the log once a minute, which buries every other line — the shape 0.3.4's log
 /// had, where the line that mattered went unread.

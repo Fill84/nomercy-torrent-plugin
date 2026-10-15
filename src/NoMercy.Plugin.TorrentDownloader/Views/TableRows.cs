@@ -113,7 +113,7 @@ public static class TableRows
     /// How many rows a page holds: what was asked, between one and the table's own size.
     /// </summary>
     /// <remarks>
-    /// Never more than the table's own, on the controller's ruling for S14-07: a client must not be able
+    /// Never more than the table's own, as decided for S14-07: a client must not be able
     /// to have the plugin draw a library of thousands in one page. A size out of range is the table's own
     /// rather than the nearest one allowed, since a client asking for something it cannot have has not
     /// asked for the largest it can.

@@ -285,7 +285,7 @@ public static class OverviewView
     /// <param name="shown">The page drawn, how many there are, and how many shows match.</param>
     /// <param name="byQuery">Whether the client asked by query, which pages by query and is told how many match.</param>
     /// <remarks>
-    /// <strong>Under a query there is no Previous or Next</strong>, on the controller's ruling for S14-07.
+    /// <strong>Under a query there is no Previous or Next</strong>, as decided for S14-07.
     /// The buttons go to the page in the path, fifty to a page and with no query on it: under ten to a
     /// page, the Next of page 2 drew shows 101 to 150, skipping 21 to 100, and dropped the sort and the
     /// filter on the way. A client paging by query pages by query, so the page says where it is and offers
