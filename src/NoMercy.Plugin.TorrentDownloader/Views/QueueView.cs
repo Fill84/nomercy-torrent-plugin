@@ -48,8 +48,8 @@ public static class QueueView
             [
                 .. Tabs.Draw(
                     [
-                        new(LookingTableId, "Looking", looking.Count, TabRoute(LookingTableId), [Looking(looking, query)]),
-                        new(WaitingTableId, "Waiting to air", waiting.Length, TabRoute(WaitingTableId), [Waiting(waiting, query)]),
+                        new(LookingTableId, "Looking", looking.Count, TabRoute(LookingTableId), Looking(looking, query)),
+                        new(WaitingTableId, "Waiting to air", waiting.Length, TabRoute(WaitingTableId), Waiting(waiting, query)),
                     ],
                     tab),
             ],
@@ -66,7 +66,7 @@ public static class QueueView
     /// uses — a page that showed a different order would be a guess about what
     /// the plugin is about to do.
     /// </remarks>
-    private static PluginComponent Looking(IReadOnlyList<TrackedEpisode> ordered, TableQuery? query)
+    private static IReadOnlyList<PluginComponent> Looking(IReadOnlyList<TrackedEpisode> ordered, TableQuery? query)
     {
         return TableRows.Table(
             LookingTableId,
@@ -155,7 +155,7 @@ public static class QueueView
             PluginActionTransport.Rest);
     }
 
-    private static PluginComponent Waiting(IEnumerable<TrackedEpisode> episodes, TableQuery? query)
+    private static IReadOnlyList<PluginComponent> Waiting(IEnumerable<TrackedEpisode> episodes, TableQuery? query)
     {
         return TableRows.Table(
             WaitingTableId,

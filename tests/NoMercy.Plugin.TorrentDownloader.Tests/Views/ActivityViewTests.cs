@@ -179,8 +179,10 @@ public class ActivityViewTests
         string[] words = [.. Rendered.Words(new() { Components = [Rendered.ById(view, ActivityView.NotesTableId)] })];
 
         Assert.Contains("Dark Matter S02E03", words);
-        Assert.Contains("PreDB · Dark Matter S02E03 1080p · 1 name: Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES", words);
         Assert.Contains("TorrentBay · Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES · 1 row", words);
+
+        // 86 characters, more than a cell holds (S15-02), so it stands whole under the table.
+        Assert.Contains("PreDB · Dark Matter S02E03 1080p · 1 name: Dark.Matter.2024.S02E03.1080p.WEB.H264-CAKES", Rendered.Words(view));
     }
 
     private static string Clock(DateTimeOffset moment)

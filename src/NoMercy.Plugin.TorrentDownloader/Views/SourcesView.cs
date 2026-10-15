@@ -72,7 +72,7 @@ public static class SourcesView
                     "sources-secondary",
                     "What each site last answered. A refusal is in the site's own words.",
                     "caption"),
-                TableRows.Table(
+                .. TableRows.Table(
                     TableId,
                     [
                         new() { Key = "source", Label = "Source" },
@@ -113,7 +113,11 @@ public static class SourcesView
 
                         // Askable now is the soonest there is.
                         ["next"] = source => source.NextAskable is DateTimeOffset next && next > now ? next : now,
-                    }),
+                    },
+
+                    // A refusal is the site's own words and the address it was asked at: on 15 October 2026
+                    // Torrentz2's ran the table off the side of the page.
+                    freeText: ["refusal"]),
         ];
 
         // Above the table, where the owner looks first: which sources are off is the reason their rows are

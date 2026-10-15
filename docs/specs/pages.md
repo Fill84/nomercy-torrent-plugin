@@ -41,6 +41,21 @@
 - A table that does not page holds all its matching rows whatever `page` and `pageSize` say.
 - A request with none of the keys draws every page exactly as it does without them.
 
+## Long text in a table
+
+- Long text in a cell never makes its table wider than the page.
+- A free-text cell holds at most 80 characters. The free-text cells are a source's refusal on the
+  Sources page, the reason on the History page, a note on the Activity page and a download's state on
+  the Downloads page.
+- A free-text cell whose text is longer than that, or holds an address, shows the text's first sentence,
+  up to the first address, and "…". A first sentence longer than the cell is cut after the last whole
+  word that fits. An address is never in the cell.
+- The whole text of each such cell stands under the table as a line of its own, in the order of the
+  rows. On a page with tabs the lines stand under the chosen tab's table.
+- A text that fits and holds no address is the cell as it is, with no line under the table.
+- `filter` and `sort` read the whole text, so a row is found by a word that is only in the line under
+  the table.
+
 ## Activity
 
 - The Activity page shows what a run is doing: the count per stage, what is in flight, and for every

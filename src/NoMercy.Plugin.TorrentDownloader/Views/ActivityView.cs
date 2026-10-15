@@ -51,14 +51,15 @@ public static class ActivityView
         {
             // No count on the stages: they are the same six rows on every run, and a number that never
             // changes says nothing about it.
-            tables.Add(new(StagesTableId, "Stages", null, TabRoute(StagesTableId), [StagesTable(run, downloads ?? [], query)]));
+            tables.Add(new(StagesTableId, "Stages", null, TabRoute(StagesTableId), StagesTable(run, downloads ?? [], query)));
         }
 
-        tables.Add(new(NowTableId, "Now", activity.InFlight.Count, TabRoute(NowTableId), [NowTable(activity, query)]));
+        tables.Add(new(NowTableId, "Now", activity.InFlight.Count, TabRoute(NowTableId), NowTable(activity, query)));
 
         if (activity.Run is not null || activity.Notes.Count > 0)
         {
-            tables.Add(new(NotesTableId, "Notes", activity.Notes.Count, TabRoute(NotesTableId), [NotesTable(activity.Notes, query)]));
+            // The table and the whole of every note it draws short, under it in the tab (S15-02).
+            tables.Add(new(NotesTableId, "Notes", activity.Notes.Count, TabRoute(NotesTableId), NotesTable(activity.Notes, query)));
         }
 
         return new()
@@ -77,7 +78,7 @@ public static class ActivityView
     }
 
     /// <summary>A row per stage of the run, each with what it has counted so far.</summary>
-    private static PluginComponent StagesTable(SearchProgress run, IReadOnlyList<DownloadRow> downloads, TableQuery? query)
+    private static IReadOnlyList<PluginComponent> StagesTable(SearchProgress run, IReadOnlyList<DownloadRow> downloads, TableQuery? query)
     {
         (string Stage, string Counts)[] stages =
         [
@@ -132,7 +133,7 @@ public static class ActivityView
     /// which source was asked and what it answered, which name was refused and
     /// why, and every question to every indexer with how many rows came back.
     /// </remarks>
-    private static PluginComponent NotesTable(IReadOnlyList<EpisodeNote> notes, TableQuery? query)
+    private static IReadOnlyList<PluginComponent> NotesTable(IReadOnlyList<EpisodeNote> notes, TableQuery? query)
     {
         return TableRows.Table(
             NotesTableId,
@@ -161,10 +162,13 @@ public static class ActivityView
 
                 // A step's place in a run, not its name: Names comes before Find.
                 ["step"] = noted => noted.Note.Stage,
-            });
+            },
+
+            // A note quotes what a source answered, address and all, and is as long as that answer.
+            freeText: ["what"]);
     }
 
-    private static PluginComponent NowTable(ActivitySnapshot activity, TableQuery? query)
+    private static IReadOnlyList<PluginComponent> NowTable(ActivitySnapshot activity, TableQuery? query)
     {
         return TableRows.Table(
             NowTableId,

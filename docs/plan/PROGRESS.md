@@ -5,9 +5,9 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
-is gone (done, `b54ef94`), `S15-02` no table scrolls sideways, `S15-03` a show downloads only a release
+is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
 the sources name (anime keeps its search by show and episode), `S15-04` a wrong episode the plugin
-delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1. **Current: `S15-02`.**
+delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1. **Current: `S15-03`.**
 Nothing is tagged before the owner has seen it.
 
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
@@ -833,7 +833,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 15 — 0.8.1: only real releases, and nothing that scrolls sideways
 - [x] `S15-01` Torrentz2 is gone
-- [ ] `S15-02` No table scrolls sideways
+- [x] `S15-02` No table scrolls sideways
 - [ ] `S15-03` A show downloads only a release the sources name
 - [ ] `S15-04` A wrong episode the plugin delivered is replaced on its own
 - [ ] `S15-05` Seen on beast-unit, then 0.8.1
@@ -842,6 +842,12 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **`S15-02` no table scrolls sideways (15 October 2026).** `TableRows` draws a free-text cell short — at
+  most 80 characters, its first sentence up to the first address, cut at a word, and "…" — after filter,
+  sort and page, and stands the whole text under the table as a line in row order (under the tab's table
+  on Activity). Free-text columns: Sources Refusal, History Why, Activity Notes What, Downloads State.
+  `TableRows.Table` returns the table and its lines now. `NoTableScrollsSidewaysTests`, 11 tests.
+  Still open: the Downloads table's ten columns can exceed 1600 px with a long release and destination.
 - **Torrentz2 removed (15 October 2026): `torrentz2.nz` no longer exists.** Entry out of `sources.json`,
   host out of `plugin.json`, `Torrentz2Reader` and its two reader tests deleted with its nine captures. The
   tests that used it as one indexer among several keep what they prove on pages of indexers that still ship:
@@ -2580,6 +2586,15 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, `S15-02`: a free-text cell holds at most 80 characters, and its whole text stands
+  under the table.** The web app draws a cell on one line and widens its column to the longest cell, so
+  Torrentz2's refusal, address and all, ran the Sources table off the page. 80 is what History leaves at a
+  table about 1600 px wide (the owner's screenshot), Inter at 16 px, about 9 px a character, 12 px padding
+  a side (`docs/08-ui.md` § Long text). A text with an address is drawn short however long it is, since an
+  address is never in the cell. The Downloads State is free text too: it carries the server's encode
+  failure, the same words as History's reason. Activity's Now is not: its cell is a stage's short phrase or
+  the release being grabbed.
 
 - **15 October 2026, the owner: Torrentz2 is removed — `torrentz2.nz` no longer exists.** DNS answered
   NXDOMAIN that day, asked of 1.1.1.1 and of 8.8.8.8, and the plugin on the owner's server reported "No such

@@ -61,7 +61,7 @@ public static class DownloadsView
             Components =
             [
                 Ui.Text("downloads-heading", "Downloads", "title"),
-                Table(rows, query),
+                .. Table(rows, query),
                 Add(),
             ],
         };
@@ -140,7 +140,7 @@ public static class DownloadsView
             });
     }
 
-    private static PluginComponent Table(IReadOnlyList<DownloadRow> rows, TableQuery? query)
+    private static IReadOnlyList<PluginComponent> Table(IReadOnlyList<DownloadRow> rows, TableQuery? query)
     {
         return TableRows.Table(
             TableId,
@@ -220,7 +220,10 @@ public static class DownloadsView
                 ["peers"] = row => row.Transfer?.Leechers,
                 ["left"] = row => row.Transfer?.Eta,
                 ["ratio"] = row => row.Transfer?.Ratio,
-            });
+            },
+
+            // The state carries the client's error or the server's encode failure in their own words.
+            freeText: ["state"]);
     }
 
     /// <summary>
@@ -403,7 +406,7 @@ public static class HistoryView
             Components =
             [
                 Ui.Text("history-heading", "History", "title"),
-                TableRows.Table(
+                .. TableRows.Table(
                     TableId,
                     [
                         new() { Key = "at", Label = "When" },
@@ -432,7 +435,10 @@ public static class HistoryView
 
                         // A line with no reason says "—", which is not a reason that sorts among the others.
                         ["detail"] = entry => entry.Line.Detail,
-                    }),
+                    },
+
+                    // A reason quotes the client or the server, whose words are as long as they are.
+                    freeText: ["detail"]),
             ],
         };
     }
