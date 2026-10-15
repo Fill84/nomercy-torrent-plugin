@@ -8,8 +8,21 @@ Read this first, update it last. Nothing else decides what happens next.
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
-`S14-07` (#5, sort, filter and paging). `S14-01` to `S14-07` are done (see **Log**). **Current: S14 done;
-final review.**
+`S14-07` (#5, sort, filter and paging). All seven are done, reviewed across the whole sprint, pushed and
+closed on GitHub (15 October 2026); the review's findings were fixed in the same sprint (see **Log**).
+**Nothing is released**: the next version waits for the owner's word. **No slice is open.** Known and not
+done, in the order worth doing:
+
+1. Rarest-first ranks pieces by one peer's bitfield at a time (`PiecePicker`, see **Decisions**, S14-04):
+   speed only, nothing is lost.
+2. `SettleTheLogAsync` checks and sets `_levelsChosen` in two steps; a save landing between them puts the
+   log level back to the stored one until the next save.
+3. Two lines of plugin wiring have no test that fails when they are deleted, because no test drives a
+   whole plugin cycle: `OpenHashes = openHashes` and the `handedOver` pass.
+4. `PeerWelcomeTests.APeerThatDialsInEncryptedIsAnsweredToo` failed once with two BitTorrent suites run in
+   parallel; not looked into.
+5. The disk-space check counts a whole pack although only its covered videos are fetched; the overview
+   builds every library's block on each render; tab counts do not follow the filter.
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
