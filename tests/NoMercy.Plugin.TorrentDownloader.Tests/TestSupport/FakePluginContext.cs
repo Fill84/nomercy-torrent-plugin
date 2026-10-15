@@ -69,6 +69,16 @@ public sealed class FakePluginContext : IPluginContext
 
     IPluginJobs? IPluginContext.Jobs => Jobs;
 
+    /// <summary>
+    /// The plugin's database, as the host opens it, in <see cref="DataFolderPath"/>.
+    /// A test that wants the facade refused gives one that refuses.
+    /// </summary>
+    public IPluginStorage? Stores { get; init; }
+
+    public IPluginStorage Storage => Stores ?? (_storage ??= new HostShapedStorage(DataFolderPath));
+
+    private HostShapedStorage? _storage;
+
     /// <summary>Where the server says it can write, or a facade that refuses as an unwired one does.</summary>
     public IReadOnlyList<PluginStorageLocation>? GrantedPaths { get; init; }
 

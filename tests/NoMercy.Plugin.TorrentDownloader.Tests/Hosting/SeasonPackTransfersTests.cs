@@ -94,7 +94,7 @@ public sealed class SeasonPackTransfersTests : IDisposable
 
     private async Task<GrabRepository> GrabsAsync()
     {
-        Store database = new(_root);
+        Store database = TestStore.In(_root);
 
         await database.MigrateAsync(CancellationToken.None);
 

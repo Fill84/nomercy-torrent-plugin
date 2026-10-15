@@ -227,7 +227,7 @@ public class OneQuestionPerTickTests : IDisposable
 
     private async Task<GrabRepository> Grabs()
     {
-        Store database = new(_root);
+        Store database = TestStore.In(_root);
 
         await database.MigrateAsync(CancellationToken.None);
 

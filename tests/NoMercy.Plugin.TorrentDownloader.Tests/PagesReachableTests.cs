@@ -153,7 +153,7 @@ public class PagesReachableTests
         await Configure(plugin);
         await plugin.EpisodesAsync(CancellationToken.None);
 
-        SourceLedgerRepository ledger = new(new(context.DataFolderPath));
+        SourceLedgerRepository ledger = new(TestStore.In(context.DataFolderPath));
 
         await ledger.RecordAsync(
             new("TorrentBay", DateTimeOffset.UtcNow, 0, "429 Too Many Requests", TimeSpan.FromSeconds(8)),
@@ -184,7 +184,7 @@ public class PagesReachableTests
     {
         await plugin.EpisodesAsync(CancellationToken.None);
 
-        return new(new(context.DataFolderPath));
+        return new(TestStore.In(context.DataFolderPath));
     }
 
     /// <summary>Folders, or the plugin refuses to do anything at all.</summary>

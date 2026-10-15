@@ -224,7 +224,7 @@ public class DownloadsControllerTests : IDisposable
     /// </remarks>
     private async Task JustRan()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
 
         await database.MigrateAsync(CancellationToken.None);
         await new CadenceRepository(database).RecordFinishedAsync(

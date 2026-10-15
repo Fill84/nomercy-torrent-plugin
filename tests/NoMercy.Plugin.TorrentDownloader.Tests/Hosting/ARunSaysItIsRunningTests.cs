@@ -314,7 +314,7 @@ public class ARunSaysItIsRunningTests : IDisposable
         // counts. The database is made and migrated by the first thing that
         // reads it, which has to be the plugin.
         _ = await plugin.EpisodesAsync(CancellationToken.None);
-        await new CadenceRepository(new Store(_folder)).RecordFinishedAsync(JobNames.Cycle, DateTimeOffset.UtcNow, CancellationToken.None);
+        await new CadenceRepository(TestStore.In(_folder)).RecordFinishedAsync(JobNames.Cycle, DateTimeOffset.UtcNow, CancellationToken.None);
 
         await plugin.Settings.SaveAsync(settings, CancellationToken.None);
 
@@ -357,12 +357,9 @@ public class ARunSaysItIsRunningTests : IDisposable
     /// <summary>How many searches have been written down.</summary>
     private async Task<long> SearchesAsync()
     {
-        await using Microsoft.Data.Sqlite.SqliteConnection connection = await new Store(_folder).OpenAsync(CancellationToken.None);
-        await using Microsoft.Data.Sqlite.SqliteCommand command = connection.CreateCommand();
+        await using Store store = TestStore.In(_folder);
 
-        command.CommandText = "SELECT COUNT(*) FROM runs;";
-
-        return (long)(await command.ExecuteScalarAsync())!;
+        return (long)(await store.ScalarAsync("SELECT COUNT(*) FROM runs;", null, CancellationToken.None))!;
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";

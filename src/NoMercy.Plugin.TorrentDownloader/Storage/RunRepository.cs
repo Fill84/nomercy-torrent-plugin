@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.Data.Sqlite;
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 
 namespace NoMercy.Plugin.TorrentDownloader.Storage;
@@ -23,42 +22,41 @@ public sealed class RunRepository(Store database)
 
     public async Task RecordAsync(LastRun run, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
+        // One transaction, so the trim never runs without the insert it trims for.
+        await database.TransactionAsync(
+            async session =>
+            {
+                await session.ExecuteAsync(
+                    "INSERT INTO runs (started_at, ended_at, outcome) VALUES ($started, $ended, $outcome);",
+                    new Dictionary<string, object?>
+                    {
+                        ["$started"] = run.StartedAt.ToString("O", CultureInfo.InvariantCulture),
+                        ["$ended"] = run.EndedAt.ToString("O", CultureInfo.InvariantCulture),
+                        ["$outcome"] = run.How.ToString(),
+                    },
+                    ct);
 
-        command.CommandText =
-            """
-            INSERT INTO runs (started_at, ended_at, outcome) VALUES ($started, $ended, $outcome);
-            DELETE FROM runs
-            WHERE rowid NOT IN (SELECT rowid FROM runs ORDER BY ended_at DESC LIMIT $kept);
-            """;
-
-        command.Parameters.AddWithValue("$started", run.StartedAt.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$ended", run.EndedAt.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$outcome", run.How.ToString());
-        command.Parameters.AddWithValue("$kept", Kept);
-
-        await command.ExecuteNonQueryAsync(ct);
+                await session.ExecuteAsync(
+                    "DELETE FROM runs WHERE rowid NOT IN (SELECT rowid FROM runs ORDER BY ended_at DESC LIMIT $kept);",
+                    new Dictionary<string, object?> { ["$kept"] = Kept },
+                    ct);
+            },
+            ct);
     }
 
     /// <summary>The run that ended last, or null when none ever has.</summary>
     public async Task<LastRun?> LastAsync(CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
+        IReadOnlyList<StoredRow> rows = await database.QueryAsync(
+            "SELECT started_at, ended_at, outcome FROM runs ORDER BY ended_at DESC LIMIT 1;",
+            null,
+            ct);
 
-        command.CommandText = "SELECT started_at, ended_at, outcome FROM runs ORDER BY ended_at DESC LIMIT 1;";
-
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
-
-        if (!await reader.ReadAsync(ct))
-        {
-            return null;
-        }
-
-        return new(
-            DateTimeOffset.Parse(reader.GetString(0), CultureInfo.InvariantCulture),
-            DateTimeOffset.Parse(reader.GetString(1), CultureInfo.InvariantCulture),
-            Enum.Parse<RunEnd>(reader.GetString(2)));
+        return rows is [StoredRow row]
+            ? new(
+                DateTimeOffset.Parse(row.Text("started_at"), CultureInfo.InvariantCulture),
+                DateTimeOffset.Parse(row.Text("ended_at"), CultureInfo.InvariantCulture),
+                Enum.Parse<RunEnd>(row.Text("outcome")))
+            : null;
     }
 }

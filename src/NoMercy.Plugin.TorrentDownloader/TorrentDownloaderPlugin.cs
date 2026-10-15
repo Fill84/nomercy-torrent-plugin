@@ -363,7 +363,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // facade throws by name on a server that wired none, and a
             // refusal that cannot be enriched is still a refusal.
             places: () => GrantedPaths(context));
-        _database = new(context.DataFolderPath);
+        // The host's database, not a SQLite of the plugin's own: the marketplace
+        // refuses Microsoft.Data.Sqlite and SQLitePCLRaw shipped in a plugin
+        // (media-server #476). Asked for lazily, because on a host that wired no
+        // storage the facade refuses by name, and Initialize does no I/O.
+        _database = new(context.DataFolderPath, () => context.Storage);
         _episodes = new(_database);
         _grabs = new(_database);
         _ledger = new(_database);
@@ -2863,6 +2867,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // and a Chrome that outlives the plugin is one nobody can see to close.
         _chain?.DisposeAsync().AsTask().GetAwaiter().GetResult();
         _lifetime.Dispose();
+
+        // The host's connection, closed rather than left for the collector: the
+        // next copy of the plugin opens the same file.
+        _database?.DisposeAsync().AsTask().GetAwaiter().GetResult();
 
         // After the token, so anything stopping on it that publishes a last
         // change still has somewhere to publish it.

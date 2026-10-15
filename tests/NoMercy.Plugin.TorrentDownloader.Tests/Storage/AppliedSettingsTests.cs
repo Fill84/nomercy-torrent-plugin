@@ -24,7 +24,7 @@ public sealed class AppliedSettingsTests : IDisposable
     [Fact]
     public async Task EveryShowOfARunGetsItsOwnSettingsWithItsLibrarysCountedIn()
     {
-        Store database = new(_root);
+        Store database = TestStore.In(_root);
         await database.MigrateAsync(CancellationToken.None);
 
         ShowSettingsRepository shows = new(database);

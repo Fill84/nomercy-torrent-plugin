@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 
 namespace NoMercy.Plugin.TorrentDownloader.Storage;
@@ -12,42 +11,34 @@ public sealed class LibraryPreferencesRepository(Store database)
 {
     public async Task<LibraryPreferences> ForAsync(string libraryId, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
             SELECT quality, codec, specials, wishes, musts, forbidden, english_only
             FROM library_preferences WHERE library_id = $library;
-            """;
+            """,
+            new Dictionary<string, object?> { ["$library"] = libraryId },
+            ct);
 
-        command.Parameters.AddWithValue("$library", libraryId);
-
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
-
-        if (!await reader.ReadAsync(ct))
+        if (rows is not [StoredRow row])
         {
             return new LibraryPreferences(libraryId);
         }
 
         return new(libraryId)
         {
-            Quality = reader.IsDBNull(0) ? null : reader.GetString(0),
-            Codec = reader.GetString(1),
-            Specials = reader.GetInt64(2) != 0,
-            Wishes = TagList.Read(reader.GetString(3)),
-            Musts = TagList.Read(reader.GetString(4)),
-            Forbidden = TagList.Read(reader.GetString(5)),
-            EnglishOnly = reader.GetInt64(6) != 0,
+            Quality = row.TextOrNull("quality"),
+            Codec = row.Text("codec"),
+            Specials = row.Flag("specials"),
+            Wishes = TagList.Read(row.Text("wishes")),
+            Musts = TagList.Read(row.Text("musts")),
+            Forbidden = TagList.Read(row.Text("forbidden")),
+            EnglishOnly = row.Flag("english_only"),
         };
     }
 
     public async Task SaveAsync(LibraryPreferences preferences, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        await database.ExecuteAsync(
             """
             INSERT INTO library_preferences (library_id, quality, codec, specials, wishes, musts, forbidden, english_only)
             VALUES ($library, $quality, $codec, $specials, $wishes, $musts, $forbidden, $english)
@@ -59,17 +50,18 @@ public sealed class LibraryPreferencesRepository(Store database)
                 musts = excluded.musts,
                 forbidden = excluded.forbidden,
                 english_only = excluded.english_only;
-            """;
-
-        command.Parameters.AddWithValue("$library", preferences.LibraryId);
-        command.Parameters.AddWithValue("$quality", (object?)preferences.Quality ?? DBNull.Value);
-        command.Parameters.AddWithValue("$codec", preferences.Codec);
-        command.Parameters.AddWithValue("$specials", preferences.Specials ? 1 : 0);
-        command.Parameters.AddWithValue("$wishes", TagList.Write(preferences.Wishes));
-        command.Parameters.AddWithValue("$musts", TagList.Write(preferences.Musts));
-        command.Parameters.AddWithValue("$forbidden", TagList.Write(preferences.Forbidden));
-        command.Parameters.AddWithValue("$english", preferences.EnglishOnly ? 1 : 0);
-
-        await command.ExecuteNonQueryAsync(ct);
+            """,
+            new Dictionary<string, object?>
+            {
+                ["$library"] = preferences.LibraryId,
+                ["$quality"] = preferences.Quality,
+                ["$codec"] = preferences.Codec,
+                ["$specials"] = preferences.Specials ? 1 : 0,
+                ["$wishes"] = TagList.Write(preferences.Wishes),
+                ["$musts"] = TagList.Write(preferences.Musts),
+                ["$forbidden"] = TagList.Write(preferences.Forbidden),
+                ["$english"] = preferences.EnglishOnly ? 1 : 0,
+            },
+            ct);
     }
 }

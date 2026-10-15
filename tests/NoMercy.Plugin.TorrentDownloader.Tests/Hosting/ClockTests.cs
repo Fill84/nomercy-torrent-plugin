@@ -48,7 +48,7 @@ public class ClockTests : IAsyncLifetime
     [Fact]
     public async Task WhenTheNextCycleFallsDueIsCountedFromTheLastFinish()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         CadenceRepository cadences = new(database);
@@ -70,7 +70,7 @@ public class ClockTests : IAsyncLifetime
     [Fact]
     public async Task ACycleThatHasNeverRunIsDueAtOnce()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         CadenceRepository cadences = new(database);
@@ -94,7 +94,7 @@ public class ClockTests : IAsyncLifetime
     [Fact]
     public async Task ASavedCadenceTakesEffectWithoutARestart()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         CadenceRepository cadences = new(database);
@@ -124,7 +124,7 @@ public class ClockTests : IAsyncLifetime
     [Fact]
     public async Task ACadenceWhoseExpressionCannotBeParsedSchedulesNothing()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         CadenceRepository cadences = new(database);

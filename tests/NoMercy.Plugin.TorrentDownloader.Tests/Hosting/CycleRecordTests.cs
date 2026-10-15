@@ -72,7 +72,7 @@ public class CycleRecordTests : IDisposable
         CycleWriter writer = new(
             [Tracked],
             grabs,
-            new EpisodeRepository(new Store(_folder)),
+            new EpisodeRepository(TestStore.In(_folder)),
             () => When,
             handedOver: ct => transfers.TickAsync(incomplete, intake, ct));
 
@@ -327,7 +327,7 @@ public class CycleRecordTests : IDisposable
     /// </summary>
     private async Task<(GrabRepository Grabs, EpisodeRepository Episodes)> Both(int attempts = 0)
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
 
         await database.MigrateAsync(CancellationToken.None);
 
@@ -348,7 +348,7 @@ public class CycleRecordTests : IDisposable
 
     private async Task<GrabRepository> Repository()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
 
         await database.MigrateAsync(CancellationToken.None);
 

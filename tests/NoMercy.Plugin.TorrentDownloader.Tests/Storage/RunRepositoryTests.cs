@@ -37,14 +37,14 @@ public class RunRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task TheLastRunIsStillKnownAfterARestart()
     {
-        Store before = new(_folder);
+        Store before = TestStore.In(_folder);
         await before.MigrateAsync(CancellationToken.None);
 
         RunRepository runs = new(before);
         await runs.RecordAsync(new(At(3, 20), At(3, 25), RunEnd.Finished), CancellationToken.None);
         await runs.RecordAsync(new(At(5, 22), At(5, 27), RunEnd.Stopped), CancellationToken.None);
 
-        Store after = new(_folder);
+        Store after = TestStore.In(_folder);
         await after.MigrateAsync(CancellationToken.None);
 
         Assert.Equal(
@@ -58,7 +58,7 @@ public class RunRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task APluginThatHasNeverRunHasNoLastRun()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         Assert.Null(await new RunRepository(database).LastAsync(CancellationToken.None));
@@ -71,7 +71,7 @@ public class RunRepositoryTests : IAsyncLifetime
     [Fact]
     public async Task OnlyTheLatestRunsAreKept()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         RunRepository runs = new(database);
@@ -82,11 +82,7 @@ public class RunRepositoryTests : IAsyncLifetime
             await runs.RecordAsync(new(at, at.AddSeconds(30), RunEnd.Finished), CancellationToken.None);
         }
 
-        await using Microsoft.Data.Sqlite.SqliteConnection connection = await database.OpenAsync(CancellationToken.None);
-        await using Microsoft.Data.Sqlite.SqliteCommand count = connection.CreateCommand();
-        count.CommandText = "SELECT COUNT(*) FROM runs;";
-
-        Assert.Equal((long)RunRepository.Kept, (long)(await count.ExecuteScalarAsync())!);
+        Assert.Equal((long)RunRepository.Kept, (long)(await database.ScalarAsync("SELECT COUNT(*) FROM runs;", null, CancellationToken.None))!);
     }
 
     private static DateTimeOffset At(int hour, int minute)

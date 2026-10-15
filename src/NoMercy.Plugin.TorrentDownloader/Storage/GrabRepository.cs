@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Text.Json;
-using Microsoft.Data.Sqlite;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
@@ -82,10 +81,9 @@ public sealed class GrabRepository(Store database)
         CancellationToken ct,
         string? folder = null)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
+        _ = showTitle;
 
-        command.CommandText =
+        await database.ExecuteAsync(
             """
             INSERT INTO grabs (show_id, season, episode, release_title, info_hash, source, magnet, grabbed_at, state, covers, folder)
             VALUES ($show, $season, $episode, $release, $hash, $source, $magnet, $at, $state, $covers, $folder)
@@ -108,28 +106,25 @@ public sealed class GrabRepository(Store database)
             -- the same way: another copy finished first, and a later run that
             -- takes this one again has a reason to.
             WHERE grabs.state IN ('failed', 'done', 'lost');
-            """;
+            """,
+            new Dictionary<string, object?>
+            {
+                ["$show"] = episode.ShowId,
+                ["$season"] = episode.Season,
+                ["$episode"] = episode.Number,
+                ["$release"] = releaseTitle,
 
-        command.Parameters.AddWithValue("$show", episode.ShowId);
-        command.Parameters.AddWithValue("$season", episode.Season);
-        command.Parameters.AddWithValue("$episode", episode.Number);
-        command.Parameters.AddWithValue("$release", releaseTitle);
-
-        // Upper case here as everywhere: the wire, the store and the page all
-        // spell a hash the same way or they do not find each other.
-        command.Parameters.AddWithValue("$hash", (object?)infoHash?.ToUpperInvariant() ?? DBNull.Value);
-        command.Parameters.AddWithValue("$source", source);
-        command.Parameters.AddWithValue("$magnet", (object?)magnet ?? DBNull.Value);
-        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$state", nameof(GrabState.Grabbed).ToLowerInvariant());
-        command.Parameters.AddWithValue(
-            "$covers",
-            JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })));
-        command.Parameters.AddWithValue("$folder", (object?)folder ?? DBNull.Value);
-
-        _ = showTitle;
-
-        await command.ExecuteNonQueryAsync(ct);
+                // Upper case here as everywhere: the wire, the store and the page
+                // all spell a hash the same way or they do not find each other.
+                ["$hash"] = infoHash?.ToUpperInvariant(),
+                ["$source"] = source,
+                ["$magnet"] = magnet,
+                ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+                ["$state"] = nameof(GrabState.Grabbed).ToLowerInvariant(),
+                ["$covers"] = JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })),
+                ["$folder"] = folder,
+            },
+            ct);
     }
 
     /// <summary>Where a grab staged its episodes, as the column holds them.</summary>
@@ -146,25 +141,15 @@ public sealed class GrabRepository(Store database)
     /// <summary>Everything not finished with, as recovery needs it.</summary>
     public async Task<IReadOnlyList<StoredDownload>> OpenAsync(CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
             SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed', 'lost');
-            """;
+            """,
+            null,
+            ct);
 
-        List<StoredDownload> open = [];
-
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
-
-        while (await reader.ReadAsync(ct))
-        {
-            open.Add(Row(reader, out GrabState _));
-        }
-
-        return open;
+        return [.. rows.Select(Row)];
     }
 
     /// <summary>
@@ -178,25 +163,15 @@ public sealed class GrabRepository(Store database)
     /// </remarks>
     public async Task<IReadOnlyList<StoredDownload>> EveryAsync(CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
             SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source FROM grabs
             WHERE info_hash IS NOT NULL;
-            """;
+            """,
+            null,
+            ct);
 
-        List<StoredDownload> all = [];
-
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
-
-        while (await reader.ReadAsync(ct))
-        {
-            all.Add(Row(reader, out GrabState _));
-        }
-
-        return all;
+        return [.. rows.Select(Row)];
     }
 
     /// <summary>One grab, as the two queries above select it.</summary>
@@ -206,21 +181,21 @@ public sealed class GrabRepository(Store database)
     /// morning, and the sweep — which reads all of them — took a staged file the
     /// other query knew was still being encoded.
     /// </remarks>
-    private static StoredDownload Row(SqliteDataReader reader, out GrabState state)
+    private static StoredDownload Row(StoredRow row)
     {
-        state = Enum.TryParse(reader.GetString(3), ignoreCase: true, out GrabState parsed) ? parsed : GrabState.Grabbed;
+        GrabState state = Enum.TryParse(row.Text("state"), ignoreCase: true, out GrabState parsed) ? parsed : GrabState.Grabbed;
 
         return new(
-            reader.GetString(0),
-            reader.IsDBNull(1) ? string.Empty : reader.GetString(1),
-            reader.GetString(2),
+            row.Text("info_hash"),
+            row.TextOrNull("magnet") ?? string.Empty,
+            row.Text("release_title"),
             state)
         {
-            Covers = Covered(reader.GetString(4)),
-            StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
-            Folder = reader.IsDBNull(6) ? null : reader.GetString(6),
-            EncodeJobs = reader.IsDBNull(7) ? new Dictionary<EpisodeKey, string>() : Jobs(reader.GetString(7)),
-            ByHand = !reader.IsDBNull(8) && reader.GetString(8) == ByHandSource,
+            Covers = Covered(row.Text("covers")),
+            StagedPaths = row.TextOrNull("staged_path") is string staged ? Staged(staged) : [],
+            Folder = row.TextOrNull("folder"),
+            EncodeJobs = row.TextOrNull("encode_jobs") is string jobs ? Jobs(jobs) : new Dictionary<EpisodeKey, string>(),
+            ByHand = row.TextOrNull("source") == ByHandSource,
         };
     }
 
@@ -242,27 +217,31 @@ public sealed class GrabRepository(Store database)
     /// </remarks>
     public async Task EncodeAsync(string infoHash, EpisodeKey episode, string jobId, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand read = connection.CreateCommand();
+        // One transaction: two episodes of a pack dispatched at once would
+        // otherwise both read the column before either wrote it, and one job
+        // would be lost.
+        await database.TransactionAsync(
+            async session =>
+            {
+                Dictionary<string, object?> hash = new() { ["$hash"] = infoHash.ToUpperInvariant() };
 
-        read.CommandText = "SELECT encode_jobs FROM grabs WHERE info_hash = $hash;";
-        read.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
+                Dictionary<EpisodeKey, string> jobs =
+                    await session.ScalarAsync("SELECT encode_jobs FROM grabs WHERE info_hash = $hash;", hash, ct) is string held
+                        ? new(Jobs(held))
+                        : [];
 
-        Dictionary<EpisodeKey, string> jobs = await read.ExecuteScalarAsync(ct) is string held
-            ? new(Jobs(held))
-            : [];
+                jobs[episode] = jobId;
 
-        jobs[episode] = jobId;
-
-        await using SqliteCommand write = connection.CreateCommand();
-
-        write.CommandText = "UPDATE grabs SET encode_jobs = $jobs WHERE info_hash = $hash;";
-        write.Parameters.AddWithValue(
-            "$jobs",
-            string.Join(' ', jobs.Select(one => $"{Tag(one.Key)}:{one.Value}")));
-        write.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
-
-        await write.ExecuteNonQueryAsync(ct);
+                await session.ExecuteAsync(
+                    "UPDATE grabs SET encode_jobs = $jobs WHERE info_hash = $hash;",
+                    new Dictionary<string, object?>
+                    {
+                        ["$jobs"] = string.Join(' ', jobs.Select(one => $"{Tag(one.Key)}:{one.Value}")),
+                        ["$hash"] = infoHash.ToUpperInvariant(),
+                    },
+                    ct);
+            },
+            ct);
     }
 
     /// <summary>The encode jobs of a grab, as the column holds them.</summary>
@@ -315,22 +294,17 @@ public sealed class GrabRepository(Store database)
     /// </remarks>
     public async Task CoversAsync(string infoHash, IReadOnlyList<EpisodeKey> covers, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        await database.ExecuteAsync(
             """
             UPDATE grabs SET covers = $covers
             WHERE info_hash = $hash AND (covers IS NULL OR covers = '[]');
-            """;
-
-        command.Parameters.AddWithValue(
-            "$covers",
-            JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })));
-
-        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
-
-        await command.ExecuteNonQueryAsync(ct);
+            """,
+            new Dictionary<string, object?>
+            {
+                ["$covers"] = JsonSerializer.Serialize(covers.Select(one => new[] { one.ShowId, one.Season, one.Number })),
+                ["$hash"] = infoHash.ToUpperInvariant(),
+            },
+            ct);
     }
 
     /// <summary>Lets a season pack's grab stop answering for the episodes it turned out not to hold.</summary>
@@ -342,18 +316,14 @@ public sealed class GrabRepository(Store database)
     /// </remarks>
     public async Task NarrowAsync(string infoHash, IReadOnlyList<EpisodeKey> held, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText = "UPDATE grabs SET covers = $covers WHERE info_hash = $hash;";
-
-        command.Parameters.AddWithValue(
-            "$covers",
-            JsonSerializer.Serialize(held.Select(one => new[] { one.ShowId, one.Season, one.Number })));
-
-        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
-
-        await command.ExecuteNonQueryAsync(ct);
+        await database.ExecuteAsync(
+            "UPDATE grabs SET covers = $covers WHERE info_hash = $hash;",
+            new Dictionary<string, object?>
+            {
+                ["$covers"] = JsonSerializer.Serialize(held.Select(one => new[] { one.ShowId, one.Season, one.Number })),
+                ["$hash"] = infoHash.ToUpperInvariant(),
+            },
+            ct);
     }
 
     /// <summary>How an episode is spelled inside the encode-jobs column.</summary>
@@ -375,20 +345,18 @@ public sealed class GrabRepository(Store database)
     /// </remarks>
     public async Task NotedAsync(string releaseTitle, string reason, DateTimeOffset at, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        await database.ExecuteAsync(
             """
             INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
             VALUES ($at, 'failed', NULL, NULL, NULL, NULL, $release, NULL, $detail);
-            """;
-
-        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$release", releaseTitle);
-        command.Parameters.AddWithValue("$detail", reason);
-
-        await command.ExecuteNonQueryAsync(ct);
+            """,
+            new Dictionary<string, object?>
+            {
+                ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+                ["$release"] = releaseTitle,
+                ["$detail"] = reason,
+            },
+            ct);
     }
 
     /// <summary>
@@ -402,29 +370,27 @@ public sealed class GrabRepository(Store database)
     /// </remarks>
     public async Task StagedAsync(string infoHash, IReadOnlyList<string> paths, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
         // Done is not spared here, and it is the only write that does not spare
         // it. A grab marked done before it recorded where it staged its episode
         // was never really finished — the encode may never have been asked for
         // — and this is the deliberate correction of that. Every other write
         // leaves a finished grab alone, because there the danger is a later
         // failure dragging it back.
-        command.CommandText =
+        await database.ExecuteAsync(
             """
             UPDATE grabs SET state = 'staged', staged_path = $path
             WHERE info_hash = $hash;
-            """;
-
-        // Newline-separated, because that is the one character a path on
-        // neither platform can hold. A row written by a version that kept only
-        // the first path reads back as the one path it has, which is what it
-        // always meant.
-        command.Parameters.AddWithValue("$path", string.Join('\n', paths));
-        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
-
-        await command.ExecuteNonQueryAsync(ct);
+            """,
+            new Dictionary<string, object?>
+            {
+                // Newline-separated, because that is the one character a path on
+                // neither platform can hold. A row written by a version that kept
+                // only the first path reads back as the one path it has, which is
+                // what it always meant.
+                ["$path"] = string.Join('\n', paths),
+                ["$hash"] = infoHash.ToUpperInvariant(),
+            },
+            ct);
     }
 
     /// <summary>
@@ -438,20 +404,20 @@ public sealed class GrabRepository(Store database)
     /// </remarks>
     public async Task StateAsync(string infoHash, GrabState state, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
         // Never a grab that is done. State is written by info hash and one
         // release could have several rows under one — so a later failure of the
         // same torrent used to drag the finished one back with it, put the
         // episode to missing and have it searched for again though its file was
         // already staged. It took the owner's finished grabs from twenty-three
         // to eleven overnight.
-        command.CommandText = "UPDATE grabs SET state = $state WHERE info_hash = $hash AND state <> 'done';";
-        command.Parameters.AddWithValue("$state", state.ToString().ToLowerInvariant());
-        command.Parameters.AddWithValue("$hash", infoHash.ToUpperInvariant());
-
-        await command.ExecuteNonQueryAsync(ct);
+        await database.ExecuteAsync(
+            "UPDATE grabs SET state = $state WHERE info_hash = $hash AND state <> 'done';",
+            new Dictionary<string, object?>
+            {
+                ["$state"] = state.ToString().ToLowerInvariant(),
+                ["$hash"] = infoHash.ToUpperInvariant(),
+            },
+            ct);
     }
 
     /// <summary>
@@ -485,87 +451,71 @@ public sealed class GrabRepository(Store database)
         DateTimeOffset? until,
         CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
-
         string hash = infoHash.ToUpperInvariant();
-        List<EpisodeKey> covered = [];
 
-        await using (SqliteCommand reading = connection.CreateCommand())
-        {
-            reading.Transaction = transaction;
-            reading.CommandText = "SELECT covers FROM grabs WHERE info_hash = $hash;";
-            reading.Parameters.AddWithValue("$hash", hash);
-
-            await using SqliteDataReader reader = await reading.ExecuteReaderAsync(ct);
-
-            while (await reader.ReadAsync(ct))
+        return await database.TransactionAsync(
+            async session =>
             {
-                foreach (int[] one in JsonSerializer.Deserialize<int[][]>(reader.GetString(0)) ?? [])
+                List<EpisodeKey> covered = [];
+
+                foreach (StoredRow row in await session.QueryAsync(
+                             "SELECT covers FROM grabs WHERE info_hash = $hash;",
+                             new Dictionary<string, object?> { ["$hash"] = hash },
+                             ct))
                 {
-                    if (one.Length == 3)
-                    {
-                        covered.Add(new(one[0], one[1], one[2]));
-                    }
+                    covered.AddRange(Covered(row.Text("covers")));
                 }
-            }
-        }
 
-        await using (SqliteCommand marking = connection.CreateCommand())
-        {
-            marking.Transaction = transaction;
-            marking.CommandText = "UPDATE grabs SET state = 'failed' WHERE info_hash = $hash AND state <> 'done';";
-            marking.Parameters.AddWithValue("$hash", hash);
+                await session.ExecuteAsync(
+                    "UPDATE grabs SET state = 'failed' WHERE info_hash = $hash AND state <> 'done';",
+                    new Dictionary<string, object?> { ["$hash"] = hash },
+                    ct);
 
-            await marking.ExecuteNonQueryAsync(ct);
-        }
+                // The hash, not the title: another release of the same episode is
+                // still worth having, and it is this torrent that would not
+                // download.
+                await session.ExecuteAsync(
+                    """
+                    INSERT INTO blacklist (key, reason, at, until) VALUES ($key, $reason, $at, $until)
+                    ON CONFLICT(key) DO UPDATE SET reason = $reason, at = $at, until = $until;
+                    """,
+                    new Dictionary<string, object?>
+                    {
+                        ["$key"] = hash,
+                        ["$reason"] = reason,
+                        ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+                        ["$until"] = until?.ToString("O", CultureInfo.InvariantCulture),
+                    },
+                    ct);
 
-        await using (SqliteCommand refusing = connection.CreateCommand())
-        {
-            refusing.Transaction = transaction;
+                // Back to missing, and the attempt count is left alone —
+                // B2: a download that failed is not an attempt the episode spent.
+                await BackToMissingAsync(session, covered, ct);
 
-            // The hash, not the title: another release of the same episode is
-            // still worth having, and it is this torrent that would not
-            // download.
-            refusing.CommandText =
-                """
-                INSERT INTO blacklist (key, reason, at, until) VALUES ($key, $reason, $at, $until)
-                ON CONFLICT(key) DO UPDATE SET reason = $reason, at = $at, until = $until;
-                """;
-            refusing.Parameters.AddWithValue("$key", hash);
-            refusing.Parameters.AddWithValue("$reason", reason);
-            refusing.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-            refusing.Parameters.AddWithValue(
-                "$until",
-                (object?)until?.ToString("O", CultureInfo.InvariantCulture) ?? DBNull.Value);
+                return covered.Count;
+            },
+            ct);
+    }
 
-            await refusing.ExecuteNonQueryAsync(ct);
-        }
-
+    /// <summary>Every episode in <paramref name="covered"/> back to missing, unless it has not aired.</summary>
+    private static async Task BackToMissingAsync(StoreSession session, IReadOnlyList<EpisodeKey> covered, CancellationToken ct)
+    {
         foreach (EpisodeKey episode in covered)
         {
-            await using SqliteCommand missing = connection.CreateCommand();
-
-            missing.Transaction = transaction;
-
-            // Back to missing, and the attempt count is left alone —
-            // B2: a download that failed is not an attempt the episode spent.
-            missing.CommandText =
+            await session.ExecuteAsync(
                 """
                 UPDATE episodes SET state = $state
                 WHERE show_id = $show AND season = $season AND episode = $episode AND state <> 'notaired';
-                """;
-            missing.Parameters.AddWithValue("$state", EpisodeStates.Missing);
-            missing.Parameters.AddWithValue("$show", episode.ShowId);
-            missing.Parameters.AddWithValue("$season", episode.Season);
-            missing.Parameters.AddWithValue("$episode", episode.Number);
-
-            await missing.ExecuteNonQueryAsync(ct);
+                """,
+                new Dictionary<string, object?>
+                {
+                    ["$state"] = EpisodeStates.Missing,
+                    ["$show"] = episode.ShowId,
+                    ["$season"] = episode.Season,
+                    ["$episode"] = episode.Number,
+                },
+                ct);
         }
-
-        await transaction.CommitAsync(ct);
-
-        return covered.Count;
     }
 
     /// <summary>
@@ -598,31 +548,27 @@ public sealed class GrabRepository(Store database)
         DateTimeOffset at,
         CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        await database.ExecuteAsync(
             """
             INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
             VALUES ($at, 'dispatched', $show, $season, $episode, $title, $release, NULL, $detail);
-            """;
+            """,
+            new Dictionary<string, object?>
+            {
+                ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+                ["$show"] = episode?.ShowId,
+                ["$season"] = episode?.Season,
+                ["$episode"] = episode?.Number,
+                ["$title"] = showTitle,
+                ["$release"] = releaseTitle,
 
-        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$show", (object?)episode?.ShowId ?? DBNull.Value);
-        command.Parameters.AddWithValue("$season", (object?)episode?.Season ?? DBNull.Value);
-        command.Parameters.AddWithValue("$episode", (object?)episode?.Number ?? DBNull.Value);
-        command.Parameters.AddWithValue("$title", (object?)showTitle ?? DBNull.Value);
-        command.Parameters.AddWithValue("$release", releaseTitle);
-
-        // Which of the two it was, in words: an episode the plugin named, or a
-        // file the server was asked to work out for itself.
-        command.Parameters.AddWithValue(
-            "$detail",
-            episode is null
-                ? $"handed to {library} for the server to identify"
-                : $"encode dispatched to {library}");
-
-        await command.ExecuteNonQueryAsync(ct);
+                // Which of the two it was, in words: an episode the plugin named,
+                // or a file the server was asked to work out for itself.
+                ["$detail"] = episode is null
+                    ? $"handed to {library} for the server to identify"
+                    : $"encode dispatched to {library}",
+            },
+            ct);
     }
 
     /// <summary>Every episode a grab answers for, as the column holds them.</summary>
@@ -670,25 +616,23 @@ public sealed class GrabRepository(Store database)
         DateTimeOffset at,
         CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        await database.ExecuteAsync(
             """
             INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
             VALUES ($at, 'decided', $show, $season, $episode, $title, $release, $source, $detail);
-            """;
-
-        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-        command.Parameters.AddWithValue("$show", episode.ShowId);
-        command.Parameters.AddWithValue("$season", episode.Season);
-        command.Parameters.AddWithValue("$episode", episode.Number);
-        command.Parameters.AddWithValue("$title", showTitle);
-        command.Parameters.AddWithValue("$release", releaseTitle);
-        command.Parameters.AddWithValue("$source", (object?)source ?? DBNull.Value);
-        command.Parameters.AddWithValue("$detail", detail);
-
-        await command.ExecuteNonQueryAsync(ct);
+            """,
+            new Dictionary<string, object?>
+            {
+                ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+                ["$show"] = episode.ShowId,
+                ["$season"] = episode.Season,
+                ["$episode"] = episode.Number,
+                ["$title"] = showTitle,
+                ["$release"] = releaseTitle,
+                ["$source"] = source,
+                ["$detail"] = detail,
+            },
+            ct);
     }
 
     /// <summary>
@@ -704,91 +648,61 @@ public sealed class GrabRepository(Store database)
     /// <returns>Whether there was a grab to cancel.</returns>
     public async Task<bool> CancelledAsync(string infoHash, DateTimeOffset at, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteTransaction transaction = (SqliteTransaction)await connection.BeginTransactionAsync(ct);
-
         string hash = infoHash.ToUpperInvariant();
-        List<EpisodeKey> covered = [];
-        string? release = null;
 
-        await using (SqliteCommand reading = connection.CreateCommand())
-        {
-            reading.Transaction = transaction;
-            reading.CommandText = "SELECT covers, release_title FROM grabs WHERE info_hash = $hash;";
-            reading.Parameters.AddWithValue("$hash", hash);
-
-            await using SqliteDataReader reader = await reading.ExecuteReaderAsync(ct);
-
-            while (await reader.ReadAsync(ct))
+        return await database.TransactionAsync(
+            async session =>
             {
-                covered.AddRange(Covered(reader.GetString(0)));
-                release ??= reader.GetString(1);
-            }
-        }
+                List<EpisodeKey> covered = [];
+                string? release = null;
 
-        if (release is null)
-        {
-            return false;
-        }
+                foreach (StoredRow row in await session.QueryAsync(
+                             "SELECT covers, release_title FROM grabs WHERE info_hash = $hash;",
+                             new Dictionary<string, object?> { ["$hash"] = hash },
+                             ct))
+                {
+                    covered.AddRange(Covered(row.Text("covers")));
+                    release ??= row.Text("release_title");
+                }
 
-        await using (SqliteCommand forgetting = connection.CreateCommand())
-        {
-            forgetting.Transaction = transaction;
+                if (release is null)
+                {
+                    return false;
+                }
 
-            // Deleted rather than marked: a cancelled grab is one that never
-            // happened as far as every page is concerned, and a row left behind
-            // would keep it on the Downloads page for ever.
-            forgetting.CommandText = "DELETE FROM grabs WHERE info_hash = $hash;";
-            forgetting.Parameters.AddWithValue("$hash", hash);
+                // Deleted rather than marked: a cancelled grab is one that never
+                // happened as far as every page is concerned, and a row left
+                // behind would keep it on the Downloads page for ever.
+                await session.ExecuteAsync(
+                    "DELETE FROM grabs WHERE info_hash = $hash;",
+                    new Dictionary<string, object?> { ["$hash"] = hash },
+                    ct);
 
-            await forgetting.ExecuteNonQueryAsync(ct);
-        }
+                // B2: a download the owner cancelled is not an attempt the episode
+                // spent, so the attempt count is left alone.
+                await BackToMissingAsync(session, covered, ct);
 
-        foreach (EpisodeKey episode in covered)
-        {
-            await using SqliteCommand missing = connection.CreateCommand();
+                EpisodeKey first = covered.Count > 0 ? covered[0] : new(0, 0, 0);
 
-            missing.Transaction = transaction;
+                await session.ExecuteAsync(
+                    """
+                    INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+                    VALUES ($at, 'failed', $show, $season, $episode, NULL, $release, NULL, $detail);
+                    """,
+                    new Dictionary<string, object?>
+                    {
+                        ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+                        ["$show"] = first.ShowId,
+                        ["$season"] = first.Season,
+                        ["$episode"] = first.Number,
+                        ["$release"] = release,
+                        ["$detail"] = "cancelled by hand",
+                    },
+                    ct);
 
-            // B2: a download the owner cancelled is not an attempt the episode
-            // spent, so the attempt count is left alone.
-            missing.CommandText =
-                """
-                UPDATE episodes SET state = $state
-                WHERE show_id = $show AND season = $season AND episode = $episode AND state <> 'notaired';
-                """;
-            missing.Parameters.AddWithValue("$state", EpisodeStates.Missing);
-            missing.Parameters.AddWithValue("$show", episode.ShowId);
-            missing.Parameters.AddWithValue("$season", episode.Season);
-            missing.Parameters.AddWithValue("$episode", episode.Number);
-
-            await missing.ExecuteNonQueryAsync(ct);
-        }
-
-        await using (SqliteCommand said = connection.CreateCommand())
-        {
-            said.Transaction = transaction;
-            said.CommandText =
-                """
-                INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
-                VALUES ($at, 'failed', $show, $season, $episode, NULL, $release, NULL, $detail);
-                """;
-
-            EpisodeKey first = covered.Count > 0 ? covered[0] : new(0, 0, 0);
-
-            said.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-            said.Parameters.AddWithValue("$show", first.ShowId);
-            said.Parameters.AddWithValue("$season", first.Season);
-            said.Parameters.AddWithValue("$episode", first.Number);
-            said.Parameters.AddWithValue("$release", release);
-            said.Parameters.AddWithValue("$detail", "cancelled by hand");
-
-            await said.ExecuteNonQueryAsync(ct);
-        }
-
-        await transaction.CommitAsync(ct);
-
-        return true;
+                return true;
+            },
+            ct);
     }
 
     /// <summary>
@@ -810,59 +724,38 @@ public sealed class GrabRepository(Store database)
     /// </remarks>
     public async Task<IReadOnlyList<HistoryRow>> HistoryAsync(CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
             SELECT event, at, show_id, season, episode, show_title, release_title, source, detail
             FROM history ORDER BY id DESC LIMIT $limit;
-            """;
+            """,
 
-        // The newest, not all of them. The owner's history had 66,149 lines —
-        // 65,878 of them refusals — and the page fetched every one, which is
-        // why it stopped answering and nothing on it could be clicked.
-        command.Parameters.AddWithValue("$limit", Recent);
+            // The newest, not all of them. The owner's history had 66,149 lines —
+            // 65,878 of them refusals — and the page fetched every one, which is
+            // why it stopped answering and nothing on it could be clicked.
+            new Dictionary<string, object?> { ["$limit"] = Recent },
+            ct);
 
-        List<HistoryRow> lines = [];
-
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
-
-        while (await reader.ReadAsync(ct))
-        {
-            lines.Add(new(
-                reader.GetString(0),
-                DateTimeOffset.Parse(reader.GetString(1), CultureInfo.InvariantCulture),
-                reader.IsDBNull(2) ? null : reader.GetInt32(2),
-                reader.IsDBNull(3) ? null : reader.GetInt32(3),
-                reader.IsDBNull(4) ? null : reader.GetInt32(4),
-                reader.IsDBNull(5) ? null : reader.GetString(5),
-                reader.IsDBNull(6) ? null : reader.GetString(6),
-                reader.IsDBNull(7) ? null : reader.GetString(7),
-                reader.IsDBNull(8) ? null : reader.GetString(8)));
-        }
-
-        return lines;
+        return [.. rows.Select(row => new HistoryRow(
+            row.Text("event"),
+            DateTimeOffset.Parse(row.Text("at"), CultureInfo.InvariantCulture),
+            row.IntOrNull("show_id"),
+            row.IntOrNull("season"),
+            row.IntOrNull("episode"),
+            row.TextOrNull("show_title"),
+            row.TextOrNull("release_title"),
+            row.TextOrNull("source"),
+            row.TextOrNull("detail")))];
     }
 
     /// <summary>Every blacklisted key, read once for a run: a name or a hash carrying one is refused.</summary>
     public async Task<IReadOnlySet<string>> BlacklistedAsync(CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
+        IReadOnlyList<StoredRow> rows = await database.QueryAsync(
+            "SELECT key FROM blacklist WHERE until IS NULL OR until > $now;",
+            new Dictionary<string, object?> { ["$now"] = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture) },
+            ct);
 
-        command.CommandText = "SELECT key FROM blacklist WHERE until IS NULL OR until > $now;";
-        command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
-
-        HashSet<string> keys = new(StringComparer.Ordinal);
-
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
-
-        while (await reader.ReadAsync(ct))
-        {
-            keys.Add(reader.GetString(0));
-        }
-
-        return keys;
+        return rows.Select(row => row.Text("key")).ToHashSet(StringComparer.Ordinal);
     }
 }

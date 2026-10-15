@@ -1,4 +1,3 @@
-using Microsoft.Data.Sqlite;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 using NoMercy.Plugin.TorrentDownloader.Storage;
@@ -166,12 +165,7 @@ public class GrabRepositoryTests : IDisposable
     /// <summary>How many rows are done, which no reading of the store answers.</summary>
     private static async Task<long> Done(Store database)
     {
-        await using SqliteConnection connection = await database.OpenAsync(CancellationToken.None);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText = "SELECT count(*) FROM grabs WHERE state = 'done';";
-
-        return (long)(await command.ExecuteScalarAsync(CancellationToken.None))!;
+        return (long)(await database.ScalarAsync("SELECT count(*) FROM grabs WHERE state = 'done';", null, CancellationToken.None))!;
     }
 
     /// <remarks>
@@ -489,7 +483,7 @@ public class GrabRepositoryTests : IDisposable
     {
         Directory.CreateDirectory(_folder);
 
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
 
         database.MigrateAsync(CancellationToken.None).GetAwaiter().GetResult();
 

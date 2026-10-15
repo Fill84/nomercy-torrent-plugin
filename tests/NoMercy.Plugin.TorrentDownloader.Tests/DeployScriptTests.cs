@@ -1,4 +1,3 @@
-using System.Runtime.InteropServices;
 using System.Text.Json;
 
 using Xunit;
@@ -51,24 +50,6 @@ public class DeployScriptTests
                 + "The host resolves dependencies from the plugin's own folder, so this one "
                 + "cannot be found and the plugin does not load at all.");
         }
-    }
-
-    /// <remarks>
-    /// The store is SQLite and SQLite is native code, which arrives under
-    /// <c>runtimes/</c> rather than beside the assembly. Managed assemblies
-    /// present and this missing opens a database by throwing.
-    /// </remarks>
-    [Fact]
-    public void TheNativeCodeTheStoreNeedsIsBesideThePluginToo()
-    {
-        string rid = RuntimeInformation.RuntimeIdentifier;
-        string native = Path.Combine(Output(), "runtimes", rid, "native");
-
-        Assert.True(
-            Directory.Exists(native),
-            $"No native code for {rid} under runtimes/. SQLite is native and the store cannot open without it.");
-
-        Assert.NotEmpty(Directory.EnumerateFiles(native, "*e_sqlite3*"));
     }
 
     /// <remarks>

@@ -161,7 +161,7 @@ public class ShowSettingsRepositoryTests : IAsyncLifetime
 
     private async Task<Store> Opened()
     {
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         return database;

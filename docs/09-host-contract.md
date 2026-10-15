@@ -53,6 +53,7 @@ IPluginLibraryWriter  LibraryWriter        (not used — the plugin never writes
 IPluginEncoder?       Encoder              (null unless the manifest names the encoder hook)
 IPluginJobs?          Jobs                 (handed over with the encoder; what became of a job)
 IPluginServerInfo     Server               (GrantedPaths, for the folder refusal; throws where a host wired none)
+IPluginStorage        Storage              (OpenDatabaseAsync only, for the plugin's database; § The database)
 IPluginGrants         Grants
 IPluginHubContext     Hub
 IPluginEvents         Events               (plugin-to-plugin messages only; not used)
@@ -84,8 +85,39 @@ that, once.
 
 **In-process is the default.** `PluginRuntimeMode.Load()` answers `InProcess` unless `runtime-mode.json`
 in the plugin config folder says otherwise. The plugin's own sockets, files and processes work as they
-did; out of process they would be refused, and moving them behind `Context.Net`, `Context.Storage` and
-`Context.Process` is work not yet done.
+did; out of process they would be refused, and moving them behind `Context.Net` and `Context.Process` is
+work not yet done. Out of process the database is refused too (`RemoteStorage.OpenDatabaseAsync`, "not
+yet"); media-server #601 asks for it.
+
+## The database
+
+Since `S16-04` (15 October 2026) the plugin's SQLite is the host's: `Context.Storage.OpenDatabaseAsync(
+"torrent-downloader")`. The marketplace scan refuses `Microsoft.Data.Sqlite` and `SQLitePCLRaw` in a
+plugin folder (media-server #476), so the plugin ships no SQLite of its own. Read off media-server `dev`
+on 15 October 2026 (`src/NoMercy.Plugins/Storage/PluginHostStorage.cs`, `PluginDatabase.cs`,
+`PluginContextFactory.cs`, `PluginLoader.cs`), and copied by the tests' `HostShapedDatabase`:
+
+- The file is `plugins/data/<plugin id>/<name>.sqlite` — the same folder the host hands the plugin as
+  `DataFolderPath`. Wired in process since server 0.1.526.
+- One `SqliteConnection` for the life of the database, with **no lock** around it. The plugin's `Store`
+  holds every call behind one gate, or a page reads a run's half-written transaction.
+- **No transaction API.** `Store.TransactionAsync` runs `BEGIN IMMEDIATE` … `COMMIT` (or `ROLLBACK`) as
+  SQL on that connection, inside the gate.
+- The host counts applied migrations in `__nomercy_plugin_schema (applied INTEGER NOT NULL)`, made empty
+  on open; `MigrateAsync(statements)` runs `statements[MAX(applied)..]`, each in a transaction of its own,
+  inserting `index + 1`. It sets neither `journal_mode` nor `foreign_keys`; the store does, once.
+- A null parameter is bound as `NULL`. A row is column name to value, in SQLite's own types (`long`,
+  `double`, `string`, `byte[]`); the store reads them through `StoredRow`.
+
+**The carry-over.** 0.8.1 and earlier kept `torrent-downloader.db` in the same folder and counted
+migrations in `PRAGMA user_version`. Before its first open, the store renames `-wal`, `-shm`, `-journal`
+and then the file itself to `torrent-downloader.sqlite`; after it, while the host's count is empty, it
+inserts the old `user_version` as the count. The two counts are the same number only while the migrations
+are numbered 1 … N with no gap, which the store refuses to run otherwise. A file that cannot be moved
+(Windows, the old copy of the plugin still holding it) leaves both files as they are and refuses the open:
+"restart the server to finish the update". A database the host opened anywhere but the carried-over file
+is refused before anything is migrated. A downgrade to 0.8.1 after the carry-over finds no `.db` and starts
+empty; the `.sqlite` is still there for the next upgrade.
 
 ## Live updates
 

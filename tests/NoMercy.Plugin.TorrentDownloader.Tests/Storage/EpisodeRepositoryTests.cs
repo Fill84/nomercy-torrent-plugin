@@ -21,7 +21,7 @@ public class EpisodeRepositoryTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        _database = new(_folder);
+        _database = TestStore.In(_folder);
         await _database.MigrateAsync(CancellationToken.None);
         _episodes = new(_database);
     }

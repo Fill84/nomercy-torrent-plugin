@@ -6,7 +6,9 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
-by us.** `SPRINTS.md` § S16. Current: **`S16-04`**. The browser is asked for in media-server #601, the sparse flag in #602.
+by us.** `SPRINTS.md` § S16. Current: **nothing the plugin can do alone.** `S16-06` waits on
+media-server #601 (the browser), `Sparse.DeviceIoControl` on #602; `S16-07` (the carry-over seen on
+beast-unit's own database, then a version) waits on the owner's word.
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
@@ -885,7 +887,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S16-01` The marketplace scan, run on every build
 - [x] `S16-02` Files without `DeviceIoControl` — measured; the call waits on media-server #602
 - [x] `S16-03` Migrations and sources read without reflection
-- [ ] `S16-04` The database is the SDK's, and every row comes along
+- [x] `S16-04` The database is the SDK's, and every row comes along
 - [x] `S16-05` The browser the solver needs, asked of the media server — #601
 - [ ] `S16-06` The solver on `IPluginBrowser` — waits on media-server #601
 - [ ] `S16-07` Seen on beast-unit, then a version
@@ -893,6 +895,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S16-04` (15 October 2026):** the database is the host's (`Context.Storage.OpenDatabaseAsync`); an
+  owner's `torrent-downloader.db` is carried to `torrent-downloader.sqlite` with its log and its count.
+  A test that needs the database builds `TestStore.In(folder)`, and `FakePluginContext` hands out a
+  `HostShapedStorage`; a test that wants to look underneath asks the store (`QueryAsync`, `ScalarAsync`),
+  never a connection of its own. Out of process the plugin now has no database until media-server #601's
+  second ask ships. The `build.yml` step that writes `ShippedFiles` (S16-03) has not yet run on Linux: CI
+  runs only for a release.
 
 - **`S16-03` (15 October 2026):** `sources.json` and the migrations travel inside the assembly as
   `ShippedFiles`, written by the build; no package carries `sources.json` any more. A test that wants the

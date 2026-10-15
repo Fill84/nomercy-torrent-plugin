@@ -3683,6 +3683,17 @@ schema. `AssemblyFolderTests` and the missing-catalogue test are gone with the f
    the plugin's references (the tests keep it for the double and the 0.8.1 fixture).
 5. `expected-findings.txt` loses `Microsoft.Data.Sqlite.dll`, `SQLitePCLRaw.*` and the three `e_sqlite3.dll`.
 
+**As done** (15 October 2026): `Store` over the host's `IPluginDatabase` (gate, `TransactionAsync`,
+carry-over, the other-file refusal, the host's count started at `user_version`, the 1 … N check),
+`StoredRow`, every repository on it, `Microsoft.Data.Sqlite` out of the plugin. `TheDatabaseIsTheSdksTests`
+on `OldDatabase` (a database written by the repository's own migration files the way 0.8.1 wrote it, one
+known row per table, and a second shape with the rows only in `-wal`): eight red on a naive store, green
+after; each rule — the `-wal` move, the count, the gate, the rollback, the other-file refusal — was taken
+out once and its test went red. `StoreTests` now go back in the host's count rather than in
+`user_version`; "prepared once" became "opened once". 272 lines left `expected-findings.txt` (58 remain).
+The held-open test runs on Windows only: Linux moves an open file, so there is nothing to refuse there.
+Docs: `docs/09-host-contract.md` § The database.
+
 ## S16-05 · The browser the solver needs, asked of the media server
 
 An issue on NoMercy-Entertainment/nomercy-media-server, linking #476 and #597, asking for

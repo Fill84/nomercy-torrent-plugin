@@ -239,7 +239,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
             .SaveAsync(settings, CancellationToken.None);
         Assert.True(saved.Saved, string.Join("; ", saved.Errors));
 
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
 
         // A grab still downloading.
@@ -379,7 +379,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         // migration. Migrating starts no cycle.
         _ = await plugin.EpisodesAsync(CancellationToken.None);
 
-        CadenceRepository cadences = new(new Store(_folder));
+        CadenceRepository cadences = new(TestStore.In(_folder));
         DateTimeOffset giveUpAt = DateTimeOffset.UtcNow + Hang.Limit;
         bool finished = false;
 
@@ -425,7 +425,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         EpisodeKey episode = new(41, 3, 6);
 
         // What the store held when the server stopped.
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
         GrabRepository grabs = new(database);
 
@@ -497,7 +497,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         const string hash = "0123456789ABCDEF0123456789ABCDEF01234567";
         EpisodeKey episode = new(41, 3, 6);
 
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
         GrabRepository grabs = new(database);
 
@@ -566,7 +566,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         const string hash = "0123456789ABCDEF0123456789ABCDEF01234567";
         EpisodeKey episode = new(41, 3, 6);
 
-        Store database = new(_folder);
+        Store database = TestStore.In(_folder);
         await database.MigrateAsync(CancellationToken.None);
         GrabRepository grabs = new(database);
 
@@ -830,7 +830,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
             // A cycle finished a moment ago, so the cadence starts none and nothing here reads a site.
             _ = await plugin.EpisodesAsync(CancellationToken.None);
-            await new CadenceRepository(new Store(_folder)).RecordFinishedAsync(
+            await new CadenceRepository(TestStore.In(_folder)).RecordFinishedAsync(
                 JobNames.Cycle, DateTimeOffset.UtcNow, CancellationToken.None);
 
             Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
@@ -913,7 +913,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         _said = context.Log;
 
         _ = await plugin.EpisodesAsync(CancellationToken.None);
-        await new CadenceRepository(new Store(_folder)).RecordFinishedAsync(
+        await new CadenceRepository(TestStore.In(_folder)).RecordFinishedAsync(
             JobNames.Cycle, DateTimeOffset.UtcNow, CancellationToken.None);
 
         Assert.Empty(await plugin.SaveShowSettingsAsync(

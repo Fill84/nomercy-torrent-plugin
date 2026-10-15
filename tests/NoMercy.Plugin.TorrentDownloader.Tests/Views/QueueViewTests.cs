@@ -29,7 +29,7 @@ public sealed class QueueViewTests : IDisposable
     [Fact]
     public async Task TheQueueListsTheEpisodesSearchedForWithSearchNow()
     {
-        Store database = new(_root);
+        Store database = TestStore.In(_root);
         await database.MigrateAsync(CancellationToken.None);
 
         ShowSettingsRepository shows = new(database);

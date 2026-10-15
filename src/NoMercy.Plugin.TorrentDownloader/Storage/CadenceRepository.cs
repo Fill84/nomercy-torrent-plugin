@@ -1,5 +1,4 @@
 using System.Globalization;
-using Microsoft.Data.Sqlite;
 
 namespace NoMercy.Plugin.TorrentDownloader.Storage;
 
@@ -18,18 +17,11 @@ public sealed class CadenceRepository(Store database)
     /// <summary>Every cadence's last finish, by name.</summary>
     public async Task<IReadOnlyDictionary<string, DateTimeOffset>> LastFinishedAsync(CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText = "SELECT name, last_finished_at FROM cadences;";
-
         Dictionary<string, DateTimeOffset> finished = new(StringComparer.Ordinal);
 
-        await using SqliteDataReader reader = await command.ExecuteReaderAsync(ct);
-
-        while (await reader.ReadAsync(ct))
+        foreach (StoredRow row in await database.QueryAsync("SELECT name, last_finished_at FROM cadences;", null, ct))
         {
-            finished[reader.GetString(0)] = DateTimeOffset.Parse(reader.GetString(1), CultureInfo.InvariantCulture);
+            finished[row.Text("name")] = DateTimeOffset.Parse(row.Text("last_finished_at"), CultureInfo.InvariantCulture);
         }
 
         return finished;
@@ -42,18 +34,16 @@ public sealed class CadenceRepository(Store database)
     /// </remarks>
     public async Task RecordFinishedAsync(string name, DateTimeOffset at, CancellationToken ct)
     {
-        await using SqliteConnection connection = await database.OpenAsync(ct);
-        await using SqliteCommand command = connection.CreateCommand();
-
-        command.CommandText =
+        await database.ExecuteAsync(
             """
             INSERT INTO cadences (name, last_finished_at) VALUES ($name, $at)
             ON CONFLICT(name) DO UPDATE SET last_finished_at = excluded.last_finished_at;
-            """;
-
-        command.Parameters.AddWithValue("$name", name);
-        command.Parameters.AddWithValue("$at", at.ToString("O", CultureInfo.InvariantCulture));
-
-        await command.ExecuteNonQueryAsync(ct);
+            """,
+            new Dictionary<string, object?>
+            {
+                ["$name"] = name,
+                ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+            },
+            ct);
     }
 }

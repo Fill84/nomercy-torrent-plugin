@@ -513,17 +513,16 @@ public class TransfersTests : IDisposable
         Assert.Equal(Hash, removed.InfoHash);
         Assert.False(removed.DeleteFiles, "A torrent the client gave up on had its files deleted as well.");
 
-        await using Microsoft.Data.Sqlite.SqliteConnection connection = await new Store(_root).OpenAsync(CancellationToken.None);
-        await using Microsoft.Data.Sqlite.SqliteCommand command = connection.CreateCommand();
+        await using Store store = TestStore.In(_root);
 
-        command.CommandText = "SELECT reason, until FROM blacklist WHERE key = $key;";
-        command.Parameters.AddWithValue("$key", Hash);
+        IReadOnlyList<StoredRow> refused = await store.QueryAsync(
+            "SELECT reason, until FROM blacklist WHERE key = $key;",
+            new Dictionary<string, object?> { ["$key"] = Hash },
+            CancellationToken.None);
 
-        await using Microsoft.Data.Sqlite.SqliteDataReader reader = await command.ExecuteReaderAsync();
-
-        Assert.True(await reader.ReadAsync(), "The release was not refused at all.");
-        Assert.Equal("there is no video file in it", reader.GetString(0));
-        Assert.True(reader.IsDBNull(1), "A release refused for ever was refused for a while instead.");
+        StoredRow row = Assert.Single(refused);
+        Assert.Equal("there is no video file in it", row.Text("reason"));
+        Assert.True(row.TextOrNull("until") is null, "A release refused for ever was refused for a while instead.");
     }
 
     /// <remarks>
@@ -2312,7 +2311,7 @@ public class TransfersTests : IDisposable
 
     private async Task<GrabRepository> Grabs()
     {
-        Store database = new(_root);
+        Store database = TestStore.In(_root);
 
         await database.MigrateAsync(CancellationToken.None);
 

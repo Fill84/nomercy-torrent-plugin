@@ -262,7 +262,7 @@ public class TorrentDownloaderPluginTests
 
             // A second reader of the same file, never the plugin's own
             // repository: what is under test is what actually landed on disk.
-            CadenceRepository cadences = new(new Store(folder));
+            CadenceRepository cadences = new(TestStore.In(folder));
 
             await plugin.RunCycleAsync(CancellationToken.None);
 
@@ -462,7 +462,7 @@ public class TorrentDownloaderPluginTests
             // has the file this cycle gave it.
             Assert.True(plugin.Running, "the cycle closed while an encode was still going");
 
-            CadenceRepository cadences = new(new Store(folder));
+            CadenceRepository cadences = new(TestStore.In(folder));
 
             Assert.False(
                 (await cadences.LastFinishedAsync(CancellationToken.None)).ContainsKey(JobNames.Cycle),
