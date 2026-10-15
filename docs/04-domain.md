@@ -66,8 +66,8 @@ names gave no torrent was asked of the indexers as `Show SxxEyy`, and the best r
 was taken. South Park S29E03 aired at 02:00 UTC on 15 October 2026; at 03:05 that search took
 `South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM`, a capture no name source lists, with the intro
 missing; and on 14 October, between 00:07 and 02:03 UTC, it had taken five TorrentGalaxy torrents titled
-as MeGusta's, CAKES's and FLUX's WEB releases that held no video. The first real release, `South.Park.S29E03.1080p.WEB.H264-CAKES`, reached
-the name sources at 06:00.
+as MeGusta's, CAKES's and FLUX's WEB releases that held no video. The first real release,
+`South.Park.S29E03.1080p.WEB.H264-CAKES`, reached the name sources at 06:00.
 
 `TitleMatcher.Matches`: normalise both sides (lowercase, **accents folded**, punctuation to spaces,
 collapse), then the release title must **begin with** the show title and the slot must match.

@@ -27,7 +27,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 /// <c>South Park S15E12</c>, LimeTorrents' answer to the FilmHD name (nothing) and to
 /// <c>South Park S15E12</c>. Solo Leveling's were captured on 15 October 2026: Nyaa's and LimeTorrents'
 /// answers to srrDB's <c>Solo.Leveling.S02E01.1080p.WEB.H264-SKYANiME</c> (nothing) and to
-/// <c>Solo Leveling S02E01</c>.
+/// <c>Solo Leveling S02E01</c>, and the four name sources', Nyaa's and LimeTorrents' answers about Ranma ½'s
+/// <c>S01E01</c>.
 /// </para>
 /// </remarks>
 public class ByShowAndEpisodeTests
@@ -112,6 +113,57 @@ public class ByShowAndEpisodeTests
 
         Assert.Equal(IndexerSites.Exact(IndexerSites.Nyaa, Skyanime), asked[0]);
         Assert.Contains(IndexerSites.Exact(IndexerSites.Nyaa, "Solo Leveling S02E01"), asked);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A result counts only when it names the episode and meets the show's settings.</strong> The same
+    /// two pages carry Solo Leveling S02E01 at 1080p in H.264 from ToonsHub and VARYG, in HEVC from
+    /// Tenrai-Sensei, EMBER, Judas and others, at 2160p in H.265 from ToonsHub, and Nyaa's first row is
+    /// <c>S02E010</c>, another episode. Tenrai-Sensei's HEVC is the one torrent both indexers list, so it
+    /// would win any round it took part in. An anime wanting 2160p in h265 takes ToonsHub's 2160p upload and
+    /// nothing else.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task OnlyAResultThatMeetsTheShowsSettingsIsTaken()
+    {
+        const string toonsHub2160 = "7F81ACBC1D8FD957F86D2D95C0A903F76BFFF974";
+
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await AnimeCycle(AnsweringSkyanimeAndTheEpisode(), engine, new FixedNames()).RunAsync(
+            [SoloLeveling],
+            new(SettingsByShow.Every(new() { Quality = "2160p", Codec = "h265", Searched = true }), Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal(toonsHub2160, outcome.InfoHash);
+        Assert.Contains(toonsHub2160, Assert.Single(engine.Taken).Source, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
+    /// And where nothing on either indexer meets the settings — 2160p in h264, which neither page carries; its
+    /// one 2160p upload is H.265 —
+    /// nothing is taken, and the episode still counts as searched, because the indexers were asked.
+    /// </remarks>
+    [Fact]
+    public async Task WhereNoResultMeetsTheSettingsNothingIsTakenAndTheEpisodeWasSearched()
+    {
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await AnimeCycle(AnsweringSkyanimeAndTheEpisode(), engine, new FixedNames()).RunAsync(
+            [SoloLeveling],
+            new(SettingsByShow.Every(new() { Quality = "2160p", Codec = "h264", Searched = true }), Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.False(outcome.HandedOver, outcome.Release);
+        Assert.Empty(engine.Taken);
+        Assert.True(outcome.Searched);
     }
 
     /// <remarks>
@@ -278,6 +330,75 @@ public class ByShowAndEpisodeTests
             CancellationToken.None,
             datedOnly);
     }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>An anime whose name sources show an older programme of its title takes no undated
+    /// result.</strong> Ranma ½ was remade in 2024, and asked about <c>Ranma 1 2 S01E01</c> the name sources
+    /// answer with the 1989 programme's DVD rips too — <c>Ranma.1_2.S01E01.DVDRip.AC3.Anime.Subbed.XviD-dUCkbURG</c>,
+    /// published 2004, twenty years before the remake's S01E01 aired on 5 October 2024. So an older programme
+    /// of the title is known, and LimeTorrents, which dates nothing, cannot say which programme its rows are.
+    /// </para>
+    /// <para>
+    /// Wanting a 1080p h264 REMUX, the one result that meets the settings is LimeTorrents' undated
+    /// <c>Ranma 1-2 2024 S01E01 Heres Ranma 1080p FLAC 2 0 AVC REMUX-FraMeSToR</c>; no name meets them, so the
+    /// search by show and episode runs, and the REMUX is left out. With the same indexer pages and no name
+    /// source behind them, nothing shows an older programme, and the same REMUX is taken: the name sources'
+    /// dates are the only difference. Every page was captured on 15 October 2026 at 11:50 UTC.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnAnimeWhoseNameSourcesShowAnOlderProgrammeOfItsTitleTakesNoUndatedResult()
+    {
+        const string remux = "A73F261D35673ADA3A94D3710A0CD600E7C1FB33";
+
+        SettingsByShow remuxAt1080 = SettingsByShow.Every(new() { Quality = "1080p", Codec = "h264", Musts = ["REMUX"], Searched = true });
+
+        FakeFetch fetch = AnsweringRanma(new FakeFetch().AnsweringFeeds())
+            .Answers("https://predb.me/?search=Ranma+1+2+S01E01&rss=1", Capture.Fixture("names-predb-search-ranma-s01e01.xml"))
+            .Answers("https://api.srrdb.com/v1/search/ranma-1-2-s01e01", Capture.Fixture("names-srrdb-search-ranma-s01e01.json"))
+            .Answers("https://api.predb.net/feed/?q=Ranma+1+2+S01E01", Capture.Fixture("names-predbnet-search-ranma-s01e01.xml"))
+            .Answers("https://www.scnsrc.me/feed/?s=Ranma+1+2+S01E01", Capture.Fixture("names-scenesource-search-ranma-s01e01.xml"));
+
+        ActivityJournal journal = new();
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await new SearchCycle(
+                NameSourceSites.Over(fetch, journal),
+                IndexerSites.Finding(fetch, sources: [LimeTorrents, IndexerSites.Nyaa], journal: journal),
+                journal,
+                new Grab(engine, new EndlessDisk(null), journal))
+            .RunAsync([Ranma], new(remuxAt1080, Blacklist.None, DryRun: false, @"C:\downloads"), CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.False(outcome.HandedOver, outcome.Release);
+        Assert.Empty(engine.Taken);
+        Assert.True(outcome.Searched);
+        Assert.Contains(fetch.Asked, address => address.ToString() == IndexerSites.Words(LimeTorrents, "Ranma 1/2 S01E01"));
+
+        FakeTorrentEngine withoutNames = new();
+
+        CycleReport unnamed = await AnimeCycle(AnsweringRanma(new FakeFetch()), withoutNames, new FixedNames()).RunAsync(
+            [Ranma],
+            new(remuxAt1080, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        Assert.Equal(remux, Assert.Single(unnamed.Outcomes).InfoHash);
+    }
+
+    /// <summary>Nyaa and LimeTorrents answering <c>Ranma 1/2 S01E01</c> as they did on 15 October 2026.</summary>
+    private static FakeFetch AnsweringRanma(FakeFetch fetch)
+    {
+        return fetch
+            .Answers(IndexerSites.Exact(IndexerSites.Nyaa, "Ranma 1/2 S01E01"), Capture.Fixture("anime-nyaa-ranma-s01e01-exact.xml"))
+            .Answers(IndexerSites.Words(IndexerSites.Nyaa, "Ranma 1/2 S01E01"), Capture.Fixture("anime-nyaa-ranma-s01e01-words.xml"))
+            .Answers(IndexerSites.Exact(LimeTorrents, "Ranma 1/2 S01E01"), Capture.Fixture("anime-limetorrents-ranma-s01e01-exact.html"))
+            .Answers(IndexerSites.Words(LimeTorrents, "Ranma 1/2 S01E01"), Capture.Fixture("anime-limetorrents-ranma-s01e01-words.html"));
+    }
+
+    private static readonly TrackedEpisode Ranma =
+        new(new(260180, 1, 1), "Ranma 1/2", 2024, LibraryKind.Anime, null, new DateOnly(2024, 10, 5), EpisodeState.Missing, 1);
 
     /// <remarks>
     /// The other half: with no sign of another programme of the same name, an undated result counts as its
