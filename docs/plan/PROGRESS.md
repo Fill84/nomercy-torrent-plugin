@@ -7,8 +7,27 @@ Read this first, update it last. Nothing else decides what happens next.
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
 the sources name (done; anime keeps its search by show and episode), `S15-04` a wrong episode the plugin
-delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1. **Current: `S15-04`.**
-Nothing is tagged before the owner has seen it.
+delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1.
+
+**`S15-04` is not in 0.8.1** (the owner's word, 15 October 2026). It is built on the branch
+`feat/replace-delivered` (`a9a73c0..9e669a2`), and it is not safe to merge until the media server does two
+things: media-server #599, where `IPluginJobs` reports Finished for an encode that is still running because
+`UpdateJobPayload` rewrites the payload hash; and media-server #600, where a re-encoded episode keeps its
+old `VideoFiles` row, so the player can serve the old, recycled file. South Park S29E03 (ViETNAM) stays in
+the library until then. Plugin-side fixes still to do on that branch, from the slice's own check:
+- close a replacement only on proof (a new root playlist written after recycling, or a new library file),
+  never on "Finished" alone;
+- recycle only what the encoder writes (the root master, `.nomercy.json`, `chapters.vtt`, the sprite, and
+  `video_*`, `audio_*`, `subtitles`, `fonts`, `thumbs`, `metadata`), never other files in the folder;
+- mark only single-episode deliveries or real season packs;
+- cap the check of old deliveries per run, run it after the search, and skip it on a hand-run;
+- refuse a second replacement while one for the same episode is open or done;
+- make the `IPluginLibraryWriter` test double refuse an existing destination, as the server does;
+- the failed-download test was never seen red.
+
+**Current: the engine test that failed twice in 132 runs**
+(`BittorrentEngineTests.ADownloadStillReceivingIsStoppedAWindowAfterTheOnlyHolderOfSomePiecesLeft`), then a
+review of the whole of S15, then `S15-05`. Nothing is tagged before the owner has seen it.
 
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
@@ -835,7 +854,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S15-01` Torrentz2 is gone
 - [x] `S15-02` No table scrolls sideways
 - [x] `S15-03` A show downloads only a release the sources name
-- [ ] `S15-04` A wrong episode the plugin delivered is replaced on its own
+- [ ] `S15-04` A wrong episode the plugin delivered is replaced on its own — on `feat/replace-delivered`, waits for media-server #599 and #600
 - [ ] `S15-05` Seen on beast-unit, then 0.8.1
 
 ## Log
@@ -2619,6 +2638,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, the owner: 0.8.1 ships without the automatic replacement.** It was built (`S15-04`, on
+  `feat/replace-delivered`), and its own check found that the media server cannot yet carry it: `IPluginJobs`
+  calls an encode Finished while it runs (media-server #599), and a re-encoded episode keeps its old
+  `VideoFiles` row, so the player can serve the recycled file (media-server #600). An episode that will not
+  play is worse than a wrong release, so the replacement waits for those two fixes. South Park S29E03
+  (ViETNAM) stays until then.
 
 - **15 October 2026, the owner: a show downloads only a release the sources name; the search by show and
   episode of 16 September 2026 (`S13-17`) stays for anime only.** If no name source — PreDB, srrDB,

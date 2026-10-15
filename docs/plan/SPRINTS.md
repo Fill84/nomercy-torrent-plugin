@@ -3512,6 +3512,9 @@ could not be red first: the anime path was already there; it was shown to fail w
 
 ## S15-04 · A wrong episode the plugin delivered is replaced on its own
 
+**Not in 0.8.1** (the owner, 15 October 2026). It is built on `feat/replace-delivered`, and it waits for
+media-server #599 and #600. `PROGRESS.md` § Current lists what is still to fix on that branch.
+
 **Read first:** `Hosting/Transfers.cs`, `Hosting/Stager.cs`, `Storage/GrabRepository.cs`,
 `Core/Pipeline/MissingRefresh.cs`, `Core/Pipeline/SearchCycle.cs`, `IPluginLibraryWriter` and the
 capability that grants it in the SDK the plugin builds against, `plugin.json`, `docs/specs/run.md` § What
