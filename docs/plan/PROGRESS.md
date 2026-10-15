@@ -814,6 +814,20 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **Sprint 14 closed out (15 October 2026): seven faults fixed, one flaky test made sound, and three rules
+  given the tests they lacked — each test seen red.** A torrent already being downloaded is not taken again on a full run, so a pack's narrowed-out
+  episodes are searched singly (`CycleOptions.OpenHashes`). A staging that failed rests until the look comes
+  round (`Transfers.StageAgainAfter`, set to `LookAgainInterval`) instead of looping on the client reopening
+  the torrent — 825 attempts in three seconds through a real client before; a run's start still tries it at
+  once (`LookAfresh`). The settings cache keeps a load's answer by compare-exchange, so a save landing in
+  between is never undone (`SettingsStore` seam `remembering`). A handed-over decision starts a transfers pass
+  once its row is written (`CycleWriter.handedOver`). A torrent the client gave up on is not failed again as
+  not searched in the same pass. A download added by hand is never cancelled for its show being off (owner,
+  see Decisions). The stall-window engine test waits on the client's wake timer, not the peer count. New
+  seams: `Chain(hiding:)` and `TorrentDownloaderPlugin.BrowserHiding`, for the machine with no browser.
+  Still open: `SettleTheLogAsync`'s own check of `_levelsChosen` is check-then-set the same way, and
+  `PeerWelcomeTests.APeerThatDialsInEncryptedIsAnsweredToo` failed once with two Bittorrent suites in parallel.
+
 - **`ADownloadThatFinishedWhileTheServerWasDownIsStagedOnStart` failed once under the full suite (15 October
   2026); the test was at fault, not the plugin.** It saved the folders through the loaded plugin and wrote the
   grab afterwards, but saving the folders is itself a start (`Settings.Saved` → `StartUpAsync`), so the grab
