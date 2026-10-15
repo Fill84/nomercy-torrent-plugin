@@ -44,6 +44,33 @@ public class CycleRecordTests : IDisposable
     }
 
     /// <remarks>
+    /// <strong>A grab writes down whether its release is a name a source gave, and the delivery it
+    /// replaces</strong> — for an episode tracked to be replaced, the delivery it is replaced over. That is what
+    /// the transfers pass recycles once the new video is staged, and what keeps a replacement from being
+    /// marked in its turn (the owner's rule of 15 October 2026). Sabotage: recording without either leaves
+    /// the replacement to encode over the old episode, which the server skips.
+    /// </remarks>
+    [Fact]
+    public async Task AGrabForAnEpisodeToBeReplacedNamesTheDeliveryItReplaces()
+    {
+        GrabRepository grabs = await Repository();
+
+        const string Old = "FEDCBA9876543210FEDCBA9876543210FEDCBA98";
+
+        await CycleRecord.WriteAsync(
+            new([Taken with { Covers = [Episode], Named = true }]),
+            [Tracked with { State = EpisodeState.Replace, Replaces = new(Old, "Silo S03E06 HDTV x264-NOBODY") }],
+            grabs,
+            When,
+            CancellationToken.None);
+
+        StoredDownload stored = Assert.Single(await grabs.OpenAsync(CancellationToken.None));
+
+        Assert.True(stored.Named);
+        Assert.Equal(Old, stored.Replaces);
+    }
+
+    /// <remarks>
     /// <para>
     /// <strong>A torrent handed to the client is in the client once its row is written.</strong> The client
     /// takes the torrent before the run writes its grab down, and a pass in that gap finds a torrent the store

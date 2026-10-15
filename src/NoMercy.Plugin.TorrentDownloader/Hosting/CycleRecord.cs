@@ -32,10 +32,16 @@ public static class CycleRecord
         EpisodeRepository? episodes = null)
     {
         Dictionary<EpisodeKey, string> titles = [];
+        Dictionary<EpisodeKey, Replacing> replacing = [];
 
         foreach (TrackedEpisode episode in looked)
         {
             titles[episode.Key] = episode.ShowTitle;
+
+            if (episode.Replaces is Replacing old)
+            {
+                replacing[episode.Key] = old;
+            }
         }
 
         foreach (EpisodeOutcome outcome in report.Outcomes)
@@ -81,7 +87,12 @@ public static class CycleRecord
                 outcome.Magnet,
                 covers,
                 at,
-                ct);
+                ct,
+                // Where the release came from, and the delivery it replaces for an episode to be replaced: the
+                // owner's rule of 15 October 2026. The transfers pass recycles that delivery's encode once this
+                // one is staged, and a named release is never marked to be replaced in its turn.
+                named: outcome.Named,
+                replaces: replacing.GetValueOrDefault(outcome.Episode)?.InfoHash);
         }
 
         await CountSearchesAsync(report, at, episodes, ct);

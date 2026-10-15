@@ -1,0 +1,412 @@
+using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
+using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
+using NoMercy.Plugin.TorrentDownloader.Storage;
+using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
+using Xunit;
+
+namespace NoMercy.Plugin.TorrentDownloader.Tests.Hosting;
+
+/// <summary>
+/// A wrong episode the plugin delivered is replaced on its own, and the old one goes to the server's recycle
+/// area.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The owner's rule of 15 October 2026 (<c>docs/specs/run.md</c> § When a download finishes, § What the plugin
+/// deletes). South Park S29E03 was delivered at 03:07 that day from ViETNAM's HDTV capture, grab 99 on the
+/// owner's server; CAKES's WEB release reached the name sources at 06:00.
+/// </para>
+/// <para>
+/// The library is a real folder laid out as the server's <c>VideoEncodeJob</c> lays an episode out —
+/// <c>{library folder}/South.Park.(1997)/South.Park.S29E03/</c> with the master playlist the library registered
+/// and the video beside it — and the library answers that file the way the owner's server does, naming the show's
+/// and the episode's folders twice. The server's library writer is a double that records and can refuse: it is
+/// the server's facade. Everything on the plugin's side runs for real.
+/// </para>
+/// </remarks>
+public sealed class AWrongEpisodeIsReplacedTests : IDisposable
+{
+    private const string TelevisionLibrary = "01HQ5W4AVF30N10RT6XCF6AJHM";
+
+    private const string Vietnam = "South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM";
+
+    private const string Cakes = "South.Park.S29E03.1080p.WEB.H264-CAKES";
+
+    private const string OldHash = "7445E4910B7A4D7E1F3C35D5A4A9C2E1B0C0FFEE";
+
+    private const string NewHash = "70AFDB530DD7CD04D1C36E142CC523A56E738DE8";
+
+    private const string Master = "South.Park.S29E03.Episode.3.NoMercy.m3u8";
+
+    private static readonly EpisodeKey S29E03 = new(2190, 29, 3);
+
+    /// <summary>When ViETNAM's capture was taken on.</summary>
+    private static readonly DateTimeOffset Delivered = new(2026, 10, 15, 3, 5, 0, TimeSpan.Zero);
+
+    /// <summary>When its encode wrote the episode into the library.</summary>
+    private static readonly DateTimeOffset Encoded = Delivered.AddMinutes(30);
+
+    /// <summary>When CAKES's release was taken on to replace it.</summary>
+    private static readonly DateTimeOffset Replacing = new(2026, 10, 15, 6, 10, 0, TimeSpan.Zero);
+
+    private readonly string _root = Path.Combine(Path.GetTempPath(), "nomercy-replace-" + Guid.NewGuid().ToString("n")[..8]);
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Once the new release is downloaded and staged, the old episode's encode goes to the recycle
+    /// area, and then the encode is asked for — in that order.</strong> Every file of the episode's folder the
+    /// delivery's encode wrote, the master playlist first: once it is gone the server encodes the episode afresh
+    /// whatever else is left (its reconciler reads a missing master playlist as an output to write in full), so
+    /// a recycling that stops half way can never leave an encode skipped over a half-moved episode.
+    /// </para>
+    /// <para>
+    /// <strong>And nothing else.</strong> Not S29E02's folder beside it, not a file in the show's folder, not
+    /// what is already in the folder's own recycle area, and not a file in the episode's folder from before the
+    /// delivery — that one the plugin's grab did not cause. Nothing is deleted or moved by any other means.
+    /// </para>
+    /// <para>
+    /// Sabotage: asking for the encode without recycling first encodes over the old episode, which the server
+    /// skips.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task TheOldEpisodesEncodeIsRecycledAndThenTheEncodeIsAskedFor()
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+
+        FakeProvider server = new();
+        RecordingLibraryWriter writer = new(server.Encoder);
+
+        await Transfers(Holding(Finished()), grabs, server, writer).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(
+            [
+                $"{EpisodeFolder}/{Master}",
+                $"{EpisodeFolder}/.nomercy.json",
+                $"{EpisodeFolder}/subtitles/South.Park.S29E03.Episode.3.NoMercy.eng.full.vtt",
+                $"{EpisodeFolder}/video_1920x1080_SDR/video_1920x1080_SDR-0000.ts",
+                $"{EpisodeFolder}/video_1920x1080_SDR/video_1920x1080_SDR.m3u8",
+            ],
+            writer.Recycled.Select(one => one.Path));
+
+        Assert.All(writer.Recycled, one => Assert.Equal(0, one.EncodesAskedBefore));
+        Assert.NotNull(server.Encoder.Job);
+        Assert.Empty(writer.DeletedOrMoved);
+
+        StoredDownload replacing = Assert.Single(await grabs.EveryAsync(CancellationToken.None), one => one.InfoHash == NewHash);
+
+        Assert.Equal(GrabState.Dispatched, replacing.State);
+        Assert.NotNull(replacing.RecycledAt);
+
+    }
+
+    /// <remarks>
+    /// <strong>Recycled once, however often the encode is asked for.</strong> An encode the server refuses is
+    /// asked for again by the next look, from the staged file; the recycling was written down before the first
+    /// ask, so the next look recycles nothing — by then the folder may hold what the new encode is writing.
+    /// The double moves nothing, so every old file is still there to be taken a second time. Sabotage: not
+    /// reading the record back recycles all five again.
+    /// </remarks>
+    [Fact]
+    public async Task AnEncodeAskedForAgainRecyclesNothingASecondTime()
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+
+        FakeProvider server = new();
+        RecordingLibraryWriter writer = new(server.Encoder);
+
+        server.Encoder.Refusal = "the server is still starting";
+        await Transfers(Holding(Finished()), grabs, server, writer).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(5, writer.Recycled.Count);
+        Assert.Null(server.Encoder.Job);
+
+        server.Encoder.Refusal = null;
+        await Transfers(Holding(Finished()), grabs, server, writer).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.NotNull(server.Encoder.Job);
+        Assert.Equal(5, writer.Recycled.Count);
+    }
+
+    /// <remarks>
+    /// <strong>An episode the owner put in the library is never recycled.</strong> Its file in the library is
+    /// older than the plugin's delivery, so the delivery did not cause it: nothing is recycled, nothing is
+    /// encoded over it, and why is said. Sabotage: recycling whatever the folder holds takes the owner's file.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeTheOwnerPutInTheLibraryIsNeverRecycled()
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library(written: Delivered.AddDays(-30));
+
+        FakeProvider server = new();
+        RecordingLibraryWriter writer = new(server.Encoder);
+        Transfers transfers = Transfers(Holding(Finished()), grabs, server, writer);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(writer.Recycled);
+        Assert.Null(server.Encoder.Job);
+        Assert.True(File.Exists(Path.Combine(Intake, Staged)), "The new video did not wait in the intake folder.");
+        Assert.Contains("not the plugin's", transfers.FailureOf(NewHash), StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <strong>A failed or unfinished new download leaves the old episode untouched.</strong> Nothing is staged,
+    /// so nothing is recycled and nothing is encoded, and every file of the old episode is where it was.
+    /// Sabotage: recycling when the grab is made rather than once its video is staged takes the old episode
+    /// for a download that never came.
+    /// </remarks>
+    [Theory]
+    [InlineData(TorrentState.Error)]
+    [InlineData(TorrentState.Downloading)]
+    public async Task AFailedOrUnfinishedDownloadLeavesTheOldEpisodeUntouched(TorrentState state)
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+
+        FakeProvider server = new();
+        RecordingLibraryWriter writer = new(server.Encoder);
+
+        TorrentStatus status = Finished() with
+        {
+            State = state,
+            BytesDone = state == TorrentState.Downloading ? 300_000_000 : 900_000_000,
+            Error = state == TorrentState.Error ? "no peer sent its metadata" : null,
+        };
+
+        await Transfers(Holding(status), grabs, server, writer).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(writer.Recycled);
+        Assert.Null(server.Encoder.Job);
+        Assert.True(File.Exists($"{EpisodeFolder}/{Master}"));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>Not granted, or refused: nothing recycled, nothing encoded, the staged file waits, and why is said
+    /// once.</strong> A plugin the owner granted no library to write in gets no writer from the server at all; a
+    /// server that refuses a path throws. Either way the new video stays in the intake folder, the Downloads row
+    /// says why, and the second look tries again without saying it a second time.
+    /// </para>
+    /// <para>
+    /// Sabotage: encoding when recycling was refused encodes over the old episode; saying the reason on every
+    /// look fills the History page with it.
+    /// </para>
+    /// </remarks>
+    [Theory]
+    [InlineData("not granted")]
+    [InlineData("refused")]
+    [InlineData("not writable")]
+    public async Task NotGrantedOrRefusedRecyclesNothingEncodesNothingAndSaysWhyOnce(string server)
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+
+        FakeProvider host = new();
+        RecordingLibraryWriter? writer = server == "not granted"
+            ? null
+            : new(host.Encoder)
+            {
+                Refusal = server == "refused" ? "the path is not inside a library this plugin has been granted write access to" : null,
+                Writable = server != "not writable",
+            };
+
+        Transfers transfers = Transfers(Holding(Finished()), grabs, host, writer);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(writer?.Recycled ?? []);
+        Assert.Null(host.Encoder.Job);
+        Assert.True(File.Exists(Path.Combine(Intake, Staged)), "The new video did not wait in the intake folder.");
+        Assert.True(File.Exists($"{EpisodeFolder}/{Master}"));
+        Assert.Equal(GrabState.Staged, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+
+        string? why = transfers.FailureOf(NewHash);
+
+        Assert.NotNull(why);
+        Assert.Contains("nothing is encoded over the old", why, StringComparison.Ordinal);
+        Assert.Single(host.Journal.Snapshot().History, entry => entry.Stage == ActivityStage.Dispatch && entry.Detail == why);
+        Assert.Single(host.Log.Entries, entry => entry.Level == Microsoft.Extensions.Logging.LogLevel.Warning && entry.Line.Contains(why, StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// <strong>The replacement is done only once the server says its encode finished.</strong> The episode had a
+    /// file all along, so the library having it proves nothing: closed on that, the staged video would be
+    /// deleted before the new encode had read it. Sabotage: closing a replacement as any other grab is closed
+    /// deletes it on the first look where the server has said nothing yet.
+    /// </remarks>
+    [Fact]
+    public async Task AReplacementIsDoneOnlyOnceTheServerSaysItsEncodeFinished()
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+
+        FakeProvider server = new();
+        RecordingLibraryWriter writer = new(server.Encoder);
+        SaysOfTheJob says = new();
+
+        await Transfers(Holding(Finished()), grabs, server, writer, says).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        // The server says nothing of the job yet. For a missing episode the library having it would be the
+        // proof; for this one it is the old file.
+        says.State = null;
+        await Transfers(Holding(Finished()), grabs, server, writer, says).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(GrabState.Dispatched, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+        Assert.True(File.Exists(Path.Combine(Intake, Staged)), "The staged video went before the server said its encode was done.");
+
+        says.State = EncodeJobState.Finished;
+        await Transfers(Holding(Finished()), grabs, server, writer, says).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
+    /// <summary>The server's word about the one job asked for, as a test sets it.</summary>
+    private sealed class SaysOfTheJob : IEncoderSays
+    {
+        public EncodeJobState? State { get; set; }
+
+        public Task<EncodeJob?> AboutAsync(string jobId, CancellationToken ct)
+        {
+            return Task.FromResult(State is EncodeJobState state ? new EncodeJob(state, null) : null);
+        }
+    }
+
+    private string Incomplete => Path.Combine(_root, "incomplete");
+
+    private string Intake => Path.Combine(_root, "intake");
+
+    /// <summary>The library folder, with forward slashes, as the server's folder row holds it.</summary>
+    private string LibraryFolder => Path.Combine(_root, "TV.Shows").Replace('\\', '/');
+
+    private string EpisodeFolder => $"{LibraryFolder}/South.Park.(1997)/South.Park.S29E03";
+
+    private static string Staged => EpisodeName.For("South Park", 1997, S29E03, "1080p", ".mkv");
+
+    /// <summary>
+    /// The library on disk, as the encoder writes it, and the file the server registered for S29E03.
+    /// </summary>
+    /// <param name="written">When the encode's files were written; the delivery's encode by default.</param>
+    private void Library(DateTimeOffset? written = null)
+    {
+        DateTimeOffset at = written ?? Encoded;
+
+        Write($"{EpisodeFolder}/{Master}", at);
+
+        // The blueprint the encoder stamps beside it (MediaBlueprintWriter.FileName), which sorts ahead of it.
+        Write($"{EpisodeFolder}/.nomercy.json", at);
+        Write($"{EpisodeFolder}/video_1920x1080_SDR/video_1920x1080_SDR.m3u8", at);
+        Write($"{EpisodeFolder}/video_1920x1080_SDR/video_1920x1080_SDR-0000.ts", at);
+        Write($"{EpisodeFolder}/subtitles/South.Park.S29E03.Episode.3.NoMercy.eng.full.vtt", at);
+
+        // Already in the recycle area beside it, from something earlier: not moved a second time.
+        Write($"{EpisodeFolder}/.recycled/South.Park.S29E03.Episode.3.NoMercy.m3u8", at);
+
+        // In the folder from before the delivery, so not the delivery's.
+        Write($"{EpisodeFolder}/folder.jpg", Delivered.AddDays(-30));
+
+        // Another episode, and the show's own folder.
+        Write($"{LibraryFolder}/South.Park.(1997)/South.Park.S29E02/South.Park.S29E02.Billionaire.Weenietown.NoMercy.m3u8", at);
+        Write($"{LibraryFolder}/South.Park.(1997)/poster.jpg", at);
+    }
+
+    private static void Write(string path, DateTimeOffset at)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        File.WriteAllText(path, "#EXTM3U");
+        File.SetLastWriteTimeUtc(path, at.UtcDateTime);
+    }
+
+    /// <summary>The ViETNAM delivery, done; and CAKES's grab that replaces it, downloaded into the incomplete folder.</summary>
+    private async Task DeliveredAndReplacing(GrabRepository grabs)
+    {
+        await grabs.RecordAsync(S29E03, "South Park", Vietnam, "TorrentBay", OldHash, $"magnet:?xt=urn:btih:{OldHash}", [S29E03], Delivered, CancellationToken.None, named: false);
+        await grabs.StateAsync(OldHash, GrabState.Done, CancellationToken.None);
+
+        await grabs.RecordAsync(S29E03, "South Park", Cakes, "LimeTorrents", NewHash, $"magnet:?xt=urn:btih:{NewHash}", [S29E03], Replacing, CancellationToken.None, named: true, replaces: OldHash);
+
+        Directory.CreateDirectory(Incomplete);
+
+        await using FileStream video = File.Create(Path.Combine(Incomplete, $"{Cakes}.mkv"));
+
+        video.SetLength(900_000_000);
+    }
+
+    private static TorrentStatus Finished()
+    {
+        return new(
+            NewHash,
+            Cakes,
+            TorrentState.Finished,
+            BytesDone: 900_000_000,
+            BytesTotal: 900_000_000,
+            DownloadRateBytesPerSecond: 0,
+            Peers: 0,
+            Seeds: 0,
+            Ratio: 1.0,
+            Eta: null,
+            Error: null);
+    }
+
+    private static StandingEngine Holding(TorrentStatus status)
+    {
+        return new StandingEngine().Holding(status, new TorrentFile($"{Cakes}.mkv", 900_000_000));
+    }
+
+    private Transfers Transfers(
+        ITorrentEngine engine,
+        GrabRepository grabs,
+        FakeProvider server,
+        RecordingLibraryWriter? writer,
+        IEncoderSays? says = null)
+    {
+        FakeLibraryQuery query = new FakeLibraryQuery()
+            .Library(TelevisionLibrary, "Series", "tv")
+            .Show(2190, "South Park", TelevisionLibrary, year: 1997, folder: "/South.Park.(1997)")
+            .Episode(2190, 29, 3, title: "Episode 3", hasFile: true, id: 7292377)
+
+            // HostFolder + Folder + Filename, as the owner's server answers the row the encoder registered.
+            .File(2190, 29, 3, $"{EpisodeFolder}/South.Park.(1997)/South.Park.S29E03/{Master}");
+
+        return new(
+            engine,
+            grabs,
+            new HostLibrary(query),
+            AppliedToEveryShow.Searched,
+            new Stager(server.Journal, server.Log),
+            EncodeGateway.For(server.Encoder, server.Journal, server.Log),
+            server.Journal,
+            server.Log,
+            TimeProvider.System,
+            says,
+            new Recycler(writer));
+    }
+
+    private async Task<GrabRepository> Grabs()
+    {
+        Store database = new(_root);
+
+        await database.MigrateAsync(CancellationToken.None);
+
+        return new(database);
+    }
+
+    public void Dispose()
+    {
+        TemporaryFolder.Forget(_root);
+    }
+}

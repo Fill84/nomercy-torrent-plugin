@@ -206,6 +206,31 @@ public class ManifestTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>Library write is a hook the manifest has to name.</strong> The
+    /// server hands a plugin <c>IPluginContext.LibraryWriter</c> only when the
+    /// manifest declares <c>libraryWrite</c> and the owner granted it a library
+    /// (<c>PluginContextFactory</c>), and the writer's recycle area is where the
+    /// encode of an episode the plugin delivered from a release no name source
+    /// names goes once its replacement is staged — the owner's rule of
+    /// 15 October 2026. Left out, every replacement would wait in the intake
+    /// folder for ever.
+    /// </para>
+    /// <para>
+    /// It is elevated, so naming it widens the manifest and the server loads the
+    /// update disabled until the owner approves it once more.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheManifestNamesTheLibraryWriteHook()
+    {
+        Assert.Contains(
+            PluginHookCapability.LibraryWrite,
+            Manifest().Capabilities?.Hooks ?? [],
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
     /// The server registers a plugin's cadences and its pages from the declared
     /// hooks, so an implemented interface the manifest does not mention is an
     /// interface the server never calls.

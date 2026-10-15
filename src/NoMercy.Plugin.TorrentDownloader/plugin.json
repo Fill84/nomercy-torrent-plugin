@@ -10,7 +10,8 @@
     "hooks": [
       "scheduledTask",
       "ui",
-      "encoder"
+      "encoder",
+      "libraryWrite"
     ],
     "rest": true,
     "ws": false,

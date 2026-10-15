@@ -3,6 +3,11 @@ using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
+/// <summary>A delivery whose release has not been checked against the name sources, and what it delivered.</summary>
+/// <param name="Grab">The plugin's done grab.</param>
+/// <param name="Covered">The episodes it delivered, as a name source's search is asked about them.</param>
+public sealed record UncheckedDelivery(StoredDownload Grab, IReadOnlyList<TrackedEpisode> Covered);
+
 /// <summary>
 /// Works out, from the library alone, which episodes this plugin should be
 /// keeping an eye on.
@@ -151,6 +156,64 @@ public sealed class MissingRefresh(
         }
 
         return tracked;
+    }
+
+    /// <summary>
+    /// The plugin's deliveries whose release has not been checked against the name sources, each with the
+    /// episodes it delivered.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The owner's rule of 15 October 2026: a delivery recorded before the plugin wrote down where its release
+    /// came from is checked once against the name sources' search. Only the ones that could mark an episode
+    /// are worth a paced question to four sites: the latest delivery of an episode the library holds, of a
+    /// show that is switched on — never an anime, never one the owner added by hand.
+    /// </para>
+    /// <para>
+    /// Each episode it covered is handed over as the search asks about it, with its air date, against which a
+    /// name published long before is another programme's.
+    /// </para>
+    /// </remarks>
+    public async Task<IReadOnlyList<UncheckedDelivery>> UncheckedAsync(CancellationToken ct)
+    {
+        Dictionary<string, UncheckedDelivery> found = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (Show show in await library.GetShowsAsync(ct))
+        {
+            if (show.Kind != LibraryKind.Television || !(await settings.ForAsync(show, ct)).Searched)
+            {
+                continue;
+            }
+
+            IReadOnlyList<Episode> episodes = await library.GetEpisodesAsync(show.Id, ct);
+
+            foreach (Episode episode in episodes.Where(one => one.HasFile))
+            {
+                if (Replacement.LastDelivery(delivered, episode.Key) is not { Named: null, ByHand: false } last
+                    || found.ContainsKey(last.InfoHash))
+                {
+                    continue;
+                }
+
+                TrackedEpisode[] covered =
+                [
+                    .. episodes
+                        .Where(one => last.Covers.Contains(one.Key))
+                        .Select(one => new TrackedEpisode(
+                            one.Key,
+                            show.Title,
+                            show.Year,
+                            show.Kind,
+                            one.Title,
+                            one.AirDate,
+                            EpisodeState.Missing)),
+                ];
+
+                found[last.InfoHash] = new(last, covered);
+            }
+        }
+
+        return [.. found.Values];
     }
 
     /// <remarks>

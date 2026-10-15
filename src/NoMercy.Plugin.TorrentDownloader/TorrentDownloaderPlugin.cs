@@ -1043,7 +1043,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // Where the server says what became of an encode. Without it a
             // failed job and a slow one look the same, and a failed one is
             // waited on until the owner cancels it.
-            says: Says())
+            says: Says(),
+
+            // The server's recycle area, for the encode of an episode the
+            // plugin delivered from a release no name source names (the
+            // owner's rule of 15 October 2026). Null from the server where the
+            // owner granted no library to write in, and then a replacement
+            // waits in the intake folder and says why.
+            recycler: new Recycler(Context.LibraryWriter))
         {
             // The look that comes round while a finished download waits is the one retry of a staging that
             // failed, so the client saying the download is whole again does not start another.
@@ -1307,6 +1314,22 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         if (await ChainAsync(ct) is not (Chain chain, Settings settings))
         {
             return;
+        }
+
+        // A delivery from before 0.8.1 wrote down nothing about where its release came from, so it is checked
+        // once against the name sources' search; one no source names marks its episode, and the list is
+        // derived again so this run already looks for its replacement. Never a reason to skip the search.
+        try
+        {
+            if (await new DeliveredNames(await GrabsAsync(ct), new HostLibrary(Context.Library), await AppliedAsync(ct), Log)
+                    .CheckAsync(chain.Names(settings), ct) > 0)
+            {
+                await RefreshAsync(ct);
+            }
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            Log.LogWarning(wrong, "The deliveries from before this version could not be checked against the name sources: {Reason}", wrong.Message);
         }
 
         IReadOnlyList<TrackedEpisode> tracked = await Tracked(ct);
@@ -1935,7 +1958,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
     private async Task DeriveMissingAsync(CancellationToken ct)
     {
-        MissingRefresh refresh = new(new HostLibrary(Context.Library), await AppliedAsync(ct), TimeProvider.System);
+        // With every delivery the plugin has made: a show's episode delivered from a release no name source
+        // names is tracked to be replaced (the owner's rule of 15 October 2026).
+        MissingRefresh refresh = new(
+            new HostLibrary(Context.Library),
+            await AppliedAsync(ct),
+            TimeProvider.System,
+            await (await GrabsAsync(ct)).EveryAsync(ct));
 
         IReadOnlyList<TrackedEpisode> derived = await refresh.DeriveAsync(ct);
 

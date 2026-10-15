@@ -72,6 +72,42 @@ public sealed class QueueViewTests : IDisposable
         }
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>An episode to be replaced is on the Queue page, under a tab of its own, with what it
+    /// replaces.</strong> It is searched for, so it is in Looking in the order the run asks; it is not
+    /// missing, so the overview does not count it — and the To be replaced tab is where the owner reads why
+    /// an episode the library has is being searched for at all. Every row carries Search now, as every row on
+    /// the page does (<c>docs/specs/pages.md</c> § Queue).
+    /// </para>
+    /// <para>
+    /// Sabotage: leaving it out of the page leaves the owner a search they cannot account for.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void AnEpisodeToBeReplacedIsListedWithTheReleaseItReplaces()
+    {
+        TrackedEpisode southPark = new(new(2190, 29, 3), "South Park", 1997, LibraryKind.Television, "Episode 3", new DateOnly(2026, 10, 15), EpisodeState.Replace)
+        {
+            Replaces = new("7445E4910B7A4D7E1F3C35D5A4A9C2E1B0C0FFEE", "South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM"),
+        };
+
+        TrackedEpisode silo = new(new(41, 3, 6), "Silo", 2023, LibraryKind.Television, null, new DateOnly(2026, 9, 1), EpisodeState.Missing);
+
+        PluginComponent replacing = Rendered.ById(QueueView.Render([southPark, silo], QueueView.ReplacingTableId), QueueView.ReplacingTableId);
+        PluginComponent row = Assert.Single(replacing.Items);
+
+        Assert.Equal("South Park S29E03", row.Props["episode"]);
+        Assert.Equal(
+            "to be replaced: South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM — waiting for a release the sources name",
+            row.Props["why"]);
+        Assert.Equal("Search now", Assert.Single(Assert.IsAssignableFrom<IReadOnlyList<PluginTableAction>>(row.Props["controls"])).Label);
+
+        Assert.Equal(
+            ["Silo S03E06", "South Park S29E03"],
+            Rendered.ById(QueueView.Render([southPark, silo]), QueueView.LookingTableId).Items.Select(one => one.Props["episode"]));
+    }
+
     public void Dispose()
     {
         TemporaryFolder.Forget(_root);

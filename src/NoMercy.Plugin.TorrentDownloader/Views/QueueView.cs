@@ -29,6 +29,9 @@ public static class QueueView
     public const string SearchAction = "queue/search";
     public const string WaitingTableId = "waiting";
 
+    /// <summary>The list of the episodes to be replaced (the owner's rule of 15 October 2026).</summary>
+    public const string ReplacingTableId = "replacing";
+
     /// <param name="tracked">Every episode the plugin tracks.</param>
     /// <param name="tab">The list the path names, or null for the first.</param>
     /// <param name="query">How the client asked for the list shown to be sorted and filtered.</param>
@@ -41,18 +44,28 @@ public static class QueueView
         IReadOnlyList<TrackedEpisode> looking = QueueOrder.Order(tracked);
         TrackedEpisode[] waiting = [.. tracked.Where(episode => episode.State == EpisodeState.NotAired)];
 
+        // Searched for, so in Looking too, in the order the run asks; this tab is where the owner reads why an
+        // episode the library has is being looked for at all. Here rather than on the Activity page, which
+        // holds what a run is doing now and lets it go once the run moves on: an episode waits to be replaced
+        // for as long as no name source names a release of it. Drawn only while there is one, so the page is
+        // the two lists it always was the rest of the time.
+        TrackedEpisode[] replacing = [.. looking.Where(episode => episode.State == EpisodeState.Replace)];
+
+        List<Tab> tabs =
+        [
+            new(LookingTableId, "Looking", looking.Count, TabRoute(LookingTableId), Looking(looking, query)),
+            new(WaitingTableId, "Waiting to air", waiting.Length, TabRoute(WaitingTableId), Waiting(waiting, query)),
+        ];
+
+        if (replacing.Length > 0)
+        {
+            tabs.Add(new(ReplacingTableId, "To be replaced", replacing.Length, TabRoute(ReplacingTableId), Replacing(replacing, query)));
+        }
+
         return new()
         {
             Layout = PluginLayout.Wide,
-            Components =
-            [
-                .. Tabs.Draw(
-                    [
-                        new(LookingTableId, "Looking", looking.Count, TabRoute(LookingTableId), Looking(looking, query)),
-                        new(WaitingTableId, "Waiting to air", waiting.Length, TabRoute(WaitingTableId), Waiting(waiting, query)),
-                    ],
-                    tab),
-            ],
+            Components = [.. Tabs.Draw(tabs, tab)],
         };
     }
 
@@ -153,6 +166,36 @@ public static class QueueView
                 ["episode"] = episode.Key.Number,
             },
             PluginActionTransport.Rest);
+    }
+
+    /// <remarks>
+    /// Each with the release it replaces, in the words the owner's rule of 15 October 2026 uses: the episode
+    /// the plugin delivered from a release no name source names waits here for a release the sources name.
+    /// </remarks>
+    private static IReadOnlyList<PluginComponent> Replacing(IReadOnlyList<TrackedEpisode> episodes, TableQuery? query)
+    {
+        return TableRows.Table(
+            ReplacingTableId,
+            [
+                new() { Key = "episode", Label = "Episode" },
+                new() { Key = "why", Label = "Why" },
+                new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
+            ],
+            episodes,
+            episode => Ui.Row(
+                $"{ReplacingTableId}-{Id(episode)}",
+                new Dictionary<string, object?>
+                {
+                    ["episode"] = Name(episode),
+                    ["why"] = $"to be replaced: {episode.Replaces?.Release} — waiting for a release the sources name",
+                    ["controls"] = new PluginTableAction[] { new() { Label = "Search now", Action = Look(episode) } },
+                }),
+            "Nothing is to be replaced.",
+            query,
+            new Dictionary<string, Func<TrackedEpisode, IComparable?>>
+            {
+                ["episode"] = Slot,
+            });
     }
 
     private static IReadOnlyList<PluginComponent> Waiting(IEnumerable<TrackedEpisode> episodes, TableQuery? query)

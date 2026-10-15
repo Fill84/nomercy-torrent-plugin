@@ -36,7 +36,8 @@ public sealed class Transfers(
     IActivityJournal journal,
     ILogger logger,
     TimeProvider? time = null,
-    IEncoderSays? says = null)
+    IEncoderSays? says = null,
+    Recycler? recycler = null)
 {
     /// <summary>What the server last said went wrong with a grab's encode, or null.</summary>
     /// <remarks>
@@ -759,7 +760,7 @@ public sealed class Transfers(
 
             foreach (StagedResult one in moved.Where(one => one.Moved))
             {
-                await DispatchAsync(finished.InfoHash, one.File.Episode, one.Path!, thisTick, ct);
+                await DispatchAsync(finished, one.File.Episode, one.Path!, thisTick, ct);
             }
 
             return staged;
@@ -802,12 +803,14 @@ public sealed class Transfers(
     /// a library: it reads the one the show is already in.
     /// </remarks>
     private async Task DispatchAsync(
-        string infoHash,
+        StoredDownload grab,
         EpisodeKey episode,
         string staged,
         LibraryThisTick thisTick,
         CancellationToken ct)
     {
+        string infoHash = grab.InfoHash;
+
         Show? show = (await thisTick.GetShowsAsync(ct))
             .FirstOrDefault(candidate => candidate.Id == episode.ShowId);
 
@@ -839,6 +842,14 @@ public sealed class Transfers(
             return;
         }
 
+        // A replacement is encoded only once the old episode's encode is out of the way: the server skips an
+        // encode whose outputs exist (media-server #38) and IPluginEncoder has no overwrite, so asking first
+        // would leave the old episode in place and close the grab on it.
+        if (!await OldEpisodeRecycledAsync(grab, episode, show, thisTick, ct))
+        {
+            return;
+        }
+
         EncodeAsk asked = await dispatch.DispatchAsync(staged, row, show, ct);
 
         if (!asked.Taken)
@@ -866,6 +877,126 @@ public sealed class Transfers(
             ct);
 
         await grabs.StateAsync(infoHash, GrabState.Dispatched, ct);
+    }
+
+    /// <summary>What was said about each replacement whose old episode could not be recycled, so it is said once.</summary>
+    private readonly SaidBefore _notRecycled = new();
+
+    /// <summary>
+    /// For a grab that replaces one of the plugin's deliveries: whether the encoded files that delivery caused
+    /// are in the server's recycle area, putting them there first. True straight away for any other grab.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <c>docs/specs/run.md</c> § When a download finishes — the owner's rule of 15 October 2026. Only once the
+    /// new release has downloaded whole and its video is staged, which is the only way here; only the encode
+    /// the plugin's own delivery caused, which is the episode's folder (<see cref="Replacement.EncodedOf"/>)
+    /// and in it only what was written between that delivery's grab and this one's; and recycled, never deleted.
+    /// </para>
+    /// <para>
+    /// <strong>Written down once it is done, before the encode is asked for.</strong> A later look finds it
+    /// recorded and recycles nothing: by then the folder holds what the new encode is writing.
+    /// </para>
+    /// <para>
+    /// <strong>A refusal leaves everything where it is.</strong> No grant, a library the plugin may not write
+    /// in, a folder that cannot be found: the new video waits in the intake folder, nothing is encoded over the
+    /// old, and why is said once — on the Downloads row, in the log, on the Activity and History pages — and
+    /// tried again by every look after.
+    /// </para>
+    /// </remarks>
+    private async Task<bool> OldEpisodeRecycledAsync(
+        StoredDownload grab,
+        EpisodeKey episode,
+        Show show,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        if (grab.Replaces is not string replaced)
+        {
+            return true;
+        }
+
+        IReadOnlyList<StoredDownload> every = await grabs.EveryAsync(ct);
+
+        // Read again rather than off the pass's own copy: an earlier look may have recycled it since.
+        if (every.FirstOrDefault(one => string.Equals(one.InfoHash, grab.InfoHash, StringComparison.OrdinalIgnoreCase))
+            is { RecycledAt: not null })
+        {
+            return true;
+        }
+
+        StoredDownload? old = every.FirstOrDefault(one =>
+            string.Equals(one.InfoHash, replaced, StringComparison.OrdinalIgnoreCase) && one.State == GrabState.Done);
+
+        string? why;
+
+        if (old is null)
+        {
+            // The plugin's own record is the proof of what its delivery caused, and without it nothing is.
+            why = "that delivery is not among the plugin's finished grabs, so nothing of it is the plugin's to recycle";
+        }
+        else if (recycler is null)
+        {
+            why = "nothing here can reach the server's recycle area";
+        }
+        else
+        {
+            EncodedLookup found = Replacement.EncodedOf(episode, show.Folder, await thisTick.GetFilesAsync(show.Id, ct));
+
+            why = found.Found is EncodedEpisode encoded
+                ? await recycler.RecycleAsync(encoded, old.GrabbedAt, grab.GrabbedAt, ct)
+                : found.Why;
+        }
+
+        string replacing = old?.ReleaseTitle ?? replaced;
+
+        if (why is null)
+        {
+            await grabs.RecycledAsync(grab.InfoHash, (time ?? TimeProvider.System).GetUtcNow(), ct);
+
+            _notRecycled.Forget(grab.InfoHash);
+
+            lock (_failures)
+            {
+                _failures.Remove(grab.InfoHash);
+            }
+
+            logger.LogInformation(
+                "{Release} replaces {Old}: the encoded files of {Old} went to the server's recycle area, so {Episode} is encoded afresh.",
+                grab.ReleaseTitle,
+                replacing,
+                replacing,
+                episode);
+            journal.Finished(
+                ActivityStage.Dispatch,
+                grab.ReleaseTitle,
+                $"replaces {replacing}, whose encoded files went to the server's recycle area");
+
+            return true;
+        }
+
+        string said =
+            $"it replaces {replacing}, whose encoded files were not put in the server's recycle area ({why}); "
+            + "the new video waits in the intake folder and nothing is encoded over the old";
+
+        // On the row the owner looks at, for as long as it waits.
+        lock (_failures)
+        {
+            _failures[grab.InfoHash] = said;
+        }
+
+        if (!_notRecycled.IsNews(grab.InfoHash, said))
+        {
+            logger.LogDebug("{Release}: {Reason}", grab.ReleaseTitle, said);
+
+            return false;
+        }
+
+        logger.LogWarning("{Release}: {Reason}", grab.ReleaseTitle, said);
+        journal.Failed(ActivityStage.Dispatch, grab.ReleaseTitle, said);
+        await grabs.NotedAsync(grab.ReleaseTitle, said, (time ?? TimeProvider.System).GetUtcNow(), ct);
+
+        return false;
     }
 
     /// <summary>
@@ -1011,7 +1142,7 @@ public sealed class Transfers(
                     continue;
                 }
 
-                await DispatchAsync(staged.InfoHash, episode, path, thisTick, ct);
+                await DispatchAsync(staged, episode, path, thisTick, ct);
             }
         }
     }
@@ -1186,6 +1317,17 @@ public sealed class Transfers(
             // against the wrong row, and to keep from deleting a download a job
             // is still reading.
             EncodeJob? standing = await StandingAsync(sent, ct);
+
+            // A replacement's episode had a file before its encode began — the
+            // one it replaces, whose row the library keeps — so the library
+            // having it proves nothing. Only the server saying its encode
+            // finished does, and until it says so the staged video is kept.
+            if (sent.Replaces is not null && standing is not { State: EncodeJobState.Finished })
+            {
+                await StillWaitingAsync(sent, thisTick, ct);
+
+                continue;
+            }
 
             // Nothing said is asked too. The server says nothing at all about an
             // encode it skips because every output is already there — South Park

@@ -364,6 +364,16 @@ public sealed class Chain : IAsyncDisposable
             written);
     }
 
+    /// <summary>The four name sources, as a run asks them.</summary>
+    /// <remarks>
+    /// For checking a delivery from before the plugin wrote down where a release came from: the same search a
+    /// run asks, so the check and the run cannot disagree about what a source names.
+    /// </remarks>
+    public IReleaseNames Names(Settings settings)
+    {
+        return new NameSources(Catalogue(settings), Fetch(), _readers, _journal, TimeProvider.System, _ledger);
+    }
+
     /// <summary>Who is serving a release, asked of this catalogue's indexers.</summary>
     /// <remarks>
     /// The fetch is also what posts TorrentBay's signed request: in the session its listing was read in.
