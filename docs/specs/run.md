@@ -11,7 +11,19 @@
 ## The order of a run
 
 - A run first works out the episodes being searched for: the aired episodes without a video file of
-  the shows and anime that are switched on with a quality, their own or their library's.
+  the shows and anime that are switched on with a quality, their own or their library's, and the
+  episodes to be replaced.
+- A grab records whether its release is a name a name source gave. An episode of a show whose latest
+  delivery by the plugin is a release no name source gave is to be replaced. An anime's episode is never
+  to be replaced, and neither is an episode the owner put in the library or a torrent the owner added by
+  hand.
+- A delivery recorded without that is checked once, before the run searches, against the search of
+  every name source for its episode, the same search the run asks; a release none of them names makes
+  its episode to be replaced. A delivery a name source did not answer about is checked again by the next
+  run.
+- An episode to be replaced is searched for by release name like an episode without a file, and only
+  by release name. It is not missing and is not counted as missing, and it is never answered for by a
+  season pack.
 - The episodes are worked through in order of show, season and episode.
 - A run reads the feeds of all name sources at the same time before it works on any episode.
 - A feed release name is taken for an episode when its show and its season and episode number are
@@ -78,6 +90,21 @@
 - An encode is asked for each staged video. The grab is done once the library has the episode, or holds
   a file named for the episode under another episode and the server has not said the encode is still
   running. The server says nothing about an encode it skips because every output already exists.
+- For an episode to be replaced, once its new release has downloaded whole and its video is staged,
+  the files of the old episode's encode go to the server's recycle area first, and then the encode is
+  asked for. Those files are the episode's own folder in the library — the folder the library's file for
+  the episode sits in, named for the episode, inside the show's folder — and in it only the files written
+  between the old delivery's grab and the new one's. The file the library names goes first. The rest of
+  the library is never touched: not the show's folder, not another episode's, not a file in a recycle
+  area, not a file from before the old delivery.
+- Where the owner has granted the plugin no library to write in, the server does not let it write in
+  the episode's library, or the server refuses, nothing is recycled and nothing is encoded: the new video
+  waits in the intake folder, and the Downloads page, the log and the Activity and History pages say why,
+  once. Every later look tries again.
+- The old episode's files are recycled once. A later look that asks for the encode again recycles
+  nothing.
+- A grab for an episode to be replaced is done once the server says its encode finished, never on the
+  library having the episode: the library had it all along.
 - The plugin looks at what the download client holds when the client says a download finished, at the
   start of every run, once a torrent the client was handed has its grab written down, and every minute
   while a finished download waits to be staged or a grab waits on an encode. A plugin with nothing waiting looks at nothing between runs.
@@ -115,12 +142,17 @@
   does not re-attach its endpoints itself: that reaches the server's own registrar outside the SDK, which
   FiLL/nomercy-torrent-plugin#1 rules out. The pages themselves are drawn by the updated copy from the
   first fetch.
-- An update whose manifest asks for more than the owner approved before — the encoder, from 0.7.0 — loads
-  disabled until the owner approves it once more on the plugin's page. The server asks; the plugin cannot.
+- An update whose manifest asks for more than the owner approved before — the encoder, from 0.7.0, and
+  library write, from 0.8.1 — loads disabled until the owner approves it once more on the plugin's page.
+  The server asks; the plugin cannot. Library write is granted per library, by the owner.
 
 ## What the plugin deletes
 
 - The plugin deletes only files and folders it created itself.
+- In the library the plugin deletes nothing. The encoded files of an episode it delivered from a release
+  no name source names go to the server's recycle area, where the owner can get them back, and only once
+  the release that replaces it is staged (§ When a download finishes). Nothing else in the library is
+  moved or recycled.
 - In the intake folder that is a file the plugin staged, and only once nothing waits on it and no
   encode is reading it. A folder in the intake folder is never deleted, and neither is a file the
   plugin did not stage, whatever it is called.

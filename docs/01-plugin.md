@@ -128,6 +128,7 @@ EF context, and no reference to the server's assemblies.
 | `Logger` | the server's log |
 | `Encoder` | asking for an encode; handed over only because `plugin.json` names the `encoder` hook |
 | `Jobs` | what became of an encode, by the job id `EncodeAsync` handed back |
+| `LibraryWriter` | putting the encode of an episode the plugin delivered from a release no name source names in the server's recycle area, once its replacement is staged; handed over only because `plugin.json` names the `libraryWrite` hook and the owner granted a library — see `docs/09-host-contract.md` |
 | `Server` | `GrantedPaths`, the places a folder may be chosen from |
 | `HttpClient` | outbound requests |
 
@@ -167,8 +168,10 @@ and what `tools/` read.
   "capabilities": {
     // "encoder" since 0.7.0: on contract 12 the encoder is handed over only to a manifest that names
     // it, and naming a hook the owner's consent did not widens the manifest — the server then loads
-    // the update disabled until they approve it once more.
-    "hooks": ["scheduledTask", "ui", "encoder"],
+    // the update disabled until they approve it once more. "libraryWrite" since 0.8.1, for the same
+    // reason: the library writer is handed over only to a manifest that names it, and only for the
+    // libraries the owner grants.
+    "hooks": ["scheduledTask", "ui", "encoder", "libraryWrite"],
     "rest": true,
     "ws": false,
     "network": { "hosts": [ /* every host in sources.json */ ] },

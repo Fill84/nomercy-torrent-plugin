@@ -49,7 +49,7 @@ HttpClient            HttpClient
 IPluginConfiguration  Configuration
 IPluginSecretStore    Secrets
 IPluginLibraryQuery   Library
-IPluginLibraryWriter  LibraryWriter        (not used — the plugin never writes to the library)
+IPluginLibraryWriter? LibraryWriter        (null unless the manifest names libraryWrite and the owner granted a library; RecycleAsync only)
 IPluginEncoder?       Encoder              (null unless the manifest names the encoder hook)
 IPluginJobs?          Jobs                 (handed over with the encoder; what became of a job)
 IPluginServerInfo     Server               (GrantedPaths, for the folder refusal; throws where a host wired none)
@@ -118,6 +118,60 @@ are numbered 1 … N with no gap, which the store refuses to run otherwise. A fi
 "restart the server to finish the update". A database the host opened anywhere but the carried-over file
 is refused before anything is migrated. A downgrade to 0.8.1 after the carry-over finds no `.db` and starts
 empty; the `.sqlite` is still there for the next upgrade.
+
+## Recycling an episode the plugin delivered
+
+The owner's rule of 15 October 2026: an episode the plugin delivered from a release no name source names
+is replaced on its own, and the old one goes to the server's recycle area (`docs/specs/run.md` § When a
+download finishes). Read on the server's `dev` branch that day:
+
+```
+IPluginLibraryWriter                        (NoMercy.PluginSdk.Abstractions, every 12.x)
+    Task<IReadOnlyList<PluginLibrary>> GetWritableLibrariesAsync(CancellationToken)
+    Task RecycleAsync(string path, CancellationToken)          the one the plugin calls
+    Task DeleteAsync(string path, CancellationToken)           never called
+    Task MoveAsync(string from, string to, CancellationToken)  never called
+    Task<bool> CanWriteAsync(string path, CancellationToken)   asked once before anything moves
+
+PluginLibraryAccessDeniedException(path, reason)
+```
+
+- **The capability is the `libraryWrite` hook** (`PluginHookCapability.LibraryWrite`); the grant behind
+  it is `library.write` per library id (`PluginGrantKind.LibraryWrite`). `PluginContextFactory` hands a
+  writer over only when the manifest names the hook and the owner granted at least one library; otherwise
+  `Context.LibraryWriter` is null. It is elevated, so naming it widens the manifest and the update loads
+  disabled until the owner approves it once more. The writer is made when the plugin's context is, so a
+  grant given later reaches the plugin when the server next builds its context.
+- **A file, never a folder.** `PluginLibraryWriter.RecycleAsync` moves through `IStorage.MoveAsync`,
+  which on a local disk is `File.Move` — a folder throws. The file lands in a `.recycled` folder beside
+  it (`RecyclePathFor`: `{its folder}/.recycled/{its name}`), not at the library root as the doc comment
+  says, and `File.Move` will not overwrite: a second file of the same name recycled into the same folder
+  is refused.
+- **Fully qualified, under a granted library folder's own path.** `IsUnderRoot` compares the path with
+  `Folder.Path` (on the owner's server `Y:/nomercy/media/TV.Shows/TV.Shows`); a path relative to it is
+  refused. In process a refusal is `PluginLibraryAccessDeniedException`; out of process it is a
+  `PluginRefusedException`, and the remote writer is never null — an ungranted one is refused by the
+  broker.
+- **What `VideoEncodeJob` writes for an episode.** `GetFileMetaData` names the folder
+  `{Tv.CreateFolderName()}{Episode.CreateFolderName()}` — `South.Park.(1997)/South.Park.S29E03` — under the
+  library folder, and the files `{Show}.SxxEyy.{Title}.NoMercy`: the master playlist at the folder's root,
+  `video_*`, `audio_*` and `subtitles/` beneath it, the sprite, the chapters and the `.nomercy.json`
+  blueprint. The master playlist is the file registered in `VideoFiles`. The scanner skips any name
+  beginning with a dot (`FilesystemRepository`), so nothing in `.recycled` is registered again, and the
+  encoder's reconciler reads a master playlist that is not at the folder's root as missing and encodes in
+  full (`EncodeReconciler.HasValidRootPlaylist`).
+- **What the library says the file is.** `GetShowFilesAsync` answers `HostFolder + Folder + Filename`.
+  The encoder's own rows carry an absolute `HostFolder` that already ends in the show's and the episode's
+  folders, so the path names them twice:
+  `Y:/nomercy/media/TV.Shows/TV.Shows/South.Park.(1997)/South.Park.S29E03/South.Park.(1997)/South.Park.S29E03/South.Park.S29E03.Episode.3.NoMercy.m3u8`.
+  Older rows carry a `HostFolder` relative to the library folder, which names no place on a disk. Read
+  from the owner's `media.db` on 15 October 2026.
+
+So the plugin recycles exactly this (`Replacement.EncodedOf`, `Hosting/Recycler`): the folder the
+library's file for the episode sits in — the doubled pair taken once, fully qualified, named for the
+episode, directly inside the show's folder, and one such folder only — and in it every file written
+between the old delivery's grab and the new one's, not one already in a `.recycled` folder, the master
+playlist first. Nothing is recycled when the library's file is older than the old delivery.
 
 ## Live updates
 

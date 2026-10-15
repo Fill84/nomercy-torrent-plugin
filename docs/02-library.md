@@ -110,10 +110,16 @@ and skipping it is the opposite of what backfill means.
 
 ### What `GetShowFilesAsync` is for
 
-It gives the path and quality of every video file a show already has. Used for one thing: an episode
-that is present but at a lower quality than its show's quality is **not** re-downloaded.
-The call is available and the upgrade decision is deliberately out of scope — noted here so nobody
-wonders whether it was forgotten.
+It gives the path and quality of every video file a show already has. An episode that is present but
+at a lower quality than its show's quality is **not** re-downloaded: the upgrade decision is
+deliberately out of scope — noted here so nobody wonders whether it was forgotten.
+
+The paths are read for two things. A file named for an episode is that episode, whichever row the
+server registered it against (`Core/Pipeline/Landed.cs`). And an episode the plugin delivered from a
+release no name source names has its encode found by the folder its file sits in, which goes to the
+server's recycle area once the release that replaces it is staged (`docs/09-host-contract.md` § Recycling
+an episode the plugin delivered). The path the server answers is `HostFolder + Folder + Filename`, and on
+the encoder's own rows it names the show's and the episode's folders twice.
 
 ## Anime numbering
 
