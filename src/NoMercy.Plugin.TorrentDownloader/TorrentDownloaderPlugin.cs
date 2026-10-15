@@ -2183,7 +2183,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     resume: new ResumeKeeper(
                         settings.IncompleteFolder,
                         TimeSpan.FromSeconds(settings.Client.ResumeIntervalSeconds),
-                        TimeProvider.System));
+                        TimeProvider.System),
+
+                    // The host makes new files sparse; the plugin ships no
+                    // native call for it (media-server #476, #609).
+                    markSparse: HostSparse.Through(() => Context.Storage));
 
                 _engine.Start();
 

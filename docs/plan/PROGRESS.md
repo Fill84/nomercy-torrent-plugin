@@ -7,7 +7,7 @@ Read this first, update it last. Nothing else decides what happens next.
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
 by us.** `SPRINTS.md` § S16. Current: **nothing the plugin can do alone.** `S16-06` waits on
-media-server #601 (the browser), `Sparse.DeviceIoControl` on #609 (#602 shipped the call on a scope only). **The owner's word, 15 October 2026:
+media-server #601 (the browser, PR #610 open); `Sparse.DeviceIoControl` is gone (`S16-08`, #609). **The owner's word, 15 October 2026:
 no version until #601 ships**, so `S16-07` (the carry-over seen on beast-unit's own database, then a
 version) comes after `S16-06` and #476 closes in one release.
 
@@ -698,12 +698,6 @@ looking and goes stale on its own when the last page closes.
   host refuses `IPluginContext.Browser`, and the interface lacks reload, content type, readiness, the
   in-page fetch, the user agent and availability. Until it ships the solver stays on PuppeteerSharp and
   the marketplace scan keeps refusing the `Solver/` findings of #476.
-- **`Sparse.DeviceIoControl` waits on media-server #609** (filed 15 October 2026). #602 shipped
-  `IPluginStorageScope.MarkSparseAsync` (ABI 12.3, `f9cdeedbe` on `dev`), but only on a scope, and the
-  files it is for are in the incomplete folder, a real local path that the SDK's own `IPluginFolderCatalog`
-  says cannot be a scope; a granted folder carries no local path, and `Storage.Private` is metered against
-  the plugin's quota. #609 asks for the same call on a local path. Dropping the flag costs every Windows
-  download (see **Decisions**, `S16-02`).
 
 **Nothing is blocked on a deploy any more.** That paragraph said the first install went over with
 every hash matching and the plugin still could not load. The cause was found and fixed on 21 August
@@ -894,12 +888,19 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S16-03` Migrations and sources read without reflection
 - [x] `S16-04` The database is the SDK's, and every row comes along
 - [x] `S16-05` The browser the solver needs, asked of the media server — #601
+- [x] `S16-08` Files made sparse by the host (media-server #609)
 - [ ] `S16-06` The solver on `IPluginBrowser` — waits on media-server #601
 - [ ] `S16-07` Seen on beast-unit, then a version
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S16-08` (16 October 2026):** new download files are made sparse by the host
+  (`IPluginStorage.MarkSparseAsync`, media-server #609); the BitTorrent assembly ships no native call and
+  has no scan finding left (57 remain, every one the solver's, #601). `plugin.json` asks for ABI 12.4, so
+  the release waits for a server on 12.4 or later — beast-unit runs 0.1.575 today. The contract in
+  `_nupkgs` is 12.5 from `dev` (`scripts/fetch-abstractions.sh dev`).
 
 - **`S16-04` (15 October 2026):** the database is the host's (`Context.Storage.OpenDatabaseAsync`); an
   owner's `torrent-downloader.db` is carried to `torrent-downloader.sqlite` with its log and its count.

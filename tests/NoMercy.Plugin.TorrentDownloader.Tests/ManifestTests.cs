@@ -160,6 +160,30 @@ public class ManifestTests
 
     /// <remarks>
     /// <para>
+    /// <strong>Never lower than the newest member the plugin calls.</strong> The
+    /// SDK's assemblies are the host's own copies, so a plugin built against a
+    /// newer contract than the server runs loads, and then dies with a
+    /// <c>MissingMethodException</c> the first time it reaches for the member the
+    /// server does not have. Declared, the server refuses it at load instead,
+    /// and says why.
+    /// </para>
+    /// <para>
+    /// 12.4 is <c>IPluginStorage.MarkSparseAsync(localPath)</c> (media-server
+    /// #609), which every new download calls.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheManifestAsksForEveryContractMemberThePluginCalls()
+    {
+        Version declared = Version.Parse(Manifest().TargetAbi!);
+
+        Assert.True(
+            declared >= new Version(12, 4),
+            $"targetAbi '{declared}' lets a server without IPluginStorage.MarkSparseAsync(localPath) (12.4) load the plugin.");
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>The encoder is a hook the manifest has to name.</strong> On
     /// contract 12 the server hands a plugin <c>IPluginContext.Encoder</c> — and
     /// with it Jobs, which says what became of an encode — only when the

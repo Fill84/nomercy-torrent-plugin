@@ -308,14 +308,15 @@ public class PieceTests : IDisposable
     /// Files are made at their full size and sparse. A torrent of two hundred
     /// megabytes should not spend two hundred megabytes of writing before the
     /// first block arrives, and a download that is cancelled should not have
-    /// filled the disk in the meantime.
+    /// filled the disk in the meantime. The host marks them (media-server #609):
+    /// the plugin ships no native call of its own (#476).
     /// </remarks>
     [Fact]
     public void FilesAreCreatedSparseAtTheirFullSize()
     {
         TorrentMetadata torrent = Torrent();
 
-        using TorrentDisk disk = new(torrent, _folder);
+        using TorrentDisk disk = new(torrent, _folder, NtfsSparse.Mark);
         disk.Create();
 
         foreach (TorrentFileEntry file in torrent.Files)
@@ -333,6 +334,57 @@ public class PieceTests : IDisposable
                     made.Attributes.HasFlag(FileAttributes.SparseFile),
                     $"{file.Path} is not sparse.");
             }
+        }
+    }
+
+    /// <remarks>
+    /// Marked while it is still empty. On NTFS the length reserves the whole
+    /// file the moment it is set, so a mark that comes after it has already lost
+    /// what it was for — the host's call says to mark before the length.
+    /// </remarks>
+    [Fact]
+    public void EachFileIsMarkedBeforeItIsGivenItsLength()
+    {
+        TorrentMetadata torrent = Torrent();
+        Dictionary<string, long> lengthWhenMarked = [];
+
+        using TorrentDisk disk = new(
+            torrent,
+            _folder,
+            path =>
+            {
+                lengthWhenMarked[path] = new FileInfo(path).Length;
+
+                return true;
+            });
+        disk.Create();
+
+        Assert.Equal(torrent.Files.Count, lengthWhenMarked.Count);
+
+        foreach (TorrentFileEntry file in torrent.Files)
+        {
+            Assert.Equal(0, lengthWhenMarked[disk.PathOf(file)]);
+            Assert.Equal(file.Length, new FileInfo(disk.PathOf(file)).Length);
+        }
+    }
+
+    /// <remarks>
+    /// Best effort, as the host's call is: a file system that refuses the mark
+    /// (FAT32 on a USB disk), or a host that has none, still gets the download,
+    /// at full size. Failing the torrent over it would be worse than the
+    /// reservation.
+    /// </remarks>
+    [Fact]
+    public void AFileThatCannotBeMarkedIsStillMadeAtItsFullSize()
+    {
+        TorrentMetadata torrent = Torrent();
+
+        using TorrentDisk disk = new(torrent, _folder, _ => false);
+        disk.Create();
+
+        foreach (TorrentFileEntry file in torrent.Files)
+        {
+            Assert.Equal(file.Length, new FileInfo(disk.PathOf(file)).Length);
         }
     }
 

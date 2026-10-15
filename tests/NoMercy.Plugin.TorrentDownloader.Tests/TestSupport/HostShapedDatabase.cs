@@ -207,6 +207,15 @@ public sealed class HostShapedStorage(string folder) : IPluginStorage
         return await HostShapedDatabase.OpenAsync(Path.Combine(folder, $"{name}.sqlite"), ct);
     }
 
+    /// <summary>
+    /// As the host does it (media-server #609, ABI 12.4): a full local path to a
+    /// file that exists, Windows only, best effort; the writer may hold it open.
+    /// </summary>
+    public Task<bool> MarkSparseAsync(string localPath, CancellationToken ct = default)
+    {
+        return Task.FromResult(Path.IsPathFullyQualified(localPath) && NtfsSparse.Mark(localPath));
+    }
+
     private static NotSupportedException NotUsed(string member)
     {
         return new NotSupportedException($"This plugin does not use IPluginStorage.{member}.");

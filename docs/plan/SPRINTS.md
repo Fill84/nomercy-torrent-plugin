@@ -3709,6 +3709,23 @@ when it is not. Also asked: `OpenDatabaseAsync` out of process.
 
 **As done** (15 October 2026): media-server #601; #476 carries the plan in a comment.
 
+## S16-08 · Files made sparse by the host
+
+**Read first:** `S16-02`, `IPluginStorage.MarkSparseAsync(localPath)` on media-server `dev` (#609, ABI
+12.4), `Pieces/TorrentDisk.cs`, `Hosting/BittorrentEngine.cs`.
+
+**As done** (16 October 2026): `TorrentDisk` takes a `Func<string, bool>` and calls it on each new file
+before its length is set; `TorrentRun` and `BittorrentEngine` hand it down; the shell's `HostSparse` makes
+it from `Context.Storage.MarkSparseAsync` and answers false where the host refuses. `Sparse` and its
+`DeviceIoControl` are gone, so the BitTorrent assembly has no finding left. `plugin.json` asks for 12.4,
+because the SDK assembly is the host's: an older server would load the plugin and throw
+`MissingMethodException` at the first download. Tests: `PieceTests` (sparse through a marker, marked
+while still empty — red with the mark after the length —, full size when it cannot be marked),
+`HostSparseTests`, `ClientAcceptanceTests` (a real download's files are sparse, red when `TorrentRun` drops
+the marker), `ManifestTests.TheManifestAsksForEveryContractMemberThePluginCalls` (red at 12.0). The one
+plugin line that hands `HostSparse` to the engine has no test of its own: no test drives a whole plugin
+download (the same gap as **Known** item 3 under `S14`). The contract is packed at 12.5 from `dev`.
+
 ## S16-06 · The solver on `IPluginBrowser`
 
 **Waits on** the S16-05 issue shipping in a server release.

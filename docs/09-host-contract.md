@@ -53,7 +53,7 @@ IPluginLibraryWriter  LibraryWriter        (not used — the plugin never writes
 IPluginEncoder?       Encoder              (null unless the manifest names the encoder hook)
 IPluginJobs?          Jobs                 (handed over with the encoder; what became of a job)
 IPluginServerInfo     Server               (GrantedPaths, for the folder refusal; throws where a host wired none)
-IPluginStorage        Storage              (OpenDatabaseAsync only, for the plugin's database; § The database)
+IPluginStorage        Storage              (OpenDatabaseAsync, § The database; MarkSparseAsync(localPath), 12.4, for new download files)
 IPluginGrants         Grants
 IPluginHubContext     Hub
 IPluginEvents         Events               (plugin-to-plugin messages only; not used)

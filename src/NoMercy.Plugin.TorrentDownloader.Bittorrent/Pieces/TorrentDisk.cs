@@ -1,6 +1,3 @@
-using System.Runtime.InteropServices;
-using System.Runtime.Versioning;
-
 namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 
 /// <summary>
@@ -18,8 +15,17 @@ namespace NoMercy.Plugin.TorrentDownloader.Bittorrent;
 /// does not spend six gigabytes of writing before the first block arrives, and
 /// so the disk is not filled by a download that is later cancelled.
 /// </para>
+/// <para>
+/// <paramref name="markSparse"/> is what makes a file sparse, and the media
+/// server's host is what does it (<c>IPluginStorage.MarkSparseAsync</c>,
+/// media-server #609). Windows has no managed way to set the flag, and the
+/// native call this assembly used to make is one the marketplace refuses
+/// (#476). Every other file system it runs on is sparse by default. Measured on
+/// NTFS without it: a 4 GiB download reserved all of it at once, took about
+/// twice as long and stalled single writes for up to half a minute (S16-02).
+/// </para>
 /// </remarks>
-public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDisposable
+public sealed class TorrentDisk(TorrentMetadata torrent, string folder, Func<string, bool>? markSparse = null) : IDisposable
 {
     private readonly Dictionary<string, FileStream> _open = new(StringComparer.OrdinalIgnoreCase);
     private readonly Lock _lock = new();
@@ -60,7 +66,13 @@ public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDispo
 
             using FileStream stream = new(path, FileMode.OpenOrCreate, FileAccess.Write, FileShare.ReadWrite);
 
-            MarkSparse(stream);
+            // Before the length, never after it: NTFS reserves the whole file
+            // the moment the length is set, so a mark that comes later has
+            // already lost what it was for. Its answer is not looked at — a file
+            // system that refuses (FAT32 on a USB disk) still holds the
+            // download, and failing the torrent over it would be worse than the
+            // reservation.
+            _ = markSparse?.Invoke(path);
 
             stream.SetLength(file.Length);
         }
@@ -168,60 +180,4 @@ public sealed class TorrentDisk(TorrentMetadata torrent, string folder) : IDispo
             return stream;
         }
     }
-
-    /// <summary>
-    /// Asks the file system not to reserve the bytes until they are written.
-    /// </summary>
-    /// <remarks>
-    /// NTFS reserves the whole length when it is set, so a six-gigabyte torrent
-    /// costs six gigabytes the moment it starts — before a single peer has
-    /// answered. Every other file system this runs on is sparse by default, so
-    /// there is nothing to ask.
-    /// </remarks>
-    private static void MarkSparse(FileStream stream)
-    {
-        if (OperatingSystem.IsWindows())
-        {
-            Sparse.Mark(stream);
-        }
-    }
-}
-
-/// <summary>Marking a file sparse on Windows, which has no managed way to do it.</summary>
-[SupportedOSPlatform("windows")]
-internal static class Sparse
-{
-    private const int FsctlSetSparse = 0x000900C4;
-
-    public static void Mark(FileStream stream)
-    {
-        // Best effort. A file system that refuses — FAT32 on a USB disk, say —
-        // still holds the download; it merely reserves the space up front, and
-        // failing the torrent over it would be worse than the reservation.
-        _ = DeviceIoControl(
-            stream.SafeFileHandle,
-            FsctlSetSparse,
-            nint.Zero,
-            0,
-            nint.Zero,
-            0,
-            out _,
-            nint.Zero);
-    }
-
-    // DllImport rather than LibraryImport: the generated marshalling code is
-    // unsafe, and this assembly compiles without unsafe blocks — which is worth
-    // more than the microseconds the generator would save on a call made once
-    // per file.
-    [DllImport("kernel32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DeviceIoControl(
-        Microsoft.Win32.SafeHandles.SafeFileHandle device,
-        int code,
-        nint input,
-        int inputLength,
-        nint output,
-        int outputLength,
-        out int returned,
-        nint overlapped);
 }

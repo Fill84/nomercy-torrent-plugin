@@ -1,7 +1,6 @@
 # What the marketplace scan still refuses in the plugin folder (media-server #476).
 # One finding per line, sorted. TheMarketplaceScanTests fails when this differs from the build.
 Microsoft.IO.RecyclableMemoryStream.dll: references banned type System.AppDomain
-NoMercy.Plugin.TorrentDownloader.Bittorrent.dll: P/Invoke or native method Sparse.DeviceIoControl
 NoMercy.Plugin.TorrentDownloader.dll: P/Invoke or native method DiesWithTheServer.AssignProcessToJobObject
 NoMercy.Plugin.TorrentDownloader.dll: P/Invoke or native method DiesWithTheServer.CloseHandle
 NoMercy.Plugin.TorrentDownloader.dll: P/Invoke or native method DiesWithTheServer.CreateJobObject

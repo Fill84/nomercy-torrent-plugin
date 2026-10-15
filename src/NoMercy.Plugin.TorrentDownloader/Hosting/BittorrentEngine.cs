@@ -45,7 +45,8 @@ public sealed class BittorrentEngine(
     TimeProvider? time = null,
     ResumeKeeper? resume = null,
     IStorageSpace? space = null,
-    Func<TorrentMetadata, TorrentDisk, Bitfield>? verify = null)
+    Func<TorrentMetadata, TorrentDisk, Bitfield>? verify = null,
+    Func<string, bool>? markSparse = null)
     : ITorrentEngine, IDisposable
 {
     private readonly Lock _lock = new();
@@ -390,7 +391,11 @@ public sealed class BittorrentEngine(
 
                 // The client's own lines — trackers, the DHT, peers, pieces — into the
                 // plugin's log at the owner's level. GitHub issue #7.
-                _clientLog);
+                _clientLog,
+
+                // The host's call that makes a new file sparse: the plugin ships
+                // no native call of its own (media-server #476, #609).
+                markSparse);
 
             // Before it is held, so a torrent that is whole on disk already —
             // which is every staged and dispatched grab after a restart — is

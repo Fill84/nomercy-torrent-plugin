@@ -169,7 +169,7 @@ Both disabled for a private torrent.
 
 ## Disk
 
-- Files created sparse at full size.
+- Files created sparse at full size; the host marks them sparse (`IPluginStorage.MarkSparseAsync`, media-server #609), so the plugin makes no native call.
 - Writes through a bounded buffer, flushed per completed piece.
 - SHA-1 verification before a piece counts as done.
 - Reads for uploading from a small LRU cache.

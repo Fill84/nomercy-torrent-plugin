@@ -87,6 +87,19 @@ public class ClientAcceptanceTests : IDisposable
         // before either engine existed, and every piece was checked against
         // them before it was written.
         Assert.Equal(content, Downloaded(torrent, Folder("leech")));
+
+        // And made sparse by the host, through the engine and the run down to
+        // the disk: the plugin ships no native call of its own (#476, #609).
+        if (OperatingSystem.IsWindows())
+        {
+            using TorrentDisk disk = new(torrent, Folder("leech"));
+
+            Assert.All(
+                torrent.Files,
+                file => Assert.True(
+                    File.GetAttributes(disk.PathOf(file)).HasFlag(FileAttributes.SparseFile),
+                    $"{file.Path} was downloaded without being made sparse."));
+        }
     }
 
     /// <summary>A folder with the whole file in it, and a resume file that says so.</summary>
@@ -245,7 +258,8 @@ public class ClientAcceptanceTests : IDisposable
             new CapturingLogger(),
             trackers,
             new SocketPeerDialler(TimeSpan.FromSeconds(30)),
-            resume: new ResumeKeeper(Folder(which), TimeSpan.FromSeconds(1), TimeProvider.System));
+            resume: new ResumeKeeper(Folder(which), TimeSpan.FromSeconds(1), TimeProvider.System),
+            markSparse: HostSparse.Through(() => new HostShapedStorage(Folder(which))));
     }
 
     private string Folder(string which)

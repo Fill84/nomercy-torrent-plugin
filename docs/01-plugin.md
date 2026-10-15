@@ -161,7 +161,7 @@ and what `tools/` read.
   // Required by PluginManifest, so a manifest without one fails to deserialise.
   "description": "Downloads every episode missing from a TV or anime library and hands it to the encoder.",
   "version": "0.7.1",
-  "targetAbi": "12.0",
+  "targetAbi": "12.4",
   "assembly": "NoMercy.Plugin.TorrentDownloader.dll",
   "autoEnabled": true,
   "capabilities": {

@@ -305,6 +305,9 @@ public sealed class TorrentRun : IDisposable
     /// <summary>Where this run says what it decided: trackers, the DHT, peers.</summary>
     private readonly IEngineLog _log;
 
+    /// <summary>What makes a new file sparse; the host's call, handed in by the plugin.</summary>
+    private readonly Func<string, bool>? _markSparse;
+
     public TorrentRun(
         byte[] infoHash,
         IReadOnlyList<string> trackers,
@@ -320,9 +323,11 @@ public sealed class TorrentRun : IDisposable
         RateLimits? limits = null,
         Dht? dht = null,
         Func<TorrentMetadata, TorrentDisk, Bitfield>? verify = null,
-        IEngineLog? log = null)
+        IEngineLog? log = null,
+        Func<string, bool>? markSparse = null)
     {
         _log = log ?? EngineLog.Silent;
+        _markSparse = markSparse;
         _verify = verify;
         _dht = dht;
         _infoHash = infoHash;
@@ -1670,7 +1675,7 @@ public sealed class TorrentRun : IDisposable
                 // connection and picked it up again, and the whole server
                 // looked hung. On every restart, because a torrent with no
                 // resume file is hashed again every time.
-                TorrentDisk disk = new(torrent, _folder);
+                TorrentDisk disk = new(torrent, _folder, _markSparse);
 
                 // **Verified before Create, and the order is the whole point.**
                 // Create sets every file to its full length, so a verification
