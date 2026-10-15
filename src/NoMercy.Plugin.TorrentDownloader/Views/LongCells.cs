@@ -16,6 +16,12 @@ public enum Cut
     /// the end of anything ("Atmos. X265"), or a tag list.
     /// </summary>
     AtWord,
+
+    /// <summary>
+    /// Cut after the last whole part that fits, the parts joined by " · ": a list of counts, where half a
+    /// part is a number without what it counts.
+    /// </summary>
+    AtPart,
 }
 
 /// <summary>A column whose text can be longer than the table has room for.</summary>
@@ -98,7 +104,12 @@ public static class LongCells
 
         if (said.Length > room)
         {
-            int word = column.Cut == Cut.AtWord ? LastNameBreak(said, room) : said.LastIndexOf(' ', room);
+            int word = column.Cut switch
+            {
+                Cut.AtWord => LastNameBreak(said, room),
+                Cut.AtPart => said.LastIndexOf(" · ", room, StringComparison.Ordinal),
+                _ => said.LastIndexOf(' ', room),
+            };
 
             // A first word longer than the cell has no word to cut at, and is cut where the cell ends.
             said = (word > 0 ? said[..word] : said[..room]).TrimEnd(Dangling);

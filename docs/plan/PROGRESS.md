@@ -842,6 +842,10 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **`S15-02` Downloads Progress and Rate shortened, Stages capped (15 October 2026, the owner's
+  decision).** Progress is "45.3% of 23.4 GB", Rate the download rate only; the Release cell keeps 45
+  characters. The Stages "So far" cell is cut after the last whole " · " part at 164 characters, the
+  whole line under the table. Every table fits at 1,600 px at its widest real content, Stages included.
 - **`S15-02` measured again, every table (15 October 2026).** Downloads re-measured at real maximums (a
   season pack's progress, an upload in KB/s, five-digit swarms, headings at 9n + 24): the release keeps
   16 characters, not 29. The overview cuts Show and Tags at 48 each, lines above its paging. The Download
@@ -2604,6 +2608,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, the owner: Downloads' Progress loses its "(… in)" and Rate shows the download rate
+  only.** The percentage already says how far a download is, and nothing on a public swarm is ever
+  uploaded, so the rate going out read nought almost always; Ratio stays, for seeding on a private
+  tracker. The two together free 261 px at real maximums, and the Release cell has them: 45 characters,
+  not 16. `TorrentStatus.Arrived` stays in the port: the page no longer reads it, but the engine sets it
+  and `BittorrentEngineTests` waits on it for bytes before a piece is whole.
 
 - **15 October 2026, `S15-02`: the Downloads release keeps 16 characters.** The 29 of the entry below
   measured headings at 8 px a character and swarms, rates and progress at their short forms. At real

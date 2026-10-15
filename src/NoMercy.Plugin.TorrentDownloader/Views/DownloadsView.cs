@@ -230,14 +230,14 @@ public static class DownloadsView
             },
 
             // Nine columns at the 1,600 px of LongCells, each at its widest real content: Progress for a
-            // season pack "45.3% of 23.4 GB (12.1 GB in)" 285 px, Rate "345.6 KB/s ↓ 345.6 KB/s ↑" 258,
-            // Seeds and Peers against a five-digit swarm "120 of 12345" 132 each (the captures hold swarms
-            // of 2602), Ratio "12.34" and Left "59.5m" 69 each, the two buttons 150: 1,095 px. State keeps
-            // every state the page writes itself whole, "grabbed, not started (downloading)" at 34
-            // characters, 330 px. The release has the 175 px left, 16 characters: a row of 1,593 px.
+            // season pack "45.3% of 23.4 GB" 168 px, Rate "345.6 KB/s" 114, Seeds and Peers against a
+            // five-digit swarm "120 of 12345" 132 each (the captures hold swarms of 2602), Ratio "12.34"
+            // and Left "59.5m" 69 each, the two buttons 150: 834 px. State keeps every state the page
+            // writes itself whole, "grabbed, not started (downloading)" at 34 characters, 330 px. The
+            // release has the 436 px left, 45 characters: a row of 1,593 px.
             longColumns:
             [
-                new("release", 16, Cut.AtWord),
+                new("release", 45, Cut.AtWord),
                 new("state", 34),
             ]);
     }
@@ -340,33 +340,20 @@ public static class DownloadsView
             return Unknown;
         }
 
-        string done = string.Create(
+        // The percentage of the size and nothing beside it: the owner's decision of 15 October 2026. What
+        // has arrived and is not verified yet, "(8.3 MB in)", made the column too wide for the page.
+        return string.Create(
             CultureInfo.InvariantCulture,
             $"{transfer.BytesDone * 100.0 / total:0.#}% of {Bytes(total)}");
-
-        // A piece counts when it is whole and hashes right, and a piece is
-        // megabytes. Off a swarm giving kilobytes a second that is half an hour
-        // per piece, with blocks landing in several at once — so a torrent can
-        // take bytes for hours and be at nought per cent, truthfully. The owner
-        // read "0% of 2.7 GB" against a torrent with 8.7 MB in it and asked
-        // twice why it was not downloading.
-        //
-        // Only where the two differ, and never on a torrent that has finished.
-        // A complete one is asked no question this answers, and it showed at
-        // all only because re-requesting a block that failed its hash makes
-        // what arrived a few bytes larger than what is verified: the owner read
-        // "100% of 2.7 GB (2.7 GB in)" and asked what was going wrong, which is
-        // the fairest possible response to it.
-        return transfer.Arrived > transfer.BytesDone && transfer.BytesDone < total
-            ? $"{done} ({Bytes(transfer.Arrived)} in)"
-            : done;
     }
 
+    /// <remarks>
+    /// The download rate only, the owner's decision of 15 October 2026: nothing on a public swarm is ever
+    /// uploaded (docs/06-torrent-client.md), so the rate going out read nought on almost every row.
+    /// </remarks>
     private static string Rate(TorrentStatus? transfer)
     {
-        return transfer is null
-            ? Unknown
-            : $"{Bytes((long)transfer.DownloadRateBytesPerSecond)}/s ↓ {Bytes((long)transfer.UploadRateBytesPerSecond)}/s ↑";
+        return transfer is null ? Unknown : $"{Bytes((long)transfer.DownloadRateBytesPerSecond)}/s";
     }
 
     /// <summary>What a number that is not known says instead of nought.</summary>

@@ -47,7 +47,9 @@
 - A long column holds a set number of characters, "…" included: on the overview a show's title 48 and
   its tags 48; a source's refusal 77; on the History page the release a line is about 60 and the reason
   77; on the Activity page a note 77, and in the table of what is in flight the episode 83 and what it
-  waits on 77; on the Downloads page the release 16 and the state 34.
+  waits on 77, and the counts of a stage 164; on the Downloads page the release 45 and the state 34.
+- A stage's counts longer than their column are cut after the last whole count, the counts being joined
+  by " · ", and "…".
 - A refusal, a reason, a note or a download's state whose text is longer than its column, or holds a
   web address, shows the text's first sentence, up to the first web address, and "…". A first sentence
   longer than the cell is cut after the last whole word that fits.
@@ -105,6 +107,8 @@
   refusals.
 - The Downloads table has no column for where a download lands: every download lands in the incomplete
   folder the settings name.
+- A download's progress is the percentage of its size, as in "45.3% of 23.4 GB", with nothing beside it.
+- A download's rate is the rate it downloads at. The rate it uploads at is not drawn.
 - On the Downloads page the field that takes a magnet or a .torrent stands under the list of
   downloads, and the list scrolls within its own height rather than pushing the field down.
 - The plugin has no separate Shows page. The overview page lists the shows.

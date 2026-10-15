@@ -233,35 +233,69 @@ public sealed class NoTableScrollsSidewaysTests
         PluginView view = DownloadsView.Render([encoding]);
 
         Assert.Equal(["encoding — the server's last…"], Cells(view, DownloadsView.TableId, "state"));
-        Assert.Equal([ShortRelease, $"encoding — {EncodeFailing}"], UnderTheAddField(view));
+        Assert.Equal([$"encoding — {EncodeFailing}"], UnderTheAddField(view));
     }
 
     /// <remarks>
     /// "grabbed, not started (downloading)" is 34 characters, the longest state the page writes itself, and
-    /// is drawn whole. The release has 16 characters: what the other columns leave at their widest.
+    /// is drawn whole. The release has 45 characters: what the other columns leave at their widest.
     /// </remarks>
     [Fact]
     public void AReleaseNameInDownloadsIsCutAtADotAndStandsWholeUnderTheTable()
     {
         PluginView view = DownloadsView.Render([Grabbed("a1", LongRelease)]);
 
-        Assert.Equal(["Lucky.S01E04…"], Cells(view, DownloadsView.TableId, "release"));
+        Assert.Equal(["Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP…"], Cells(view, DownloadsView.TableId, "release"));
         Assert.Equal(["grabbed, not started (downloading)"], Cells(view, DownloadsView.TableId, "state"));
         Assert.Equal([LongRelease], UnderTheAddField(view));
     }
 
     /// <remarks>
-    /// A torrent added by hand whose magnet names nothing is recorded under its info hash, which has no
-    /// word in it to cut at, so it is cut where the cell ends.
+    /// A torrent added by hand whose magnet names nothing is recorded under its info hash, 40 characters
+    /// with nowhere to cut, and the Release cell holds it whole.
     /// </remarks>
     [Fact]
-    public void AReleaseNameWithNoBreakInItIsCutWhereTheCellEnds()
+    public void AnInfoHashStandingForAReleaseIsDrawnWhole()
     {
         const string hash = "fed03cc5627432777f0f6b6a0d62e96d0549e543";
 
         PluginView view = DownloadsView.Render([Grabbed(hash, hash)]);
 
-        Assert.Equal(["fed03cc56274327…"], Cells(view, DownloadsView.TableId, "release"));
+        Assert.Equal([hash], Cells(view, DownloadsView.TableId, "release"));
+    }
+
+    /// <remarks>
+    /// One part per state the client's downloads are in; with every state at once the row ran to some
+    /// 1,800 px. The cell is cut after the last whole part that fits.
+    /// </remarks>
+    [Fact]
+    public void TheDownloadStageIsCutAfterTheLastWholeStateThatFits()
+    {
+        DownloadRow[] downloads =
+        [
+            Waiting("a1", GrabState.Grabbed),
+            Waiting("b2", GrabState.Downloading),
+            Waiting("c3", GrabState.Staged),
+            Waiting("d4", GrabState.Dispatched),
+            InTheClient("e5", TorrentState.FetchingMetadata),
+            InTheClient("f6", TorrentState.Checking),
+            InTheClient("g7", TorrentState.Downloading),
+            InTheClient("h8", TorrentState.Seeding),
+            InTheClient("i9", TorrentState.Paused),
+        ];
+        ActivitySnapshot running = new([], [], Now) { Run = new(Now.AddMinutes(-3), new Dictionary<RunCounter, int>()) };
+
+        PluginView view = ActivityView.Render(running, new(true, null, null) { StartedAt = Now.AddMinutes(-3) }, downloads, ActivityView.StagesTableId);
+
+        const string whole =
+            "1 grabbed, not started (grabbed) · 1 grabbed, not started (downloading) · 1 waiting for the encoder to take it"
+            + " · 1 encoding · 1 fetching metadata · 1 checking · 1 downloading · 1 seeding · 1 paused";
+
+        Assert.Equal(
+            "1 grabbed, not started (grabbed) · 1 grabbed, not started (downloading) · 1 waiting for the encoder to take it"
+            + " · 1 encoding · 1 fetching metadata · 1 checking…",
+            Cells(view, ActivityView.StagesTableId, "counts")[^1]);
+        Assert.Equal([whole], Under(view, ActivityView.StagesTableId));
     }
 
     /// <remarks>
@@ -403,6 +437,20 @@ public sealed class NoTableScrollsSidewaysTests
     private static DownloadRow Grabbed(string hash, string release)
     {
         return new(new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Downloading), null);
+    }
+
+    /// <summary>A grab the client holds no transfer for, in the state the plugin stored.</summary>
+    private static DownloadRow Waiting(string hash, GrabState state)
+    {
+        return new(new(hash, $"magnet:?xt=urn:btih:{hash}", ShortRelease, state), null);
+    }
+
+    /// <summary>A download in the client, in the state the client says.</summary>
+    private static DownloadRow InTheClient(string hash, TorrentState state)
+    {
+        return new(
+            new(hash, $"magnet:?xt=urn:btih:{hash}", ShortRelease, GrabState.Downloading),
+            new(hash, ShortRelease, state, 0, null, 0, 0, 0, 0, null, null, null));
     }
 
     /// <summary>A download the client paused with an error of its own, as the engine says it.</summary>

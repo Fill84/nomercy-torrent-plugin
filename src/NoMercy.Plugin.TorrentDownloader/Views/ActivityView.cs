@@ -106,7 +106,11 @@ public static class ActivityView
                     ["counts"] = stage.Counts,
                 }),
             "Nothing counted yet.",
-            query);
+            query,
+
+            // The Download stage has a part per state the client's downloads are in, and with every state
+            // at once it ran to some 1,800 px. Stage takes 96 px of the 1,600 (LongCells): 164 characters.
+            longColumns: [new("counts", 164, Cut.AtPart)]);
     }
 
     /// <summary>

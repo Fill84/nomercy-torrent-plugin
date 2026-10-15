@@ -74,9 +74,11 @@ public class DownloadsViewTests
         string row = string.Join(" ", Rendered.EveryValue(view));
 
         Assert.Contains("50% of 3.7 GB", row, StringComparison.Ordinal);
-        Assert.Contains("5 MB/s", row, StringComparison.Ordinal);
-        Assert.Contains("512 KB/s", row, StringComparison.Ordinal);
         Assert.Contains("0.35", row, StringComparison.Ordinal);
+
+        // The download rate only, the owner's decision of 15 October 2026: nothing on a public swarm is
+        // uploaded, so the 512 KB/s going out is not drawn.
+        Assert.Equal("5 MB/s", Assert.Single(Rendered.ById(view, DownloadsView.TableId).Items).Props["rate"]);
 
         // Nine seeds, and twenty-four connections of which nine are seeds, so
         // fifteen leechers. The peers column counts leechers: this used to
@@ -268,23 +270,12 @@ public class DownloadsViewTests
     }
 
     /// <remarks>
-    /// <para>
-    /// <strong>Nought per cent is not nothing arriving.</strong> A piece counts
-    /// when it is whole and hashes right, and a piece here is eight mebibytes.
-    /// Off a swarm giving four kilobytes a second that is half an hour per
-    /// piece, and the blocks come in spread across several at once — so a
-    /// torrent can take megabytes for hours and still be at nought verified,
-    /// truthfully.
-    /// </para>
-    /// <para>
-    /// The owner read <c>0% · 0 B/s</c> against Rings of Power S02E06 on
-    /// 3 September 2026 and asked, twice, why it was not downloading. It was:
-    /// 8.7 MB had arrived. The page knew — it is in the session as
-    /// <c>Downloaded</c> — and drew the one number that says nothing.
-    /// </para>
+    /// The owner's decision of 15 October 2026: the percentage says it, and the
+    /// "(8.3 MB in)" beside it made the column too wide for the page. What has
+    /// arrived and is not verified yet is not drawn.
     /// </remarks>
     [Fact]
-    public void ATorrentWithNothingVerifiedYetStillSaysWhatHasArrived()
+    public void ProgressSaysThePercentageOfTheSizeAndNothingBeside()
     {
         PluginView view = DownloadsView.Render(
         [
@@ -306,85 +297,9 @@ public class DownloadsViewTests
                     Arrived: 8_700_000)),
         ]);
 
-        string row = string.Join(" ", Rendered.EveryValue(view));
+        PluginComponent row = Assert.Single(Rendered.ById(view, DownloadsView.TableId).Items);
 
-        Assert.Contains("0% of 2.7 GB", row, StringComparison.Ordinal);
-        Assert.Contains("8.3 MB in", row, StringComparison.Ordinal);
-    }
-
-    /// <remarks>
-    /// And it is said only where it says something. A torrent whose bytes are
-    /// verified as fast as they land has nothing to add, and a second figure
-    /// beside the first in every row is clutter that makes the one row that
-    /// needs it harder to see.
-    /// </remarks>
-    [Fact]
-    public void ATorrentVerifyingEverythingThatArrivesDoesNotSayItTwice()
-    {
-        PluginView view = DownloadsView.Render(
-        [
-            new(
-                Grab(),
-                new(
-                    Hash,
-                    "Silo S03E06 1080p",
-                    TorrentState.Downloading,
-                    BytesDone: 2_000_000_000,
-                    BytesTotal: 4_000_000_000,
-                    DownloadRateBytesPerSecond: 5 * 1024 * 1024,
-                    UploadRateBytesPerSecond: 0,
-                    Peers: 24,
-                    Seeds: 9,
-                    Ratio: 0.35,
-                    Eta: null,
-                    Error: null,
-                    Arrived: 2_000_000_000)),
-        ]);
-
-        string row = string.Join(" ", Rendered.EveryValue(view));
-
-        Assert.Contains("50% of 3.7 GB", row, StringComparison.Ordinal);
-        Assert.DoesNotContain(" in)", row, StringComparison.Ordinal);
-    }
-
-    /// <remarks>
-    /// And never on a torrent that is finished. The clause is there so nought
-    /// per cent does not read as nothing happening; on a complete torrent it
-    /// answers a question nobody has, and it appears at all only because
-    /// re-requested blocks make what arrived a few bytes larger than what is
-    /// verified. The owner read "100% of 2.7 GB (2.7 GB in)" and asked what was
-    /// going wrong, which is the fairest possible response to it.
-    /// </remarks>
-    [Fact]
-    public void AFinishedTorrentDoesNotSayWhatArrivedBesideWhatIsVerified()
-    {
-        PluginView view = DownloadsView.Render(
-        [
-            new(
-                Grab(),
-                new(
-                    Hash,
-                    "Silo S03E06 1080p",
-                    TorrentState.Finished,
-                    BytesDone: 2_870_000_000,
-                    BytesTotal: 2_870_000_000,
-                    DownloadRateBytesPerSecond: 0,
-                    UploadRateBytesPerSecond: 0,
-                    Peers: 0,
-                    Seeds: 0,
-                    Ratio: 0,
-                    Eta: null,
-                    Error: null,
-
-                    // A handful of bytes more than the file, which is what
-                    // re-requesting a block that failed its hash costs.
-                    Arrived: 2_870_004_096)),
-        ]);
-
-        string row = string.Join(" ", Rendered.EveryValue(view));
-
-        Assert.Contains("100% of 2.7 GB", row, StringComparison.Ordinal);
-        Assert.DoesNotContain(" in)", row, StringComparison.Ordinal);
+        Assert.Equal("0% of 2.7 GB", row.Props["progress"]);
     }
 
     /// <remarks>
