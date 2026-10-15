@@ -7,8 +7,9 @@ Read this first, update it last. Nothing else decides what happens next.
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
 by us.** `SPRINTS.md` § S16. Current: **nothing the plugin can do alone.** `S16-06` waits on
-media-server #601 (the browser), `Sparse.DeviceIoControl` on #602; `S16-07` (the carry-over seen on
-beast-unit's own database, then a version) waits on the owner's word.
+media-server #601 (the browser), `Sparse.DeviceIoControl` on #602. **The owner's word, 15 October 2026:
+no version until #601 ships**, so `S16-07` (the carry-over seen on beast-unit's own database, then a
+version) comes after `S16-06` and #476 closes in one release.
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
@@ -2703,6 +2704,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, the owner: S16 ships as one version, after media-server #601.** The database
+  carry-over (`S16-04`) is on master and is not released on its own; it goes to beast-unit with the solver
+  on `IPluginBrowser` (`S16-06`), so #476 closes in one release.
 
 - **15 October 2026: files stay sparse; `DeviceIoControl` waits on media-server #602 (`S16-02`).**
   Measured on NTFS, one 4 GiB file, 1024 pieces of 4 MiB in random order, each flushed. WD Red 4 TB
