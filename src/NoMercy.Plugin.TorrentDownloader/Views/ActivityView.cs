@@ -111,7 +111,8 @@ public static class ActivityView
 
     /// <summary>
     /// What the client holds, counted by the state the Downloads page gives
-    /// each one — the same words, so the two pages cannot disagree.
+    /// each one — the same words, so the two pages cannot disagree — without
+    /// the client's error, which is on the Downloads page.
     /// </summary>
     private static string Downloading(IReadOnlyList<DownloadRow> downloads)
     {
@@ -120,7 +121,7 @@ public static class ActivityView
             : string.Join(
                 " · ",
                 downloads
-                    .GroupBy(DownloadsView.State)
+                    .GroupBy(DownloadsView.StateWithoutReason)
                     .OrderByDescending(state => state.Count())
                     .Select(state => $"{state.Count()} {state.Key}"));
     }

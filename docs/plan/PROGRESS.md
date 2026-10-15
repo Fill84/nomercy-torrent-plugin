@@ -842,6 +842,12 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **`S15-02` measured again, every table (15 October 2026).** Downloads re-measured at real maximums (a
+  season pack's progress, an upload in KB/s, five-digit swarms, headings at 9n + 24): the release keeps
+  16 characters, not 29. The overview cuts Show and Tags at 48 each, lines above its paging. The Download
+  stage counts states without the client's error. The magnet field stays directly under the Downloads
+  table, its whole texts after it. A release name is not cut at a dot before a digit ("H.265"). Options
+  that give the release room are in the S15-02 report, for the owner.
 - **`S15-02` Downloads has no Destination column (15 October 2026, the owner's decision).** Column, cell
   and `DownloadRow.Destination` gone, with the path cut (`Cut.FromFront`) and the once-only lines that
   existed only for it. Downloads now measures 1,598 px at its widest real content; the release keeps 29
@@ -2598,6 +2604,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, `S15-02`: the Downloads release keeps 16 characters.** The 29 of the entry below
+  measured headings at 8 px a character and swarms, rates and progress at their short forms. At real
+  maximums — "45.3% of 23.4 GB (12.1 GB in)", "345.6 KB/s ↓ 345.6 KB/s ↑", "120 of 12345" (the captures hold
+  swarms of 2602) — the other eight columns leave 175 px. Nothing in a column's content changed; giving
+  the release more room is the owner's choice between options measured in the S15-02 report.
 
 - **15 October 2026, the owner: the Destination column goes from the Downloads table.** Every row showed
   the same incomplete folder of the settings, so it said nothing about its row, and with it the table was

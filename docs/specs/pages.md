@@ -44,19 +44,26 @@
 ## Long text in a table
 
 - Long text in a cell never makes its table wider than the page.
-- A long column holds a set number of characters, "…" included: a source's refusal 77; on the History
-  page the release a line is about 60 and the reason 77; on the Activity page a note 77, and in the
-  table of what is in flight the episode 83 and what it waits on 77; on the Downloads page the release
-  29 and the state 34.
-- A refusal, a reason, a note or a download's state whose text is longer than its column, or holds an
-  address, shows the text's first sentence, up to the first address, and "…". A first sentence longer
-  than the cell is cut after the last whole word that fits.
-- A release name longer than its column is cut after the last space, dot, dash or underscore that fits,
-  and "…". A full stop in a release name is not the end of it.
-- An address is never in a cell.
+- A long column holds a set number of characters, "…" included: on the overview a show's title 48 and
+  its tags 48; a source's refusal 77; on the History page the release a line is about 60 and the reason
+  77; on the Activity page a note 77, and in the table of what is in flight the episode 83 and what it
+  waits on 77; on the Downloads page the release 16 and the state 34.
+- A refusal, a reason, a note or a download's state whose text is longer than its column, or holds a
+  web address, shows the text's first sentence, up to the first web address, and "…". A first sentence
+  longer than the cell is cut after the last whole word that fits.
+- A release name, a show's title or a tag list longer than its column is cut after the last space, dash,
+  underscore or dot that fits, and "…". A full stop in a release name is not the end of it, and a dot
+  before a digit, as in "H.265" or "DD5.1", is inside a word. A text with nowhere to cut, such as an info
+  hash, is cut where the cell ends.
+- A web address (http or https) is never in a cell. A host and port such as "(torrentz2.nz:443)" is not
+  a web address.
 - The whole text of each cell drawn short stands under the table as a line of its own, in the order of
-  the rows. On a page with tabs the lines stand under the chosen tab's table.
-- A text that fits and holds no address is the cell as it is, with no line under the table.
+  the rows. On a page with tabs the lines stand under the chosen tab's table. On the overview they stand
+  above the paging line. On the Downloads page they stand under the field that takes a magnet, which
+  stays directly under the table.
+- A text that fits and holds no web address is the cell as it is, with no line under the table.
+- The Activity page counts the downloads of the Download stage by their state, without the client's
+  error.
 - `filter` and `sort` read the whole text, so a row is found by a word that is only in the line under
   the table.
 

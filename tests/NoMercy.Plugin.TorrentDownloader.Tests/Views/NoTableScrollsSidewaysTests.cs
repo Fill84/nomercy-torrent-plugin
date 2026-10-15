@@ -1,7 +1,9 @@
 using System.Globalization;
 
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
+using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
+using NoMercy.Plugin.TorrentDownloader.Core.Ports;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.Plugin.TorrentDownloader.Views;
@@ -231,30 +233,107 @@ public sealed class NoTableScrollsSidewaysTests
         PluginView view = DownloadsView.Render([encoding]);
 
         Assert.Equal(["encoding — the server's last…"], Cells(view, DownloadsView.TableId, "state"));
-        Assert.Equal([$"encoding — {EncodeFailing}"], Under(view, DownloadsView.TableId));
+        Assert.Equal([ShortRelease, $"encoding — {EncodeFailing}"], UnderTheAddField(view));
     }
 
     /// <remarks>
     /// "grabbed, not started (downloading)" is 34 characters, the longest state the page writes itself, and
-    /// is drawn whole.
+    /// is drawn whole. The release has 16 characters: what the other columns leave at their widest.
     /// </remarks>
     [Fact]
     public void AReleaseNameInDownloadsIsCutAtADotAndStandsWholeUnderTheTable()
     {
         PluginView view = DownloadsView.Render([Grabbed("a1", LongRelease)]);
 
-        Assert.Equal(["Lucky.S01E04.Too.Close.to…"], Cells(view, DownloadsView.TableId, "release"));
+        Assert.Equal(["Lucky.S01E04…"], Cells(view, DownloadsView.TableId, "release"));
         Assert.Equal(["grabbed, not started (downloading)"], Cells(view, DownloadsView.TableId, "state"));
-        Assert.Equal([LongRelease], Under(view, DownloadsView.TableId));
+        Assert.Equal([LongRelease], UnderTheAddField(view));
+    }
+
+    /// <remarks>
+    /// A torrent added by hand whose magnet names nothing is recorded under its info hash, which has no
+    /// word in it to cut at, so it is cut where the cell ends.
+    /// </remarks>
+    [Fact]
+    public void AReleaseNameWithNoBreakInItIsCutWhereTheCellEnds()
+    {
+        const string hash = "fed03cc5627432777f0f6b6a0d62e96d0549e543";
+
+        PluginView view = DownloadsView.Render([Grabbed(hash, hash)]);
+
+        Assert.Equal(["fed03cc56274327…"], Cells(view, DownloadsView.TableId, "release"));
+    }
+
+    /// <remarks>
+    /// <c>docs/specs/pages.md</c>: the field that takes a magnet stands under the list of downloads. The
+    /// whole texts come after it, so a page of long release names does not push the field down.
+    /// </remarks>
+    [Fact]
+    public void TheAddFieldStandsDirectlyUnderTheDownloadsTable()
+    {
+        PluginView view = DownloadsView.Render([Grabbed("a1", LongRelease)]);
+        PluginComponent[] page = [.. view.Components ?? []];
+        int table = Array.FindIndex(page, component => component.Id == DownloadsView.TableId);
+
+        Assert.Equal("downloads-add", page[table + 1].Id);
+        Assert.Equal([LongRelease], UnderTheAddField(view));
     }
 
     [Fact]
     public void AShortReleaseNameIsUnchangedAndHasNoLineUnderTheTable()
     {
-        PluginView view = DownloadsView.Render([Grabbed("a1", ShortRelease)]);
+        PluginView view = HistoryView.Render([new("failed", Now.AddHours(-1), ShortRelease, "cancelled by hand")]);
 
-        Assert.Equal([ShortRelease], Cells(view, DownloadsView.TableId, "release"));
-        Assert.Empty(Under(view, DownloadsView.TableId));
+        Assert.Equal([ShortRelease], Cells(view, HistoryView.TableId, "subject"));
+        Assert.Empty(Under(view, HistoryView.TableId));
+    }
+
+    /// <remarks>
+    /// The Download stage counts the downloads by their state. A client's error is in a state's words on the
+    /// Downloads page, and counted with it every refused torrent was a group of its own, as long as its error.
+    /// </remarks>
+    [Fact]
+    public void TheDownloadStageCountsByStateWithoutTheClientsError()
+    {
+        DownloadRow[] downloads =
+        [
+            Refused("a1", "There is no video file in it, so nothing in it was downloaded."),
+            Refused("b2", "No peer sent its metadata within 5 minutes."),
+        ];
+        ActivitySnapshot running = new([], [], Now) { Run = new(Now.AddMinutes(-3), new Dictionary<RunCounter, int>()) };
+
+        PluginView view = ActivityView.Render(running, new(true, null, null) { StartedAt = Now.AddMinutes(-3) }, downloads, ActivityView.StagesTableId);
+
+        Assert.Equal("2 paused", Cells(view, ActivityView.StagesTableId, "counts")[^1]);
+    }
+
+    /// <remarks>
+    /// A tag list is typed by the owner and an anime title runs past sixty characters: the two cells the
+    /// overview cannot know the length of, 48 characters each.
+    /// </remarks>
+    [Fact]
+    public void ALongShowTitleAndTagListAreCutAndStandWholeUnderTheLibrarysTable()
+    {
+        const string library = "01HQ5W4GAVF30N10RT6XCF6AJQ";
+        const string title = "I've Been Killing Slimes for 300 Years and Maxed Out My Level";
+        LibraryPreferences anime = new(library) { Quality = "1080p" };
+        ShowSettings settings = new(7)
+        {
+            SwitchedOn = true,
+            Wishes = ["ATVP", "NF", "AMZN"],
+            Musts = ["1080p"],
+            Forbidden = ["CAM", "TS", "HDCAM", "TELESYNC"],
+        };
+        EffectiveSettings applied = EffectiveSettings.Of(settings, anime);
+        const string tags = "wishes: ATVP, NF, AMZN · musts: 1080p · forbidden: CAM, TS, HDCAM, TELESYNC";
+
+        PluginView view = OverviewView.Render(
+            new(false, null, null),
+            [new(new(library, "Anime", LibraryKind.Anime), anime, [new(new(7, title, 2021, library, "Anime", LibraryKind.Anime, "/slimes"), settings, applied, 2)])]);
+
+        Assert.Equal(["I've Been Killing Slimes for 300 Years and…"], Cells(view, OverviewView.TableId(library), "show"));
+        Assert.Equal(["wishes: ATVP, NF, AMZN · musts: 1080p…"], Cells(view, OverviewView.TableId(library), "tags"));
+        Assert.Equal([title, tags], Under(view, OverviewView.TableId(library)));
     }
 
     /// <remarks>
@@ -302,7 +381,8 @@ public sealed class NoTableScrollsSidewaysTests
             ActivityView.NowTableId);
 
         Assert.Equal(["Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP.WEB-DL.ITA.ENG.DD5.1.DV.HDR.H.265-G66…"], Cells(view, ActivityView.NowTableId, "subject"));
-        Assert.Equal(["Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP.WEB-DL.ITA.ENG.DD5.1.DV.HDR.H…"], Cells(view, ActivityView.NowTableId, "waiting"));
+        // Not at the dot of "H.265": a dot before a digit is inside a word.
+        Assert.Equal(["Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP.WEB-DL.ITA.ENG.DD5.1.DV.HDR…"], Cells(view, ActivityView.NowTableId, "waiting"));
         Assert.Equal([asked, LongRelease], Under(view, ActivityView.NowTableId));
     }
 
@@ -323,6 +403,20 @@ public sealed class NoTableScrollsSidewaysTests
     private static DownloadRow Grabbed(string hash, string release)
     {
         return new(new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Downloading), null);
+    }
+
+    /// <summary>A download the client paused with an error of its own, as the engine says it.</summary>
+    private static DownloadRow Refused(string hash, string error)
+    {
+        return new(
+            new(hash, $"magnet:?xt=urn:btih:{hash}", ShortRelease, GrabState.Downloading),
+            new(hash, ShortRelease, TorrentState.Paused, 0, null, 0, 0, 0, 0, null, null, error));
+    }
+
+    /// <summary>The lines of text after the Downloads page's field, which is where its whole texts stand.</summary>
+    private static IReadOnlyList<string> UnderTheAddField(PluginView page)
+    {
+        return Under(page, "downloads-add");
     }
 
     private static SourceReport Source(string name, string refusal)

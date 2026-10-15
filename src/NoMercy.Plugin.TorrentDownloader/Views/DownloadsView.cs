@@ -54,14 +54,20 @@ public static class DownloadsView
 
     public static PluginView Render(IReadOnlyList<DownloadRow> rows, TableQuery? query = null)
     {
+        IReadOnlyList<PluginComponent> table = Table(rows, query);
+
         return new()
         {
             Layout = PluginLayout.Wide,
             Components =
             [
                 Ui.Text("downloads-heading", "Downloads", "title"),
-                .. Table(rows, query),
+                table[0],
+
+                // The field straight under the table and the whole texts after it (docs/specs/pages.md): a
+                // page of long release names would otherwise push the field down by a line each.
                 Add(),
+                .. table.Skip(1),
             ],
         };
     }
@@ -223,14 +229,15 @@ public static class DownloadsView
                 ["ratio"] = row => row.Transfer?.Ratio,
             },
 
-            // Nine columns at the 1,600 px of LongCells, each at its widest real content: Progress "45.3% of
-            // 2.7 GB (1.2 GB in)" 267 px, Rate "12.3 MB/s ↓ 1.2 MB/s ↑" 222, Seeds and Peers "12 of 300"
-            // 105 each, Ratio and Left at their headings 65 and 69, the two buttons 150: 983 px. State keeps
+            // Nine columns at the 1,600 px of LongCells, each at its widest real content: Progress for a
+            // season pack "45.3% of 23.4 GB (12.1 GB in)" 285 px, Rate "345.6 KB/s ↓ 345.6 KB/s ↑" 258,
+            // Seeds and Peers against a five-digit swarm "120 of 12345" 132 each (the captures hold swarms
+            // of 2602), Ratio "12.34" and Left "59.5m" 69 each, the two buttons 150: 1,095 px. State keeps
             // every state the page writes itself whole, "grabbed, not started (downloading)" at 34
-            // characters, 330 px. The release has the 287 px left, 29 characters: a row of 1,598 px.
+            // characters, 330 px. The release has the 175 px left, 16 characters: a row of 1,593 px.
             longColumns:
             [
-                new("release", 29, Cut.AtWord),
+                new("release", 16, Cut.AtWord),
                 new("state", 34),
             ]);
     }
@@ -244,6 +251,16 @@ public static class DownloadsView
     /// is stuck, and an owner can act on the difference.
     /// </remarks>
     internal static string State(DownloadRow row)
+    {
+        return row.Transfer?.Error is string wrong ? $"{StateWithoutReason(row)}: {wrong}" : StateWithoutReason(row);
+    }
+
+    /// <summary>The state in its own words, without the client's error.</summary>
+    /// <remarks>
+    /// What the Activity page counts downloads by. Counted with the error, every refused torrent was a group
+    /// of its own as long as its error, in a cell that does not wrap; the error is on the Downloads page.
+    /// </remarks>
+    internal static string StateWithoutReason(DownloadRow row)
     {
         if (row.Transfer is null)
         {
@@ -259,9 +276,7 @@ public static class DownloadsView
             };
         }
 
-        return row.Transfer.Error is string wrong
-            ? $"{Words(row.Transfer.State.ToString())}: {wrong}"
-            : Words(row.Transfer.State.ToString());
+        return Words(row.Transfer.State.ToString());
     }
 
     /// <summary>

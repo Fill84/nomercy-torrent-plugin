@@ -11,9 +11,9 @@ public enum Cut
     FirstSentence,
 
     /// <summary>
-    /// Cut after the last whole word that fits, a word ending at a space, a dot, a dash or an underscore: a
-    /// release name, whose dots are its spaces and whose full stops are not the end of anything ("Mr.
-    /// Robot").
+    /// Cut after the last whole word that fits, a word ending at a space, a dash, an underscore or a dot
+    /// that is not inside a number: a release name, whose dots are its spaces and whose full stops are not
+    /// the end of anything ("Atmos. X265"), or a tag list.
     /// </summary>
     AtWord,
 }
@@ -60,8 +60,6 @@ public static class LongCells
     /// <summary>What a cut leaves at the end that reads as nothing before the "…".</summary>
     private static readonly char[] Dangling = [' ', ',', ';', ':', '(', '·', '—', '-', '.', '_'];
 
-    /// <summary>Where a word of a release name ends.</summary>
-    private static readonly char[] NameBreaks = [' ', '.', '-', '_'];
 
     /// <summary>What a cell of <paramref name="column"/> shows of <paramref name="text"/>.</summary>
     /// <remarks>
@@ -70,7 +68,8 @@ public static class LongCells
     /// column's <see cref="Cut"/>, with "…" to say the rest is under the table.
     /// </para>
     /// <para>
-    /// <strong>An address is never in the cell</strong>, however short the text: it is what made
+    /// <strong>A web address (http or https) is never in the cell</strong>, however short the text; a
+    /// host and port such as "(torrentz2.nz:443)" is not one, and stays. A web address is what made
     /// Torrentz2's refusal run off the page, it cannot be read at a glance, and an address with a space in
     /// its query ("?q=Dark Matter S02E08") does not even end where it looks to. So the cell stops before the
     /// first one, and the address is in the whole text under the table.
@@ -99,7 +98,7 @@ public static class LongCells
 
         if (said.Length > room)
         {
-            int word = column.Cut == Cut.AtWord ? said.LastIndexOfAny(NameBreaks, room) : said.LastIndexOf(' ', room);
+            int word = column.Cut == Cut.AtWord ? LastNameBreak(said, room) : said.LastIndexOf(' ', room);
 
             // A first word longer than the cell has no word to cut at, and is cut where the cell ends.
             said = (word > 0 ? said[..word] : said[..room]).TrimEnd(Dangling);
@@ -137,6 +136,9 @@ public static class LongCells
             lines.Add(Ui.Text($"{row.Id}-{column.Key}", whole));
         }
 
+        // Field by field, because PluginComponent is a class and has no `with`. Design is not carried: its
+        // fields are merged into Props on read, so they are in the cells already, and carried as well they
+        // would be merged back over the short form. A property the SDK adds later has to be added here.
         return cells is null
             ? row
             : new()
@@ -147,5 +149,36 @@ public static class LongCells
                 Action = row.Action,
                 Items = row.Items,
             };
+    }
+
+    /// <summary>
+    /// The last place at or before <paramref name="from"/> where a word of a release name ends: a space, a
+    /// dash, an underscore, or a dot that is not inside a number.
+    /// </summary>
+    /// <remarks>
+    /// A dot before a digit is inside a word — "H.265", "DD5.1", "2.0" — and cutting there leaves "H" or
+    /// "DD5" on the page, which reads as something else. -1 when there is no such place, and the name is
+    /// cut where the cell ends.
+    /// </remarks>
+    private static int LastNameBreak(string name, int from)
+    {
+        for (int at = from; at > 0; at--)
+        {
+            char here = name[at];
+
+            if (here is ' ' or '-' or '_')
+            {
+                return at;
+            }
+
+            bool insideANumber = at + 1 < name.Length && char.IsDigit(name[at + 1]) && char.IsLetterOrDigit(name[at - 1]);
+
+            if (here == '.' && !insideANumber)
+            {
+                return at;
+            }
+        }
+
+        return -1;
     }
 }

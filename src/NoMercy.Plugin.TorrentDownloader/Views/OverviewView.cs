@@ -217,9 +217,22 @@ public static class OverviewView
             // Which of the two nothings this is. "This library holds no show" under a search that found
             // none says the library is empty, which is a different thing and not true.
             find is null ? "This library holds no show." : $"No show here matches '{find}'.",
-            new TablePaging(PageSize, page));
+            new TablePaging(PageSize, page),
+
+            // The two cells whose length the overview cannot know: an anime title runs past sixty
+            // characters ("I've Been Killing Slimes for 300 Years and Maxed Out My Level") and the owner
+            // types the tags. Year "year not known" 150 px, Missing "not counted" 123, Quality 87, Codec and
+            // State at their headings 69 each, Switch off and Settings 190: 688 of the 1,600 px of
+            // LongCells, which leaves 912 for the two, 48 characters each.
+            [new("show", 48, Cut.AtWord), new("tags", 48, Cut.AtWord)]);
 
         yield return Ui.Table(TableId(id), columns, shown.Rows, shown.EmptyMessage);
+
+        // Under the table and above its paging, which is about the table and not about any one row.
+        foreach (PluginComponent line in shown.Lines)
+        {
+            yield return line;
+        }
 
         // Under a query the line is drawn even for one page, because it is where the total of matching
         // rows is said, and a client paging by query needs it. Without one the page is as it always was.
