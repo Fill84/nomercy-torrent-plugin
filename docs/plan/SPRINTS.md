@@ -3744,6 +3744,63 @@ download (the same gap as **Known** item 3 under `S14`). The contract is packed 
 Built as S15-05: the owner sees what changes, the carry-over is watched on beast-unit's own database,
 and a version is released only on the owner's word.
 
+## S17 · The plugin finished: the replacement, and what is known to be wrong
+
+The owner's word, 16 October 2026: carry on making the plugin finished and better. Media-server #599 and
+#600 are closed (#599 released in 0.1.583), so `S15-04` is no longer blocked. It ships with S16, in the
+one release that waits on media-server #601.
+
+Order: the replacement first — it is the owner's open wish and the only thing that leaves a wrong episode
+in the library — then the fault seen on beast-unit, then the known list of `S14`, in its own order.
+
+## S17-01 · The replacement branch on today's master
+
+**Read first:** `SPRINTS.md` § S15-04, `git log master..feat/replace-delivered`, `Storage/Store.cs`.
+
+**Steps**
+
+1. Rebase `feat/replace-delivered` onto master. Its storage writes move to the `Store` API (`QueryAsync`,
+   `ExecuteAsync`, `TransactionAsync`, `StoredRow`); its tests to `TestStore.In` and the store's own calls;
+   its migration is `018`, which the host's count runs after the seventeen.
+2. Every test on the branch and on master is green, and `expected-findings.txt` gains nothing.
+
+## S17-02 · The replacement, finished from its own check
+
+**Read first:** `PROGRESS.md` § Current (the list under `S15-04`), the branch's `Replacement.cs`,
+`Recycler.cs`, `Transfers.cs`, `DeliveredNames.cs`, `IPluginJobs` and `IPluginLibraryWriter` on
+media-server `dev` (read only), media-server #599 and #600.
+
+**Steps**, each with its test red first:
+
+1. The `IPluginLibraryWriter` test double refuses an existing destination, as the server does.
+2. A replacement closes only on proof — a new root playlist written after the recycling, or a new library
+   file — never on "Finished" alone.
+3. Only what the encoder writes is recycled (the root master, `.nomercy.json`, `chapters.vtt`, the sprite,
+   `video_*`, `audio_*`, `subtitles`, `fonts`, `thumbs`, `metadata`); anything else in the folder stays.
+4. Only a single-episode delivery or a real season pack is marked.
+5. The check of old deliveries is capped per run, runs after the search, and is skipped on a hand-run.
+6. A second replacement is refused while one for the same episode is open or done.
+7. The failed-download test is seen red.
+
+**Done when** all seven hold, the branch is merged into master, and `S15-04` is ticked.
+
+## S17-03 · A plugin unloaded mid-cycle leaves nothing unobserved
+
+**Read first:** `PROGRESS.md` § Current (Known, for the next version), `TorrentDownloaderPlugin.cs`
+(`Dispose`, `CycleThroughAsync`).
+
+A test that disposes the plugin while a cycle runs and sees no unobserved task exception, red first; then
+the fix.
+
+## S17-04 · The `S14` known list
+
+**Read first:** `PROGRESS.md` § Current, the five items under `S14`.
+
+One slice each, in that list's order: rarest-first over every peer's bitfield; `SettleTheLogAsync` checks
+and sets `_levelsChosen` in one step; a test that drives a whole plugin cycle through `OpenHashes` and the
+`handedOver` pass (and the `HostSparse` hand-over of `S16-08`); `PeerWelcomeTests` under parallel suites;
+the disk-space check counts only the videos a pack fetches.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 None of these has a fix that belongs in this plugin.

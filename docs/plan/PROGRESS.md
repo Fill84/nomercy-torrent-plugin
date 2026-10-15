@@ -4,6 +4,9 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
+Media-server #599 and #600 are closed, so `S15-04` is unblocked. Current: **`S17-01`**.
+
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
 by us.** `SPRINTS.md` § S16. Current: **nothing the plugin can do alone.** `S16-06` waits on
@@ -891,6 +894,12 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S16-08` Files made sparse by the host (media-server #609)
 - [ ] `S16-06` The solver on `IPluginBrowser` — waits on media-server #601
 - [ ] `S16-07` Seen on beast-unit, then a version
+
+### Sprint 17 — The plugin finished: the replacement, and what is known to be wrong
+- [ ] `S17-01` The replacement branch on today's master
+- [ ] `S17-02` The replacement, finished from its own check
+- [ ] `S17-03` A plugin unloaded mid-cycle leaves nothing unobserved
+- [ ] `S17-04` The `S14` known list
 
 ## Log
 
