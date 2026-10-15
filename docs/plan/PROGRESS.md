@@ -35,6 +35,13 @@ released. On 15 October 2026 a hand-copied 0.8.1 was refused that way; the publi
 back file for file (44 of 44 matching the server's own record) and loaded again. **Current: nothing open
 on master.** `S15-04` waits on its branch for media-server #599 and #600.
 
+**Known, for the next version (seen on beast-unit, 15 October 2026 16:04:21Z):** when the server unloads
+the plugin while a cycle runs (an update through the catalogue), `CycleThroughAsync` touches its stop token
+after `Dispose` disposed it, and the server logs an `UnobservedTaskException` (`ObjectDisposedException:
+The CancellationTokenSource has been disposed`). It changes nothing — that cycle was ending anyway and the
+new copy started clean — but the code is the same in 0.8.1. A test that disposes the plugin mid-cycle and
+sees no unobserved exception comes first.
+
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
