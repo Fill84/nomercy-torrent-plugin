@@ -37,11 +37,13 @@ public static class ActivityView
     /// going and no stage is drawn.
     /// </param>
     /// <param name="tab">The table the path names, or null for the first.</param>
+    /// <param name="query">How the client asked for the table shown to be sorted and filtered.</param>
     public static PluginView Render(
         ActivitySnapshot activity,
         CycleStatus cycle,
         IReadOnlyList<DownloadRow>? downloads = null,
-        string? tab = null)
+        string? tab = null,
+        TableQuery? query = null)
     {
         List<Tab> tables = [];
 
@@ -49,14 +51,14 @@ public static class ActivityView
         {
             // No count on the stages: they are the same six rows on every run, and a number that never
             // changes says nothing about it.
-            tables.Add(new(StagesTableId, "Stages", null, TabRoute(StagesTableId), [StagesTable(run, downloads ?? [])]));
+            tables.Add(new(StagesTableId, "Stages", null, TabRoute(StagesTableId), [StagesTable(run, downloads ?? [], query)]));
         }
 
-        tables.Add(new(NowTableId, "Now", activity.InFlight.Count, TabRoute(NowTableId), [NowTable(activity)]));
+        tables.Add(new(NowTableId, "Now", activity.InFlight.Count, TabRoute(NowTableId), [NowTable(activity, query)]));
 
         if (activity.Run is not null || activity.Notes.Count > 0)
         {
-            tables.Add(new(NotesTableId, "Notes", activity.Notes.Count, TabRoute(NotesTableId), [NotesTable(activity.Notes)]));
+            tables.Add(new(NotesTableId, "Notes", activity.Notes.Count, TabRoute(NotesTableId), [NotesTable(activity.Notes, query)]));
         }
 
         return new()
@@ -75,7 +77,7 @@ public static class ActivityView
     }
 
     /// <summary>A row per stage of the run, each with what it has counted so far.</summary>
-    private static PluginComponent StagesTable(SearchProgress run, IReadOnlyList<DownloadRow> downloads)
+    private static PluginComponent StagesTable(SearchProgress run, IReadOnlyList<DownloadRow> downloads, TableQuery? query)
     {
         (string Stage, string Counts)[] stages =
         [
@@ -87,22 +89,23 @@ public static class ActivityView
             ("Download", Downloading(downloads)),
         ];
 
-        return Ui.Table(
+        // Words both, so both sort by the words: the stages' own order is the one a run goes through them in.
+        return TableRows.Table(
             StagesTableId,
             [
                 new() { Key = "stage", Label = "Stage" },
                 new() { Key = "counts", Label = "So far" },
             ],
-            [
-                .. stages.Select(((string Stage, string Counts) stage, int index) => Ui.Row(
-                    $"{StagesTableId}-{index}",
-                    new Dictionary<string, object?>
-                    {
-                        ["stage"] = stage.Stage,
-                        ["counts"] = stage.Counts,
-                    })),
-            ],
-            "Nothing counted yet.");
+            stages.Select(((string Stage, string Counts) stage, int index) => (stage.Stage, stage.Counts, Index: index)),
+            stage => Ui.Row(
+                $"{StagesTableId}-{stage.Index}",
+                new Dictionary<string, object?>
+                {
+                    ["stage"] = stage.Stage,
+                    ["counts"] = stage.Counts,
+                }),
+            "Nothing counted yet.",
+            query);
     }
 
     /// <summary>
@@ -129,9 +132,9 @@ public static class ActivityView
     /// which source was asked and what it answered, which name was refused and
     /// why, and every question to every indexer with how many rows came back.
     /// </remarks>
-    private static PluginComponent NotesTable(IReadOnlyList<EpisodeNote> notes)
+    private static PluginComponent NotesTable(IReadOnlyList<EpisodeNote> notes, TableQuery? query)
     {
-        return Ui.Table(
+        return TableRows.Table(
             NotesTableId,
             [
                 new() { Key = "at", Label = "Time" },
@@ -139,46 +142,56 @@ public static class ActivityView
                 new() { Key = "step", Label = "Step" },
                 new() { Key = "what", Label = "What" },
             ],
-            [
-                .. notes.Select((EpisodeNote note, int index) => Ui.Row(
-                    $"{NotesTableId}-{index}",
-                    new Dictionary<string, object?>
-                    {
-                        ["at"] = note.At.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture),
-                        ["episode"] = note.Episode,
-                        ["step"] = note.Stage.ToString(),
-                        ["what"] = note.Line,
-                    })),
-            ],
-            "Nothing noted yet.");
-    }
-
-    private static PluginComponent NowTable(ActivitySnapshot activity)
-    {
-        List<PluginComponent> rows =
-        [
-            .. activity.InFlight.Select((ActivityEvent work, int index) => Ui.Row(
-                $"{NowTableId}-{index}",
+            notes.Select((EpisodeNote note, int index) => (Note: note, Index: index)),
+            noted => Ui.Row(
+                $"{NotesTableId}-{noted.Index}",
                 new Dictionary<string, object?>
                 {
-                    ["subject"] = work.Subject,
-                    ["stage"] = work.Stage.ToString(),
-                    // Empty rather than invented: the stage on its own is the
-                    // whole answer when a stage reported no detail.
-                    ["waiting"] = work.Detail ?? string.Empty,
-                })),
-        ];
+                    ["at"] = noted.Note.At.ToLocalTime().ToString("HH:mm:ss", CultureInfo.InvariantCulture),
+                    ["episode"] = noted.Note.Episode,
+                    ["step"] = noted.Note.Stage.ToString(),
+                    ["what"] = noted.Note.Line,
+                }),
+            "Nothing noted yet.",
+            query,
+            new Dictionary<string, Func<(EpisodeNote Note, int Index), IComparable?>>
+            {
+                // The time itself: the clock in the cell starts again at midnight.
+                ["at"] = noted => noted.Note.At,
 
-        return Ui.Table(
+                // A step's place in a run, not its name: Names comes before Find.
+                ["step"] = noted => noted.Note.Stage,
+            });
+    }
+
+    private static PluginComponent NowTable(ActivitySnapshot activity, TableQuery? query)
+    {
+        return TableRows.Table(
             NowTableId,
             [
                 new() { Key = "subject", Label = "Episode" },
                 new() { Key = "stage", Label = "Stage" },
                 new() { Key = "waiting", Label = "Waiting on" },
             ],
-            rows,
+            activity.InFlight.Select((ActivityEvent work, int index) => (Work: work, Index: index)),
+            flying => Ui.Row(
+                $"{NowTableId}-{flying.Index}",
+                new Dictionary<string, object?>
+                {
+                    ["subject"] = flying.Work.Subject,
+                    ["stage"] = flying.Work.Stage.ToString(),
+                    // Empty rather than invented: the stage on its own is the
+                    // whole answer when a stage reported no detail.
+                    ["waiting"] = flying.Work.Detail ?? string.Empty,
+                }),
             // Not an EmptyState: that is for a plugin with nothing configured.
             // An idle plugin with nothing in flight is working correctly.
-            "Nothing in flight.");
+            "Nothing in flight.",
+            query,
+            new Dictionary<string, Func<(ActivityEvent Work, int Index), IComparable?>>
+            {
+                // A stage's place in a run, not its name: Names comes before Find.
+                ["stage"] = flying => flying.Work.Stage,
+            });
     }
 }

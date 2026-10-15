@@ -98,7 +98,23 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
             return NotFound(refusal);
         }
 
-        return Data(await plugin.GetViewAsync(new() { Route = route, Caller = Whoever() }, ct));
+        return Data(await plugin.GetViewAsync(new() { Route = route, Query = Asked(), Caller = Whoever() }, ct));
+    }
+
+    /// <summary>
+    /// The request's query, as the server's own view endpoint hands it on.
+    /// </summary>
+    /// <remarks>
+    /// A table's sort, filter and page arrive in the query (GitHub issue #5, media-server #593), and a
+    /// request built from the route alone dropped them on this address while the server's endpoint passed
+    /// them, so the same page drew two different tables. Everything but <c>route</c> and <c>surface</c>,
+    /// which the server keeps for itself.
+    /// </remarks>
+    private Dictionary<string, string> Asked()
+    {
+        return Request.Query
+            .Where(entry => entry.Key is not "route" and not "surface")
+            .ToDictionary(entry => entry.Key, entry => entry.Value.ToString(), StringComparer.Ordinal);
     }
 
     /// <summary>

@@ -53,7 +53,7 @@ public static class DownloadsView
     /// <summary>Taking on a torrent the owner found themselves.</summary>
     public const string AddAction = "downloads";
 
-    public static PluginView Render(IReadOnlyList<DownloadRow> rows)
+    public static PluginView Render(IReadOnlyList<DownloadRow> rows, TableQuery? query = null)
     {
         return new()
         {
@@ -61,7 +61,7 @@ public static class DownloadsView
             Components =
             [
                 Ui.Text("downloads-heading", "Downloads", "title"),
-                Table(rows),
+                Table(rows, query),
                 Add(),
             ],
         };
@@ -140,9 +140,9 @@ public static class DownloadsView
             });
     }
 
-    private static PluginComponent Table(IReadOnlyList<DownloadRow> rows)
+    private static PluginComponent Table(IReadOnlyList<DownloadRow> rows, TableQuery? query)
     {
-        return Ui.Table(
+        return TableRows.Table(
             TableId,
             [
                 new() { Key = "release", Label = "Release" },
@@ -175,38 +175,52 @@ public static class DownloadsView
                 new() { Key = "destination", Label = "Destination" },
                 new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
             ],
-            [
-                .. rows.Select(row => Ui.Row(
-                    $"{TableId}-{row.Grab.InfoHash}",
-                    new Dictionary<string, object?>
-                    {
-                        ["release"] = row.Grab.ReleaseTitle,
-                        ["state"] = row.EncodeFailure is string failure ? $"{State(row)} — {failure}" : State(row),
-                        ["progress"] = Progress(row.Transfer),
-                        ["rate"] = Rate(row.Transfer),
+            rows,
+            row => Ui.Row(
+                $"{TableId}-{row.Grab.InfoHash}",
+                new Dictionary<string, object?>
+                {
+                    ["release"] = row.Grab.ReleaseTitle,
+                    ["state"] = row.EncodeFailure is string failure ? $"{State(row)} — {failure}" : State(row),
+                    ["progress"] = Progress(row.Transfer),
+                    ["rate"] = Rate(row.Transfer),
 
-                        // A count nobody has been told is not nought. This is
-                        // the whole of what 0.3.4 got wrong on this page.
-                        ["seeds"] = Swarm(row.Transfer?.Seeds, row.Transfer?.SwarmSeeds),
-                        // Leechers, counted as leechers. A tracker answers
-                        // with seeders and leechers and they are two
-                        // populations, never one taken off the other: a seed
-                        // has all of it, a leecher has not, and this column is
-                        // the second of those on both sides.
-                        ["peers"] = Swarm(row.Transfer?.Leechers, row.Transfer?.SwarmPeers),
-                        // Null where it cannot be known — no size, or nothing
-                        // moving. A remaining time worked out from a rate of
-                        // nought inflates to infinity, and an invented figure
-                        // is worse than none.
-                        ["left"] = row.Transfer?.Eta is TimeSpan left ? Left(left) : Unknown,
-                        ["ratio"] = row.Transfer?.Ratio is double ratio
-                            ? ratio.ToString("0.00", CultureInfo.InvariantCulture)
-                            : Unknown,
-                        ["destination"] = row.Destination,
-                        ["controls"] = Controls(row),
-                    })),
-            ],
-            "Nothing has been grabbed.");
+                    // A count nobody has been told is not nought. This is
+                    // the whole of what 0.3.4 got wrong on this page.
+                    ["seeds"] = Swarm(row.Transfer?.Seeds, row.Transfer?.SwarmSeeds),
+                    // Leechers, counted as leechers. A tracker answers
+                    // with seeders and leechers and they are two
+                    // populations, never one taken off the other: a seed
+                    // has all of it, a leecher has not, and this column is
+                    // the second of those on both sides.
+                    ["peers"] = Swarm(row.Transfer?.Leechers, row.Transfer?.SwarmPeers),
+                    // Null where it cannot be known — no size, or nothing
+                    // moving. A remaining time worked out from a rate of
+                    // nought inflates to infinity, and an invented figure
+                    // is worse than none.
+                    ["left"] = row.Transfer?.Eta is TimeSpan left ? Left(left) : Unknown,
+                    ["ratio"] = row.Transfer?.Ratio is double ratio
+                        ? ratio.ToString("0.00", CultureInfo.InvariantCulture)
+                        : Unknown,
+                    ["destination"] = row.Destination,
+                    ["controls"] = Controls(row),
+                }),
+            "Nothing has been grabbed.",
+            query,
+
+            // The figures, not the words drawn for them: "10% of 1 GB" is before "9% of 1 GB" as text and
+            // "900 KB/s" after "2 MB/s". A figure the client has not told is null, and sorts after the rest.
+            new Dictionary<string, Func<DownloadRow, IComparable?>>
+            {
+                ["progress"] = row => row.Transfer?.BytesTotal is long total && total > 0
+                    ? (double)row.Transfer.BytesDone / total
+                    : null,
+                ["rate"] = row => row.Transfer?.DownloadRateBytesPerSecond,
+                ["seeds"] = row => row.Transfer?.Seeds,
+                ["peers"] = row => row.Transfer?.Leechers,
+                ["left"] = row => row.Transfer?.Eta,
+                ["ratio"] = row => row.Transfer?.Ratio,
+            });
     }
 
     /// <summary>
@@ -381,7 +395,7 @@ public static class HistoryView
 {
     public const string TableId = "history";
 
-    public static PluginView Render(IReadOnlyList<HistoryLine> lines)
+    public static PluginView Render(IReadOnlyList<HistoryLine> lines, TableQuery? query = null)
     {
         return new()
         {
@@ -389,7 +403,7 @@ public static class HistoryView
             Components =
             [
                 Ui.Text("history-heading", "History", "title"),
-                Ui.Table(
+                TableRows.Table(
                     TableId,
                     [
                         new() { Key = "at", Label = "When" },
@@ -397,21 +411,28 @@ public static class HistoryView
                         new() { Key = "subject", Label = "Which" },
                         new() { Key = "detail", Label = "Why" },
                     ],
-                    [
-                        .. lines.Select((HistoryLine line, int index) => Ui.Row(
-                            $"{TableId}-{index}",
-                            new Dictionary<string, object?>
-                            {
-                                ["at"] = line.At.ToString("u", CultureInfo.InvariantCulture),
-                                ["event"] = line.Event,
-                                ["subject"] = line.Subject,
+                    lines.Select((HistoryLine line, int index) => (Line: line, Index: index)),
+                    entry => Ui.Row(
+                        $"{TableId}-{entry.Index}",
+                        new Dictionary<string, object?>
+                        {
+                            ["at"] = entry.Line.At.ToString("u", CultureInfo.InvariantCulture),
+                            ["event"] = entry.Line.Event,
+                            ["subject"] = entry.Line.Subject,
 
-                                // Never blank: a line with no reason is the one
-                                // an owner came here to read.
-                                ["detail"] = line.Detail ?? "—",
-                            })),
-                    ],
-                    "Nothing has happened yet."),
+                            // Never blank: a line with no reason is the one
+                            // an owner came here to read.
+                            ["detail"] = entry.Line.Detail ?? "—",
+                        }),
+                    "Nothing has happened yet.",
+                    query,
+                    new Dictionary<string, Func<(HistoryLine Line, int Index), IComparable?>>
+                    {
+                        ["at"] = entry => entry.Line.At,
+
+                        // A line with no reason says "—", which is not a reason that sorts among the others.
+                        ["detail"] = entry => entry.Line.Detail,
+                    }),
             ],
         };
     }

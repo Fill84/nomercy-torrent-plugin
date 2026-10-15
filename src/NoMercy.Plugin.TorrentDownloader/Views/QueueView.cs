@@ -31,11 +31,12 @@ public static class QueueView
 
     /// <param name="tracked">Every episode the plugin tracks.</param>
     /// <param name="tab">The list the path names, or null for the first.</param>
+    /// <param name="query">How the client asked for the list shown to be sorted and filtered.</param>
     /// <remarks>
     /// One list at a time, under a tab each (GitHub issue #4): stacked, Waiting to air began wherever
     /// Looking happened to end. The tab's label is the list's name, so there is no heading above it.
     /// </remarks>
-    public static PluginView Render(IReadOnlyList<TrackedEpisode> tracked, string? tab = null)
+    public static PluginView Render(IReadOnlyList<TrackedEpisode> tracked, string? tab = null, TableQuery? query = null)
     {
         IReadOnlyList<TrackedEpisode> looking = QueueOrder.Order(tracked);
         TrackedEpisode[] waiting = [.. tracked.Where(episode => episode.State == EpisodeState.NotAired)];
@@ -47,8 +48,8 @@ public static class QueueView
             [
                 .. Tabs.Draw(
                     [
-                        new(LookingTableId, "Looking", looking.Count, TabRoute(LookingTableId), [Looking(looking)]),
-                        new(WaitingTableId, "Waiting to air", waiting.Length, TabRoute(WaitingTableId), [Waiting(waiting)]),
+                        new(LookingTableId, "Looking", looking.Count, TabRoute(LookingTableId), [Looking(looking, query)]),
+                        new(WaitingTableId, "Waiting to air", waiting.Length, TabRoute(WaitingTableId), [Waiting(waiting, query)]),
                     ],
                     tab),
             ],
@@ -65,9 +66,9 @@ public static class QueueView
     /// uses — a page that showed a different order would be a guess about what
     /// the plugin is about to do.
     /// </remarks>
-    private static PluginComponent Looking(IReadOnlyList<TrackedEpisode> ordered)
+    private static PluginComponent Looking(IReadOnlyList<TrackedEpisode> ordered, TableQuery? query)
     {
-        return Ui.Table(
+        return TableRows.Table(
             LookingTableId,
             [
                 new() { Key = "episode", Label = "Episode" },
@@ -75,26 +76,43 @@ public static class QueueView
                 new() { Key = "last", Label = "Last tried" },
                 new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
             ],
-            [
-                .. ordered.Select(episode => Ui.Row(
-                    $"{LookingTableId}-{Id(episode)}",
-                    new Dictionary<string, object?>
-                    {
-                        ["episode"] = Name(episode),
-                        ["attempts"] = episode.Attempts,
-                        // Never searched is not the same as searched long ago,
-                        // and nought would be a date.
-                        ["last"] = episode.LastSearchAt?.ToString("u") ?? "never",
+            ordered,
+            episode => Ui.Row(
+                $"{LookingTableId}-{Id(episode)}",
+                new Dictionary<string, object?>
+                {
+                    ["episode"] = Name(episode),
+                    ["attempts"] = episode.Attempts,
+                    // Never searched is not the same as searched long ago,
+                    // and nought would be a date.
+                    ["last"] = episode.LastSearchAt?.ToString("u") ?? "never",
 
-                        // A button in the row, where a click on the whole row
-                        // used to do it with nothing on the page to say so
-                        // (docs/specs/pages.md § Queue). Looking for one episode
-                        // now is a decision about that row, and the attempts
-                        // beside it are what an owner reads before taking it.
-                        ["controls"] = new PluginTableAction[] { new() { Label = "Search now", Action = Look(episode) } },
-                    })),
-            ],
-            "Nothing is being looked for.");
+                    // A button in the row, where a click on the whole row
+                    // used to do it with nothing on the page to say so
+                    // (docs/specs/pages.md § Queue). Looking for one episode
+                    // now is a decision about that row, and the attempts
+                    // beside it are what an owner reads before taking it.
+                    ["controls"] = new PluginTableAction[] { new() { Label = "Search now", Action = Look(episode) } },
+                }),
+            "Nothing is being looked for.",
+            query,
+            new Dictionary<string, Func<TrackedEpisode, IComparable?>>
+            {
+                ["episode"] = Slot,
+                ["attempts"] = episode => episode.Attempts,
+                ["last"] = episode => episode.LastSearchAt,
+            });
+    }
+
+    /// <summary>
+    /// An episode's place among the others: its show, then where it is in the show.
+    /// </summary>
+    /// <remarks>
+    /// Not the words in the cell. Drawn as text, episode 100 of a long anime sorts before episode 99.
+    /// </remarks>
+    private static IComparable Slot(TrackedEpisode episode)
+    {
+        return (episode.ShowTitle.ToUpperInvariant(), episode.Key.ShowId, episode.Key.Season, episode.Key.Number);
     }
 
     /// <summary>Looking for one episode now, outside the cadence.</summary>
@@ -115,31 +133,35 @@ public static class QueueView
             PluginActionTransport.Rest);
     }
 
-    private static PluginComponent Waiting(IEnumerable<TrackedEpisode> episodes)
+    private static PluginComponent Waiting(IEnumerable<TrackedEpisode> episodes, TableQuery? query)
     {
-        return Ui.Table(
+        return TableRows.Table(
             WaitingTableId,
             [
                 new() { Key = "episode", Label = "Episode" },
                 new() { Key = "airs", Label = "Airs" },
             ],
-            [
-                .. episodes
-                    .OrderBy(episode => episode.AirDate ?? DateOnly.MaxValue)
-                    .ThenBy(episode => episode.Key.ShowId)
-                    .ThenBy(episode => episode.Key.Season)
-                    .ThenBy(episode => episode.Key.Number)
-                    .Select(episode => Ui.Row(
-                        $"{WaitingTableId}-{Id(episode)}",
-                        new Dictionary<string, object?>
-                        {
-                            ["episode"] = Name(episode),
-                            // An episode with no announced date says so. A
-                            // blank would read as a date nobody had filled in.
-                            ["airs"] = episode.AirDate?.ToString("yyyy-MM-dd") ?? "no date announced",
-                        })),
-            ],
-            "Nothing is waiting to air.");
+            episodes
+                .OrderBy(episode => episode.AirDate ?? DateOnly.MaxValue)
+                .ThenBy(episode => episode.Key.ShowId)
+                .ThenBy(episode => episode.Key.Season)
+                .ThenBy(episode => episode.Key.Number),
+            episode => Ui.Row(
+                $"{WaitingTableId}-{Id(episode)}",
+                new Dictionary<string, object?>
+                {
+                    ["episode"] = Name(episode),
+                    // An episode with no announced date says so. A
+                    // blank would read as a date nobody had filled in.
+                    ["airs"] = episode.AirDate?.ToString("yyyy-MM-dd") ?? "no date announced",
+                }),
+            "Nothing is waiting to air.",
+            query,
+            new Dictionary<string, Func<TrackedEpisode, IComparable?>>
+            {
+                ["episode"] = Slot,
+                ["airs"] = episode => episode.AirDate,
+            });
     }
 
     private static string Name(TrackedEpisode episode)

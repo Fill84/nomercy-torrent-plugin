@@ -62,7 +62,8 @@ public static class SourcesView
         Settings? settings = null,
         IReadOnlyCollection<string>? secretsSet = null,
         bool advanced = false,
-        BrowserOff? browserOff = null)
+        BrowserOff? browserOff = null,
+        TableQuery? query = null)
     {
         List<PluginComponent> page =
             [
@@ -71,7 +72,7 @@ public static class SourcesView
                     "sources-secondary",
                     "What each site last answered. A refusal is in the site's own words.",
                     "caption"),
-                Ui.Table(
+                TableRows.Table(
                     TableId,
                     [
                         new() { Key = "source", Label = "Source" },
@@ -81,26 +82,38 @@ public static class SourcesView
                         new() { Key = "refusal", Label = "Refusal" },
                         new() { Key = "next", Label = "Askable again" },
                     ],
-                    [
-                        .. sources.Select(source => Ui.Row(
-                            $"{TableId}-{source.Name}",
-                            new Dictionary<string, object?>
-                            {
-                                ["source"] = source.Name,
+                    sources,
+                    source => Ui.Row(
+                        $"{TableId}-{source.Name}",
+                        new Dictionary<string, object?>
+                        {
+                            ["source"] = source.Name,
 
-                                // Never asked is not long ago, and nought would
-                                // be a date in 1970.
-                                ["last"] = source.At?.ToString("u", CultureInfo.InvariantCulture) ?? Never,
-                                ["rows"] = source.At is null ? Unknown : source.Rows,
-                                ["took"] = source.At is null ? Unknown : Took(source.Duration),
+                            // Never asked is not long ago, and nought would
+                            // be a date in 1970.
+                            ["last"] = source.At?.ToString("u", CultureInfo.InvariantCulture) ?? Never,
+                            ["rows"] = source.At is null ? Unknown : source.Rows,
+                            ["took"] = source.At is null ? Unknown : Took(source.Duration),
 
-                                // Its own words, or nothing at all. A site that
-                                // answered and had nothing to give is working.
-                                ["refusal"] = IsOff(source.Name, browserOff) ? browserOff!.Why : source.Refusal ?? string.Empty,
-                                ["next"] = Next(source, now),
-                            })),
-                    ],
-                    "No source has been asked yet."),
+                            // Its own words, or nothing at all. A site that
+                            // answered and had nothing to give is working.
+                            ["refusal"] = IsOff(source.Name, browserOff) ? browserOff!.Why : source.Refusal ?? string.Empty,
+                            ["next"] = Next(source, now),
+                        }),
+                    "No source has been asked yet.",
+                    query,
+
+                    // A source never asked has no time, no rows and no duration, and sorts after those that do.
+                    // "1.5 s" is before "900 ms" as text, so the duration sorts as a duration.
+                    new Dictionary<string, Func<SourceReport, IComparable?>>
+                    {
+                        ["last"] = source => source.At,
+                        ["rows"] = source => source.At is null ? null : source.Rows,
+                        ["took"] = source => source.At is null ? null : source.Duration,
+
+                        // Askable now is the soonest there is.
+                        ["next"] = source => source.NextAskable is DateTimeOffset next && next > now ? next : now,
+                    }),
         ];
 
         // Above the table, where the owner looks first: which sources are off is the reason their rows are

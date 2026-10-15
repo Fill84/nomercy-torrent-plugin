@@ -2237,6 +2237,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // most worth trusting is the one saying what is happening now.
         PluginRouteMatch? match = Pages.Routes.Resolve(request.Route);
 
+        // Sort, filter and paging for the table the page draws (GitHub issue #5). A page draws one table at
+        // a time since the tabs of #4, so a key that names no table is about the one shown.
+        TableQuery query = TableQuery.From(request.Query);
+
         switch (match?.Route.Name)
         {
             case "settings":
@@ -2266,14 +2270,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 return await OverviewAsync(
                     match!.Param("id"),
                     int.TryParse(match.Param("page"), NumberStyles.Integer, CultureInfo.InvariantCulture, out int page) ? page : 1,
+                    query,
                     ct);
 
             case "queue":
             case Pages.QueueTabName:
-                return QueueView.Render(await Tracked(ct), match!.Param("tab"));
+                return QueueView.Render(await Tracked(ct), match!.Param("tab"), query);
 
             case "downloads":
-                return DownloadsView.Render(await DownloadRowsAsync(ct));
+                return DownloadsView.Render(await DownloadRowsAsync(ct), query);
 
             case "sources":
                 return SourcesView.Render(
@@ -2289,11 +2294,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // draws that a key is set and has nothing it could leak.
                     await Settings.SecretsSetAsync(ct),
                     ShowAdvanced,
-                    await BrowserOffAsync(ct));
+                    await BrowserOffAsync(ct),
+                    query);
 
             case "history":
                 return HistoryView.Render(
-                    [.. (await (await GrabsAsync(ct)).HistoryAsync(ct)).Select(Line)]);
+                    [.. (await (await GrabsAsync(ct)).HistoryAsync(ct)).Select(Line)],
+                    query);
 
             case "activity":
             case Pages.ActivityTabName:
@@ -2308,12 +2315,13 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     activity,
                     CurrentCycle(),
                     activity.Run is null ? null : await DownloadRowsAsync(ct),
-                    match!.Param("tab"));
+                    match!.Param("tab"),
+                    query);
 
             default:
                 await LastRunAsync(ct);
 
-                return await OverviewAsync(null, 1, ct);
+                return await OverviewAsync(null, 1, query, ct);
         }
     }
 
@@ -2351,7 +2359,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// sixty-nine — and listing those read as recommendations for programmes they do not have.
     /// </para>
     /// </remarks>
-    private async Task<PluginView> OverviewAsync(string? onlyLibraryId, int page, CancellationToken ct)
+    private async Task<PluginView> OverviewAsync(string? onlyLibraryId, int page, TableQuery query, CancellationToken ct)
     {
         (IReadOnlyList<Library> libraries, IReadOnlyList<Show> shows, string? unread) = await ShelvesAsync(ct);
 
@@ -2411,7 +2419,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             listings.Add(new(shelf, prefs, rows));
         }
 
-        return OverviewView.Render(CurrentCycle(), listings, onlyLibraryId, page, Finding);
+        return OverviewView.Render(CurrentCycle(), listings, onlyLibraryId, page, Finding, query);
     }
 
     /// <summary>The settings form of one show, or a page saying there is no such show.</summary>

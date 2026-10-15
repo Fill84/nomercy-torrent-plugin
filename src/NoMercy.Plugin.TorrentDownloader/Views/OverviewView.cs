@@ -59,6 +59,10 @@ public static class OverviewView
     /// </param>
     /// <param name="page">Which page of that library's shows, counted from one.</param>
     /// <param name="find">What is being looked for, or null for the whole list.</param>
+    /// <param name="query">
+    /// How the client asked for the library shown to be sorted, filtered and paged. A page in it wins over
+    /// <paramref name="page"/>.
+    /// </param>
     /// <remarks>
     /// <para>
     /// <strong>One library at a time, under a tab each</strong> (GitHub issue #4). Stacked, the anime
@@ -74,7 +78,8 @@ public static class OverviewView
         IReadOnlyList<LibraryListing> libraries,
         string? onlyLibraryId = null,
         int page = 1,
-        string? find = null)
+        string? find = null,
+        TableQuery? query = null)
     {
         // The page number belongs to the library the path names. On the overview's own address, or a
         // library that is not there any more, the first tab is drawn from its first page.
@@ -87,7 +92,7 @@ public static class OverviewView
                 // What is listed under the tab, so a search says which library the show is in.
                 library.Shows.Count(one => Found(find, one.Show.Title)),
                 ShowsRoute(library.Library.Id, 1),
-                [.. Block(library, library.Library.Id == onlyLibraryId ? Math.Max(page, 1) : 1, find)])),
+                [.. Block(library, library.Library.Id == onlyLibraryId ? Math.Max(page, 1) : 1, find, query ?? TableQuery.None)])),
         ];
 
         return new()
@@ -159,7 +164,7 @@ public static class OverviewView
     }
 
     /// <summary>A library's heading, its preferences with an Edit button, its table and its paging.</summary>
-    private static IEnumerable<PluginComponent> Block(LibraryListing listing, int page, string? find)
+    private static IEnumerable<PluginComponent> Block(LibraryListing listing, int page, string? find, TableQuery query)
     {
         string id = listing.Library.Id;
 
@@ -182,30 +187,45 @@ public static class OverviewView
                 .ThenBy(one => one.Show.Id),
         ];
 
-        int pages = Math.Max(1, (ordered.Length + PageSize - 1) / PageSize);
-        int shown = Math.Min(page, pages);
+        PluginTableColumn[] columns =
+        [
+            new() { Key = "show", Label = "Show" },
+            new() { Key = "year", Label = "Year" },
+            new() { Key = "missing", Label = "Missing" },
+            new() { Key = "quality", Label = "Quality" },
+            new() { Key = "codec", Label = "Codec" },
+            new() { Key = "tags", Label = "Tags" },
+            new() { Key = "state", Label = "State" },
+            new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
+        ];
 
-        yield return Ui.Table(
-            TableId(id),
-            [
-                new() { Key = "show", Label = "Show" },
-                new() { Key = "year", Label = "Year" },
-                new() { Key = "missing", Label = "Missing" },
-                new() { Key = "quality", Label = "Quality" },
-                new() { Key = "codec", Label = "Codec" },
-                new() { Key = "tags", Label = "Tags" },
-                new() { Key = "state", Label = "State" },
-                new() { Key = "controls", Label = string.Empty, Cell = PluginTableCellType.Actions },
-            ],
-            [.. ordered.Skip((shown - 1) * PageSize).Take(PageSize).Select(Row)],
+        // The one table of the plugin that pages, so the one where a page in the query means anything: it
+        // wins over the page in the path, and the page size is at most this table's own fifty.
+        ShownRows shown = TableRows.Answer(
+            ordered,
+            Row,
+            columns,
+            new Dictionary<string, Func<ShowListing, IComparable?>>
+            {
+                // A year, a count and a quality nobody set are not known, and sort after those that are.
+                ["year"] = one => one.Show.Year,
+                ["missing"] = one => one.Missing,
+                ["quality"] = one => one.Applied.Quality,
+            },
+            query,
 
             // Which of the two nothings this is. "This library holds no show" under a search that found
             // none says the library is empty, which is a different thing and not true.
-            find is null ? "This library holds no show." : $"No show here matches '{find}'.");
+            find is null ? "This library holds no show." : $"No show here matches '{find}'.",
+            new TablePaging(PageSize, page));
 
-        if (pages > 1)
+        yield return Ui.Table(TableId(id), columns, shown.Rows, shown.EmptyMessage);
+
+        // Under a query the line is drawn even for one page, because it is where the total of matching
+        // rows is said, and a client paging by query needs it. Without one the page is as it always was.
+        if (shown.Pages > 1 || query.Asked)
         {
-            yield return Paging(id, shown, pages);
+            yield return Paging(id, shown, query.Asked);
         }
     }
 
@@ -261,18 +281,26 @@ public static class OverviewView
         ];
     }
 
-    private static PluginComponent Paging(string libraryId, int page, int pages)
+    /// <param name="libraryId">The library whose table this pages.</param>
+    /// <param name="shown">The page drawn, how many there are, and how many shows match.</param>
+    /// <param name="counted">Whether to say how many shows match, which a client asking by query is told.</param>
+    private static PluginComponent Paging(string libraryId, ShownRows shown, bool counted)
     {
         List<PluginComponent> buttons = [];
+        int page = shown.Page;
 
         if (page > 1)
         {
             buttons.Add(Ui.Button($"library-{libraryId}-previous", "Previous", PageOf(libraryId, page - 1)));
         }
 
-        buttons.Add(Ui.Text($"library-{libraryId}-page", $"page {page} of {pages}"));
+        string line = $"page {page} of {shown.Pages}";
 
-        if (page < pages)
+        buttons.Add(Ui.Text(
+            $"library-{libraryId}-page",
+            counted ? $"{line} · {shown.Matching} {(shown.Matching == 1 ? "show" : "shows")}" : line));
+
+        if (page < shown.Pages)
         {
             buttons.Add(Ui.Button($"library-{libraryId}-next", "Next", PageOf(libraryId, page + 1)));
         }
