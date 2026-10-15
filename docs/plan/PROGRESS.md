@@ -8,7 +8,8 @@ Read this first, update it last. Nothing else decides what happens next.
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
-`S14-07` (#5, sort, filter and paging). `S14-01` to `S14-06` are done (see **Log**). **Current: `S14-07`.**
+`S14-07` (#5, sort, filter and paging). `S14-01` to `S14-07` are done (see **Log**). **Current: S14 done;
+final review.**
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
@@ -807,11 +808,24 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
 - [x] `S14-05` A season with several gaps takes a pack (#1)
 - [x] `S14-06` A page with two or more tables shows them as tabs (#4)
-- [ ] `S14-07` Every table answers sort, filter and paging (#5)
+- [x] `S14-07` Every table answers sort, filter and paging (#5)
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S14-07` Every table answers sort, filter and paging (#5).** `Views/TableQuery.From` reads #593's keys
+  (`sort`, `order`, `filter`, `page`, `pageSize`) off `PluginViewRequest.Query`; `Views/TableRows` filters
+  each table on the words its cells show (buttons excluded), sorts stably on a per-column value where the
+  words would mislead (sizes, rates, durations, counts, times, a stage's place in a run) or on the words
+  otherwise, unknown values last either way, then pages. Every table goes through it: Activity (stages,
+  now, notes), Queue (looking, waiting), Downloads, History, Sources, the overview's library tables. Only
+  the overview pages (50): a query `page` wins over the path's, `pageSize` is honoured from 1 to 50, a page
+  past the end is the last, and under any key the paging line adds "· N shows". An unknown key or order is
+  the table's own order; with no key every page is as it was. Tab counts stay the tables' totals.
+  `PagesController` now passes the request's query on. For the final review: #5 is to be closed with a
+  comment that the client side waits on media-server #593, and the overview's Previous and Next still
+  navigate by the path page at the default 50, so a client paging by query has to carry its own page.
 
 - **`S14-06` A page with two or more tables shows them as tabs (#4).** `Views/Tabs.Draw` takes a page's
   tables as `Tab`s (key, name, count or null, address, content) and the key the path names: two or more
@@ -2505,6 +2519,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, the controller's ruling for `S14-07` on `pageSize`.** A query's `pageSize` is honoured
+  between 1 and the table's own page size (the overview's 50) and never above it, so a client cannot have
+  the plugin draw an unbounded page; a size out of range or not a number is the table's own. A table that
+  does not page today ignores `page` and `pageSize`. Two readings made here: a value a row does not know
+  ("never", "—", "not counted") sorts after the known ones in either order, and the overview's paging line
+  says how many shows match only under a query, so a client that sends none sees the page unchanged.
 
 - **15 October 2026, GitHub issue #4 replaced the Queue's two half-height lists of 16 September 2026.**
   The owner's word of 14 October 2026 was to fix the seven issues, and fixing #4 is the decision: the

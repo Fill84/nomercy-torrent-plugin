@@ -14,6 +14,30 @@
   and right move from one to the next.
 - The overview page has a tab per library, at that library's page of shows.
 
+## Sorting, filtering and paging
+
+- Every table answers five keys in the page request's query: `sort`, `order`, `filter`, `page` and
+  `pageSize`. They apply to the table the page shows.
+- `sort` names a column by its key and `order` is `asc` or `desc`, ascending when it is left out.
+  A column of sizes, rates, durations, counts or times sorts by that value, not by the words in the
+  cell; any other column sorts by its words, case set aside. A row whose value is not known comes
+  after every row whose value is, in either order. Rows that sort the same keep the table's own order.
+- `filter` keeps the rows where the words of a cell contain the filter text, case set aside. A
+  row's buttons are not its words. When rows exist and none match, the table says that nothing
+  matches the filter, rather than that it is empty.
+- A sort key the table has no column for, the column of buttons, and an `order` that is neither
+  `asc` nor `desc` leave the table in its own order. No key or value makes a page fail.
+- Only the overview's table of a library's shows pages, 50 shows to a page. On it the rows are
+  filtered, then sorted, then paged, so the second page continues the first page's order. A `page`
+  in the query wins over the page in the address. A page past the last is the last page, and one
+  before the first is the first.
+- `pageSize` is honoured from 1 to the table's own 50. A size outside that, or one that is not a
+  number, is the table's own 50.
+- Under any of the keys the overview's paging line says the page, the number of pages and how many
+  shows match, as in "page 2 of 3 · 120 shows", even when the shows fit on one page.
+- A table that does not page holds all its matching rows whatever `page` and `pageSize` say.
+- A request with none of the keys draws every page exactly as it does without them.
+
 ## Activity
 
 - The Activity page shows what a run is doing: the count per stage, what is in flight, and for every
