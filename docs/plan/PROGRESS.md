@@ -25,9 +25,15 @@ the library until then. Plugin-side fixes still to do on that branch, from the s
 - make the `IPluginLibraryWriter` test double refuse an existing destination, as the server does;
 - the failed-download test was never seen red.
 
-**Current: `S15-05`** — the whole of 0.8.1 (`b63cc59..d4b79ff`) was checked across its slices on
-15 October 2026 and found ready to show the owner on beast-unit. Nothing is tagged before the owner has
-seen it.
+**v0.8.1 is released** on the owner's word of 15 October 2026: the same package on Forgejo and GitHub
+(sha256 `2ac9f18e…`), `repository.json` names 0.8.1 (`0a9284c`), and the `nomercy-plugins` catalogue was
+rebuilt at once so it lists 0.8.1. The owner updates through the catalogue and restarts the server once.
+A build copied by hand onto beast-unit is refused by the server (`PLUGIN_FILES_CHANGED`: every plugin
+folder is checked against the `.files.sha256` written at its catalogue install), and the owner does not
+want developer mode on the server, so a version is shown to the owner as a list of what changes and then
+released. On 15 October 2026 a hand-copied 0.8.1 was refused that way; the published 0.8.0 package was put
+back file for file (44 of 44 matching the server's own record) and loaded again. **Current: nothing open
+on master.** `S15-04` waits on its branch for media-server #599 and #600.
 
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
@@ -855,7 +861,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S15-02` No table scrolls sideways
 - [x] `S15-03` A show downloads only a release the sources name
 - [ ] `S15-04` A wrong episode the plugin delivered is replaced on its own — on `feat/replace-delivered`, waits for media-server #599 and #600
-- [ ] `S15-05` Seen on beast-unit, then 0.8.1
+- [x] `S15-05` 0.8.1 released on the owner's word, after the list of what changes
 
 ## Log
 
