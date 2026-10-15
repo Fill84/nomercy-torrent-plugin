@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.8.0",
+          "targetAbi": "12.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.8.0/NoMercy.Plugin.TorrentDownloader-0.8.0.zip",
+          "checksum": "13efca76669db4c4c31cb25f16204e2d36bf5e41959cc40634d08e3fc60cc7b3",
+          "changelog": "Seven reported problems fixed: finished downloads that never reached the intake folder, providers that failed on Docker, logs too thin to debug with, copies nobody seeds, season packs, and the tables.",
+          "timestamp": "2026-10-15T03:04:21Z"
+        },
+        {
           "version": "0.7.1",
           "targetAbi": "12.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.7.1/NoMercy.Plugin.TorrentDownloader-0.7.1.zip",
