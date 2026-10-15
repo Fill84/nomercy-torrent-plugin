@@ -112,7 +112,29 @@ public static class QueueView
     /// </remarks>
     private static IComparable Slot(TrackedEpisode episode)
     {
-        return (episode.ShowTitle.ToUpperInvariant(), episode.Key.ShowId, episode.Key.Season, episode.Key.Number);
+        return new EpisodeSlot(episode.ShowTitle, episode.Key.ShowId, episode.Key.Season, episode.Key.Number);
+    }
+
+    /// <summary>Where an episode sorts: its show's title, then the show, the season and the number.</summary>
+    /// <remarks>
+    /// The title letter by letter whatever its case, as the Queue's own order (<c>QueueOrder</c>) and every
+    /// other sorted word on the plugin's pages compare it. A tuple compared its title by the server's
+    /// culture, which under en-GB puts "Élite" before "Fargo" and letter by letter after it: one list in
+    /// two orders, by which country the server was set up in.
+    /// </remarks>
+    private sealed record EpisodeSlot(string Title, int ShowId, int Season, int Number) : IComparable
+    {
+        public int CompareTo(object? obj)
+        {
+            if (obj is not EpisodeSlot other)
+            {
+                throw new ArgumentException("An episode's place is compared with another episode's.", nameof(obj));
+            }
+
+            int byTitle = StringComparer.OrdinalIgnoreCase.Compare(Title, other.Title);
+
+            return byTitle != 0 ? byTitle : (ShowId, Season, Number).CompareTo((other.ShowId, other.Season, other.Number));
+        }
     }
 
     /// <summary>Looking for one episode now, outside the cadence.</summary>

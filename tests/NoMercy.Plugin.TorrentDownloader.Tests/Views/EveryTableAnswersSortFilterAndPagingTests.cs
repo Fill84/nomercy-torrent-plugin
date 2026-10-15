@@ -91,6 +91,49 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
                 query: Asked(("sort", "attempts"), ("order", "desc"), ("page", "2"), ("pageSize", "1")))));
     }
 
+    /// <remarks>
+    /// A query's keys are case-insensitive to ASP.NET, which is where they arrive from, so <c>?Sort=</c>
+    /// is the same request as <c>?sort=</c>.
+    /// </remarks>
+    [Fact]
+    public void TheKeysAreReadWhateverTheirCase()
+    {
+        Assert.Equal(
+            ["Severance S02E01", "Silo S01E01", "Andor S01E02"],
+            Episodes(QueueView.Render(Looking(), query: Asked(("Sort", "attempts"), ("ORDER", "desc")))));
+        Assert.Equal(["Severance S02E01"], Episodes(QueueView.Render(Looking(), query: Asked(("Filter", "sever")))));
+    }
+
+    /// <remarks>
+    /// An episode sorts by its show's title the way the Queue's own order does, letter by letter whatever
+    /// the case, and never by the server's culture: under en-GB "Élite" sorts before "Fargo", letter by
+    /// letter after it. Two servers in two countries draw the same list.
+    /// </remarks>
+    [Fact]
+    public void AnEpisodeSortsByItsTitleAsTheQueueDoesWhateverTheServersCulture()
+    {
+        CultureInfo was = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo("en-GB");
+
+        try
+        {
+            TrackedEpisode[] two =
+            [
+                Tracked(7, "Élite", 1, 1, EpisodeState.Missing),
+                Tracked(8, "Fargo", 1, 1, EpisodeState.Missing),
+            ];
+
+            Assert.Equal(["Fargo S01E01", "Élite S01E01"], Episodes(QueueView.Render(two)));
+            Assert.Equal(
+                ["Fargo S01E01", "Élite S01E01"],
+                Episodes(QueueView.Render(two, query: Asked(("sort", "episode"), ("order", "asc")))));
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = was;
+        }
+    }
+
     [Theory]
     [InlineData("nope", "asc")]
     [InlineData("attempts", "sideways")]
@@ -294,6 +337,23 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
         Assert.Equal("page 2 of 3 · 5 shows", PagingLine(second));
     }
 
+    /// <remarks>
+    /// The controller's ruling for S14-07, fix round 1: Previous and Next go to the page in the path, fifty
+    /// to a page and with no query on it, so under a query of ten to a page the Next of page 2 drew shows
+    /// 101 to 150 and dropped the sort and the filter. A client paging by query pages by query; the page
+    /// says where it is and how many match, and offers no button that would take it somewhere else.
+    /// </remarks>
+    [Fact]
+    public void UnderAQueryTheOverviewDrawsNoPreviousOrNext()
+    {
+        PluginView page = Overview(Asked(("page", "2"), ("pageSize", "2")));
+
+        Assert.Equal("page 2 of 3 · 5 shows", PagingLine(page));
+        Assert.DoesNotContain(
+            Rendered.All(page),
+            one => one.Id == $"library-{Tv}-previous" || one.Id == $"library-{Tv}-next");
+    }
+
     [Fact]
     public void APagePastTheEndIsTheLastPage()
     {
@@ -357,6 +417,8 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
         Assert.Equal(50, Shows(page).Count);
         Assert.Equal("Show 001", Shows(page)[0]);
         Assert.Equal("page 1 of 2", PagingLine(page));
+        Assert.Equal(PluginActionType.Navigate, Rendered.ById(page, $"library-{Tv}-next").Action?.Type);
+        Assert.DoesNotContain(Rendered.All(page), one => one.Id == $"library-{Tv}-previous");
         Assert.DoesNotContain(Rendered.All(Overview(TableQuery.None)), one => one.Id == $"library-{Tv}-paging");
     }
 
@@ -404,13 +466,15 @@ public sealed class EveryTableAnswersSortFilterAndPagingTests : IDisposable
     /// The address the web app fetches a page by is answered by the plugin's own controller, which built
     /// its request from the route alone, so a query on it never reached a table.
     /// </remarks>
-    [Fact]
-    public async Task AQueryOnThePagesOwnAddressReachesTheTable()
+    [Theory]
+    [InlineData("?filter=S01E02")]
+    [InlineData("?Filter=S01E02")]
+    public async Task AQueryOnThePagesOwnAddressReachesTheTable(string asked)
     {
         using TorrentDownloaderPlugin plugin = await Seeded();
 
         PagesController controller = new PagesController(new LoadedPlugins(plugin)).On(plugin.Id);
-        controller.HttpContext.Request.QueryString = new QueryString("?filter=S01E02");
+        controller.HttpContext.Request.QueryString = new QueryString(asked);
 
         OkObjectResult result = Assert.IsType<OkObjectResult>(await controller.Page("queue", CancellationToken.None));
         PluginView page = Assert.IsType<PluginDataResponse<PluginView>>(result.Value).Data!;

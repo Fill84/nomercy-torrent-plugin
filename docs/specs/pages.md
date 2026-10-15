@@ -17,7 +17,7 @@
 ## Sorting, filtering and paging
 
 - Every table answers five keys in the page request's query: `sort`, `order`, `filter`, `page` and
-  `pageSize`. They apply to the table the page shows.
+  `pageSize`, whatever the case of the key. They apply to the table the page shows.
 - `sort` names a column by its key and `order` is `asc` or `desc`, ascending when it is left out.
   A column of sizes, rates, durations, counts or times sorts by that value, not by the words in the
   cell; any other column sorts by its words, case set aside. A row whose value is not known comes
@@ -34,7 +34,10 @@
 - `pageSize` is honoured from 1 to the table's own 50. A size outside that, or one that is not a
   number, is the table's own 50.
 - Under any of the keys the overview's paging line says the page, the number of pages and how many
-  shows match, as in "page 2 of 3 · 120 shows", even when the shows fit on one page.
+  shows match, as in "page 2 of 3 · 120 shows", even when the shows fit on one page, and the overview
+  draws no Previous or Next buttons. Without any of the keys, Previous and Next go to the address of
+  the page before and the page after.
+- A tab's count is the number of rows its table holds, whatever `filter` keeps.
 - A table that does not page holds all its matching rows whatever `page` and `pageSize` say.
 - A request with none of the keys draws every page exactly as it does without them.
 

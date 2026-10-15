@@ -107,14 +107,16 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
     /// <remarks>
     /// A table's sort, filter and page arrive in the query (GitHub issue #5, media-server #593), and a
     /// request built from the route alone dropped them on this address while the server's endpoint passed
-    /// them, so the same page drew two different tables. Everything but <c>route</c> and <c>surface</c>,
-    /// which the server keeps for itself.
+    /// them, so the same page drew two different tables. Built exactly as the server's
+    /// <c>PluginUiController</c> builds it — everything but <c>route</c> and <c>surface</c>, the keys as
+    /// they were sent, in a dictionary with the default comparer — so a view is handed the same query on
+    /// either address. A key's case is set aside where it is read (<c>TableQuery.From</c>).
     /// </remarks>
     private Dictionary<string, string> Asked()
     {
         return Request.Query
-            .Where(entry => entry.Key is not "route" and not "surface")
-            .ToDictionary(entry => entry.Key, entry => entry.Value.ToString(), StringComparer.Ordinal);
+            .Where(entry => entry.Key != "route" && entry.Key != "surface")
+            .ToDictionary(entry => entry.Key, entry => entry.Value.ToString());
     }
 
     /// <summary>

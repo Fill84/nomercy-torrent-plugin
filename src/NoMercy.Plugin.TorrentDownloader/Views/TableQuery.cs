@@ -63,9 +63,17 @@ public sealed record TableQuery(string? Sort, bool Descending, string? Filter, i
         return new(sort, descending, Read(query, FilterKey), Number(query, PageKey), Number(query, PageSizeKey));
     }
 
+    /// <remarks>
+    /// <strong>Whatever the key's case.</strong> ASP.NET reads a query's keys case-insensitively, and the
+    /// server hands them on as they were sent, in a dictionary that is not: <c>?Sort=</c> arrives as
+    /// <c>Sort</c>, and an exact lookup ignored a key that the request it came from treats as <c>sort</c>.
+    /// The request already folded keys that differ only in case into one, so at most one matches.
+    /// </remarks>
     private static string? Read(IReadOnlyDictionary<string, string> query, string key)
     {
-        return query.TryGetValue(key, out string? value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
+        string? value = query.FirstOrDefault(entry => string.Equals(entry.Key, key, StringComparison.OrdinalIgnoreCase)).Value;
+
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private static int? Number(IReadOnlyDictionary<string, string> query, string key)

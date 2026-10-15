@@ -283,22 +283,33 @@ public static class OverviewView
 
     /// <param name="libraryId">The library whose table this pages.</param>
     /// <param name="shown">The page drawn, how many there are, and how many shows match.</param>
-    /// <param name="counted">Whether to say how many shows match, which a client asking by query is told.</param>
-    private static PluginComponent Paging(string libraryId, ShownRows shown, bool counted)
+    /// <param name="byQuery">Whether the client asked by query, which pages by query and is told how many match.</param>
+    /// <remarks>
+    /// <strong>Under a query there is no Previous or Next</strong>, on the controller's ruling for S14-07.
+    /// The buttons go to the page in the path, fifty to a page and with no query on it: under ten to a
+    /// page, the Next of page 2 drew shows 101 to 150, skipping 21 to 100, and dropped the sort and the
+    /// filter on the way. A client paging by query pages by query, so the page says where it is and offers
+    /// nothing that would take it somewhere else.
+    /// </remarks>
+    private static PluginComponent Paging(string libraryId, ShownRows shown, bool byQuery)
     {
         List<PluginComponent> buttons = [];
         int page = shown.Page;
+        string line = $"page {page} of {shown.Pages}";
+
+        if (byQuery)
+        {
+            return Ui.Row(
+                $"library-{libraryId}-paging",
+                Ui.Text($"library-{libraryId}-page", $"{line} · {shown.Matching} {(shown.Matching == 1 ? "show" : "shows")}"));
+        }
 
         if (page > 1)
         {
             buttons.Add(Ui.Button($"library-{libraryId}-previous", "Previous", PageOf(libraryId, page - 1)));
         }
 
-        string line = $"page {page} of {shown.Pages}";
-
-        buttons.Add(Ui.Text(
-            $"library-{libraryId}-page",
-            counted ? $"{line} · {shown.Matching} {(shown.Matching == 1 ? "show" : "shows")}" : line));
+        buttons.Add(Ui.Text($"library-{libraryId}-page", line));
 
         if (page < shown.Pages)
         {

@@ -823,9 +823,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   the overview pages (50): a query `page` wins over the path's, `pageSize` is honoured from 1 to 50, a page
   past the end is the last, and under any key the paging line adds "· N shows". An unknown key or order is
   the table's own order; with no key every page is as it was. Tab counts stay the tables' totals.
-  `PagesController` now passes the request's query on. For the final review: #5 is to be closed with a
-  comment that the client side waits on media-server #593, and the overview's Previous and Next still
-  navigate by the path page at the default 50, so a client paging by query has to carry its own page.
+  `PagesController` now passes the request's query on, built as the server builds it; keys are read
+  whatever their case. Review fix round 1: under any key the overview draws no Previous or Next (they went
+  to the path page at 50 with no query), the Queue's episode sort compares titles ordinal-ignore-case
+  rather than by the server's culture. For the final review: #5 is to be closed with a comment that the
+  client side waits on media-server #593.
 
 - **`S14-06` A page with two or more tables shows them as tabs (#4).** `Views/Tabs.Draw` takes a page's
   tables as `Tab`s (key, name, count or null, address, content) and the key the path names: two or more
@@ -2526,6 +2528,9 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   does not page today ignores `page` and `pageSize`. Two readings made here: a value a row does not know
   ("never", "—", "not counted") sorts after the known ones in either order, and the overview's paging line
   says how many shows match only under a query, so a client that sends none sees the page unchanged.
+  The controller's ruling in review fix round 1: under any query key the overview draws no Previous or
+  Next, only "page X of Y · N shows" — a client paging by query pages by query; without a query the
+  buttons are as before. Tab counts are the tables' totals and do not follow the filter.
 
 - **15 October 2026, GitHub issue #4 replaced the Queue's two half-height lists of 16 September 2026.**
   The owner's word of 14 October 2026 was to fix the seven issues, and fixing #4 is the decision: the
