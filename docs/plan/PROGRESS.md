@@ -814,6 +814,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **`ADownloadThatFinishedWhileTheServerWasDownIsStagedOnStart` failed once under the full suite (15 October
+  2026); the test was at fault, not the plugin.** It saved the folders through the loaded plugin and wrote the
+  grab afterwards, but saving the folders is itself a start (`Settings.Saved` → `StartUpAsync`), so the grab
+  raced the pass it was there for: a pass that read the store first put nothing back and nothing looked again.
+  Now the folders (a `SettingsStore` of its own over the context), the grab and a cycle just finished are
+  written before `Initialize`, as a real restart has them, and the start off `Initialize` is what stages it.
+  The finished cycle also closes a gap: with none on record a cycle opened at once and its own pass staged the
+  file, so the test passed with the start's pass deleted. Nothing in `src/` changed.
 - **`S14-07` Every table answers sort, filter and paging (#5).** `Views/TableQuery.From` reads #593's keys
   (`sort`, `order`, `filter`, `page`, `pageSize`) off `PluginViewRequest.Query`; `Views/TableRows` filters
   each table on the words its cells show (buttons excluded), sorts stably on a per-column value where the
@@ -3217,6 +3225,13 @@ Kept here so no slice re-discovers them.
   and the reason a test that presses a button straight after configuring must first write down that the
   cycle has just run — `CadenceRepository.RecordFinishedAsync(Cadences.Name, …)` — or `StartSearchAsync`
   refuses, because a search is refused while a cycle is open. Measured 22 September 2026 (`S13-24`).
+
+- **A row a test writes after saving the folders races the start that save begins.** Under two suites at
+  once the save-to-row gap was 180 ms to 1.84 s and the start's pass came 115 to 145 ms after the row, every
+  time; with the row held back one second, or five, the pass read "stored 0" and the download was never
+  staged (2 of 2). Before: one failure in the full suite of 15 October 2026, none in 13 loaded or unloaded
+  runs of mine. After writing everything before `Initialize`: none in 3 full `dotnet test` runs and 4 runs
+  of the plugin suite two at a time, and the window no longer exists. Measured 15 October 2026.
 
 - **`RunEnd.Stopped` is written only where the cycle sees the cancellation** (`TorrentDownloaderPlugin.cs:1373`).
   A run over an empty library can be finished before Stop reaches it, and then the bar says "last run

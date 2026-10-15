@@ -183,9 +183,10 @@ public sealed class TheChainIsJoinedTests : IDisposable
     /// nothing touched them until somebody opened a page.
     /// </para>
     /// <para>
-    /// The start is the server saying the plugin has loaded, which is after
-    /// <c>Initialize</c> and is an event: the grab is in the store, its file is
-    /// whole on disk, and nothing but that event is published.
+    /// The start is the one a plugin on contract 12 gives itself off the
+    /// <c>Initialize</c> thread: the folders are set, the grab is in the store,
+    /// its file is whole on disk, and all of it was there before the plugin was
+    /// loaded. Nothing else is done — no page, no Run, no cycle due.
     /// </para>
     /// </remarks>
     [Fact]
@@ -214,8 +215,6 @@ public sealed class TheChainIsJoinedTests : IDisposable
             .Episode(41, 3, 6, "The Getaway", new DateTime(2020, 1, 1), hasFile: false)
             .Episode(41, 1, 1, "Freedom Day", new DateTime(2019, 1, 1), hasFile: true);
 
-        using TorrentDownloaderPlugin plugin = new();
-
         FakePluginContext context = new()
         {
             DataFolderPath = _folder,
@@ -224,16 +223,24 @@ public sealed class TheChainIsJoinedTests : IDisposable
             Encodes = new FakeEncoder(),
         };
 
-        plugin.Initialize(context);
-
+        // What the server kept when it stopped, written before the plugin is
+        // loaded, because that is when it was written. This test used to load
+        // the plugin, save the folders and only then write the grab — and saving
+        // the folders is itself a start, so the grab raced the very pass it was
+        // there for. Under the full suite on 15 October 2026 that pass read the
+        // store first, found nothing to put back, and nothing looked again.
         Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
         settings.Client.ListenPort = 0;
 
-        SaveResult saved = await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+        SaveResult saved = await new SettingsStore(context.Configuration, context.Secrets)
+            .SaveAsync(settings, CancellationToken.None);
         Assert.True(saved.Saved, string.Join("; ", saved.Errors));
 
-        // What the store held when the server stopped: a grab still downloading.
-        await (await plugin.GrabsAsync(CancellationToken.None)).RecordAsync(
+        Store database = new(_folder);
+        await database.MigrateAsync(CancellationToken.None);
+
+        // A grab still downloading.
+        await new GrabRepository(database).RecordAsync(
             new(0, 0, 0),
             string.Empty,
             name,
@@ -244,7 +251,18 @@ public sealed class TheChainIsJoinedTests : IDisposable
             DateTimeOffset.UtcNow,
             CancellationToken.None);
 
+        // And a cycle that finished a moment ago, so none is due. A cycle
+        // starting looks at the transfers too, and with no cycle on record one
+        // starts at once: the start's own pass could then go and this test would
+        // not notice.
+        await new CadenceRepository(database).RecordFinishedAsync(
+            Cadences.Name, DateTimeOffset.UtcNow, CancellationToken.None);
+
         Assert.Empty(Directory.GetFiles(intake));
+
+        using TorrentDownloaderPlugin plugin = new();
+
+        plugin.Initialize(context);
 
         // Nothing else happens: the plugin starts itself, and the client says
         // the download is whole as it opens.
@@ -257,7 +275,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
         Assert.True(
             Directory.GetFiles(intake).Length > 0,
-            "the server said the plugin loaded and the download that finished while it was down was never staged.");
+            "the plugin started and the download that finished while the server was down was never staged.");
     }
 
     /// <remarks>
