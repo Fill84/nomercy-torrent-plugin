@@ -67,3 +67,6 @@
 
 - The winning merged torrent is offered to the download client.
 - Only the winning torrent is offered. No other hash of the same release is started.
+- On a run over every missing episode, a merged torrent an open grab is already downloading is not
+  offered again, and the next merged torrent in the same order becomes the winner. A season pack that no
+  longer answers for some of its episodes is not taken again for them, and they are searched for singly.

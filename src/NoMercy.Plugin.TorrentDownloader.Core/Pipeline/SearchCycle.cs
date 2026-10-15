@@ -107,6 +107,17 @@ public sealed record CycleOptions(
     /// that had the torrent, which before then was none at all.
     /// </remarks>
     public IReadOnlyCollection<string> OwnTrackerHosts { get; init; } = [];
+
+    /// <summary>The info hashes of every grab still open, read once for the cycle.</summary>
+    /// <remarks>
+    /// A torrent already being downloaded is not taken again. A pack that has let go of two of its episodes —
+    /// narrowed out because their videos would not come — leaves them as gaps, and the indexers rank that same
+    /// pack first. Taken again it answered for nothing: the client already had it, the store kept the open row
+    /// as it was, and the two episodes were settled as taken by a torrent that would never deliver them, every
+    /// run until the pack was done — and then the store turned the done row into a grab for the two, the client
+    /// refused it and the pack was blacklisted for good.
+    /// </remarks>
+    public IReadOnlySet<string> OpenHashes { get; init; } = new HashSet<string>();
 }
 
 /// <summary>Everything one cycle decided.</summary>
@@ -515,6 +526,19 @@ public sealed class SearchCycle(
 
         foreach (RankedTorrent candidate in ranked)
         {
+            if (candidate.Torrent.InfoHash is string open && options.OpenHashes.Contains(open))
+            {
+                // Already being downloaded, so taking it again answers for nothing it is not already answering
+                // for (CycleOptions.OpenHashes says what that cost). Passed over before its page is read, like a
+                // copy nobody seeds, and not refused: once it is done or failed it is judged afresh.
+                string reason = $"{candidate.Torrent.Title} is already being downloaded, so it is not taken again.";
+
+                journal.Noted(ActivityStage.Decide, subject, reason);
+                refused.Add(reason);
+
+                continue;
+            }
+
             if (candidate.NobodySeeds)
             {
                 string reason = candidate.Indexers.Count == 1

@@ -106,6 +106,34 @@ public sealed class SeasonPackCycleTests
         Assert.Contains(fetch.Asked, address => address.ToString() == IndexerSites.Exact(ThePirateBay, FluxPack));
     }
 
+    /// <remarks>
+    /// The pack is still downloading and two of its episodes were let go of — narrowed out of it because their
+    /// videos would not come — so they are gaps again. The pack is the one the indexers rank first, and taken
+    /// again it answers for nothing new: the client already has it, the store keeps the open row as it is, and
+    /// the two episodes are settled as taken by a torrent that will never deliver them, run after run. A
+    /// torrent already open does not stand, so the run searches the two singly instead.
+    /// </remarks>
+    [Fact]
+    public async Task TheEpisodesLetGoOfByAnOpenPackAreSearchedSinglyAndThePackIsNotTakenAgain()
+    {
+        FakeFetch fetch = Sites(packListed: true);
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await Cycle(fetch, engine).RunAsync(
+            [Adolescence(1), Adolescence(2)],
+            Options with { OpenHashes = new HashSet<string>([PackHash], StringComparer.OrdinalIgnoreCase) },
+            CancellationToken.None);
+
+        Assert.DoesNotContain(report.Outcomes, outcome => outcome.InfoHash == PackHash);
+        Assert.DoesNotContain(engine.Taken, taken => taken.Episodes is not null);
+
+        EpisodeOutcome single = Assert.Single(report.Outcomes, outcome => outcome.HandedOver);
+
+        Assert.Equal(SingleHash, single.InfoHash);
+        Assert.Equal([Adolescence(1).Key], single.Covers);
+        Assert.Contains(fetch.Asked, address => address.ToString() == IndexerSites.Exact(ThePirateBay, Single));
+    }
+
     private static CycleOptions Options { get; } =
         new(
             SettingsByShow.Every(new() { Quality = "1080p", Codec = "h264", EnglishOnly = true, Searched = true }),

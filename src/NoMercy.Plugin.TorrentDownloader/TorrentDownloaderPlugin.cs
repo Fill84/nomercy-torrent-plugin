@@ -1304,8 +1304,16 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
 
         GrabRepository grabs = await GrabsAsync(ct);
 
+        // What is already being downloaded, which a full pass does not take again (CycleOptions.OpenHashes). A
+        // hand-run leaves it empty for the reason the gaps below are left as they are.
+        HashSet<string> openHashes = new(StringComparer.OrdinalIgnoreCase);
+
         if (only is null)
         {
+            IReadOnlyList<StoredDownload> open = await grabs.OpenAsync(ct);
+
+            openHashes.UnionWith(open.Select(one => one.InfoHash));
+
             // An episode something is already downloading is not a gap. It
             // stays missing until a file for it is in the library — which is
             // right — and without this the cycle read that as work and grabbed
@@ -1317,7 +1325,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // because a grab is open is refusing the thing they asked for.
             tracked = OpenGrabs.Excluding(
                 tracked,
-                [.. (await grabs.OpenAsync(ct)).SelectMany(one => one.Covers)]);
+                [.. open.SelectMany(one => one.Covers)]);
         }
 
         // Every challenge cleared first, in one pass, so the run itself needs no
@@ -1378,6 +1386,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     // Their tracker belongs to the torrents it issued and to
                     // nothing else.
                     OwnTrackerHosts = [.. settings.PrivateTrackers.Select(one => one.Host)],
+                    OpenHashes = openHashes,
                 },
                 ct);
         }
