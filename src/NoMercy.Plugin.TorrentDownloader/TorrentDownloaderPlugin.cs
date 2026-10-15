@@ -671,7 +671,9 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // by an event, and an event that was lost or a pass that failed left
             // a finished download in the incomplete folder until something
             // unrelated started another (GitHub issue #3). The cadence is the
-            // net under all of them.
+            // net under all of them, so it tries a staging that failed a
+            // moment ago too: the owner may have just cleared what was in the way.
+            _transfers?.LookAfresh();
             StartTransfers();
         }
 
@@ -1030,7 +1032,12 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // Where the server says what became of an encode. Without it a
             // failed job and a slow one look the same, and a failed one is
             // waited on until the owner cancels it.
-            says: Says());
+            says: Says())
+        {
+            // The look that comes round while a finished download waits is the one retry of a staging that
+            // failed, so the client saying the download is whole again does not start another.
+            StageAgainAfter = LookAgainInterval,
+        };
 
         await _transfers.TickAsync(
             settings.IncompleteFolder,

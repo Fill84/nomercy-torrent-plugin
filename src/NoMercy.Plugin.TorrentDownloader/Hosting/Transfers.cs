@@ -66,6 +66,68 @@ public sealed class Transfers(
     /// <summary>The staging failures already said, by download, so one that repeats every pass is loud once.</summary>
     private readonly SaidBefore _stagingFailed = new();
 
+    /// <summary>How long a download whose staging failed is left alone before it is staged again.</summary>
+    /// <remarks>
+    /// The plugin sets it to its own look-again interval, so the look that comes round while a finished download
+    /// waits is the one retry.
+    /// </remarks>
+    public TimeSpan StageAgainAfter { get; init; } = TimeSpan.FromMinutes(1);
+
+    /// <summary>When each download's staging last failed, by info hash.</summary>
+    /// <remarks>
+    /// <para>
+    /// A staging that fails after the torrent was let go of holds it again, the client opens it whole from what
+    /// it kept and says it finished, and that starts the next pass at once — which let go of it, failed the same
+    /// way and held it again, in a loop paced by how fast the client reopens a torrent, and each round may copy
+    /// gigabytes. So a download whose staging failed is left out of staging until <see cref="StageAgainAfter"/>
+    /// has passed.
+    /// </para>
+    /// <para>
+    /// Held rather than written down: a restart is a fresh look at the intake folder, and trying once then
+    /// costs one attempt. A run's start is one too (<see cref="LookAfresh"/>).
+    /// </para>
+    /// </remarks>
+    private readonly Dictionary<string, DateTimeOffset> _stagingFailedAt = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Has the next pass try every finished download, however recently its staging failed.</summary>
+    /// <remarks>
+    /// For the look at the start of a run (<c>docs/specs/run.md</c>): it is the net under every other pass,
+    /// and the one the owner starts by hand once they have cleared what was in the way.
+    /// </remarks>
+    public void LookAfresh()
+    {
+        lock (_stagingFailedAt)
+        {
+            _stagingFailedAt.Clear();
+        }
+    }
+
+    /// <summary>Whether a download's last staging failed too recently to be tried again on this pass.</summary>
+    private bool StagingRests(string infoHash)
+    {
+        lock (_stagingFailedAt)
+        {
+            return _stagingFailedAt.TryGetValue(infoHash, out DateTimeOffset failedAt)
+                   && (time ?? TimeProvider.System).GetUtcNow() - failedAt < StageAgainAfter;
+        }
+    }
+
+    /// <summary>Writes down that a download's staging failed just now, or forgets that it did.</summary>
+    private void StagingFailed(string infoHash, bool failed = true)
+    {
+        lock (_stagingFailedAt)
+        {
+            if (failed)
+            {
+                _stagingFailedAt[infoHash] = (time ?? TimeProvider.System).GetUtcNow();
+            }
+            else
+            {
+                _stagingFailedAt.Remove(infoHash);
+            }
+        }
+    }
+
     /// <summary>One pass over everything the client is holding.</summary>
     /// <param name="incompleteFolder">Where downloads land while they run.</param>
     /// <param name="trackers">
@@ -148,6 +210,12 @@ public sealed class Transfers(
 
         foreach (StoredDownload whole in plan.Stage)
         {
+            if (StagingRests(whole.InfoHash))
+            {
+                // Its staging failed a moment ago; the look that comes round tries again (_stagingFailedAt).
+                continue;
+            }
+
             // What a pack does not hold is let go of first, so it is neither staged nor waited for.
             StoredDownload finished = await NarrowedAsync(whole, ct);
 
@@ -658,11 +726,17 @@ public sealed class Transfers(
             {
                 // Nothing reached the intake folder, so nothing is done with.
                 // Marking it done would lose the download and the episode.
+                if (chosen.Count > 0)
+                {
+                    StagingFailed(finished.InfoHash);
+                }
+
                 return [];
             }
 
             // Staged, so a failure of it from here on is news again.
             _stagingFailed.Forget(finished.InfoHash);
+            StagingFailed(finished.InfoHash, failed: false);
 
             // Staged, and said so before the encode is asked for. The copy has
             // happened and must not happen again; whether the encode is taken
@@ -692,6 +766,8 @@ public sealed class Transfers(
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
         {
+            StagingFailed(finished.InfoHash);
+
             if (!_stagingFailed.IsNews(finished.InfoHash, wrong.Message))
             {
                 // The pass comes round every minute while this waits (S14-01),

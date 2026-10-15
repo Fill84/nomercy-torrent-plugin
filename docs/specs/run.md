@@ -81,6 +81,9 @@
 - A download that finishes while the plugin is looking is looked at again before that look ends.
 - A finished download whose staging fails stays where it is and is staged by a later look, with nothing
   else happening.
+- A finished download whose staging failed is tried again once a minute, by the look that comes round
+  while it waits, or at the start of a run. The download client saying it is finished again does not try
+  it sooner.
 - While a grab waits on an encode, each look reads what the server made of it and the library, and the
   look that finds the episode closes the grab.
 - A move or a copy into the intake folder that fails is written to the server's log as a warning naming

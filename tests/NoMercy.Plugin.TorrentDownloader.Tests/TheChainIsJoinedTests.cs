@@ -36,6 +36,9 @@ public sealed class TheChainIsJoinedTests : IDisposable
     private readonly string _folder = Path.Combine(
         Path.GetTempPath(), "nomercy-torrent-tests", "chain-" + Guid.NewGuid().ToString("n")[..8]);
 
+    /// <summary>What the plugin <see cref="AStagingThatFailsAsync"/> built has said.</summary>
+    private CapturingLogger _said = new();
+
     /// <remarks>
     /// A download that is whole the moment it is taken on — which is every
     /// staged and dispatched grab after a restart — is staged without anything
@@ -655,9 +658,17 @@ public sealed class TheChainIsJoinedTests : IDisposable
             // What was in the way is gone. Nobody presses anything.
             Directory.Delete(staged);
 
+            DateTimeOffset cleared = DateTimeOffset.UtcNow;
+
             Assert.True(
                 await UntilAsync(() => File.Exists(staged)),
                 "a finished download's staging failed once and nothing ever looked at it again.");
+
+            // On the look the plugin was given and not on a minute of its own: a failed staging rests until
+            // the look comes round, and the look is the one retry.
+            Assert.True(
+                DateTimeOffset.UtcNow - cleared < TimeSpan.FromSeconds(30),
+                "the failed staging was tried again on a clock of its own, not on the plugin's look.");
         }
     }
 
@@ -685,6 +696,40 @@ public sealed class TheChainIsJoinedTests : IDisposable
             Assert.True(
                 await UntilAsync(() => File.Exists(staged)),
                 "a run started and the finished download waiting to be staged was not looked at.");
+        }
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A staging that failed waits for the look, not for the client.</strong> The torrent is let go of
+    /// so its file can be moved, the move fails, and the client is handed it back; it opens it whole from what
+    /// it kept and says it finished, and that started the next pass at once — which failed the same way, in a
+    /// loop paced by how fast the client reopens a torrent, each round of which may copy gigabytes.
+    /// </para>
+    /// <para>
+    /// Here, through the plugin and a real client, the look is an hour away and the way stays blocked: in the
+    /// seconds after the first refusal, staging is not tried again.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AStagingThatFailedIsNotTriedAgainUntilTheLookComesRound()
+    {
+        (TorrentDownloaderPlugin plugin, _) = await AStagingThatFailsAsync(
+            TimeSpan.FromHours(1),
+            LogLevel.Debug,
+            isPrivate: false);
+
+        using (plugin)
+        {
+            // Long enough for a client reopening a 64 KB torrent to say it finished many times over.
+            await Task.Delay(TimeSpan.FromSeconds(3));
+
+            // The plugin's own file, which keeps the Debug line each repeat is written at.
+            plugin.Log.Flush();
+
+            Assert.Single(
+                LogFiles.Lines(plugin.Log.Folder),
+                line => line.Contains("could not be staged", StringComparison.Ordinal));
         }
     }
 
@@ -825,7 +870,15 @@ public sealed class TheChainIsJoinedTests : IDisposable
     /// </para>
     /// </remarks>
     /// <param name="lookAgain">How long until the pass comes round by itself while something waits.</param>
-    private async Task<(TorrentDownloaderPlugin Plugin, string Staged)> AStagingThatFailsAsync(TimeSpan lookAgain)
+    /// <param name="level">What the plugin's log keeps, so a test can count the quiet repeats too.</param>
+    /// <param name="isPrivate">
+    /// False for a public torrent, which nothing seeds, so it is let go of and its file moved — and, the move
+    /// refused, handed back to the client.
+    /// </param>
+    private async Task<(TorrentDownloaderPlugin Plugin, string Staged)> AStagingThatFailsAsync(
+        TimeSpan lookAgain,
+        LogLevel level = LogLevel.Information,
+        bool isPrivate = true)
     {
         string incomplete = Path.Combine(_folder, "incomplete");
         string intake = Path.Combine(_folder, "intake");
@@ -839,7 +892,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         byte[] content = RandomNumberGenerator.GetBytes(64 * 1024);
         await File.WriteAllBytesAsync(Path.Combine(incomplete, name), content);
 
-        byte[] file = Torrent(name, content, pieceLength: 16 * 1024, isPrivate: true);
+        byte[] file = Torrent(name, content, pieceLength: 16 * 1024, isPrivate: isPrivate);
         string torrent = Path.Combine(_folder, "episode.torrent");
         await File.WriteAllBytesAsync(torrent, file);
 
@@ -860,6 +913,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         };
 
         plugin.Initialize(context);
+        _said = context.Log;
 
         _ = await plugin.EpisodesAsync(CancellationToken.None);
         await new CadenceRepository(new Store(_folder)).RecordFinishedAsync(
@@ -888,7 +942,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
 
         Directory.CreateDirectory(staged);
 
-        Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake };
+        Settings settings = new() { IncompleteFolder = incomplete, IntakeFolder = intake, LogLevel = level };
         settings.Client.ListenPort = 0;
 
         // So a run reads nobody: this touches no network.

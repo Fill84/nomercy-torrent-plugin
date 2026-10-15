@@ -1562,11 +1562,15 @@ public class TransfersTests : IDisposable
 
         NoFileList engine = new(new StandingEngine().Holding(Finished() with { State = TorrentState.Finished }));
         FakeProvider server = Server();
-        Transfers transfers = Transfers(engine, grabs, server);
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 15, 12, 0, 0, TimeSpan.Zero));
+        Transfers transfers = Transfers(engine, grabs, server, clock: clock);
 
         for (int pass = 0; pass < 3; pass++)
         {
             await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+            // Each a look later, which is when a staging that failed is tried again.
+            clock.Advance(transfers.StageAgainAfter);
         }
 
         Assert.Single(
@@ -1788,6 +1792,58 @@ public class TransfersTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>A staging the intake folder refused is tried again once the look comes round, and not
+    /// before.</strong> Held again, the client opens the torrent from what it kept, finds it whole at once and
+    /// says it finished — which starts another pass, which let go of it, failed the same way and held it again:
+    /// a loop paced by how fast the client reopens a torrent, each round of which may copy gigabytes.
+    /// </para>
+    /// <para>
+    /// Here the client holds it again as finished, exactly as the real one does. A second pass straight away
+    /// leaves it alone; one a look later tries once more.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AStagingTheIntakeFolderRefusedIsTriedAgainOnlyOnceTheLookComesRound()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 15, 12, 0, 0, TimeSpan.Zero));
+
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        TorrentStatus finished = Finished() with { State = TorrentState.Finished };
+        TorrentFile file = new(Path.GetFileName(episode), 900_000_000);
+        StandingEngine standing = new StandingEngine().Holding(finished, file);
+        WholeAgainAtOnce engine = new(standing, finished, file);
+
+        await File.WriteAllTextAsync(Intake, "not a folder");
+
+        Transfers transfers = Transfers(engine, grabs, Server(), clock: clock);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Single(standing.Released);
+
+        // The pass the client's "finished" starts, at once.
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Single(standing.Released);
+
+        clock.Advance(transfers.StageAgainAfter - TimeSpan.FromSeconds(1));
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Single(standing.Released);
+
+        clock.Advance(TimeSpan.FromSeconds(1));
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(2, standing.Released.Count);
+        Assert.True(File.Exists(episode), "The download is not where it was.");
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>A staged file that goes after its encode was asked for is looked for again.</strong> Only a
     /// grab still waiting to be dispatched was checked for its file. Once dispatched, a file deleted from the
     /// intake folder — by hand, or by anything else — left an encode that could never read it and a grab that
@@ -1973,6 +2029,33 @@ public class TransfersTests : IDisposable
 
             _open.Clear();
         }
+    }
+
+    /// <summary>
+    /// A client that, handed a torrent it let go of, holds it again whole at once — as the real one does, from the
+    /// resume data it kept.
+    /// </summary>
+    private sealed class WholeAgainAtOnce(StandingEngine engine, TorrentStatus whole, params TorrentFile[] files) : ITorrentEngine
+    {
+        public Task<TorrentHandle> AddAsync(TorrentRequest request, CancellationToken ct)
+        {
+            engine.Holding(whole, files);
+
+            return engine.AddAsync(request, ct);
+        }
+
+        public Task<IReadOnlyList<TorrentStatus>> StatusAsync(CancellationToken ct) => engine.StatusAsync(ct);
+
+        public Task PauseAsync(string infoHash, CancellationToken ct) => engine.PauseAsync(infoHash, ct);
+
+        public Task ResumeAsync(string infoHash, CancellationToken ct) => engine.ResumeAsync(infoHash, ct);
+
+        public Task<IReadOnlyList<TorrentFile>> FilesAsync(string infoHash, CancellationToken ct) => engine.FilesAsync(infoHash, ct);
+
+        public Task RemoveAsync(string infoHash, bool deleteFiles, CancellationToken ct) =>
+            engine.RemoveAsync(infoHash, deleteFiles, ct);
+
+        public Task ReleaseAsync(string infoHash, CancellationToken ct) => engine.ReleaseAsync(infoHash, ct);
     }
 
     /// <summary>A client that holds what it is told to and cannot say what any torrent's files are.</summary>
