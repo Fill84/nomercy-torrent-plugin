@@ -53,6 +53,8 @@
 - A download of a show that has nothing searched — switched off, or without a quality anywhere —
   is cancelled and what it downloaded is deleted, unless its episode is already staged for the
   encoder. This holds as well for downloads running when the plugin is updated to the show list.
+- A download the owner added by hand is never cancelled or deleted because its show has nothing
+  searched. It stays until it is staged or the owner cancels it.
 - Whether a show has a video file on disk plays no part in whether it is searched for.
 
 ## The settings of a show

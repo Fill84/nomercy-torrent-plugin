@@ -916,6 +916,15 @@ public sealed class Transfers(
                 continue;
             }
 
+            if (open.ByHand)
+            {
+                // The owner's decision of 15 October 2026: what they added by hand waits for staging to work
+                // or for them to cancel it. It answers for no episode until staging reads its files, and once
+                // a staging that failed had written down what they hold, the next pass cancelled it and
+                // deleted what the owner had asked for.
+                continue;
+            }
+
             bool searched = true;
 
             // The shows from the tick's library, asked once for the whole pass.

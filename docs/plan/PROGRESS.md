@@ -2530,6 +2530,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 ## Decisions
 
+- **15 October 2026, the owner: a download added by hand is never cancelled because its show is off.**
+  Such a download answers for no episode until staging reads its files; once a staging that failed had
+  written down what they hold, the next pass cancelled it as a show switched off and deleted it. A grab
+  recorded with the source "by hand" is now left out of that rule entirely: it waits until staging
+  succeeds or the owner cancels it (`docs/specs/show-list.md` § Switching a show on).
+
 - **15 October 2026, `S14-07`: `pageSize` and paging under a query.** A query's `pageSize` is honoured
   between 1 and the table's own page size (the overview's 50) and never above it, so a client cannot have
   the plugin draw an unbounded page; a size out of range or not a number is the table's own. A table that

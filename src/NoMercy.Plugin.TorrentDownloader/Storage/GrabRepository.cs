@@ -151,7 +151,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed', 'lost');
             """;
 
@@ -183,7 +183,7 @@ public sealed class GrabRepository(Store database)
 
         command.CommandText =
             """
-            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs FROM grabs
+            SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source FROM grabs
             WHERE info_hash IS NOT NULL;
             """;
 
@@ -220,8 +220,16 @@ public sealed class GrabRepository(Store database)
             StagedPaths = reader.IsDBNull(5) ? [] : Staged(reader.GetString(5)),
             Folder = reader.IsDBNull(6) ? null : reader.GetString(6),
             EncodeJobs = reader.IsDBNull(7) ? new Dictionary<EpisodeKey, string>() : Jobs(reader.GetString(7)),
+            ByHand = !reader.IsDBNull(8) && reader.GetString(8) == ByHandSource,
         };
     }
+
+    /// <summary>The source a torrent the owner added by hand is recorded under.</summary>
+    /// <remarks>
+    /// The one mark such a grab carries: it answers for no episode until staging reads its files, and from
+    /// then on it looks like any other grab but for this.
+    /// </remarks>
+    public const string ByHandSource = "by hand";
 
     /// <summary>
     /// Writes down what the server called the encode it queued for one episode

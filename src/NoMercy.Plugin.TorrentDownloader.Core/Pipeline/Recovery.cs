@@ -71,6 +71,13 @@ public sealed record StoredDownload(string InfoHash, string Magnet, string Relea
     /// </remarks>
     public IReadOnlyList<EpisodeKey> Covers { get; init; } = [];
 
+    /// <summary>Whether the owner added it by hand rather than a run taking it.</summary>
+    /// <remarks>
+    /// Such a download is never cancelled because its show is off — the owner's decision of 15 October 2026.
+    /// It is a decision the owner made about that torrent, and the show switch is about what a run searches.
+    /// </remarks>
+    public bool ByHand { get; init; }
+
     /// <summary>
     /// Where its episodes were copied to, once they have been.
     /// </summary>

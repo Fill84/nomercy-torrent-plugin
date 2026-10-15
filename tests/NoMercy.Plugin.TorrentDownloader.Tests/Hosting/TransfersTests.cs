@@ -526,6 +526,50 @@ public class TransfersTests : IDisposable
         Assert.True(reader.IsDBNull(1), "A release refused for ever was refused for a while instead.");
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A download the owner added by hand is never cancelled because its show is off.</strong> The
+    /// owner's decision of 15 October 2026. Added by hand it answers for no episode, so the rule for a show
+    /// switched off passed it by — until staging read its files, wrote down the episode they hold, and failed.
+    /// The next pass then found a grab for a show that is off, cancelled it and deleted what the owner had
+    /// asked for.
+    /// </para>
+    /// <para>
+    /// Here the show is off, the intake folder refuses the file, and the passes go on: the download waits,
+    /// whole, for staging to work or for the owner to cancel it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ADownloadAddedByHandIsNeverCancelledBecauseItsShowIsOff()
+    {
+        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 15, 12, 0, 0, TimeSpan.Zero));
+
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        TorrentStatus finished = Finished() with { State = TorrentState.Finished };
+        TorrentFile file = new(Path.GetFileName(episode), 900_000_000);
+        StandingEngine standing = new StandingEngine().Holding(finished, file);
+        WholeAgainAtOnce engine = new(standing, finished, file);
+
+        await File.WriteAllTextAsync(Intake, "not a folder");
+
+        Transfers transfers = Transfers(engine, grabs, Server(), searched: false, clock: clock);
+
+        for (int pass = 0; pass < 3; pass++)
+        {
+            await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+            clock.Advance(transfers.StageAgainAfter);
+        }
+
+        Assert.DoesNotContain(standing.Removed, removed => removed.DeleteFiles);
+        Assert.True(File.Exists(episode), "What the owner added by hand was deleted.");
+        Assert.Equal(Hash, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).InfoHash);
+    }
+
     /// <summary>A torrent that is still going, so nothing else in the tick acts on it.</summary>
     private static TorrentStatus Downloading()
     {

@@ -1803,7 +1803,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 new(0, 0, 0),
                 string.Empty,
                 taken.Name ?? taken.InfoHash,
-                "by hand",
+                GrabRepository.ByHandSource,
                 taken.InfoHash,
                 source,
 
