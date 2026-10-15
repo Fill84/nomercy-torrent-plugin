@@ -25,7 +25,9 @@ the library until then. Plugin-side fixes still to do on that branch, from the s
 - make the `IPluginLibraryWriter` test double refuse an existing destination, as the server does;
 - the failed-download test was never seen red.
 
-**Current: a review of the whole of S15, then `S15-05`.** Nothing is tagged before the owner has seen it.
+**Current: `S15-05`** — the whole of 0.8.1 (`b63cc59..d4b79ff`) was checked across its slices on
+15 October 2026 and found ready to show the owner on beast-unit. Nothing is tagged before the owner has
+seen it.
 
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished

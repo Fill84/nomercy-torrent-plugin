@@ -108,8 +108,7 @@
 - The Downloads, History and Sources pages show what they show, unchanged by the show list.
 - The History page holds what became of a grab — decided, grabbed, dispatched, failed — and no
   refusals.
-- The Downloads table has no column for where a download lands: every download lands in the incomplete
-  folder the settings name.
+- The Downloads table has no column for where a download lands.
 - A download's progress is the percentage of its size, as in "45.3% of 23.4 GB", with nothing beside it.
 - A download's rate is the rate it downloads at. The rate it uploads at is not drawn.
 - On the Downloads page the field that takes a magnet or a .torrent stands under the list of

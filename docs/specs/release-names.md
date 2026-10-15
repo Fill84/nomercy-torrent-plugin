@@ -6,16 +6,17 @@
 - A show downloads only a release that a name source names. For a show, an indexer is searched only with
   the release names that a name source gave.
 - A show's episode for which no name source gave a release name that meets the show's settings is not
-  searched for on any indexer and nothing is downloaded for it. The Activity and History pages say why,
-  and the next run searches for it again.
+  searched for on any indexer and nothing is downloaded for it. The Activity page says why, and the next
+  run searches for it again.
 - A show's episode whose release names give no torrent on any indexer is not downloaded either, and the
   next run searches for it again.
 - An anime is the exception: fansubs are its real releases and no name source lists them. When no
   release name gives an anime's episode a torrent — because no name source gave a release name that meets
   the show's settings, or because no indexer listed a torrent for any of them — the indexers are searched
   for the show and episode instead (`indexer-search.md` § When no release name gives a torrent).
-- The plugin builds no other search term of its own from a show's title, season or episode than the
-  show and season for a season pack (§ Season packs), and for an anime the show and episode.
+- The plugin puts no search term of its own to an indexer other than a release name, except the show and
+  episode for an anime. The name sources are asked for the show and episode (§ Backfill) and for the show
+  and season (§ Season packs).
 
 ## Reading the feeds
 

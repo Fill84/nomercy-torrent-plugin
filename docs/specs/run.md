@@ -39,8 +39,8 @@
   (`release-names.md` § Release names first).
 - An anime's episode for which no wish group produces a torrent is searched for on the indexers by show
   and episode (`indexer-search.md` § When no release name gives a torrent).
-- An episode for which no torrent is found is shown with its reason on the Activity and History pages,
-  and is searched for again on the next run.
+- An episode for which no torrent is found is shown with its reason on the Activity page, and is searched
+  for again on the next run.
 - When nothing a run started is still downloading, staged or waiting on an encode, maintenance runs
   and the run ends.
 
