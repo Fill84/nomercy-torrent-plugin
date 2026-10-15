@@ -216,9 +216,9 @@ jobs:
           done
           [ -z "$missing" ] || { echo "the package is missing:$missing" >&2; exit 1; }
 
-          # The catalogue is read from beside the assembly. Without it the
-          # plugin has no sources at all and says nothing about why.
-          [ -f "$stage/sources.json" ] || { echo "sources.json is not in the package" >&2; exit 1; }
+          # The source catalogue is not checked here: the build writes it into
+          # the assembly (S16-03), and TheCatalogueTravelsInsideTheAssemblyTests
+          # proves a copy of the assembly alone knows every source.
 
           echo "package holds $(find "$stage" -type f | wc -l) files"
 

@@ -6,7 +6,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
-by us.** `SPRINTS.md` § S16. Current: **`S16-03`**. The browser is asked for in media-server #601, the sparse flag in #602.
+by us.** `SPRINTS.md` § S16. Current: **`S16-04`**. The browser is asked for in media-server #601, the sparse flag in #602.
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
@@ -884,7 +884,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 16 — Through the SDK: what the marketplace scan refuses (media-server #476)
 - [x] `S16-01` The marketplace scan, run on every build
 - [x] `S16-02` Files without `DeviceIoControl` — measured; the call waits on media-server #602
-- [ ] `S16-03` Migrations and sources read without reflection
+- [x] `S16-03` Migrations and sources read without reflection
 - [ ] `S16-04` The database is the SDK's, and every row comes along
 - [x] `S16-05` The browser the solver needs, asked of the media server — #601
 - [ ] `S16-06` The solver on `IPluginBrowser` — waits on media-server #601
@@ -893,6 +893,11 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S16-03` (15 October 2026):** `sources.json` and the migrations travel inside the assembly as
+  `ShippedFiles`, written by the build; no package carries `sources.json` any more. A test that wants the
+  shipped source names asks `CatalogueLoader.Load()`, never a file in `bin/`. `MarketplaceScan.ReachedFrom`
+  tells which class still reaches a banned member, which the folder list cannot.
 
 - **`S16-01` (15 October 2026):** `TheMarketplaceScanTests` runs the marketplace's rule list over the
   plugin's build output and holds it to `tests/…/Scan/expected-findings.txt` (330 lines, the same counts

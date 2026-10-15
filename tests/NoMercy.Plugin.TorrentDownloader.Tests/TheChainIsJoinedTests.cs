@@ -364,10 +364,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         settings.Client.ListenPort = 0;
 
         // So the feed reads nobody: this touches no network.
-        foreach (string source in System.Text.Json.JsonDocument
-                     .Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources.json")))
-                     .RootElement.GetProperty("sources").EnumerateArray()
-                     .Select(one => one.GetProperty("name").GetString()!))
+        foreach (string source in new CatalogueLoader(new CapturingLogger()).Load().Select(one => one.Name))
         {
             settings.DisabledDefaultSources.Add(source);
         }
@@ -946,10 +943,7 @@ public sealed class TheChainIsJoinedTests : IDisposable
         settings.Client.ListenPort = 0;
 
         // So a run reads nobody: this touches no network.
-        foreach (string source in System.Text.Json.JsonDocument
-                     .Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources.json")))
-                     .RootElement.GetProperty("sources").EnumerateArray()
-                     .Select(one => one.GetProperty("name").GetString()!))
+        foreach (string source in new CatalogueLoader(new CapturingLogger()).Load().Select(one => one.Name))
         {
             settings.DisabledDefaultSources.Add(source);
         }

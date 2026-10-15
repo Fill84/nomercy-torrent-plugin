@@ -141,6 +141,68 @@ public sealed class MarketplaceScanTests
     }
 
     [Fact]
+    public void WhatOneTypeReachesIsToldApartFromItsNeighbours()
+    {
+        // The folder's findings are per assembly, so they cannot say which class
+        // still reaches out. This can, which is what lets a slice prove it took
+        // one use away while another class keeps the same finding alive.
+        MemoryStream image = CompiledAssembly.From(
+            """
+            using System.Linq;
+
+            namespace Sample;
+
+            public static class Reaches
+            {
+                public static string Where() => typeof(Reaches).Assembly.Location;
+
+                public static int Names() => typeof(Reaches).Assembly.GetManifestResourceNames().Count(name => name.Length > 0);
+            }
+
+            public static class Clean
+            {
+                public static string Name(System.Exception failure) => failure.GetType().Name;
+            }
+            """);
+
+        Assert.Equal(
+            ["System.Reflection.Assembly::GetManifestResourceNames", "System.Reflection.Assembly::get_Location"],
+            MarketplaceScan.ReachedFrom(image, "Sample.Reaches"));
+
+        image.Position = 0;
+        Assert.Empty(MarketplaceScan.ReachedFrom(image, "Sample.Clean"));
+    }
+
+    [Fact]
+    public void WhatALambdaOrAnAsyncMethodReachesCountsForItsType()
+    {
+        // The compiler moves a lambda's body and an async method's body into
+        // nested types it makes up, so those count as the type's own.
+        MemoryStream image = CompiledAssembly.From(
+            """
+            using System;
+            using System.Threading.Tasks;
+
+            namespace Sample;
+
+            public static class Hidden
+            {
+                public static Func<string> Later() => () => typeof(Hidden).Assembly.Location;
+
+                public static async Task<int> Soon()
+                {
+                    await Task.Yield();
+                    return System.Diagnostics.Process.GetCurrentProcess().Id;
+                }
+            }
+            """);
+
+        Assert.Equal(
+            ["System.Diagnostics.Process::GetCurrentProcess", "System.Diagnostics.Process::get_Id", "System.Reflection.Assembly::get_Location"],
+            MarketplaceScan.ReachedFrom(image, "Sample.Hidden"));
+    }
+
+    [Fact]
     public void AFileThatIsNotILIsFound()
     {
         IReadOnlyList<string> findings = MarketplaceScan.Image(

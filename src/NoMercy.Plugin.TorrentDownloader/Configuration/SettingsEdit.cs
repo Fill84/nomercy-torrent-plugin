@@ -61,7 +61,7 @@ public static class SettingsEdit
         {
             // One switch per shipped source, so the names cannot be listed here
             // the way every other setting is: they are the catalogue's, and the
-            // catalogue is a file that ships beside the assembly. The prefix is
+            // catalogue ships inside the assembly, not in this code. The prefix is
             // the contract instead.
             //
             // Off is the thing recorded. The list holds what the owner turned

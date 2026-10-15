@@ -392,12 +392,7 @@ public class TorrentDownloaderPluginTests
     /// <summary>Every shipped source, by name, so a test can switch them all off.</summary>
     private static void DisableEveryShippedSource(Settings settings)
     {
-        foreach (string source in System.Text.Json.JsonDocument
-            .Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources.json")))
-            .RootElement
-            .GetProperty("sources")
-            .EnumerateArray()
-            .Select(one => one.GetProperty("name").GetString()!))
+        foreach (string source in new CatalogueLoader(new CapturingLogger()).Load().Select(one => one.Name))
         {
             settings.DisabledDefaultSources.Add(source);
         }

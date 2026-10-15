@@ -199,13 +199,7 @@ public class HardeningTests : IDisposable
     /// <summary>Every shipped source, by name, read from the catalogue that ships.</summary>
     private static IEnumerable<string> Shipped()
     {
-        return System.Text.Json.JsonDocument
-            .Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "sources.json")))
-            .RootElement
-            .GetProperty("sources")
-            .EnumerateArray()
-            .Select(one => one.GetProperty("name").GetString()!)
-            .ToArray();
+        return [.. new CatalogueLoader(new CapturingLogger()).Load().Select(source => source.Name)];
     }
 
     private const string Hash = "0123456789ABCDEF0123456789ABCDEF01234567";

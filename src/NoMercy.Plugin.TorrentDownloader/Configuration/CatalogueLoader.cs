@@ -6,19 +6,21 @@ using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 namespace NoMercy.Plugin.TorrentDownloader.Configuration;
 
 /// <summary>
-/// Reads <c>sources.json</c> from the folder the assembly is actually in.
+/// Reads the shipped catalogue, which the build writes into the assembly from
+/// <c>sources.json</c>.
 /// </summary>
 /// <remarks>
-/// <strong>C1.</strong> Not <c>AppContext.BaseDirectory</c>. A plugin is loaded
-/// into the media server's process, so that property names the <em>server's</em>
-/// folder: 0.3.4 looked there, never found the file, fell back to three
+/// <strong>C1.</strong> 0.3.4 looked for <c>sources.json</c> in
+/// <c>AppContext.BaseDirectory</c> — for a plugin loaded into the media server's
+/// process, the <em>server's</em> folder — never found it, fell back to three
 /// compiled-in sources, and ran for a day looking perfectly healthy while
-/// fourteen sources simply did not exist.
+/// fourteen sources simply did not exist. Reading it from the assembly's own
+/// folder fixed that, but needed <c>Assembly.Location</c>, which the marketplace
+/// scan refuses (media-server #476). Inside the assembly there is no folder left
+/// to get wrong.
 /// </remarks>
 public sealed class CatalogueLoader(ILogger logger)
 {
-    public const string FileName = "sources.json";
-
     /// <summary>
     /// The lowest number of sources a healthy catalogue has.
     /// </summary>
@@ -36,17 +38,15 @@ public sealed class CatalogueLoader(ILogger logger)
         AllowTrailingCommas = true,
     };
 
-    /// <summary>The folder the running assembly sits in — the plugin's own.</summary>
-    public static string AssemblyFolder =>
-        Path.GetDirectoryName(typeof(CatalogueLoader).Assembly.Location) is string folder && folder.Length > 0
-            ? folder
-            // A single-file or in-memory assembly has no location. Nothing this
-            // plugin ships is loaded that way, and guessing the server's folder
-            // is the exact fault this class exists to avoid.
-            : throw new InvalidOperationException("This assembly has no folder to read sources.json from.");
+    /// <summary>The shipped sources, or an empty list and a loud complaint.</summary>
+    public IReadOnlyList<SourceDefinition> Load()
+    {
+        return Read(ShippedFiles.Catalogue);
+    }
 
     /// <summary>
-    /// The shipped sources, or an empty list and a loud complaint.
+    /// The sources in <paramref name="catalogue"/>, or an empty list and a loud
+    /// complaint.
     /// </summary>
     /// <remarks>
     /// Empty, never a smaller built-in set. A partial fallback is what made
@@ -54,23 +54,11 @@ public sealed class CatalogueLoader(ILogger logger)
     /// missing, and nothing anywhere said so. Nothing is the honest answer,
     /// and it is the one the owner will notice.
     /// </remarks>
-    public IReadOnlyList<SourceDefinition> Load(string? folder = null)
+    public IReadOnlyList<SourceDefinition> Read(string catalogue)
     {
-        string path = Path.Combine(folder ?? AssemblyFolder, FileName);
-
-        if (!File.Exists(path))
-        {
-            logger.LogError(
-                "No {FileName} beside the assembly at {Path}. The plugin ships with none of its sources and will find nothing until it is put back.",
-                FileName,
-                path);
-
-            return [];
-        }
-
         try
         {
-            CatalogueFile? file = JsonSerializer.Deserialize<CatalogueFile>(File.ReadAllText(path), Json);
+            CatalogueFile? file = JsonSerializer.Deserialize<CatalogueFile>(catalogue, Json);
 
             return file?.Sources is null ? [] : [.. file.Sources.Select(Convert)];
         }
@@ -78,8 +66,7 @@ public sealed class CatalogueLoader(ILogger logger)
         {
             logger.LogError(
                 exception,
-                "{Path} is not readable as a catalogue. The plugin has no sources until it is corrected.",
-                path);
+                "The shipped sources.json is not readable as a catalogue. The plugin has no sources until it is corrected.");
 
             return [];
         }

@@ -40,8 +40,10 @@ internal static class Program
 
         string repository = RepositoryRoot();
 
-        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(logger).Load(
-            Path.Combine(repository, "src", "NoMercy.Plugin.TorrentDownloader"));
+        // The file in the repository, not the copy built into the plugin: an
+        // address corrected there is walked before anything is rebuilt.
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(logger).Read(
+            File.ReadAllText(Path.Combine(repository, "src", "NoMercy.Plugin.TorrentDownloader", "sources.json")));
 
         SourceDefinition[] enabled = [.. shipped.Where(source => source.Enabled)];
 

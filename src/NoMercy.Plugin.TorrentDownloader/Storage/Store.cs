@@ -1,4 +1,3 @@
-using System.Reflection;
 using Microsoft.Data.Sqlite;
 
 namespace NoMercy.Plugin.TorrentDownloader.Storage;
@@ -151,42 +150,34 @@ public sealed class Store
     /// The migrations that ship, in order, with the number each file's name
     /// begins with.
     /// </summary>
+    /// <remarks>
+    /// Written into the assembly as code by the build (<c>ShippedFiles</c>), not
+    /// read back as embedded resources: that needs
+    /// <c>Assembly.GetManifestResourceStream</c>, which the marketplace scan
+    /// refuses (media-server #476). They are inside the assembly either way, so a
+    /// migration that failed to deploy still cannot look like a database that was
+    /// already up to date.
+    /// </remarks>
     private static IEnumerable<(long Number, string Sql)> Migrations()
     {
-        Assembly assembly = typeof(Store).Assembly;
-
-        return assembly
-            .GetManifestResourceNames()
-            .Where(name => name.Contains(".Migrations.", StringComparison.Ordinal)
-                           && name.EndsWith(".sql", StringComparison.Ordinal))
-            .Select(name => (Number: NumberOf(name), Name: name))
-            .OrderBy(migration => migration.Number)
-            .Select(migration => (migration.Number, Sql: Read(assembly, migration.Name)));
+        return ShippedFiles.Migrations
+            .Select(migration => (Number: NumberOf(migration.Name), migration.Sql))
+            .OrderBy(migration => migration.Number);
     }
 
-    private static long NumberOf(string resourceName)
+    private static long NumberOf(string fileName)
     {
-        // "…Storage.Migrations.001-initial.sql" → 1. The number is the order
-        // migrations run in, so a file that cannot be numbered is a file that
-        // would run at an unpredictable point.
-        string fileName = resourceName[(resourceName.IndexOf(".Migrations.", StringComparison.Ordinal) + ".Migrations.".Length)..];
+        // "001-initial.sql" → 1. The number is the order migrations run in, so a
+        // file that cannot be numbered is a file that would run at an
+        // unpredictable point.
         string digits = new([.. fileName.TakeWhile(char.IsAsciiDigit)]);
 
         if (digits.Length == 0)
         {
-            throw new InvalidOperationException($"The migration '{resourceName}' does not begin with a number.");
+            throw new InvalidOperationException($"The migration '{fileName}' does not begin with a number.");
         }
 
         return long.Parse(digits);
-    }
-
-    private static string Read(Assembly assembly, string resourceName)
-    {
-        using Stream stream = assembly.GetManifestResourceStream(resourceName)
-                              ?? throw new InvalidOperationException($"The migration '{resourceName}' is not in the assembly.");
-        using StreamReader reader = new(stream);
-
-        return reader.ReadToEnd();
     }
 
     private static async Task<long> CurrentVersion(SqliteConnection connection, CancellationToken ct)

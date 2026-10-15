@@ -14,14 +14,14 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.Configuration;
 public class CatalogueTests
 {
     /// <remarks>
-    /// <strong>C1.</strong> From the folder the assembly is really in — not
-    /// <c>AppContext.BaseDirectory</c>, which for a plugin loaded into the
-    /// server's process is the <em>server's</em> folder. 0.3.4 looked there,
+    /// <strong>C1.</strong> 0.3.4 looked for its catalogue in the wrong folder,
     /// found nothing, fell back to three compiled-in sources, and ran for a day
-    /// looking perfectly healthy while fourteen sources did not exist.
+    /// looking perfectly healthy while fourteen sources did not exist. The
+    /// catalogue is inside the assembly now; a copy of it alone is
+    /// <c>TheCatalogueTravelsInsideTheAssemblyTests</c>.
     /// </remarks>
     [Fact]
-    public void TheCatalogueIsReadFromTheAssemblysOwnFolderAndHasMoreThanTenSources()
+    public void TheShippedCatalogueHasMoreThanTenSources()
     {
         CapturingLogger log = new();
 
@@ -118,54 +118,21 @@ public class CatalogueTests
     }
 
     /// <remarks>
-    /// Missing is not the same as empty, and the difference has to be loud. The
-    /// fallback is nothing at all rather than a smaller built-in set, because a
-    /// partial fallback is exactly what made C1 invisible.
-    /// </remarks>
-    [Fact]
-    public void AMissingCatalogueIsLoggedAndYieldsNothing()
-    {
-        CapturingLogger log = new();
-        string empty = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
-        Directory.CreateDirectory(empty);
-
-        try
-        {
-            Assert.Empty(new CatalogueLoader(log).Load(empty));
-            // At error level, not trace: a catalogue nobody hears about is
-            // gone as surely as one nobody reported.
-            Assert.Contains(
-                log.Entries,
-                entry => entry.Level == LogLevel.Error
-                         && entry.Line.Contains("sources.json", StringComparison.Ordinal));
-        }
-        finally
-        {
-            Directory.Delete(empty, recursive: true);
-        }
-    }
-
-    /// <remarks>
-    /// A catalogue that will not parse is the same failure wearing a different
-    /// hat, and gets the same answer: nothing, said out loud.
+    /// A catalogue that will not parse gets nothing at all rather than a smaller
+    /// built-in set, because a partial fallback is exactly what made C1
+    /// invisible — and it is said at error level, because a catalogue nobody
+    /// hears about is gone as surely as one nobody reported.
     /// </remarks>
     [Fact]
     public void ACatalogueThatWillNotParseIsLoggedAndYieldsNothing()
     {
         CapturingLogger log = new();
-        string folder = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
-        Directory.CreateDirectory(folder);
-        File.WriteAllText(Path.Combine(folder, CatalogueLoader.FileName), "{ not json");
 
-        try
-        {
-            Assert.Empty(new CatalogueLoader(log).Load(folder));
-            Assert.Contains(log.Entries, entry => entry.Level == LogLevel.Error);
-        }
-        finally
-        {
-            Directory.Delete(folder, recursive: true);
-        }
+        Assert.Empty(new CatalogueLoader(log).Read("{ not json"));
+        Assert.Contains(
+            log.Entries,
+            entry => entry.Level == LogLevel.Error
+                     && entry.Line.Contains("sources.json", StringComparison.Ordinal));
     }
 
     /// <remarks>

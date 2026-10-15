@@ -91,7 +91,7 @@ public sealed class Chain : IAsyncDisposable
         _solver = new(_tabs, _logger);
     }
 
-    /// <summary>The sources that ship, read from beside the assembly.</summary>
+    /// <summary>The sources that ship, built into the assembly.</summary>
     public IReadOnlyList<SourceDefinition> Shipped { get; }
 
     /// <summary>

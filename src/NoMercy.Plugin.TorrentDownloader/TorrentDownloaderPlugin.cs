@@ -2055,7 +2055,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </summary>
     /// <remarks>
     /// Not in <c>Initialize</c>, which does no I/O: this reads the settings,
-    /// the catalogue beside the assembly and asks the server for grants. Behind
+    /// the catalogue inside the assembly and asks the server for grants. Behind
     /// the same semaphore as the migration because a cycle and a page can both
     /// arrive at once on a plugin that has just loaded.
     /// </remarks>
@@ -2744,8 +2744,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// The sources that ship, read once.
     /// </summary>
     /// <remarks>
-    /// A file beside the assembly that cannot change while the server runs, so
-    /// a page render must not pay to read it again.
+    /// Built into the assembly, so it cannot change while the server runs, and
+    /// a page render must not pay to parse it again.
     /// </remarks>
     private IReadOnlyList<SourceDefinition> Shipped()
     {

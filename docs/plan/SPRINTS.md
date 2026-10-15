@@ -3647,6 +3647,18 @@ them into code: an MSBuild step writes `ShippedSources.g.cs` (the catalogue as a
 3. `typeof(...).Assembly` is gone from `Store` and `CatalogueLoader` (`UnobservedContexts` keeps one until
    S16-06).
 
+**As done** (15 October 2026): the `WriteShippedFiles` step in the plugin's project file writes
+`obj/…/ShippedFiles.g.cs` (`ShippedFiles.Catalogue`, `ShippedFiles.Migrations`), escaped so MSBuild does
+not split the SQL at its semicolons. `CatalogueLoader.Load()` reads it and `Read(json)` parses any
+catalogue (the tools read the repository's file through it); `AssemblyFolder` is gone. Tests:
+`TheCatalogueTravelsInsideTheAssemblyTests` (a copy of the DLL alone in an empty folder, red at "knows 0
+sources"), `TheShippedFilesTests` (`MarketplaceScan.ReachedFrom`, red on `GetManifestResourceNames`,
+`GetManifestResourceStream` and `get_Location`). The plan's two other tests were not written: a
+migration without a number still throws at run time (`Store.NumberOf`), as before, rather than failing
+the build, and the existing `StoreTests` already run all seventeen migrations against the documented
+schema. `AssemblyFolderTests` and the missing-catalogue test are gone with the folder they tested;
+`build.yml` no longer looks for `sources.json` in the package.
+
 ## S16-04 · The database is the SDK's, and every row comes along
 
 **Read first:** this sprint's facts, `Storage/*.cs`, `TorrentDownloaderPlugin.cs` (`DatabaseAsync`),

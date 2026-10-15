@@ -72,26 +72,17 @@ public class DeployScriptTests
     }
 
     /// <remarks>
-    /// <para>
-    /// The catalogue is read from the assembly's own folder — that is
-    /// <strong>C1</strong>. A build that leaves it behind gives a plugin
-    /// reading yesterday's sources, or none at all on a fresh install, while
-    /// looking perfectly healthy and asking nobody anything.
-    /// </para>
-    /// <para>
-    /// The manifest is there for its own reason: it carries the version
-    /// independently of the assembly, and one without the other leaves a server
-    /// reporting a version it is not running.
-    /// </para>
+    /// The manifest carries the version independently of the assembly, and one
+    /// without the other leaves a server reporting a version it is not running.
+    /// The source catalogue no longer travels beside it: the build writes it into
+    /// the assembly (<c>TheCatalogueTravelsInsideTheAssemblyTests</c>).
     /// </remarks>
-    [Theory]
-    [InlineData("sources.json")]
-    [InlineData("plugin.json")]
-    public void EveryFileTheAssemblyReadsFromItsOwnFolderIsBesideIt(string file)
+    [Fact]
+    public void TheManifestIsBesideTheAssembly()
     {
         Assert.True(
-            File.Exists(Path.Combine(Output(), file)),
-            $"{file} is read from the assembly's own folder and the build did not put one there.");
+            File.Exists(Path.Combine(Output(), "plugin.json")),
+            "plugin.json is read by the server from beside the assembly and the build did not put one there.");
     }
 
     /// <remarks>

@@ -1,8 +1,8 @@
 # Sources
 
-Fifteen entries ship in `src/.../sources.json`: five name sources and ten indexers. They are
-copied beside the assembly, and on top of them the owner may add their own indexers and their own
-private trackers.
+Fifteen entries ship in `src/.../sources.json`: five name sources and ten indexers. The build
+writes them into the assembly (`docs/01-plugin.md` § Where it lives on disk), and on top of them the
+owner may add their own indexers and their own private trackers.
 
 **Two ship switched off**: YTS, which is films and out of scope, and EZTV latest, whose API takes a
 search parameter and ignores it. Thirteen are asked.

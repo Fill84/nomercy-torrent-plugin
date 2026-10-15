@@ -121,8 +121,10 @@ internal static class Program
         string fixtures = Path.Combine(repository, "tests", "fixtures");
         Directory.CreateDirectory(fixtures);
 
-        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(logger).Load(
-            Path.Combine(repository, "src", "NoMercy.Plugin.TorrentDownloader"));
+        // The file in the repository, not the copy built into the plugin: a source
+        // being added is captured before anything is rebuilt.
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(logger).Read(
+            File.ReadAllText(Path.Combine(repository, "src", "NoMercy.Plugin.TorrentDownloader", "sources.json")));
 
         SourceDefinition? source = shipped.FirstOrDefault(
             candidate => string.Equals(candidate.Name, wanted, StringComparison.OrdinalIgnoreCase));

@@ -27,7 +27,7 @@ public static class QueryStyles
 /// asked.
 /// </summary>
 /// <remarks>
-/// The shipped ones are read from <c>sources.json</c> beside the assembly; the
+/// The shipped ones are read from <c>sources.json</c>, which the build writes into the plugin assembly; the
 /// owner's own come from the settings. Both become this, so nothing downstream
 /// knows or cares which it is dealing with.
 /// </remarks>

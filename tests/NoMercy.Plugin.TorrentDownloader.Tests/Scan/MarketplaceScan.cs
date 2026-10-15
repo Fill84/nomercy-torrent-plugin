@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Reflection.Metadata;
+using System.Reflection.Metadata.Ecma335;
 using System.Reflection.PortableExecutable;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.Scan;
@@ -177,6 +178,150 @@ internal static class MarketplaceScan
         }
 
         return findings;
+    }
+
+    /// <summary>
+    /// The banned members and types the code of one type reaches, as
+    /// <c>Namespace.Type::Member</c> (or the type alone), sorted.
+    /// </summary>
+    /// <remarks>
+    /// The compiler puts a lambda's body and an async method's state machine in
+    /// nested types it names itself, so every type nested inside counts as the
+    /// type's own.
+    /// </remarks>
+    public static IReadOnlyList<string> ReachedFrom(Stream image, string typeFullName)
+    {
+        using PEReader pe = new(image, PEStreamOptions.LeaveOpen);
+        MetadataReader metadata = pe.GetMetadataReader();
+        SortedSet<string> reached = new(StringComparer.Ordinal);
+
+        foreach (TypeDefinitionHandle handle in metadata.TypeDefinitions)
+        {
+            if (OutermostName(metadata, handle) != typeFullName)
+            {
+                continue;
+            }
+
+            foreach (MethodDefinitionHandle method in metadata.GetTypeDefinition(handle).GetMethods())
+            {
+                int address = metadata.GetMethodDefinition(method).RelativeVirtualAddress;
+
+                if (address == 0)
+                {
+                    continue;
+                }
+
+                foreach (EntityHandle token in Tokens(pe.GetMethodBody(address).GetILReader()))
+                {
+                    if (BannedReach(metadata, token) is string banned)
+                    {
+                        reached.Add(banned);
+                    }
+                }
+            }
+        }
+
+        return [.. reached];
+    }
+
+    private static string OutermostName(MetadataReader metadata, TypeDefinitionHandle handle)
+    {
+        TypeDefinition type = metadata.GetTypeDefinition(handle);
+
+        while (!type.GetDeclaringType().IsNil)
+        {
+            type = metadata.GetTypeDefinition(type.GetDeclaringType());
+        }
+
+        string ns = metadata.GetString(type.Namespace);
+
+        return ns.Length == 0 ? metadata.GetString(type.Name) : $"{ns}.{metadata.GetString(type.Name)}";
+    }
+
+    /// <summary>Every metadata token an instruction names: a method, a field, a type.</summary>
+    private static IEnumerable<EntityHandle> Tokens(BlobReader il)
+    {
+        List<EntityHandle> tokens = [];
+
+        while (il.RemainingBytes > 0)
+        {
+            short value = il.ReadByte();
+
+            if (value == 0xFE)
+            {
+                value = (short)(0xFE00 | il.ReadByte());
+            }
+
+            OpCode code = OpCodesByValue[value];
+
+            if (code.OperandType is OperandType.InlineMethod or OperandType.InlineField
+                or OperandType.InlineType or OperandType.InlineTok)
+            {
+                tokens.Add(MetadataTokens.EntityHandle(il.ReadInt32()));
+
+                continue;
+            }
+
+            int operand = code.OperandType switch
+            {
+                OperandType.InlineNone => 0,
+                OperandType.ShortInlineBrTarget or OperandType.ShortInlineI or OperandType.ShortInlineVar => 1,
+                OperandType.InlineVar => 2,
+                OperandType.InlineI8 or OperandType.InlineR => 8,
+                OperandType.InlineSwitch => 4 * il.ReadInt32(),
+                _ => 4,
+            };
+
+            il.Offset += operand;
+        }
+
+        return tokens;
+    }
+
+    /// <summary>
+    /// The banned member or type a token names, in the same terms the folder scan
+    /// judges by, or null.
+    /// </summary>
+    private static string? BannedReach(MetadataReader metadata, EntityHandle token)
+    {
+        if (token.Kind == HandleKind.MethodSpecification)
+        {
+            token = metadata.GetMethodSpecification((MethodSpecificationHandle)token).Method;
+        }
+
+        if (token.Kind == HandleKind.TypeReference)
+        {
+            TypeReference type = metadata.GetTypeReference((TypeReferenceHandle)token);
+            string ns = metadata.GetString(type.Namespace);
+            string name = metadata.GetString(type.Name);
+
+            return IsBanned(ns, name) ? $"{ns}.{name}" : null;
+        }
+
+        if (token.Kind != HandleKind.MemberReference)
+        {
+            return null;
+        }
+
+        MemberReference member = metadata.GetMemberReference((MemberReferenceHandle)token);
+        string? parent = ParentName(metadata, member.Parent);
+
+        if (parent is null)
+        {
+            return null;
+        }
+
+        string memberName = metadata.GetString(member.Name);
+        string key = $"{parent}::{memberName}";
+        int split = parent.LastIndexOf('.');
+        bool bannedParent = IsBanned(parent[..split], parent[(split + 1)..])
+                            && !(parent == "System.Reflection.MemberInfo" && memberName == "get_Name");
+
+        return bannedParent
+               || BannedMembers.Contains(key)
+               || (CompilerHelperTypes.Contains(parent) && !IsCompilerEmitted(member, key))
+            ? key
+            : null;
     }
 
     private static bool IsImage(string fileName, Stream stream)

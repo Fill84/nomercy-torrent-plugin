@@ -137,14 +137,18 @@ EF context, and no reference to the server's assemblies.
 ## Where it lives on disk
 
 ```
-%LOCALAPPDATA%\NoMercy\plugins\NoMercy.Plugin.TorrentDownloader\   the assemblies, plugin.json, sources.json
+%LOCALAPPDATA%\NoMercy\plugins\NoMercy.Plugin.TorrentDownloader\   the assemblies, plugin.json
 %LOCALAPPDATA%\NoMercy\plugins\data\1SBQT26FHF98EBRPYVRGD92CZF\    settings, SQLite, browser, resume data
 ```
 
-`sources.json` is read from **the assembly's own folder**. Not `AppContext.BaseDirectory` — a
-plugin is loaded into the server's process, so that property names the server's folder, the
-catalogue is silently never found, and the plugin runs on a compiled-in fallback while looking
-perfectly healthy. That happened, for a day.
+`sources.json` and the migrations under `Storage/Migrations` travel **inside the assembly**: the build
+writes them into it as code (`ShippedFiles`, the `WriteShippedFiles` step in the project file). 0.3.4
+looked for its catalogue in `AppContext.BaseDirectory` — for a plugin loaded into the server's
+process, the server's folder — never found it, and ran for a day on a compiled-in fallback while
+looking perfectly healthy. Reading it from the assembly's own folder fixed that but needed
+`Assembly.Location`, and reading embedded resources needs `Assembly.GetManifestResourceStream`; the
+marketplace scan refuses both (media-server #476). The files in the repository stay what people edit
+and what `tools/` read.
 
 ## Manifest
 
@@ -212,8 +216,8 @@ and the old build stays in place — which looks exactly like a deploy that work
 nothing. `scripts/deploy-to-server.ps1` compares every file's hash afterwards, which is the only
 way to tell those two apart.
 
-Files that travel: the plugin assemblies, `deps.json`, `plugin.json`, **`sources.json`**, and the
-browser driver's assemblies. `Newtonsoft.Json`, `Ulid` and every `NoMercy.*` are deliberately
+Files that travel: the plugin assemblies, `deps.json`, `plugin.json`, and the browser driver's
+assemblies. The source catalogue is inside the plugin assembly. `Newtonsoft.Json`, `Ulid` and every `NoMercy.*` are deliberately
 absent — they are in `PluginHostOptions.DefaultSharedAssemblies`, so the load context returns null
 for them and the host's copy is used. Shipping a second copy means a second assembly identity for
 `[JsonProperty]`, which is the bug that list exists to prevent.

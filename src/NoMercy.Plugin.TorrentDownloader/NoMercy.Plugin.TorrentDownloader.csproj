@@ -29,13 +29,6 @@
       this project too, so a test reads the copy that would actually deploy.
     -->
     <None Update="plugin.json" CopyToOutputDirectory="PreserveNewest" />
-    <!--
-      Beside the assembly, and read from the assembly's own folder rather than
-      from AppContext.BaseDirectory — which, for a plugin loaded into the
-      server's process, is the server's folder. That mistake cost 0.3.4 fourteen
-      of its seventeen sources for a day, silently.
-    -->
-    <None Update="sources.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
@@ -76,13 +69,53 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
   </ItemGroup>
 
+  <!--
+    The source catalogue and the migrations travel inside the assembly, as code
+    this step writes from the files people edit and tools read.
+
+    Not beside it: a catalogue read from beside the assembly has to ask the
+    assembly where it is (Assembly.Location), and one looked for in the wrong
+    folder cost 0.3.4 fourteen of its seventeen sources for a day, silently (C1).
+    Not as embedded resources either: reading those needs
+    Assembly.GetManifestResourceStream. The marketplace scan refuses
+    System.Reflection.Assembly (media-server #476), and code needs neither.
+
+    Escaped, because MSBuild would otherwise split the files at every semicolon.
+  -->
   <ItemGroup>
-    <!--
-      Read out of the assembly rather than from beside it: a migration that
-      failed to deploy would otherwise look exactly like a database that was
-      already up to date.
-    -->
-    <EmbeddedResource Include="Storage\Migrations\*.sql" />
+    <ShippedCatalogue Include="sources.json" />
+    <ShippedMigration Include="Storage\Migrations\*.sql" />
   </ItemGroup>
+
+  <Target Name="WriteShippedFiles"
+          BeforeTargets="BeforeCompile"
+          Inputs="@(ShippedCatalogue);@(ShippedMigration);$(MSBuildThisFileFullPath)"
+          Outputs="$(IntermediateOutputPath)ShippedFiles.g.cs">
+    <PropertyGroup>
+      <ShippedFilesSource>$(IntermediateOutputPath)ShippedFiles.g.cs</ShippedFilesSource>
+      <!-- A raw string's fence: longer than any run of quotes in a source or a migration. -->
+      <ShippedFence>&quot;&quot;&quot;&quot;</ShippedFence>
+    </PropertyGroup>
+
+    <WriteLinesToFile File="$(ShippedFilesSource)"
+                      Overwrite="true"
+                      Lines="// Written by the build from sources.json and Storage/Migrations. Edit those, not this.;namespace NoMercy.Plugin.TorrentDownloader%3B;internal static class ShippedFiles;{;public const string Catalogue = $(ShippedFence)" />
+    <WriteLinesToFile File="$(ShippedFilesSource)"
+                      Lines="$([MSBuild]::Escape($([System.IO.File]::ReadAllText('%(ShippedCatalogue.FullPath)'))))" />
+    <WriteLinesToFile File="$(ShippedFilesSource)"
+                      Lines="$(ShippedFence)%3B;public static readonly (string Name, string Sql)[] Migrations =;[" />
+    <WriteLinesToFile File="$(ShippedFilesSource)"
+                      Lines="(&quot;%(ShippedMigration.Filename)%(ShippedMigration.Extension)&quot;, $(ShippedFence);$([MSBuild]::Escape($([System.IO.File]::ReadAllText('%(ShippedMigration.FullPath)'))));$(ShippedFence))," />
+    <WriteLinesToFile File="$(ShippedFilesSource)"
+                      Lines="]%3B;}" />
+  </Target>
+
+  <!-- Its own target, so the file is compiled whether or not it was up to date and rewritten. -->
+  <Target Name="CompileShippedFiles" AfterTargets="WriteShippedFiles" BeforeTargets="BeforeCompile">
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)ShippedFiles.g.cs" />
+      <FileWrites Include="$(IntermediateOutputPath)ShippedFiles.g.cs" />
+    </ItemGroup>
+  </Target>
 
 </Project>
