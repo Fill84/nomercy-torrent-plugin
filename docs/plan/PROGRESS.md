@@ -25,9 +25,7 @@ the library until then. Plugin-side fixes still to do on that branch, from the s
 - make the `IPluginLibraryWriter` test double refuse an existing destination, as the server does;
 - the failed-download test was never seen red.
 
-**Current: the engine test that failed twice in 132 runs**
-(`BittorrentEngineTests.ADownloadStillReceivingIsStoppedAWindowAfterTheOnlyHolderOfSomePiecesLeft`), then a
-review of the whole of S15, then `S15-05`. Nothing is tagged before the owner has seen it.
+**Current: a review of the whole of S15, then `S15-05`.** Nothing is tagged before the owner has seen it.
 
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
@@ -860,6 +858,15 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **The availability-window engine test no longer fails one run in ten under load (15 October 2026).** Two
+  causes. The test moved the clock once the peer count said one, before the client had heard the peer go,
+  so the window opened a step late and its stop fell after the test's last step; it now waits for the
+  client's own minute timer (`ArmingClock.ArmedFor(due, at)`). And `RateLimits`, shared by every peer of
+  every torrent, had no lock: two peers asking at once both took a second's allowance, and two first blocks
+  of a torrent wrote its bucket dictionary at once, which threw and dropped the peer that had just delivered
+  a block. A lock now covers finding, refilling and charging the buckets
+  (`RateLimitTests.TwoPeersAskingAtTheSameMomentShareOneSecondsAllowance`). Rates under **Facts, measured**.
 
 - **`S15-03` a show downloads only a release the sources name (15 October 2026).** `SearchCycle` asks the
   indexers by show and episode for an anime only; a show with no name is not searched on any indexer
@@ -3399,6 +3406,25 @@ and note it here.
 ## Facts, measured
 
 Kept here so no slice re-discovers them.
+
+- **`FakeTimeProvider` 10.9.0 fires due timers on whichever thread reads it.** `GetUtcNow`, `CreateTimer`
+  and `Advance` all run every timer that is due, on the calling thread, unless another thread is already
+  doing so. So after the test moves the clock, the client's wake timer can run inside a session thread's
+  `Now()`, under the session's lock — and if the test thread is reading `Drawn` (the client's lock, then
+  the session's) at that moment, the two wait for each other for ever. Seen twice in about 1,500 loaded
+  runs of `ADownloadStillReceivingIsStoppedAWindowAfterTheOnlyHolderOfSomePiecesLeft` (stacks taken with
+  `dotnet-stack`); none in the 270 after the two fixes below. The real clock never runs a callback from
+  `GetUtcNow`, so the plugin is not exposed to it; a test that reads the client from its own thread while
+  sessions run is. Read the clock before taking a lock, never under one, in test clocks too.
+- **The availability-window engine test, measured under load, 15 October 2026.** Six copies of the one
+  test at once, each a fresh `dotnet test`. At `ab471a9`: 21 of 210 failed, every one the reported one —
+  no stop after the window, error empty. The peer count drops under the session's lock and the session
+  tells the client afterwards; in a failing run the test saw one peer at 90 s, moved the clock, and the
+  client asked for its reading at 100 s, so the window opened at 160 s and its stop was due at 1,960 s,
+  after the test's last step at 1,950 s. With the test waiting for the client's own minute timer: none of
+  240 failed that way, but 2 of 240 waited four minutes for the peer count to reach one — the client had
+  dropped the other peer early on with `InvalidOperationException` from `RateLimits.Bucket`, two first
+  blocks having written its dictionary at once. With the lock in `RateLimits` as well: 270 of 270 passed.
 
 - **A release reaches the owner's catalogue in two hops, and the second one is not ours.** The tag's
   workflow publishes the zip and commits `repository.json` in this repository, which is this plugin's

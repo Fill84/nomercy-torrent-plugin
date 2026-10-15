@@ -2211,6 +2211,13 @@ public class BittorrentEngineTests : IDisposable
     /// the whole of it. The download runs until thirty minutes after the window opened, and is stopped then.
     /// </para>
     /// <para>
+    /// The minute is counted from when the client heard the first peer go, which is when it asks for that
+    /// reading, and not from when the peer count says one. The session counts the peer gone before it tells
+    /// the client, so under load the clock moved a step in between: the reading was asked for at a hundred
+    /// seconds rather than ninety, the window opened a step late, and its stop was due a step after the last
+    /// one this test takes. Two runs in a hundred and thirty-two waited for a stop that never came.
+    /// </para>
+    /// <para>
     /// The content is generated rather than captured: it is the payload of a torrent built here, and what is
     /// being tested is when the client gives up, not how it reads anybody's bytes.
     /// </para>
@@ -2219,7 +2226,7 @@ public class BittorrentEngineTests : IDisposable
     public async Task ADownloadStillReceivingIsStoppedAWindowAfterTheOnlyHolderOfSomePiecesLeft()
     {
         using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(4));
-        FakeTimeProvider clock = new(new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero));
+        ArmingClock clock = new(new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero));
 
         const int pieces = 300;
         const int onlyFirst = 16;
@@ -2271,6 +2278,11 @@ public class BittorrentEngineTests : IDisposable
         await firstGoes.CancelAsync();
         await firstServes.ContinueWith(_ => toFirst.Dispose(), TaskScheduler.Default);
         await Until(async () => (await engine.StatusAsync(stopping.Token))[0].Peers == 1, stopping.Token);
+
+        // The reading a minute from now, which is the client having heard the first peer go.
+        DateTimeOffset left = clock.GetUtcNow();
+
+        await Until(() => Task.FromResult(clock.ArmedFor(TimeSpan.FromMinutes(1), left)), stopping.Token);
 
         // A minute to the reading that opens the window, then the window itself, all but its last step.
         await ReceivingAsync(engine, clock, steps: 6, stopping.Token);
@@ -2421,14 +2433,27 @@ public class BittorrentEngineTests : IDisposable
     /// </remarks>
     private sealed class ArmingClock(DateTimeOffset start) : FakeTimeProvider(start)
     {
-        private readonly List<TimeSpan> _armed = [];
+        private readonly List<(DateTimeOffset At, TimeSpan Due)> _armed = [];
 
         /// <summary>Whether the client set its wake timer to fire this far after the moment it set it.</summary>
         public bool ArmedFor(TimeSpan due)
         {
             lock (_armed)
             {
-                return _armed.Contains(due);
+                return _armed.Exists(one => one.Due == due);
+            }
+        }
+
+        /// <summary>Whether the client set its wake timer at this moment of the clock, to fire this far after it.</summary>
+        /// <remarks>
+        /// The moment as well as the wait, for a test whose client has already asked for a reading a minute
+        /// ahead earlier on: only the one asked for now says it has heard of what happened now.
+        /// </remarks>
+        public bool ArmedFor(TimeSpan due, DateTimeOffset at)
+        {
+            lock (_armed)
+            {
+                return _armed.Contains((at, due));
             }
         }
 
@@ -2436,9 +2461,14 @@ public class BittorrentEngineTests : IDisposable
         {
             if (SetByTheClient(callback.Method.DeclaringType))
             {
+                // Read before the lock, never under it: this clock fires whatever timers are due on the thread
+                // that reads it, and a timer of the client's own waits for the client's lock — which the thread
+                // setting this timer may be holding while it waits for this one.
+                DateTimeOffset at = GetUtcNow();
+
                 lock (_armed)
                 {
-                    _armed.Add(dueTime);
+                    _armed.Add((at, dueTime));
                 }
             }
 
