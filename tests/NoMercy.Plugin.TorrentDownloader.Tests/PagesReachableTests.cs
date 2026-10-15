@@ -35,6 +35,8 @@ public class PagesReachableTests
                 Pages.ShowSettingsRoute,
                 Pages.LibraryPreferencesRoute,
                 Pages.LibraryShowsRoute,
+                Pages.QueueTabRoute,
+                Pages.ActivityTabRoute,
             ],
             plugin.Routes.Routes.Select(route => route.Path));
     }

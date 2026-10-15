@@ -52,6 +52,21 @@ public sealed class PagesController(IPluginManager plugins) : PluginControllerBa
     public const string PrefetchedLibraryShows =
         "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText + "/libraries/{id}/shows/{number}";
 
+    /// <summary>Where the web app fetches one tab of a page with several tables: <c>/queue/waiting</c>.</summary>
+    /// <remarks>
+    /// Each tab is an address of its own (GitHub issue #4), so the web app fetches each one before it
+    /// draws it, and an unanswered fetch is the console's 404 of 11 September 2026 again.
+    /// </remarks>
+    public const string PrefetchedTab =
+        "~/api/v{version:apiVersion}/dashboard/plugins/" + PluginIdentity.IdText
+        + "/{page:regex(^(activity|queue)$)}/{tab}";
+
+    [HttpGet(PrefetchedTab)]
+    public Task<IActionResult> Tab(string page, string tab, CancellationToken ct)
+    {
+        return View($"/{page}/{Uri.EscapeDataString(tab)}", ct);
+    }
+
     [HttpGet(Prefetched)]
     public Task<IActionResult> Page(string page, CancellationToken ct)
     {

@@ -29,20 +29,35 @@ public static class QueueView
     public const string SearchAction = "queue/search";
     public const string WaitingTableId = "waiting";
 
-    public static PluginView Render(IReadOnlyList<TrackedEpisode> tracked)
+    /// <param name="tracked">Every episode the plugin tracks.</param>
+    /// <param name="tab">The list the path names, or null for the first.</param>
+    /// <remarks>
+    /// One list at a time, under a tab each (GitHub issue #4): stacked, Waiting to air began wherever
+    /// Looking happened to end. The tab's label is the list's name, so there is no heading above it.
+    /// </remarks>
+    public static PluginView Render(IReadOnlyList<TrackedEpisode> tracked, string? tab = null)
     {
+        IReadOnlyList<TrackedEpisode> looking = QueueOrder.Order(tracked);
+        TrackedEpisode[] waiting = [.. tracked.Where(episode => episode.State == EpisodeState.NotAired)];
+
         return new()
         {
             Layout = PluginLayout.Wide,
             Components =
             [
-                Ui.Text("looking-heading", "Looking", "title"),
-                Looking(QueueOrder.Order(tracked)),
-
-                Ui.Text("waiting-heading", "Waiting to air", "title"),
-                Waiting(tracked.Where(episode => episode.State == EpisodeState.NotAired)),
+                .. Tabs.Draw(
+                    [
+                        new(LookingTableId, "Looking", looking.Count, TabRoute(LookingTableId), [Looking(looking)]),
+                        new(WaitingTableId, "Waiting to air", waiting.Length, TabRoute(WaitingTableId), [Waiting(waiting)]),
+                    ],
+                    tab),
             ],
         };
+    }
+
+    private static string TabRoute(string tab)
+    {
+        return Pages.Routes.PathTo(Pages.QueueTabName, new Dictionary<string, string> { ["tab"] = tab });
     }
 
     /// <remarks>

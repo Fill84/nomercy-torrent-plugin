@@ -7,7 +7,8 @@
   of a title is enough, and case, accents and punctuation are ignored. A button puts the whole list
   back, the box keeps what was typed, and nothing about it is saved: a restart shows every show again.
 - The plugin's overview page lists every show of every `tv` library and every anime of every `anime`
-  library, in one list per library.
+  library, in one list per library, each library under a tab of its own labelled with its name and how
+  many of its shows are listed.
 - A show or anime the library holds no video file of is not listed, unless it is switched on. The
   server keeps a row for every show it ever identified, and those are not the owner's shows.
 - The missing column says, for every show listed, how many of its aired episodes have no video file,

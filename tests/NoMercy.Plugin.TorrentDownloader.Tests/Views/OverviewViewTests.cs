@@ -23,15 +23,15 @@ public class OverviewViewTests
     [Fact]
     public void EveryShowOfEveryTvAndAnimeLibraryIsListedPerLibrary()
     {
-        PluginView page = OverviewView.Render(
-            Idle(),
-            [
-                Listing(Tv, "Series", LibraryKind.Television, Listed(41, "Silo", Tv), Listed(52, "Sugar", Tv)),
-                Listing(Anime, "Anime", LibraryKind.Anime, Listed(90, "Frieren", Anime)),
-            ]);
+        LibraryListing[] libraries =
+        [
+            Listing(Tv, "Series", LibraryKind.Television, Listed(41, "Silo", Tv), Listed(52, "Sugar", Tv)),
+            Listing(Anime, "Anime", LibraryKind.Anime, Listed(90, "Frieren", Anime)),
+        ];
 
-        Assert.Equal(["Silo", "Sugar"], Titles(page, Tv));
-        Assert.Equal(["Frieren"], Titles(page, Anime));
+        // A library to a tab (GitHub issue #4): the first on the overview's own address, the other on its.
+        Assert.Equal(["Silo", "Sugar"], Titles(OverviewView.Render(Idle(), libraries), Tv));
+        Assert.Equal(["Frieren"], Titles(OverviewView.Render(Idle(), libraries, onlyLibraryId: Anime), Anime));
     }
 
     /// <remarks>
@@ -213,16 +213,16 @@ public class OverviewViewTests
     [Fact]
     public void ASearchListsOnlyTheShowsThatMatchWhicheverLibraryTheyAreIn()
     {
-        PluginView page = OverviewView.Render(
-            Idle(),
-            [
-                Listing(Tv, "Series", LibraryKind.Television, Listed(41, "Silo", Tv), Listed(52, "Sugar", Tv)),
-                Listing(Anime, "Anime", LibraryKind.Anime, Listed(90, "Classroom of the Elite", Anime), Listed(91, "Frieren", Anime)),
-            ],
-            find: "elite");
+        LibraryListing[] libraries =
+        [
+            Listing(Tv, "Series", LibraryKind.Television, Listed(41, "Silo", Tv), Listed(52, "Sugar", Tv)),
+            Listing(Anime, "Anime", LibraryKind.Anime, Listed(90, "Classroom of the Elite", Anime), Listed(91, "Frieren", Anime)),
+        ];
 
-        Assert.Empty(Titles(page, Tv));
-        Assert.Equal(["Classroom of the Elite"], Titles(page, Anime));
+        Assert.Empty(Titles(OverviewView.Render(Idle(), libraries, find: "elite"), Tv));
+        Assert.Equal(
+            ["Classroom of the Elite"],
+            Titles(OverviewView.Render(Idle(), libraries, onlyLibraryId: Anime, find: "elite"), Anime));
     }
 
     /// <remarks>

@@ -113,26 +113,29 @@ public class HandCountedLibraryTests : IDisposable
         IReadOnlyList<Show> onShelves = await adapter.GetShowsAsync(CancellationToken.None);
         Dictionary<int, int> missing = shows.ToDictionary(show => show.ShowId, show => show.Missing);
 
-        PluginView page = OverviewView.Render(
-            new(false, null, null),
-            [
-                .. (await adapter.GetLibrariesAsync(CancellationToken.None)).Select(library => new LibraryListing(
-                    library,
-                    new(library.Id),
-                    [
-                        .. onShelves.Where(show => show.LibraryId == library.Id).Select(show => new ShowListing(
-                            show,
-                            new(show.Id),
-                            EffectiveSettings.Of(new(show.Id), new(library.Id)),
-                            missing.TryGetValue(show.Id, out int count) ? count : null)),
-                    ])),
-            ]);
+        LibraryListing[] listings =
+        [
+            .. (await adapter.GetLibrariesAsync(CancellationToken.None)).Select(library => new LibraryListing(
+                library,
+                new(library.Id),
+                [
+                    .. onShelves.Where(show => show.LibraryId == library.Id).Select(show => new ShowListing(
+                        show,
+                        new(show.Id),
+                        EffectiveSettings.Of(new(show.Id), new(library.Id)),
+                        missing.TryGetValue(show.Id, out int count) ? count : null)),
+                ])),
+        ];
+
+        // A library to a tab (GitHub issue #4), so each library is read on its own.
+        PluginView page = OverviewView.Render(new(false, null, null), listings);
+        PluginView anime = OverviewView.Render(new(false, null, null), listings, onlyLibraryId: "lib-anime");
 
         Assert.Equal("2", Rendered.ById(page, "show-1").Props["missing"]);
-        Assert.Equal("1", Rendered.ById(page, "show-2").Props["missing"]);
-        Assert.Contains(Rendered.ById(page, OverviewView.TableId("lib-anime")).Items, row => row.Id == "show-2");
+        Assert.Equal("1", Rendered.ById(anime, "show-2").Props["missing"]);
+        Assert.Contains(Rendered.ById(anime, OverviewView.TableId("lib-anime")).Items, row => row.Id == "show-2");
 
-        IReadOnlyList<string> words = Rendered.EveryValue(page);
+        IReadOnlyList<string> words = [.. Rendered.EveryValue(page), .. Rendered.EveryValue(anime)];
 
         Assert.DoesNotContain("A film's show", words);
         Assert.DoesNotContain("Homeless", words);

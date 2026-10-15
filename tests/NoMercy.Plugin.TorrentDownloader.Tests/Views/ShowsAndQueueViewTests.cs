@@ -42,11 +42,16 @@ public class ShowsAndQueueViewTests : IDisposable
 
         PluginView page = await View(plugin, Pages.OverviewRoute);
 
+        // The anime library is a tab of its own, at its own address (GitHub issue #4).
+        PluginView anime = await View(
+            plugin,
+            Pages.Routes.PathTo(Pages.LibraryShowsName, new Dictionary<string, string> { ["id"] = AnimeLibrary, ["page"] = "1" }));
+
         // Silo: three missing, one waiting. Frieren: one missing, none waiting.
         Assert.Equal("3", Rendered.ById(page, "show-1").Props["missing"]);
-        Assert.Equal("1", Rendered.ById(page, "show-2").Props["missing"]);
+        Assert.Equal("1", Rendered.ById(anime, "show-2").Props["missing"]);
         Assert.Contains(Rendered.ById(page, OverviewView.TableId(TvLibrary)).Items, row => row.Id == "show-1");
-        Assert.Contains(Rendered.ById(page, OverviewView.TableId(AnimeLibrary)).Items, row => row.Id == "show-2");
+        Assert.Contains(Rendered.ById(anime, OverviewView.TableId(AnimeLibrary)).Items, row => row.Id == "show-2");
     }
 
     /// <remarks>
@@ -68,16 +73,23 @@ public class ShowsAndQueueViewTests : IDisposable
 
         PluginView page = await View(plugin, Pages.QueueRoute);
 
+        // Waiting to air is the second tab, at its own address (GitHub issue #4).
+        PluginView waiting = await View(
+            plugin,
+            Pages.Routes.PathTo(Pages.QueueTabName, new Dictionary<string, string> { ["tab"] = QueueView.WaitingTableId }));
+
         Assert.Equal(
             ["Silo S01E01", "Silo S01E03"],
             RowsOf(page, QueueView.LookingTableId));
         Assert.Equal(
             ["Silo S01E02"],
-            RowsOf(page, QueueView.WaitingTableId));
+            RowsOf(waiting, QueueView.WaitingTableId));
 
         // Nothing on the page still calls this "given up" — the heading is
-        // gone along with the state, not merely emptied.
+        // gone along with the state, not merely emptied — and there is no
+        // third tab for it either.
         Assert.DoesNotContain("Given up for now", Rendered.Words(page));
+        Assert.Equal(2, Rendered.ById(page, Tabs.RowId).Items.Count);
     }
 
     /// <remarks>

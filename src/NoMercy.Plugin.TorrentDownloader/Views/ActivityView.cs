@@ -36,30 +36,42 @@ public static class ActivityView
     /// What the client holds, for the Download stage, or null when no run is
     /// going and no stage is drawn.
     /// </param>
+    /// <param name="tab">The table the path names, or null for the first.</param>
     public static PluginView Render(
         ActivitySnapshot activity,
         CycleStatus cycle,
-        IReadOnlyList<DownloadRow>? downloads = null)
+        IReadOnlyList<DownloadRow>? downloads = null,
+        string? tab = null)
     {
-        List<PluginComponent> components = [RunStatusView.Line(cycle)];
+        List<Tab> tables = [];
 
         if (activity.Run is SearchProgress run)
         {
-            components.Add(StagesTable(run, downloads ?? []));
+            // No count on the stages: they are the same six rows on every run, and a number that never
+            // changes says nothing about it.
+            tables.Add(new(StagesTableId, "Stages", null, TabRoute(StagesTableId), [StagesTable(run, downloads ?? [])]));
         }
 
-        components.Add(NowTable(activity));
+        tables.Add(new(NowTableId, "Now", activity.InFlight.Count, TabRoute(NowTableId), [NowTable(activity)]));
 
         if (activity.Run is not null || activity.Notes.Count > 0)
         {
-            components.Add(NotesTable(activity.Notes));
+            tables.Add(new(NotesTableId, "Notes", activity.Notes.Count, TabRoute(NotesTableId), [NotesTable(activity.Notes)]));
         }
 
         return new()
         {
             Layout = PluginLayout.Wide,
-            Components = [.. components],
+
+            // One table at a time while a run gives the page three (GitHub issue #4); the status line stays
+            // above the tabs, because whether a run is going is the answer to every one of them.
+            Components = [RunStatusView.Line(cycle), .. Tabs.Draw(tables, tab)],
         };
+    }
+
+    private static string TabRoute(string tab)
+    {
+        return Pages.Routes.PathTo(Pages.ActivityTabName, new Dictionary<string, string> { ["tab"] = tab });
     }
 
     /// <summary>A row per stage of the run, each with what it has counted so far.</summary>

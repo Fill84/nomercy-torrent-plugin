@@ -8,7 +8,7 @@ Read this first, update it last. Nothing else decides what happens next.
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
-`S14-07` (#5, sort, filter and paging). `S14-01` to `S14-05` are done (see **Log**). **Current: `S14-06`.**
+`S14-07` (#5, sort, filter and paging). `S14-01` to `S14-06` are done (see **Log**). **Current: `S14-07`.**
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
@@ -806,12 +806,26 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S14-03` A log level the owner sets, and a log file that holds it (#7)
 - [x] `S14-04` A copy nobody seeds is not started, and one that cannot finish is stopped (#2)
 - [x] `S14-05` A season with several gaps takes a pack (#1)
-- [ ] `S14-06` A page with two or more tables shows them as tabs (#4)
+- [x] `S14-06` A page with two or more tables shows them as tabs (#4)
 - [ ] `S14-07` Every table answers sort, filter and paging (#5)
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S14-06` A page with two or more tables shows them as tabs (#4).** `Views/Tabs.Draw` takes a page's
+  tables as `Tab`s (key, name, count or null, address, content) and the key the path names: two or more
+  draw a `PluginRow` of navigating `PluginButton`s, the chosen one `primary` and the rest `ghost` as the
+  navigation marks a page, then only the chosen tab's content; one table draws as it was; a key the page
+  does not have draws the first. New routes `/queue/:tab` (`looking`, `waiting`) and `/activity/:tab`
+  (`stages`, `now`, `notes`), named `queue-tab` and `activity-tab`, with a parameter so `Pages.Navigable`
+  leaves them out; `Pages.PageOf` makes the navigation mark Queue, Activity, and the overview for
+  `/libraries/:id/shows/:page`. The overview's tabs are its libraries at `/libraries/:id/shows/1`, counted
+  by what is listed (under a search, what matches); `/` and an unknown library draw the first. The Queue's
+  two headings are gone, the tab names the list. `PagesController.Tab` answers the web app's prefetch of
+  `dashboard/plugins/{id}/{activity|queue}/{tab}`. Downloads has one table and no tabs (`SPRINTS.md`
+  corrected). For S14-07: one table is drawn at a time, and each tab's address is in the path; a query
+  key from #593 applies to the tab the path names.
 
 - **`S14-05` A season with several gaps takes a pack (#1).** `SeasonPacks.WithSeveralGaps` (two or more
   searched episodes of one season) decides which seasons look for a pack; `ReleaseName.IsSeasonPack` and
@@ -2491,6 +2505,14 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, GitHub issue #4 replaced the Queue's two half-height lists of 16 September 2026.**
+  The owner's word of 14 October 2026 was to fix the seven issues, and fixing #4 is the decision: the
+  Queue's two lists are two tabs, one drawn at a time, and every page with two or more tables does the
+  same (`docs/specs/pages.md` § Tabs). The tab is in the path, because the web app forwards no query.
+  Two readings made here: the stages tab carries no count, since it is the same six rows on every run;
+  and under a search the overview still draws the first library unless the path names another, the
+  counts on the tabs saying where the matches are.
 
 - **14 October 2026, GitHub issue #1 replaced the owner's rule of 15 September 2026 that a pack is not
   searched for.** The owner's word that day was to fix the seven issues, and fixing #1 is the decision to

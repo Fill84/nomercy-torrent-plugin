@@ -3390,8 +3390,10 @@ row of buttons that navigate), `Views/Ui.cs`, `Views/ActivityView.cs`, `Views/Do
 `Views/QueueView.cs`, `Views/OverviewView.cs`, `Controllers/PagesController.cs`, and
 `EveryPageIsTheSameShellTests`.
 
-**The pages.** Activity (now, sources, downloads), Downloads (two tables), Queue (looked for, waiting to
-air) and the overview (one table per library).
+**The pages.** Activity while a run is going (stages, now, notes — corrected on 15 October 2026: the
+page has no sources or downloads table, which are `docs/08-ui.md`'s sketch and not the page), Queue
+(looking, waiting to air) and the overview (one table per library). Downloads has one table and no
+tabs (corrected the same day: it was listed here with two).
 
 **Steps**
 

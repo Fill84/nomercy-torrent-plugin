@@ -17,7 +17,7 @@ public sealed record ShowListing(Show Show, ShowSettings Settings, EffectiveSett
 public sealed record LibraryListing(Library Library, LibraryPreferences Preferences, IReadOnlyList<ShowListing> Shows);
 
 /// <summary>
-/// The overview page at <c>/</c>: the run's status line, then one block per library.
+/// The overview page at <c>/</c>: the run's status line, then one block per library, a tab each.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -53,9 +53,22 @@ public static class OverviewView
 
     /// <param name="cycle">Where the run stands, for the status line.</param>
     /// <param name="libraries">Every tv and anime library, with its shows.</param>
-    /// <param name="onlyLibraryId">One library's page of shows, or null for the overview of all of them.</param>
+    /// <param name="onlyLibraryId">
+    /// The library the path names, whose tab is drawn, or null for the overview's own address, which draws
+    /// the first.
+    /// </param>
     /// <param name="page">Which page of that library's shows, counted from one.</param>
     /// <param name="find">What is being looked for, or null for the whole list.</param>
+    /// <remarks>
+    /// <para>
+    /// <strong>One library at a time, under a tab each</strong> (GitHub issue #4). Stacked, the anime
+    /// library was found by scrolling past every show of the television library above it.
+    /// </para>
+    /// <para>
+    /// A library's tab is its page of shows, <c>/libraries/:id/shows/1</c>: the address Previous and Next
+    /// already used, so a tab reloads to the same library and the paging under it is the paging it was.
+    /// </para>
+    /// </remarks>
     public static PluginView Render(
         CycleStatus cycle,
         IReadOnlyList<LibraryListing> libraries,
@@ -63,22 +76,24 @@ public static class OverviewView
         int page = 1,
         string? find = null)
     {
-        List<PluginComponent> components = [RunStatusView.Line(cycle), .. Finder(find)];
+        // The page number belongs to the library the path names. On the overview's own address, or a
+        // library that is not there any more, the first tab is drawn from its first page.
+        Tab[] tabs =
+        [
+            .. libraries.Select(library => new Tab(
+                library.Library.Id,
+                library.Library.Name,
 
-        foreach (LibraryListing library in libraries)
-        {
-            if (onlyLibraryId is not null && library.Library.Id != onlyLibraryId)
-            {
-                continue;
-            }
-
-            components.AddRange(Block(library, onlyLibraryId is null ? 1 : Math.Max(page, 1), find));
-        }
+                // What is listed under the tab, so a search says which library the show is in.
+                library.Shows.Count(one => Found(find, one.Show.Title)),
+                ShowsRoute(library.Library.Id, 1),
+                [.. Block(library, library.Library.Id == onlyLibraryId ? Math.Max(page, 1) : 1, find)])),
+        ];
 
         return new()
         {
             Layout = PluginLayout.Wide,
-            Components = [.. components],
+            Components = [RunStatusView.Line(cycle), .. Finder(find), .. Tabs.Draw(tabs, onlyLibraryId)],
         };
     }
 
@@ -267,7 +282,13 @@ public static class OverviewView
 
     private static PluginActionIntent PageOf(string libraryId, int page)
     {
-        return Pages.Routes.GoTo(
+        return PluginActionIntent.Navigate(ShowsRoute(libraryId, page));
+    }
+
+    /// <summary>The address of one page of one library's shows, which is that library's tab.</summary>
+    private static string ShowsRoute(string libraryId, int page)
+    {
+        return Pages.Routes.PathTo(
             Pages.LibraryShowsName,
             new Dictionary<string, string>
             {

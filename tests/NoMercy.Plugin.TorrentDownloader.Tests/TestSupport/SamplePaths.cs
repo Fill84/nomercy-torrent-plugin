@@ -1,3 +1,4 @@
+using NoMercy.Plugin.TorrentDownloader.Views;
 using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
@@ -19,6 +20,11 @@ public static class SamplePaths
         {
             ["id"] = route.Path.StartsWith("/shows", StringComparison.Ordinal) ? ShowId : LibraryId,
             ["page"] = "2",
+
+            // A tab the page always has, so a walk asks for a page by a tab that is really on it.
+            ["tab"] = route.Path.StartsWith("/queue", StringComparison.Ordinal)
+                ? QueueView.WaitingTableId
+                : ActivityView.NowTableId,
         });
     }
 }

@@ -2269,7 +2269,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     ct);
 
             case "queue":
-                return QueueView.Render(await Tracked(ct));
+            case Pages.QueueTabName:
+                return QueueView.Render(await Tracked(ct), match!.Param("tab"));
 
             case "downloads":
                 return DownloadsView.Render(await DownloadRowsAsync(ct));
@@ -2295,6 +2296,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     [.. (await (await GrabsAsync(ct)).HistoryAsync(ct)).Select(Line)]);
 
             case "activity":
+            case Pages.ActivityTabName:
                 await LastRunAsync(ct);
 
                 ActivitySnapshot activity = _journal.Snapshot();
@@ -2305,7 +2307,8 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 return ActivityView.Render(
                     activity,
                     CurrentCycle(),
-                    activity.Run is null ? null : await DownloadRowsAsync(ct));
+                    activity.Run is null ? null : await DownloadRowsAsync(ct),
+                    match!.Param("tab"));
 
             default:
                 await LastRunAsync(ct);

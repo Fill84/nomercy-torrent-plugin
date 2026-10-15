@@ -34,6 +34,22 @@ public static class Pages
     /// <summary>What is being looked for, given up on, and still to air.</summary>
     public const string QueueRoute = "/queue";
 
+    /// <summary>One list of the Queue, by its table: <c>/queue/waiting</c>.</summary>
+    public const string QueueTabRoute = "/queue/:tab";
+
+    public const string QueueTabName = "queue-tab";
+
+    /// <summary>One table of the Activity page, by its id: <c>/activity/notes</c>.</summary>
+    public const string ActivityTabRoute = "/activity/:tab";
+
+    public const string ActivityTabName = "activity-tab";
+
+    /// <summary>How the page being read is marked, in the navigation and in a page's tabs alike.</summary>
+    public const string Marked = "primary";
+
+    /// <summary>And every other one.</summary>
+    public const string Unmarked = "ghost";
+
     /// <summary>What is transferring, and what was grabbed and is not yet.</summary>
     public const string DownloadsRoute = "/downloads";
 
@@ -75,8 +91,8 @@ public static class Pages
             "nav",
             [
                 // Only the pages that stand on their own. A page with a parameter in its path - one
-                // show's settings, one library's page of shows - is reached from the row or the block
-                // it belongs to, and has no address a tab could hold.
+                // show's settings, one library's page of shows, one tab of a page - is reached from the
+                // row, the block or the page it belongs to, and has no one address this row could hold.
                 .. Navigable.Select(one => Ui.Button(
                     $"nav-{one.Name}",
                     one.Label ?? one.Name,
@@ -86,11 +102,30 @@ public static class Pages
                     // link that disappears on arrival moves every other link
                     // along by one, so the row is never twice in the same
                     // place and nothing can be found by where it sits.
-                    variant: Same(one.Path, route) ? "primary" : "ghost")),
+                    variant: Same(one.Path, PageOf(route)) ? Marked : Unmarked)),
             ]);
     }
 
-    /// <summary>The routes a tab can point at: every one without a parameter in its path.</summary>
+    /// <summary>
+    /// The page a route is a tab of, or the route itself.
+    /// </summary>
+    /// <remarks>
+    /// A tab is an address of its own (GitHub issue #4), and the navigation marks a page by its address:
+    /// left at that, <c>/queue/waiting</c> would mark nothing and read as a page outside the plugin's
+    /// navigation. A library's page of shows is the overview's tab for that library.
+    /// </remarks>
+    private static string PageOf(string route)
+    {
+        return Routes.Resolve(route)?.Route.Name switch
+        {
+            QueueTabName => QueueRoute,
+            ActivityTabName => ActivityRoute,
+            LibraryShowsName => OverviewRoute,
+            _ => route,
+        };
+    }
+
+    /// <summary>The routes the navigation points at: every one without a parameter in its path.</summary>
     public static IEnumerable<PluginRoute> Navigable => Routes.Routes.Where(route => !route.Path.Contains(':', StringComparison.Ordinal));
 
     /// <summary>
@@ -130,7 +165,9 @@ public static class Pages
         Page(SettingsRoute, "settings", "Settings"),
         Page(ShowSettingsRoute, ShowSettingsName, "Show settings"),
         Page(LibraryPreferencesRoute, LibraryPreferencesName, "Library preferences"),
-        Page(LibraryShowsRoute, LibraryShowsName, "Shows"));
+        Page(LibraryShowsRoute, LibraryShowsName, "Shows"),
+        Page(QueueTabRoute, QueueTabName, "Queue"),
+        Page(ActivityTabRoute, ActivityTabName, "Activity"));
 
     /// <summary>One page, in the dashboard's width like every other.</summary>
     private static PluginRoute Page(string path, string name, string label)

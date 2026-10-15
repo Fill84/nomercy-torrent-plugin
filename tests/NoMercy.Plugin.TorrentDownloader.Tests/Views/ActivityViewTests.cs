@@ -170,7 +170,11 @@ public class ActivityViewTests
             ],
         };
 
-        PluginView view = ActivityView.Render(snapshot, new(true, null, null) { StartedAt = Now.AddMinutes(-3) });
+        // Under its own tab, since a run gives the page three tables (GitHub issue #4).
+        PluginView view = ActivityView.Render(
+            snapshot,
+            new(true, null, null) { StartedAt = Now.AddMinutes(-3) },
+            tab: ActivityView.NotesTableId);
 
         string[] words = [.. Rendered.Words(new() { Components = [Rendered.ById(view, ActivityView.NotesTableId)] })];
 
