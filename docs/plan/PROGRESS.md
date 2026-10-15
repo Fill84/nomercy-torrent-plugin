@@ -4,9 +4,11 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
-**15 October 2026: Torrentz2 is removed, the owner's decision of that day (see Decisions).** Its catalogue
-entry, its manifest host, its reader and every capture of it are gone; ten indexers ship. The fix is
-committed locally for 0.8.1 and **not pushed, tagged or versioned**: it waits for the owner to see it.
+**15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
+is gone (done, `b54ef94`), `S15-02` no table scrolls sideways, `S15-03` a show downloads only a release
+the sources name (anime keeps its search by show and episode), `S15-04` a wrong episode the plugin
+delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1. **Current: `S15-02`.**
+Nothing is tagged before the owner has seen it.
 
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
@@ -828,6 +830,13 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S14-05` A season with several gaps takes a pack (#1)
 - [x] `S14-06` A page with two or more tables shows them as tabs (#4)
 - [x] `S14-07` Every table answers sort, filter and paging (#5)
+
+### Sprint 15 — 0.8.1: only real releases, and nothing that scrolls sideways
+- [x] `S15-01` Torrentz2 is gone
+- [ ] `S15-02` No table scrolls sideways
+- [ ] `S15-03` A show downloads only a release the sources name
+- [ ] `S15-04` A wrong episode the plugin delivered is replaced on its own
+- [ ] `S15-05` Seen on beast-unit, then 0.8.1
 
 ## Log
 

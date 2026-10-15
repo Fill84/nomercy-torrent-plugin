@@ -3436,6 +3436,108 @@ builds against (it carries `Query`), `Controllers/PagesController.cs`.
 **Done when** the tests are green and were red, the gates are clean, and #5 is closed with a comment
 that says the client side waits on #593.
 
+## S15 · 0.8.1: only real releases, and nothing that scrolls sideways
+
+What the owner saw on beast-unit on 15 October 2026, the day 0.8.0 was released: the Sources table
+scrolled sideways, Torrentz2's domain no longer exists, and South Park S29E03 was downloaded as
+`South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM` — a non-scene capture with the intro missing — when
+PreDB and srrDB knew no release of it at all. The owner's word that day: **nothing is downloaded that is
+not a release on the sources, except anime**, and a wrong episode the plugin already delivered is put
+right **automatically**, with nothing for the owner to do. **Nothing of S15 is tagged before the owner
+has seen it on beast-unit (`S15-05`).**
+
+Facts read that day, so they are not looked for again:
+
+- The five TorrentGalaxy "WEB" torrents grabbed for S29E03 on 14 October 2026 (MeGusta, CAKES, FLUX) held
+  no video and were refused; the ViETNAM one came from TorrentBay through the "When no release name
+  gives a torrent" search that `S13-17` added on 16 September 2026.
+- `IPluginLibraryWriter` (SDK 12.1, implemented by the server in process and out of process) has
+  `RecycleAsync`, documented as what "a quality upgrade that replaces an episode should call". It is an
+  elevated capability, jailed to the libraries the owner grants: after the update the plugin loads
+  disabled until the owner approves it once more.
+- `IPluginEncoder.EncodeAsync` has no overwrite option, and the server skips an encode whose outputs
+  exist (media-server #38), so the old episode has to be gone before the new encode is asked for.
+
+## S15-01 · Torrentz2 is gone
+
+**As done** (`b54ef94`): its catalogue entry, manifest host, reader, captures and reader tests are
+removed; ten indexers ship; the date-rule test uses 1337x's Silo page; a `config.json` naming Torrentz2
+as switched off still loads.
+
+## S15-02 · No table scrolls sideways
+
+**Read first:** `docs/08-ui.md`, `docs/specs/pages.md`, `Views/TableRows.cs`, `Views/SourcesView.cs`,
+`Views/DownloadsView.cs` (History), `Views/ActivityView.cs` (notes); read `../nomercy-app-web`'s
+`PluginTable` only to confirm that a cell does not wrap.
+
+**Steps**
+
+1. Tests (red first): a free-text cell longer than the cap shows its first sentence cut at a word with
+   "…", and the whole text stands under the table as a line of its own, in table order; a short text is
+   unchanged and has no line under the table; `filter` still finds a row by a word only in the whole
+   text. For Sources `refusal`, History `detail` and Activity notes, with texts the plugin really
+   produces.
+2. One helper for every such cell. The URL in a refusal is never in the cell.
+3. `docs/08-ui.md` and `docs/specs/pages.md` say it.
+
+## S15-03 · A show downloads only a release the sources name
+
+**Read first:** `docs/specs/release-names.md`, `docs/specs/indexer-search.md` § When no release name gives
+a torrent, `docs/specs/run.md`, `Core/Pipeline/SearchCycle.cs`, `Core/Pipeline/IndexerRound.cs`
+(`AskForEpisodeAsync`), `SPRINTS.md` § S13-17.
+
+**The rule, replacing `S13-17` (16 September 2026):** for a show, the indexers are asked only for release
+names a name source gave. When none gives a torrent, nothing is downloaded and the episode is searched
+for again on the next run. For an anime the search by show and episode stays, because fansubs are the
+real releases and no name source lists them.
+
+**Steps**
+
+1. Tests (red first), on the captures `ByShowAndEpisodeTests` uses: a show whose names give no torrent
+   downloads nothing and says why on the Activity page; an anime in the same position is still asked of
+   the indexers by show and episode.
+2. Remove the path for shows; keep it for anime. Nothing dormant.
+3. Specs and `docs/04-domain.md` state the rule; **Decisions** records the reversal.
+
+## S15-04 · A wrong episode the plugin delivered is replaced on its own
+
+**Read first:** `Hosting/Transfers.cs`, `Hosting/Stager.cs`, `Storage/GrabRepository.cs`,
+`Core/Pipeline/MissingRefresh.cs`, `Core/Pipeline/SearchCycle.cs`, `IPluginLibraryWriter` and the
+capability that grants it in the SDK the plugin builds against, `plugin.json`, `docs/specs/run.md` § What
+the plugin deletes.
+
+**The rule (the owner, 15 October 2026):**
+
+1. A grab records whether its release is a name a name source gave. A done grab for a show whose release
+   is not such a name marks its episode **to be replaced**. Grabs from before this version are checked
+   once against the name sources' search; a release they do not name marks its episode the same way.
+   Anime is never marked.
+2. An episode to be replaced is searched for by release name like a missing one, and only by name.
+3. Once its new release has downloaded whole and its video is staged, the files of the old episode that
+   the plugin's own grab caused — the encoded episode in the library — go to the server's recycle area
+   through `IPluginLibraryWriter.RecycleAsync`, and then the encode is asked for. Nothing the plugin did
+   not deliver is touched, and nothing is deleted outright.
+4. Where the library is not granted, or recycling is refused, the new video waits in the intake folder and
+   the page says why, once; nothing is encoded over the old.
+5. `plugin.json` asks for the capability; the release notes say the plugin must be approved once more.
+
+**Steps**
+
+1. Tests (red first) for each numbered rule, including: an episode the owner put in the library is never
+   recycled; a failed download leaves the old episode in place; anime is never marked.
+2. Build it; `docs/specs/run.md` § What the plugin deletes and § When a download finishes state it.
+
+## S15-05 · Seen on beast-unit, then 0.8.1
+
+**Steps**
+
+1. Build the package, ask the owner to stop the server, put it on beast-unit, ask the owner to start it
+   and approve the plugin once more, and walk through Sources, History, Activity and South Park S29E03
+   with the owner. Fix what they find.
+2. Only on the owner's approval: the version goes to 0.8.1, the tag is pushed, the release workflow is
+   watched, both forges carry the same package, `repository.json` names 0.8.1, and the
+   `nomercy-plugins` catalogue workflow is started so the catalogue shows it at once.
+
 ## What is not this repository's, and is written down so it is not looked for here again
 
 None of these has a fix that belongs in this plugin.
