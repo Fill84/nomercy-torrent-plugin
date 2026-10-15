@@ -5,7 +5,8 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
-Media-server #599 and #600 are closed, so `S15-04` is unblocked. Current: **`S17-01`**.
+Media-server #599 and #600 are closed, so `S15-04` is unblocked. Current: **`S17-02`**, on the branch
+`feat/replace-delivered`, which merges into master when `S17-02` is done.
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
@@ -896,7 +897,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [ ] `S16-07` Seen on beast-unit, then a version
 
 ### Sprint 17 — The plugin finished: the replacement, and what is known to be wrong
-- [ ] `S17-01` The replacement branch on today's master
+- [x] `S17-01` The replacement branch on today's master
 - [ ] `S17-02` The replacement, finished from its own check
 - [ ] `S17-03` A plugin unloaded mid-cycle leaves nothing unobserved
 - [ ] `S17-04` The `S14` known list
@@ -904,6 +905,11 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-01` (16 October 2026):** `feat/replace-delivered` rebased onto master (`84bfa5e`): its grab and
+  episode writes are on the `Store` API, migration 018 runs after the host's count reaches 0.8.1's 17
+  (`OldDatabase` now writes only those 17, so the carry-over test proves 018 runs after it), and the
+  branch's own `PROGRESS.md` (which ticked `S15-04`) gave way to master's. 776 + 511 + 294 + 7 green.
 
 - **`S16-08` (16 October 2026):** new download files are made sparse by the host
   (`IPluginStorage.MarkSparseAsync`, media-server #609); the BitTorrent assembly ships no native call and
