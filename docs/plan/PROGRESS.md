@@ -902,7 +902,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   `HostShapedStorage`; a test that wants to look underneath asks the store (`QueryAsync`, `ScalarAsync`),
   never a connection of its own. Out of process the plugin now has no database until media-server #601's
   second ask ships. The `build.yml` step that writes `ShippedFiles` (S16-03) has not yet run on Linux: CI
-  runs only for a release.
+  runs only for a release. A review of the slice found no loss and no deadlock, and one refusal of the
+  right file: SQLite on Linux and macOS reports a database's path with every symbolic link followed, so
+  the other-file check compares both paths through `RealPath` (`RealPathTests`; the whole failure cannot
+  be shown on Windows, where SQLite follows no link).
 
 - **`S16-03` (15 October 2026):** `sources.json` and the migrations travel inside the assembly as
   `ShippedFiles`, written by the build; no package carries `sources.json` any more. A test that wants the

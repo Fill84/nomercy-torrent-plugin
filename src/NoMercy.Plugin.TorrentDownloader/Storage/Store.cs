@@ -275,7 +275,7 @@ public sealed class Store : IAsyncDisposable
         {
             throw new InvalidOperationException(
                 $"The plugin's database at {old} could not be moved to {carried} ({failure.Message}). "
-                + "Nothing was changed; restart the server to finish the update.",
+                + "The database itself was not moved and nothing in it changed; restart the server to finish the update.",
                 failure);
         }
     }
@@ -306,7 +306,9 @@ public sealed class Store : IAsyncDisposable
 
         StringComparison paths = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
 
-        if (opened.Length == 0 || !string.Equals(Path.GetFullPath(opened), Path.GetFullPath(carried), paths))
+        // Both through every link: SQLite reports the real file on Linux and
+        // macOS, and a data folder under a link is still the right one.
+        if (opened.Length == 0 || !string.Equals(RealPath.Of(opened), RealPath.Of(carried), paths))
         {
             throw new InvalidOperationException(
                 $"The server opened this plugin's database at '{opened}', but its data is at {carried}. "
