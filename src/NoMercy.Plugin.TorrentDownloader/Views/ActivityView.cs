@@ -165,7 +165,7 @@ public static class ActivityView
             },
 
             // A note quotes what a source answered, address and all, and is as long as that answer.
-            freeText: ["what"]);
+            longColumns: [new("what")]);
     }
 
     private static IReadOnlyList<PluginComponent> NowTable(ActivitySnapshot activity, TableQuery? query)
@@ -196,6 +196,12 @@ public static class ActivityView
             {
                 // A stage's place in a run, not its name: Names comes before Find.
                 ["stage"] = flying => flying.Work.Stage,
-            });
+            },
+
+            // A release name is in both while it is found and grabbed: Find's "release · source" in Episode,
+            // and the release Grab waits on. The longest in the captures is 81 characters, and the two of
+            // them beside Stage ("Clearance", 105 px) ran to some 1,755 px. Stage leaves 1,495 px of the
+            // 1,600 (LongCells): 83 characters, a whole release and the start of its source, and 77.
+            longColumns: [new("subject", 83, Cut.AtWord), new("waiting", LongCells.CellCharacters, Cut.AtWord)]);
     }
 }

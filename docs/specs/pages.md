@@ -44,14 +44,21 @@
 ## Long text in a table
 
 - Long text in a cell never makes its table wider than the page.
-- A free-text cell holds at most 80 characters. The free-text cells are a source's refusal on the
-  Sources page, the reason on the History page, a note on the Activity page and a download's state on
-  the Downloads page.
-- A free-text cell whose text is longer than that, or holds an address, shows the text's first sentence,
-  up to the first address, and "…". A first sentence longer than the cell is cut after the last whole
-  word that fits. An address is never in the cell.
-- The whole text of each such cell stands under the table as a line of its own, in the order of the
-  rows. On a page with tabs the lines stand under the chosen tab's table.
+- A long column holds a set number of characters, "…" included: a source's refusal 77; on the History
+  page the release a line is about 60 and the reason 77; on the Activity page a note 77, and in the
+  table of what is in flight the episode 83 and what it waits on 77; on the Downloads page the release
+  29, the state 34 and the destination 16.
+- A refusal, a reason, a note or a download's state whose text is longer than its column, or holds an
+  address, shows the text's first sentence, up to the first address, and "…". A first sentence longer
+  than the cell is cut after the last whole word that fits.
+- A release name longer than its column is cut after the last space, dot, dash or underscore that fits,
+  and "…". A full stop in a release name is not the end of it.
+- A destination longer than its column shows "…" and its last folder, and only the end of that folder
+  when the folder alone is too long.
+- An address is never in a cell.
+- The whole text of each cell drawn short stands under the table as a line of its own, in the order of
+  the rows, and a text that is under the table already is not said twice. On a page with tabs the lines
+  stand under the chosen tab's table.
 - A text that fits and holds no address is the cell as it is, with no line under the table.
 - `filter` and `sort` read the whole text, so a row is found by a word that is only in the line under
   the table.

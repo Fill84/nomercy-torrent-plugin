@@ -222,8 +222,18 @@ public static class DownloadsView
                 ["ratio"] = row => row.Transfer?.Ratio,
             },
 
-            // The state carries the client's error or the server's encode failure in their own words.
-            freeText: ["state"]);
+            // Ten columns at the 1,600 px of LongCells, each at its widest real content: Progress "45.3% of
+            // 2.7 GB (1.2 GB in)" 267 px, Rate "12.3 MB/s ↓ 1.2 MB/s ↑" 222, Seeds and Peers "12 of 300"
+            // 105 each, Ratio and Left at their headings 65 and 69, the two buttons 150: 983 px before the
+            // three below. State keeps every state the page writes itself whole, "grabbed, not started
+            // (downloading)" at 34 characters, and a destination shows its last folder in 16. The release
+            // has 29, which fits only without the Destination column: with it the row is about 1,766 px.
+            longColumns:
+            [
+                new("release", 29, Cut.AtWord),
+                new("state", 34),
+                new("destination", 16, Cut.FromFront),
+            ]);
     }
 
     /// <summary>
@@ -438,7 +448,14 @@ public static class HistoryView
                     },
 
                     // A reason quotes the client or the server, whose words are as long as they are.
-                    freeText: ["detail"]),
+                    longColumns:
+                    [
+                        // A line about a release rather than an episode names the release, up to 81
+                        // characters in the captures. When and What take 318 px of the 1,600 (LongCells),
+                        // and the reason 717 at its 77 characters: 60 are left.
+                        new("subject", 60, Cut.AtWord),
+                        new("detail"),
+                    ]),
             ],
         };
     }

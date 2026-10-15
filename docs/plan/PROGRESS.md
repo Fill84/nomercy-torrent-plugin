@@ -5,7 +5,7 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
-is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
+is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done, but for the owner's choice of a Downloads column to drop), `S15-03` a show downloads only a release
 the sources name (anime keeps its search by show and episode), `S15-04` a wrong episode the plugin
 delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1. **Current: `S15-03`.**
 Nothing is tagged before the owner has seen it.
@@ -842,6 +842,14 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
 
+- **`S15-02` every table measured (15 October 2026).** `Views/LongCells` holds the rule with a cap and a
+  cut per column: first sentence (refusal, reason, note, state), at a word (release names, never at a
+  full stop) or the last folder (destination); each whole text once under the table. Downloads cuts
+  Release 29, State 34, Destination 16; History cuts Which 60; Activity Now cuts Episode 83 and Waiting
+  on 77; the prose cap is 77, not 80. Every other table fits at 1,600 px (`docs/08-ui.md` § Long text).
+  **Downloads still does not: about 1,766 px with all ten columns**; without Destination, the same folder
+  on every row, it is 1,598. Which column goes is the owner's to decide. 18 tests in
+  `NoTableScrollsSidewaysTests`.
 - **`S15-02` no table scrolls sideways (15 October 2026).** `TableRows` draws a free-text cell short — at
   most 80 characters, its first sentence up to the first address, cut at a word, and "…" — after filter,
   sort and page, and stands the whole text under the table as a line in row order (under the tab's table
@@ -2586,6 +2594,15 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, `S15-02`: every table is measured at 1,600 px, and each long column has its own
+  cap.** The 80 of the entry below left out the reason cell's own 24 px of padding: History leaves 718 px
+  with that padding in, which is 77 characters. A release name is cut at a word, never at a full stop
+  (The Pirate Bay writes "Atmos. X265" inside a name), and a path to its last folder. A whole text that
+  stands under the table already is not said again, since every download lands in the same folder.
+  Activity's Now is a long column after all: the longest release in the captures is 81 characters, and
+  Find's "release · source" beside Grab's release ran to some 1,755 px. Downloads fits only without one
+  column (Destination proposed); that is the owner's decision.
 
 - **15 October 2026, `S15-02`: a free-text cell holds at most 80 characters, and its whole text stands
   under the table.** The web app draws a cell on one line and widens its column to the longest cell, so

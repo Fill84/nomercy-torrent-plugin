@@ -50,6 +50,15 @@ public sealed class NoTableScrollsSidewaysTests
         "the server's last attempt at the encode failed (S02E08: the server said no more than that); "
         + "it is waited on, because the server tries a failed encode again";
 
+    /// <summary>
+    /// The longest episode release name in the captures, 81 characters: TorrentGalaxy's listing in
+    /// <c>lucky2-torrentgalaxy.html</c> names it as its file, with ".mkv".
+    /// </summary>
+    private const string LongRelease = "Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP.WEB-DL.ITA.ENG.DD5.1.DV.HDR.H.265-G66";
+
+    /// <summary>A release name from the captures (<c>sugar1-apibay.json</c>) short enough for the Downloads cell.</summary>
+    private const string ShortRelease = "Farm.S02E01.HDTV.x264-FEET";
+
     [Fact]
     public void ALongRefusalShowsItsFirstSentenceAndStandsWholeUnderTheTable()
     {
@@ -153,8 +162,8 @@ public sealed class NoTableScrollsSidewaysTests
         IReadOnlyList<string> cells = Cells(view, HistoryView.TableId, "detail");
 
         Assert.Equal("cancelled by hand", cells[0]);
-        Assert.Equal("the server's last attempt at the encode failed (S02E08: the server said no more…", cells[1]);
-        Assert.True(cells[1].Length <= TableRows.CellCharacters, $"{cells[1].Length} characters");
+        Assert.Equal("the server's last attempt at the encode failed (S02E08: the server said no…", cells[1]);
+        Assert.True(cells[1].Length <= LongCells.CellCharacters, $"{cells[1].Length} characters");
         Assert.Equal([EncodeFailing], Under(view, HistoryView.TableId));
     }
 
@@ -173,7 +182,7 @@ public sealed class NoTableScrollsSidewaysTests
 
     /// <remarks>
     /// Under the Notes tab's own table, since the tab is what is drawn while it is chosen. The first sentence
-    /// is 80 characters without its full stop, one more than the cell holds beside the "…", so it is cut at a word.
+    /// is 80 characters without its full stop, more than the cell holds beside the "…", so it is cut at a word.
     /// </remarks>
     [Fact]
     public void ALongNoteShowsItsFirstSentenceAndStandsWholeUnderTheNotesTable()
@@ -207,13 +216,13 @@ public sealed class NoTableScrollsSidewaysTests
 
     /// <remarks>
     /// The Downloads state carries the same encode reason after "encoding", in a table of ten columns that
-    /// has the least room of any for it.
+    /// has the least room of any for it: 34 characters, the longest state the page writes itself.
     /// </remarks>
     [Fact]
     public void AnEncodeFailureInADownloadsStateIsCutAtAWordAndStandsWholeUnderTheTable()
     {
         DownloadRow encoding = new(
-            new("8f2c", "magnet:?xt=urn:btih:8f2c", "Dark.Matter.2024.S02E08.1080p.WEB.h264-ETHEL", GrabState.Dispatched),
+            new("8f2c", "magnet:?xt=urn:btih:8f2c", ShortRelease, GrabState.Dispatched),
             null,
             "D:\\incomplete")
         {
@@ -222,10 +231,110 @@ public sealed class NoTableScrollsSidewaysTests
 
         PluginView view = DownloadsView.Render([encoding]);
 
-        Assert.Equal(
-            ["encoding — the server's last attempt at the encode failed (S02E08: the server…"],
-            Cells(view, DownloadsView.TableId, "state"));
+        Assert.Equal(["encoding — the server's last…"], Cells(view, DownloadsView.TableId, "state"));
         Assert.Equal([$"encoding — {EncodeFailing}"], Under(view, DownloadsView.TableId));
+    }
+
+    /// <remarks>
+    /// "grabbed, not started (downloading)" is 34 characters, the longest state the page writes itself, and
+    /// is drawn whole.
+    /// </remarks>
+    [Fact]
+    public void AReleaseNameInDownloadsIsCutAtADotAndStandsWholeUnderTheTable()
+    {
+        PluginView view = DownloadsView.Render([Grabbed("a1", LongRelease, "D:\\incomplete")]);
+
+        Assert.Equal(["Lucky.S01E04.Too.Close.to…"], Cells(view, DownloadsView.TableId, "release"));
+        Assert.Equal(["grabbed, not started (downloading)"], Cells(view, DownloadsView.TableId, "state"));
+        Assert.Equal(["D:\\incomplete"], Cells(view, DownloadsView.TableId, "destination"));
+        Assert.Equal([LongRelease], Under(view, DownloadsView.TableId));
+    }
+
+    [Fact]
+    public void AShortReleaseNameIsUnchangedAndHasNoLineUnderTheTable()
+    {
+        PluginView view = DownloadsView.Render([Grabbed("a1", ShortRelease, "D:\\incomplete")]);
+
+        Assert.Equal([ShortRelease], Cells(view, DownloadsView.TableId, "release"));
+        Assert.Empty(Under(view, DownloadsView.TableId));
+    }
+
+    /// <remarks>
+    /// Every row lands in the same folder, so its whole path stands under the table once, not once a row.
+    /// </remarks>
+    [Fact]
+    public void ADestinationShowsItsLastFolderAndStandsWholeUnderTheTableOnce()
+    {
+        const string folder = "D:\\Torrents\\NoMercy\\incomplete";
+
+        PluginView view = DownloadsView.Render([Grabbed("a1", ShortRelease, folder), Grabbed("b2", "Fish.S03E01.480p.x264-mSD", folder)]);
+
+        Assert.Equal(["…\\incomplete", "…\\incomplete"], Cells(view, DownloadsView.TableId, "destination"));
+        Assert.Equal([folder], Under(view, DownloadsView.TableId));
+    }
+
+    [Fact]
+    public void ALastFolderLongerThanTheCellIsCutFromTheFront()
+    {
+        const string folder = "D:\\nomercy_finished_downloads";
+
+        PluginView view = DownloadsView.Render([Grabbed("a1", ShortRelease, folder)]);
+
+        Assert.Equal(["…ished_downloads"], Cells(view, DownloadsView.TableId, "destination"));
+        Assert.Equal([folder], Under(view, DownloadsView.TableId));
+    }
+
+    /// <remarks>
+    /// A line about a release rather than an episode names the release in Which, and a release name runs to
+    /// 81 characters in the captures (Lucky S01E04). It is cut at the last dot that fits.
+    /// </remarks>
+    [Fact]
+    public void AReleaseNameInHistoryIsCutAtADotAndStandsWholeUnderTheTable()
+    {
+        PluginView view = HistoryView.Render([new("failed", Now.AddHours(-1), LongRelease, "cancelled by hand")]);
+
+        Assert.Equal(["Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP.WEB-DL.ITA.ENG…"], Cells(view, HistoryView.TableId, "subject"));
+        Assert.Equal(["cancelled by hand"], Cells(view, HistoryView.TableId, "detail"));
+        Assert.Equal([LongRelease], Under(view, HistoryView.TableId));
+    }
+
+    /// <remarks>
+    /// While a release is grabbed the Now table names it twice: in Episode, as Find's "release · source", and
+    /// in Waiting on, as what Grab is waiting on.
+    /// </remarks>
+    [Fact]
+    public void AReleaseNameInTheNowTableIsCutAtADotAndStandsWholeUnderTheTable()
+    {
+        string asked = $"{LongRelease} · TorrentGalaxy";
+
+        PluginView view = ActivityView.Render(
+            new([new(ActivityStage.Grab, ActivityOutcome.Started, asked, Now.AddSeconds(-5), LongRelease)], [], Now),
+            new(true, null, null) { StartedAt = Now.AddMinutes(-3) },
+            [],
+            ActivityView.NowTableId);
+
+        Assert.Equal(["Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP.WEB-DL.ITA.ENG.DD5.1.DV.HDR.H.265-G66…"], Cells(view, ActivityView.NowTableId, "subject"));
+        Assert.Equal(["Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP.WEB-DL.ITA.ENG.DD5.1.DV.HDR.H…"], Cells(view, ActivityView.NowTableId, "waiting"));
+        Assert.Equal([asked, LongRelease], Under(view, ActivityView.NowTableId));
+    }
+
+    /// <remarks>
+    /// The Pirate Bay names a release "… DDP5.1 Atmos. X265 POOTLED" (<c>the-pirate-bay.json</c>): a full
+    /// stop in a release name ends nothing, so the cell keeps what comes after it.
+    /// </remarks>
+    [Fact]
+    public void AFullStopInAReleaseNameIsNotTheEndOfIt()
+    {
+        const string release = "Silo S03E06 The Drive 1080P ATVP WEB-DL DDP5.1 Atmos. X265 POOTLED";
+
+        PluginView view = HistoryView.Render([new("failed", Now.AddHours(-1), release, "cancelled by hand")]);
+
+        Assert.Equal(["Silo S03E06 The Drive 1080P ATVP WEB-DL DDP5.1 Atmos. X265…"], Cells(view, HistoryView.TableId, "subject"));
+    }
+
+    private static DownloadRow Grabbed(string hash, string release, string destination)
+    {
+        return new(new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Downloading), null, destination);
     }
 
     private static SourceReport Source(string name, string refusal)

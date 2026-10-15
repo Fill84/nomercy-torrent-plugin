@@ -117,7 +117,7 @@ public static class SourcesView
 
                     // A refusal is the site's own words and the address it was asked at: on 15 October 2026
                     // Torrentz2's ran the table off the side of the page.
-                    freeText: ["refusal"]),
+                    longColumns: [new("refusal")]),
         ];
 
         // Above the table, where the owner looks first: which sources are off is the reason their rows are
