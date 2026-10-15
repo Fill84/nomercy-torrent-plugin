@@ -6,7 +6,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
-by us.** `SPRINTS.md` § S16. Current: **`S16-02`**. The browser is asked for in media-server #601.
+by us.** `SPRINTS.md` § S16. Current: **`S16-03`**. The browser is asked for in media-server #601, the sparse flag in #602.
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
@@ -695,6 +695,8 @@ looking and goes stale on its own when the last page closes.
   host refuses `IPluginContext.Browser`, and the interface lacks reload, content type, readiness, the
   in-page fetch, the user agent and availability. Until it ships the solver stays on PuppeteerSharp and
   the marketplace scan keeps refusing the `Solver/` findings of #476.
+- **`Sparse.DeviceIoControl` waits on media-server #602** (filed 15 October 2026), a host call that
+  marks a file sparse. Dropping it costs every Windows download (see **Decisions**, `S16-02`).
 
 **Nothing is blocked on a deploy any more.** That paragraph said the first install went over with
 every hash matching and the plugin still could not load. The cause was found and fixed on 21 August
@@ -881,7 +883,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 16 — Through the SDK: what the marketplace scan refuses (media-server #476)
 - [x] `S16-01` The marketplace scan, run on every build
-- [ ] `S16-02` Files without `DeviceIoControl`
+- [x] `S16-02` Files without `DeviceIoControl` — measured; the call waits on media-server #602
 - [ ] `S16-03` Migrations and sources read without reflection
 - [ ] `S16-04` The database is the SDK's, and every row comes along
 - [x] `S16-05` The browser the solver needs, asked of the media server — #601
@@ -2683,6 +2685,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026: files stay sparse; `DeviceIoControl` waits on media-server #602 (`S16-02`).**
+  Measured on NTFS, one 4 GiB file, 1024 pieces of 4 MiB in random order, each flushed. WD Red 4 TB
+  (HDD): sparse 0 MiB reserved, 56.9 s, slowest piece 167 ms; not sparse 4096 MiB reserved at once,
+  111.6 s, slowest piece 13.0 s. Samsung 870 QVO (SSD): sparse 0 MiB, 87.2 s, 549 ms; not sparse
+  4096 MiB, 150.6 s, 33.3 s. A write past NTFS's valid data length zero-fills the gap, so dropping the
+  flag to please the scan would make every download on Windows slower and stall it for half a minute.
 
 - **15 October 2026, the owner: 0.8.1 ships without the automatic replacement.** It was built (`S15-04`, on
   `feat/replace-delivered`), and its own check found that the media server cannot yet carry it: `IPluginJobs`

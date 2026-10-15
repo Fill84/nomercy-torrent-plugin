@@ -3616,13 +3616,18 @@ walks a fixed array.
 
 **Steps**
 
-1. Measure on Windows (NTFS), in an integration test: a 4 GiB file written in random piece order, sparse
-   and not sparse — wall time and bytes written. On NTFS a write past the valid data length zero-fills the
-   gap, which is what the sparse flag was for.
+1. Measure on Windows (NTFS) with a throwaway program, not a test (a timing that asserts nothing is not
+   a test): a 4 GiB file written in random piece order, sparse and not sparse — what is reserved at
+   once, wall time, the slowest piece. On NTFS a write past the valid data length zero-fills the gap.
 2. The numbers go under **Decisions**. When the run without the flag is no slower in a way a download
    would notice: remove `DeviceIoControl`, and the spec says files are created at full size. When it is:
    the flag becomes an SDK capability request on the media server, and the call stays until it ships.
 3. `expected-findings.txt` loses `Sparse.DeviceIoControl`.
+
+**As done** (15 October 2026): without the flag a 4 GiB download reserves all 4 GiB at once, takes about
+twice as long, and stalls single writes for 13 s (HDD) and 33 s (SSD); numbers under **Decisions**. The
+call stays; media-server #602 asks for it in the SDK, and its line stays in `expected-findings.txt` until
+that ships.
 
 ## S16-03 · Migrations and sources read without reflection
 
