@@ -10,7 +10,9 @@ download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` 
 plugin's own log file), `S14-04` (#2, seeders), `S14-05` (#1, season packs), `S14-06` (#4, tabs),
 `S14-07` (#5, sort, filter and paging). All seven are done, reviewed across the whole sprint, pushed and
 closed on GitHub (15 October 2026); the review's findings were fixed in the same sprint (see **Log**).
-**Nothing is released**: the next version waits for the owner's word. **No slice is open.** Known and not
+**v0.8.0 is released** on the owner's word of 15 October 2026: Forgejo run 937, the same package on
+Forgejo and GitHub (sha256 `13efca76…`), and `repository.json` names 0.8.0 (`e24b872`). The owner updates
+through the plugin catalogue and restarts the server once. **No slice is open.** Known and not
 done, in the order worth doing:
 
 1. Rarest-first ranks pieces by one peer's bitfield at a time (`PiecePicker`, see **Decisions**, S14-04):
