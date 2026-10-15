@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.8.1",
+          "targetAbi": "12.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.8.1/NoMercy.Plugin.TorrentDownloader-0.8.1.zip",
+          "checksum": "2ac9f18e96e1402fe720e626b9d43a952031804ae61825bfe84478a1b5b02008",
+          "changelog": "A TV show downloads only a real release, no table scrolls sideways, and Torrentz2 is gone.",
+          "timestamp": "2026-10-15T16:02:42Z"
+        },
+        {
           "version": "0.8.0",
           "targetAbi": "12.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.8.0/NoMercy.Plugin.TorrentDownloader-0.8.0.zip",
