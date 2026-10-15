@@ -159,7 +159,7 @@ public sealed class DeliveredNamesTests : IDisposable
 
     private async Task<GrabRepository> Grabs()
     {
-        Store database = new(_root);
+        Store database = TestStore.In(_root);
 
         await database.MigrateAsync(CancellationToken.None);
 
