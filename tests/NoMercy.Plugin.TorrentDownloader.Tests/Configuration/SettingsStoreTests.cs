@@ -419,6 +419,50 @@ public class SettingsStoreTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A save that lands while a load is keeping its answer is not undone by it.</strong> A load read
+    /// the host, found no save had gone through, and only then kept what it read; a save landing between the
+    /// two was overwritten by the answer it had replaced, and the plugin ran on the old settings until the next
+    /// save. Every start-up loads the settings for the log level while the owner may be saving them.
+    /// </para>
+    /// <para>
+    /// The save is run in that gap, through the seam that exists for it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASaveThatLandsWhileALoadIsKeepingItsAnswerIsSeenByTheNextLoad()
+    {
+        FakePluginContext context = new();
+        SettingsStore? store = null;
+        bool saving = false;
+
+        Settings changed = Writable(new Settings());
+        changed.Client.MaxConcurrentDownloads = 9;
+
+        store = new(
+            context.Config,
+            context.Secrets,
+            remembering: async () =>
+            {
+                if (saving)
+                {
+                    saving = false;
+
+                    SaveResult saved = await store!.SaveAsync(changed, CancellationToken.None);
+
+                    Assert.True(saved.Saved, string.Join("; ", saved.Errors));
+                }
+            });
+
+        await store.SaveAsync(Writable(new Settings()), CancellationToken.None);
+
+        saving = true;
+
+        Assert.Equal(5, (await store.LoadAsync(CancellationToken.None)).Client.MaxConcurrentDownloads);
+        Assert.Equal(9, (await store.LoadAsync(CancellationToken.None)).Client.MaxConcurrentDownloads);
+    }
+
+    /// <remarks>
     /// A save that was refused changes nothing, so the answer the next load
     /// gives is the one that is really stored. A cache dropped by an attempt
     /// rather than by a write would go and fetch the same thing again; a cache

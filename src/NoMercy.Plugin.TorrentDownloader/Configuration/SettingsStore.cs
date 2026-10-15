@@ -21,27 +21,34 @@ public sealed class SettingsStore
     private readonly Func<string, string?> _volumeOf;
 
     /// <summary>
-    /// What the host last said the settings were, as JSON, or null when it has
+    /// What the host last said the settings were, as JSON, or nothing when it has
     /// not been asked since the last save.
     /// </summary>
     /// <remarks>
+    /// <para>
     /// The host's read is a file check, a full file read and a deserialise,
     /// behind a lock it shares with every other plugin on the server — and every
     /// transfers pass, every cycle and every page the owner opens asks for the
     /// settings.
-    /// </remarks>
-    private string? _asRead;
-
-    /// <summary>
-    /// How many saves have gone through. Only ever compared with itself.
-    /// </summary>
-    /// <remarks>
+    /// </para>
+    /// <para>
     /// A load that began before a save must not be remembered after it: the
     /// answer it is carrying is the one the save replaced, and a settings cache
     /// holding what the owner has just changed away from is worse than the
-    /// round trip it saves.
+    /// round trip it saves. So every save puts a new, empty one here, and a load
+    /// keeps its answer only by swapping out the very one it saw when it began —
+    /// one step, which a save cannot land in the middle of. Checking first and
+    /// keeping after was two steps, and a save between them was overwritten by
+    /// the answer it replaced.
+    /// </para>
     /// </remarks>
-    private int _saves;
+    private Remembered _remembered = new(null);
+
+    /// <summary>One answer of the host's, or none; compared by which one it is, never by what it holds.</summary>
+    private sealed class Remembered(string? json)
+    {
+        public string? Json { get; } = json;
+    }
 
     /// <summary>The settings, with the two seams the tests need.</summary>
     /// <param name="configuration">Where the settings are kept.</param>
@@ -65,17 +72,28 @@ public sealed class SettingsStore
     /// caller at the moment it is wanted; a server that wires no server-info
     /// facade answers nothing, and the refusal is then what it always was.
     /// </param>
+    /// <param name="remembering">
+    /// Called by a load that has read the host's answer, just before it keeps it. Nothing on a server passes
+    /// it. It is a seam because the one interleaving that matters — a save landing between a load's read and
+    /// its keeping what it read — is a few instructions wide, and a test that waited for it by chance would
+    /// pass whether or not the store got it right.
+    /// </param>
     public SettingsStore(
         IPluginConfiguration configuration,
         IPluginSecretStore secrets,
         Func<string, string?>? volumeOf = null,
-        Func<IReadOnlyList<PluginStorageLocation>>? places = null)
+        Func<IReadOnlyList<PluginStorageLocation>>? places = null,
+        Func<Task>? remembering = null)
     {
         _configuration = configuration;
         _secrets = secrets;
         _volumeOf = volumeOf ?? Path.GetPathRoot;
         _places = places;
+        _remembering = remembering;
     }
+
+    /// <summary>See the constructor's <c>remembering</c>.</summary>
+    private readonly Func<Task>? _remembering;
 
     /// <summary>How to reach the server's own list of places it can write.</summary>
     /// <remarks>
@@ -105,26 +123,28 @@ public sealed class SettingsStore
     public async Task<Settings> LoadAsync(CancellationToken ct)
     {
         string settings;
+        Remembered seen = Volatile.Read(ref _remembered);
 
-        if (_asRead is string remembered)
+        if (seen.Json is string remembered)
         {
             settings = remembered;
         }
         else
         {
-            int before = Volatile.Read(ref _saves);
-
             settings = JsonSerializer.Serialize(
                 await _configuration.GetConfigurationAsync<Settings>(ct) ?? new Settings());
+
+            if (_remembering is not null)
+            {
+                await _remembering();
+            }
 
             // Remembered only if nothing was saved while it was being read.
             // Otherwise this is an answer the save has already replaced, and
             // keeping it would leave the plugin running on settings the owner
-            // has changed away from until the next save.
-            if (Volatile.Read(ref _saves) == before)
-            {
-                _asRead = settings;
-            }
+            // has changed away from until the next save. The swap fails when a
+            // save has put a new one in since (_remembered says why it is one step).
+            Interlocked.CompareExchange(ref _remembered, new Remembered(settings), seen);
         }
 
         // A new object every time, never the remembered one. The settings page
@@ -200,8 +220,7 @@ public sealed class SettingsStore
         // Dropped rather than replaced with what was just written, so the next
         // load is what the host really stored. Only here: a save that was
         // refused above wrote nothing, and there is nothing to forget.
-        Interlocked.Increment(ref _saves);
-        _asRead = null;
+        Interlocked.Exchange(ref _remembered, new Remembered(null));
 
         // After the store has forgotten, so a listener that reads the settings
         // back reads what was just written. Handed what was saved as well, so a
