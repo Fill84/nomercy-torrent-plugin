@@ -4,6 +4,10 @@ Read this first, update it last. Nothing else decides what happens next.
 
 ## Current
 
+**15 October 2026: Torrentz2 is removed, the owner's decision of that day (see Decisions).** Its catalogue
+entry, its manifest host, its reader and every capture of it are gone; ten indexers ship. The fix is
+committed locally for 0.8.1 and **not pushed, tagged or versioned**: it waits for the owner to see it.
+
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
 to fix them.** `SPRINTS.md` § S14 lists them in the order they are done: `S14-01` (#3, a finished
 download that stays in the incomplete folder), `S14-02` (#6, no Xvfb), `S14-03` (#7, log level and the
@@ -828,6 +832,15 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **Torrentz2 removed (15 October 2026): `torrentz2.nz` no longer exists.** Entry out of `sources.json`,
+  host out of `plugin.json`, `Torrentz2Reader` and its two reader tests deleted with its nine captures. The
+  tests that used it as one indexer among several keep what they prove on pages of indexers that still ship:
+  the round counts five indexers for the TGx upload and two for the EZTV one; found first is held on The
+  Pirate Bay and TorrentGalaxy, which list the two uploads in opposite orders; the bare `DUAL` on TorrentBay's
+  `Silo.S03E08.1080p.WEB-DL.DUAL.5.1`. The release-name date rule had only Torrentz2's FaiLED capture, so it
+  is held on 1337x's real answer for Silo's name with an air date set a year after it (said in the test). A
+  `config.json` naming Torrentz2 in `DisabledDefaultSources` still loads (`SettingsStoreTests`). Not pushed.
 
 - **Sprint 14 closed out (15 October 2026): seven faults fixed, one flaky test made sound, and three rules
   given the tests they lacked — each test seen red.** A torrent already being downloaded is not taken again on a full run, so a pack's narrowed-out
@@ -2558,6 +2571,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, the owner: Torrentz2 is removed — `torrentz2.nz` no longer exists.** DNS answered
+  NXDOMAIN that day, asked of 1.1.1.1 and of 8.8.8.8, and the plugin on the owner's server reported "No such
+  host is known" for it at 03:09Z. It last answered on 28 September 2026 (Wayback Machine, HTTP 200), and
+  the last page captured from it is of 17 September 2026. Removed, not switched off: a source switched off
+  is still a switch on the Sources page and a host in the manifest for a site that is not there. An owner's
+  `DisabledDefaultSources` that still names it switches nothing off and is harmless.
 
 - **15 October 2026, the owner: a download added by hand is never cancelled because its show is off.**
   Such a download answers for no episode until staging reads its files; once a staging that failed had

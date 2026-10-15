@@ -170,8 +170,9 @@ public sealed record ReleaseName(
         // release being in several languages, and "MULTi" alone means the audio.
         ("multi", new(@"\bmulti\b(?!\s*-?\s*sub)", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("vostfr", new(@"\bvostfr\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
-        // The word on its own is how Torrentz2 prints it, and it means the same
-        // thing: a second language beside the English one.
+        // The word on its own is how TorrentBay prints it -
+        // Silo.S03E08.1080p.WEB-DL.DUAL.5.1 - and it means the same thing: a
+        // second language beside the English one.
         ("dual audio", new(@"\bdual(?:[\s._-]?audio)?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
         ("multiple subtitle", new(@"\bmultiple[\s._-]?subtitles?\b", RegexOptions.Compiled | RegexOptions.IgnoreCase)),
 

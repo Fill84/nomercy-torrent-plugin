@@ -143,7 +143,7 @@ public class FindTests
     {
         FakeFetch fetch = new();
         fetch.Answers(Address("LimeTorrents"), Capture.Fixture("limetorrents.html"));
-        fetch.FailsHost("torrentz2.nz", FetchOutcome.RateLimited, "torrentz2.nz answered 429");
+        fetch.FailsHost("torrentgalaxy.one", FetchOutcome.RateLimited, "torrentgalaxy.one answered 429");
 
         ActivityJournal journal = new();
 
@@ -159,7 +159,7 @@ public class FindTests
             journal.Snapshot().History,
             entry => entry.Stage == ActivityStage.Find
                      && entry.Outcome == ActivityOutcome.Failed
-                     && entry.Subject.Contains("Torrentz2", StringComparison.Ordinal));
+                     && entry.Subject.Contains("TorrentGalaxy", StringComparison.Ordinal));
 
         Assert.Empty(journal.Snapshot().InFlight);
     }
@@ -176,11 +176,11 @@ public class FindTests
         FakeFetch fetch = new();
         RecordingLedger ledger = new();
 
-        // LimeTorrents answers the name letter for letter. Torrentz2 refuses
-        // both forms of it.
+        // LimeTorrents answers the name letter for letter. TorrentGalaxy refuses
+        // both forms of it — refused by host, because it writes the words with
+        // spaces in its path and the address it is asked at is the escaped one.
         fetch.Answers(Exact("LimeTorrents"), Capture.Fixture("limetorrents.html"));
-        fetch.Fails(Exact("Torrentz2"), FetchOutcome.RateLimited, "429 Too Many Requests");
-        fetch.Fails(Address("Torrentz2"), FetchOutcome.RateLimited, "429 Too Many Requests");
+        fetch.FailsHost("torrentgalaxy.one", FetchOutcome.RateLimited, "429 Too Many Requests");
 
         Find find = Finding(fetch, ledger: ledger);
 
@@ -194,7 +194,7 @@ public class FindTests
         Assert.Null(answered.Refusal);
 
         // Both questions it was put, each written down.
-        SourceAnswer[] refused = [.. ledger.Answers.Where(one => one.Name == "Torrentz2")];
+        SourceAnswer[] refused = [.. ledger.Answers.Where(one => one.Name == "TorrentGalaxy")];
 
         Assert.Equal(2, refused.Length);
 
@@ -443,10 +443,11 @@ public class FindTests
     private static readonly SourceDefinition[] Indexers =
     [
         new("LimeTorrents", "site", "https://www.limetorrents.lol/search/all/{query}/") { Priority = 35 },
-        new("Torrentz2", "site", "https://torrentz2.nz/search?q={query}")
+        new("TorrentGalaxy", "site", "https://torrentgalaxy.one/get-posts/keywords:{query}/")
         {
-            Reader = "torrentz2",
-            Priority = 25,
+            Reader = "torrentgalaxy",
+            Query = QueryStyles.Spaced,
+            Priority = 30,
         },
         new("TorrentDownloads", "site", "https://www.torrentdownloads.pro/search/?search={query}")
         {

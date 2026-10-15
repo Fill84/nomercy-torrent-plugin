@@ -1,5 +1,7 @@
 using NoMercy.Plugin.TorrentDownloader.Configuration;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Sources;
+using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 using NoMercy.PluginSdk.Abstractions;
 using Xunit;
@@ -209,6 +211,44 @@ public class SettingsStoreTests : IDisposable
         {
             Assert.DoesNotContain(gone, context.Config.Written, StringComparison.Ordinal);
         }
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>An owner who switched Torrentz2 off still has a plugin that loads.</strong> Torrentz2 left
+    /// the catalogue on 15 October 2026, when its domain stopped existing, and a <c>config.json</c> written
+    /// before then can name it in <c>DisabledDefaultSources</c>. A name the catalogue no longer holds switches
+    /// nothing off: the file loads, the source switched off beside it stays off, and every other shipped
+    /// source is still asked.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASettingsFileThatSwitchedOffAGoneSourceStillLoads()
+    {
+        FakePluginContext context = new();
+        SettingsStore store = new(context.Config, context.Secrets);
+
+        string incomplete = Folder();
+        string intake = Folder();
+
+        context.Config.SaveConfiguration(new
+        {
+            IncompleteFolder = incomplete,
+            IntakeFolder = intake,
+            DisabledDefaultSources = new[] { "Torrentz2", "EZTV" },
+        });
+
+        Settings settings = await store.LoadAsync(CancellationToken.None);
+
+        Assert.Equal(incomplete, settings.IncompleteFolder);
+        Assert.Equal(["Torrentz2", "EZTV"], settings.DisabledDefaultSources);
+
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(new CapturingLogger()).Load();
+        SourceCatalogue catalogue = Chain.Catalogue(shipped, settings);
+
+        Assert.Equal(
+            shipped.Where(one => one.Name != "EZTV").Select(one => one.Name),
+            catalogue.All.Select(one => one.Name));
     }
 
     /// <remarks>

@@ -210,23 +210,36 @@ public class ByShowAndEpisodeTests
     /// 17 September 2026. The date was on the page; only the episode search looked at it.
     /// </para>
     /// <para>
+    /// Torrentz2 left the catalogue on 15 October 2026, when its domain stopped existing, and no indexer that
+    /// still ships answered that name on a page captured here. So the rule is held on 1337x's real answer for
+    /// Silo's name, which dates the TGx upload 15 November 2024, put for an episode recorded as airing a year
+    /// later: the page is as 1337x sent it, the air date is this test's own. The same page for the episode
+    /// the upload was made for is taken, so the date is the only thing that leaves it out.
+    /// </para>
+    /// <para>
     /// Left out, it is not even read further: no detail page is asked for a torrent that will not be taken.
     /// </para>
     /// </remarks>
     [Fact]
     public async Task AReleaseNamesTorrentUploadedLongBeforeTheEpisodeAiredIsNotTaken()
     {
-        const string failed = "Dark.Matter.S02E04.1080p.WEB.x264-FaiLED";
+        TrackedEpisode aYearLater = IndexerSites.SiloEpisode with { AirDate = new DateOnly(2025, 11, 15) };
 
-        FakeFetch fetch = new FakeFetch()
-            .Answers(IndexerSites.Exact(IndexerSites.Torrentz2, failed), Capture.Fixture("round-dark-matter-torrentz2-failed.html"))
-            .Answers(IndexerSites.Words(IndexerSites.Torrentz2, failed), Capture.Fixture("round-dark-matter-torrentz2-failed.html"));
+        FakeFetch fetch = new FakeFetch().AnsweringSilo();
 
-        IReadOnlyList<RankedTorrent> ranked = await IndexerSites.Round(fetch, [IndexerSites.Torrentz2])
-            .AskAsync([failed], DarkMatter2024, Blacklist.None, new(), CancellationToken.None);
+        IReadOnlyList<RankedTorrent> ranked = await IndexerSites.Round(fetch, [IndexerSites.X1337])
+            .AskAsync([IndexerSites.Silo], aYearLater, Blacklist.None, new(), CancellationToken.None);
 
         Assert.Empty(ranked);
-        Assert.All(fetch.Asked, address => Assert.Contains("/search", address.AbsolutePath, StringComparison.Ordinal));
+        Assert.DoesNotContain(fetch.Asked, address => address.ToString() == IndexerSites.X1337Detail);
+
+        FakeFetch onTheDay = new FakeFetch().AnsweringSilo();
+
+        IReadOnlyList<RankedTorrent> taken = await IndexerSites.Round(onTheDay, [IndexerSites.X1337])
+            .AskAsync([IndexerSites.Silo], IndexerSites.SiloEpisode, Blacklist.None, new(), CancellationToken.None);
+
+        Assert.Equal(IndexerSites.TgxHash, Assert.Single(taken).Torrent.InfoHash);
+        Assert.Contains(onTheDay.Asked, address => address.ToString() == IndexerSites.X1337Detail);
     }
 
     /// <remarks>

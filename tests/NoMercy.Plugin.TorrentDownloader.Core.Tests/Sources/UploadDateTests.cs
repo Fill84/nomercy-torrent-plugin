@@ -91,29 +91,6 @@ public class UploadDateTests
     }
 
     /// <remarks>
-    /// Torrentz2 puts the moment in the title of the age, and it has written it two ways: the browser's own
-    /// rendering, <c>Mon Nov 18 2024 21:09:41 GMT+0000 (Coordinated Universal Time)</c>, on the capture of
-    /// 15 September 2026, and <c>2026-08-07T18:02:19.368Z</c> on the capture of 15 August 2026.
-    /// </remarks>
-    [Fact]
-    public void Torrentz2GivesTheMomentBehindTheAgeItPrintsInEitherOfItsForms()
-    {
-        IReadOnlyList<SourceRow> rendered = new Torrentz2Reader().Read(
-            Capture.Fixture("round-silo-torrentz2-exact.html"),
-            new("https://torrentz2.nz/search?q=Silo.S02E01.1080p.WEB.H264-SuccessfulCrab"));
-
-        Assert.Equal("Silo.S02E01.1080p.WEB.H264-SuccessfulCrab[TGx]", rendered[0].Title);
-        Assert.Equal(new DateTimeOffset(2024, 11, 18, 21, 9, 41, TimeSpan.Zero), rendered[0].Published);
-
-        IReadOnlyList<SourceRow> written = new Torrentz2Reader().Read(
-            Capture.Fixture("torrentz2.html"),
-            new("https://torrentz2.nz/search?q=Silo+S03E06"));
-
-        Assert.Equal("silo.s03e06.1080p.web.h264-cakes[EZTVx.to].mkv", written[0].Title);
-        Assert.Equal(new DateTimeOffset(2026, 8, 7, 18, 2, 19, 368, TimeSpan.Zero), written[0].Published);
-    }
-
-    /// <remarks>
     /// 1337x writes a date with its year for an upload of an earlier year, <c>Nov. 15th '24</c>, and one of
     /// this year without it, <c>11pm Aug. 11th</c>. Only the first says which year it is; the second is left
     /// undated rather than given a year the page never wrote.

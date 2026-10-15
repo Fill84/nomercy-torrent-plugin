@@ -18,7 +18,7 @@ public sealed class IndexerRoundTests
 {
     /// <remarks>
     /// For a show TorrentBay is asked and then LimeTorrents, one after the other, and only then every other
-    /// enabled indexer at the same time. The rest are held on the clock: all six are waiting together before
+    /// enabled indexer at the same time. The rest are held on the clock: all five are waiting together before
     /// any of them may answer, which cannot happen unless they were started together, and not one of them
     /// was asked before LimeTorrents had its question.
     /// </remarks>
@@ -30,7 +30,7 @@ public sealed class IndexerRoundTests
 
         Task<IReadOnlyList<RankedTorrent>> asking = Round(fetch).AskAsync([Silo], SiloEpisode, Blacklist.None, new(), CancellationToken.None);
 
-        await Until(() => fetch.InFlight == 6);
+        await Until(() => fetch.InFlight == 5);
 
         string[] asked = [.. fetch.Asked.Select(address => address.ToString())];
 
@@ -40,7 +40,7 @@ public sealed class IndexerRoundTests
         Assert.Equal(0, torrentBay);
         Assert.True(limeTorrents > torrentBay, "LimeTorrents was not asked after TorrentBay.");
 
-        foreach (SourceDefinition rest in (SourceDefinition[])[ThePirateBay, X1337, Eztv, TorrentGalaxy, Torrentz2, TorrentDownloads])
+        foreach (SourceDefinition rest in (SourceDefinition[])[ThePirateBay, X1337, Eztv, TorrentGalaxy, TorrentDownloads])
         {
             Assert.True(Array.IndexOf(asked, Exact(rest, Silo)) > limeTorrents, $"{rest.Name} was asked before the first-choice indexers were done.");
         }
@@ -87,9 +87,9 @@ public sealed class IndexerRoundTests
 
     /// <remarks>
     /// A row counts only when its title is the release name: the same letters and digits in the same order,
-    /// with case, punctuation and the site's own tag set aside — <c>[TGx]</c>, a trailing <c>EZTV</c>,
-    /// <c>[EZTVx.to].mkv</c>. TorrentGalaxy's answer to the words also carried S02E10 and S02E11 of the
-    /// same group: those are not the name, so their pages are never read and they are part of no torrent.
+    /// with case, punctuation and the site's own tag set aside — <c>[TGx]</c>, a trailing <c>EZTV</c> or
+    /// <c>TGx</c>. TorrentGalaxy's answer to the words also carried S02E10 and S02E11 of the same group:
+    /// those are not the name, so their pages are never read and they are part of no torrent.
     /// </remarks>
     [Fact]
     public async Task ARowCountsOnlyWhenItsTitleIsTheName()
@@ -98,7 +98,8 @@ public sealed class IndexerRoundTests
 
         IReadOnlyList<RankedTorrent> ranked = await Round(fetch).AskAsync([Silo], SiloEpisode, Blacklist.None, new(), CancellationToken.None);
 
-        Assert.Contains("Torrentz2", Assert.Single(ranked, torrent => torrent.Torrent.InfoHash == EztvHash).Indexers);
+        // Silo S02E01 1080p WEB H264 SuccessfulCrab EZTV and … TGx, as TorrentGalaxy titles the two uploads.
+        Assert.Contains("TorrentGalaxy", Assert.Single(ranked, torrent => torrent.Torrent.InfoHash == EztvHash).Indexers);
         Assert.Contains("TorrentGalaxy", Assert.Single(ranked, torrent => torrent.Torrent.InfoHash == TgxHash).Indexers);
 
         Assert.DoesNotContain(fetch.Asked, address => address.ToString().Contains("s02e10", StringComparison.OrdinalIgnoreCase));

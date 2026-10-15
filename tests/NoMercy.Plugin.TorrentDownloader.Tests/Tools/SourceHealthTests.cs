@@ -388,7 +388,6 @@ public class SourceHealthTests
     [InlineData("torrentbay.html")]
     [InlineData("torrentdownloads.html")]
     [InlineData("torrentgalaxy.html")]
-    [InlineData("torrentz2.html")]
     [InlineData("nyaa.xml")]
     [InlineData("predb.xml")]
     [InlineData("scenesource.xml")]

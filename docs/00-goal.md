@@ -51,7 +51,7 @@ term of its own (`docs/specs/indexer-search.md`).
 
 ## What the owner configures
 
-The five public name sources and eleven public indexers ship with the plugin and are not
+The five public name sources and ten public indexers ship with the plugin and are not
 configurable.
 On top of them the owner may add their own indexers and their own private trackers, because those
 cannot be shipped.

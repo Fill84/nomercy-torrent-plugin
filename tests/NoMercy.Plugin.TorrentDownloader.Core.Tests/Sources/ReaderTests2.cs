@@ -105,29 +105,6 @@ public class ReaderTests2
     }
 
     /// <remarks>
-    /// Cut on a spaced dash and nothing else. A scene name is full of dashes
-    /// and the one before the release group has no spaces, so cutting on a bare
-    /// dash would take the group off every title on the page.
-    /// </remarks>
-    [Fact]
-    public void Torrentz2CutsAForeignSitePrefixAndKeepsTheReleaseGroup()
-    {
-        IReadOnlyList<SourceRow> rows = new Torrentz2Reader().Read(
-            Fixture("torrentz2"),
-            new("https://torrentz2.nz/search?q=Silo+S03E06"));
-
-        Assert.NotEmpty(rows);
-        Assert.Equal("silo.s03e06.1080p.web.h264-cakes[EZTVx.to].mkv", rows[0].Title);
-        Assert.Equal(7595, rows[0].Seeders);
-        Assert.Equal(4381, rows[0].Leechers);
-
-        // The prefixed one loses its prefix and keeps everything after it.
-        SourceRow prefixed = rows.First(row => row.Title.StartsWith("Silo.S03E06.1080p", StringComparison.Ordinal));
-        Assert.Equal("Silo.S03E06.1080p.WEB.H264-CAKES", prefixed.Title);
-        Assert.DoesNotContain("UIndex", prefixed.Title, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <remarks>
     /// The adverts at the top of the page name the search term and look exactly
     /// like results. Every real release has a numeric id in its address and no
     /// advert does.

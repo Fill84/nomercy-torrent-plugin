@@ -203,7 +203,9 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
         [
             // Held to the episode's air date as well. A name no source dated reached the indexers as the 2015
             // Dark Matter's FaiLED release, and Torrentz2 dated its torrents 2019 — years before the 2024
-            // programme's S02E04 aired, which it was grabbed for twice on 17 September 2026.
+            // programme's S02E04 aired, which it was grabbed for twice on 17 September 2026. Torrentz2 has been
+            // gone since its domain stopped existing on 15 October 2026; any indexer that dates a row is held
+            // to the same rule.
             .. names.Select(name => new Question(name, title => IsTheName(title, name), _ => name, episode)),
         ];
 

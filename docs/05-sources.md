@@ -1,11 +1,11 @@
 # Sources
 
-Sixteen entries ship in `src/.../sources.json`: five name sources and eleven indexers. They are
+Fifteen entries ship in `src/.../sources.json`: five name sources and ten indexers. They are
 copied beside the assembly, and on top of them the owner may add their own indexers and their own
 private trackers.
 
 **Two ship switched off**: YTS, which is films and out of scope, and EZTV latest, whose API takes a
-search parameter and ignores it. Fourteen are asked.
+search parameter and ignores it. Thirteen are asked.
 
 **The two are not the same thing and this document does not use one word for both.** A name source
 answers what a release is called; an indexer answers who is serving it. `SourceRole` decides which
@@ -24,7 +24,7 @@ until then, and 3,149 of its file names — a quarter of the owner's whole name 
 release names, spelled `Somebody.Knows.Something.S01E04.XviD-AFG[EZTVx.to].avi` with the site's tag
 inside and the extension still on the end.
 
-Fourteen are asked. YTS ships switched off because films are out of scope, and EZTV latest because
+Thirteen are asked. YTS ships switched off because films are out of scope, and EZTV latest because
 its API ignores the search term: measured 11 September 2026, it answered every question for every
 episode with the same hundred newest torrents of every show, so it counted as having answered and
 was asked the same thing over and over. The owner's decision; the EZTV site, which searches, stays. All of them were measured
@@ -94,7 +94,6 @@ names, srrDB 21, PreDB.net 20 and SceneSource 1, every one of them for that epis
 | TorrentBay | `site` | `torrentbay` | words | **yes** | 60 | 15s | indexer, first choice 2 |
 | EZTV | `site` | `eztv` | words | **yes** | 30 | 15s | indexer |
 | TorrentGalaxy | `site` | `torrentgalaxy` | **spaced** | no | 30 | 15s | indexer |
-| Torrentz2 | `site` | `torrentz2` | words | no | 25 | 15s | indexer |
 | TorrentDownloads | `site` | `torrentdownloads` | words | no | 25 | 15s | indexer |
 | Nyaa | `torrent-rss` | — | words | no | **70** | 15s | indexer, **anime libraries only**, first choice 1 |
 | YTS | `yts` | — | words | no | 20 | 15s | films — **off** |
@@ -117,7 +116,6 @@ LimeTorrents     https://www.limetorrents.fun/search/all/{query}/
 TorrentBay       https://extranet.torrentbay.st/browse/?q={query}&sort=seeders&order=desc
 EZTV             https://eztvx.to/search/{query}
 TorrentGalaxy    https://torrentgalaxy.one/get-posts/keywords:{query}/
-Torrentz2        https://torrentz2.nz/search?q={query}
 TorrentDownloads https://www.torrentdownloads.pro/search/?search={query}
 Nyaa             https://nyaa.si/?page=rss&q={query}
 YTS              https://yts.gg/api/v2/list_movies.json?query_term={query}
@@ -211,10 +209,6 @@ the dozen forty-character hex strings are element ids. Title from the anchor's `
 the text is split across spans and joining the nodes glues words together. Seeders sit behind
 `title="Seeders/Leechers"`, two tags away from the bracket.
 
-**Torrentz2** — twenty definition lists, each with a name and a link to its own page. Titles read
-`www.UIndex.org - Silo.S03E06...`; cut the prefix, anchored on ` - ` with spaces, because a scene
-name is full of dashes and the one before the group has none.
-
 **TorrentDownloads** — the first link is an advert for another site carrying the same terms. Match
 rows on the numeric id every real release has in its address. Seeders and leechers are two bare
 spans in that order followed by the size.
@@ -222,6 +216,13 @@ spans in that order followed by the size.
 **TorrentFunk was removed on 22 August 2026**, on the owner's decision, and its host is out of the
 manifest with it. It answered nothing for the episodes of the owner's own library while every other
 site answered plenty. Nothing here reads that site any more.
+
+**Torrentz2 was removed on 15 October 2026**, on the owner's decision, and its host is out of the
+manifest with it. `torrentz2.nz` no longer exists: DNS answered NXDOMAIN on 15 October 2026, asked of
+1.1.1.1 and of 8.8.8.8, and the plugin on the owner's server reported "No such host is known" for it at
+03:09Z that day. It last answered on 28 September 2026 (the Wayback Machine, HTTP 200), and the last
+page captured from it is of 17 September 2026. Its entry, its reader and every capture of it went with
+it; nothing here reads that site any more.
 
 **LimeTorrents** — a hashed `.torrent` link on the listing; the generic reader handles it. It moved from
 `limetorrents.lol` to `limetorrents.fun`, found on 16 September 2026: the old address answers 301 to the
@@ -318,12 +319,13 @@ time, most wishes first.
 
 **Measured on 15 September 2026**, `tests/fixtures/round-*`: `Silo.S02E01.1080p.WEB.H264-SuccessfulCrab`
 was posted twice. The TGx upload (`87D8…`) is on LimeTorrents and The Pirate Bay with its hash, and on
-1337x, TorrentGalaxy, Torrentz2 and TorrentDownloads behind the row's page — six indexers. The EZTV
-upload (`41B0…`) is on The Pirate Bay, TorrentGalaxy and Torrentz2 — three; EZTV's own page for it
-answered 451. Torrentz2 lists two more uploads of the name on it alone. TorrentGalaxy answers the exact
-name with nothing and the name as words with the release. Nyaa had nothing for the scene anime name
-`Solo.Leveling.S02E01.1080p.WEB.H264-SKYANiME`; TorrentBay had it. Torrentz2's page spells its magnet
-with HTML entities and is read all the same. **The capture tool's check of TorrentBay's signed request
+1337x, TorrentGalaxy and TorrentDownloads behind the row's page — five indexers. The EZTV upload
+(`41B0…`) is on The Pirate Bay and TorrentGalaxy — two; EZTV's own page for it answered 451. The Pirate
+Bay lists the TGx upload first and TorrentGalaxy the EZTV upload first. On the day Torrentz2 listed both
+as well, and two more uploads of the name on it alone, which made six and three; it was removed on
+15 October 2026 (§ Per-site readers) and its captures with it. TorrentGalaxy answers the exact name with nothing
+and the name as words with the release. Nyaa had nothing for the scene anime name
+`Solo.Leveling.S02E01.1080p.WEB.H264-SKYANiME`; TorrentBay had it. **The capture tool's check of TorrentBay's signed request
 failed with `Failed to fetch`**, sent after the browser had closed the tab that loaded the page — step 0
 of `S13-08`, because TorrentBay is a first-choice indexer.
 

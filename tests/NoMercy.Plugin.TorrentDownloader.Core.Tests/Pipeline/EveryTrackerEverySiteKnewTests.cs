@@ -9,13 +9,15 @@ using Xunit;
 namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 
 /// <summary>
-/// One torrent, six indexers, and the trackers that have to travel with it.
+/// One torrent, five indexers, and the trackers that have to travel with it.
 /// </summary>
 /// <remarks>
 /// <para>
 /// <c>Silo S03E06 XviD-AFG</c>, info hash
-/// <c>60207FB3AE7877C8C76DDD27A07C385E5047783C</c>, as six sites really
-/// answered for it on 10 September 2026. Every page here is that day's capture.
+/// <c>60207FB3AE7877C8C76DDD27A07C385E5047783C</c>, as five sites that still
+/// ship really answered for it on 10 September 2026. Every page here is that
+/// day's capture. A sixth, Torrentz2, answered too; it left the catalogue on
+/// 15 October 2026, when its domain stopped existing, and its page went with it.
 /// </para>
 /// <para>
 /// <strong>What this exists to stop coming back.</strong> Measured that
@@ -34,8 +36,8 @@ public class EveryTrackerEverySiteKnewTests
     private const string Hash = "60207FB3AE7877C8C76DDD27A07C385E5047783C";
 
     /// <remarks>
-    /// The four sites that publish a magnet on the row's page hold 20, 19, 7
-    /// and 6 trackers between them, and they overlap. What has to come out is
+    /// The three sites that publish a magnet on the row's page hold 20, 19 and
+    /// 7 trackers between them, and they overlap. What has to come out is
     /// the union — every distinct one, once — on a copy that arrived carrying
     /// none.
     /// </remarks>
@@ -53,7 +55,6 @@ public class EveryTrackerEverySiteKnewTests
                     "silo6afg-row-limetorrents.html",
                     "silo6afg-row-torrentdownloads.html",
                     "silo6afg-row-eztv.html",
-                    "silo6afg-row-torrentz2.html",
                 }
                 .Select(page => Magnets.TrackersOf(DetailPage.Read(Capture.Fixture(page), Release)!.Value.Magnet))
                 .SelectMany(trackers => trackers)
@@ -80,10 +81,10 @@ public class EveryTrackerEverySiteKnewTests
 
         await Finding(fetch).ResolveAsync(Merged(), CancellationToken.None);
 
-        // Five: the six routes less The Pirate Bay, which publishes no page at
+        // Four: the five routes less The Pirate Bay, which publishes no page at
         // all. TorrentBay's is asked and answers no magnet, which is still one
         // ask and not two.
-        Assert.Equal(5, fetch.Asked.Count);
+        Assert.Equal(4, fetch.Asked.Count);
         Assert.Equal(fetch.Asked.Count, fetch.Asked.Distinct().Count());
     }
 
@@ -137,7 +138,6 @@ public class EveryTrackerEverySiteKnewTests
                 .TrackersOf(DetailPage.Read(Capture.Fixture("silo6afg-row-limetorrents.html"), Release)!.Value.Magnet)
                 .Except(
                     Magnets.TrackersOf(DetailPage.Read(Capture.Fixture("silo6afg-row-eztv.html"), Release)!.Value.Magnet)
-                        .Concat(Magnets.TrackersOf(DetailPage.Read(Capture.Fixture("silo6afg-row-torrentz2.html"), Release)!.Value.Magnet))
                         .Concat(Magnets.TrackersOf(DetailPage.Read(Capture.Fixture("silo6afg-row-torrentdownloads.html"), Release)!.Value.Magnet)),
                     StringComparer.OrdinalIgnoreCase),
         ];
@@ -191,7 +191,6 @@ public class EveryTrackerEverySiteKnewTests
                     "TorrentBay",
                     new("https://extranet.torrentbay.st/silo-s03e06-xvid-afg-eztv-21152818/")),
                 new("EZTV", new("https://eztvx.to/ep/3134563/silo-s03e06-xvid-afg/?d=")),
-                new("Torrentz2", new("https://torrentz2.nz/torrent/6a771b12b4102f84ff095fd3")),
                 new(
                     "TorrentDownloads",
                     new("https://www.torrentdownloads.pro/torrent/1707076497/Silo-S03E06-XviD-AFG%5BEZTVx-to%5D-avi")),
@@ -212,9 +211,6 @@ public class EveryTrackerEverySiteKnewTests
         fetch.Answers(
             "https://eztvx.to/ep/3134563/silo-s03e06-xvid-afg/?d=",
             Capture.Fixture("silo6afg-row-eztv.html"));
-        fetch.Answers(
-            "https://torrentz2.nz/torrent/6a771b12b4102f84ff095fd3",
-            Capture.Fixture("silo6afg-row-torrentz2.html"));
         fetch.Answers(
             "https://www.torrentdownloads.pro/torrent/1707076497/Silo-S03E06-XviD-AFG%5BEZTVx-to%5D-avi",
             Capture.Fixture("silo6afg-row-torrentdownloads.html"));
@@ -242,7 +238,6 @@ public class EveryTrackerEverySiteKnewTests
             Priority = 30,
         },
         new("EZTV", "site", "https://eztvx.to/search/{query}") { Reader = "eztv", Gated = true, Priority = 30 },
-        new("Torrentz2", "site", "https://torrentz2.nz/search?q={query}") { Reader = "torrentz2", Priority = 25 },
         new("TorrentDownloads", "site", "https://www.torrentdownloads.pro/search/?search={query}")
         {
             Reader = "torrentdownloads",

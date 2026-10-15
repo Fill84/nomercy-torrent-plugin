@@ -120,15 +120,6 @@
       "note": "Searches from its path, where a plus is a plus. No magnet and no hash on the listing: the forty-character hex strings there are element ids."
     },
     {
-      "name": "Torrentz2",
-      "kind": "site",
-      "url": "https://torrentz2.nz/search?q={query}",
-      "reader": "torrentz2",
-      "priority": 25,
-      "minimumIntervalSeconds": 15,
-      "note": "Twenty definition lists, each with a name and a link to its own page. Titles carry a site prefix to cut, anchored on ' - ' with spaces because a scene name is full of dashes and the one before the group has none."
-    },
-    {
       "name": "TorrentDownloads",
       "kind": "site",
       "url": "https://www.torrentdownloads.pro/search/?search={query}",

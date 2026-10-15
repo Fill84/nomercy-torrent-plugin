@@ -350,6 +350,36 @@ public class CatalogueTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>Torrentz2 is gone, and nothing of it ships.</strong> The owner's decision of 15 October 2026:
+    /// <c>torrentz2.nz</c> no longer exists — DNS answers NXDOMAIN — and the owner's server had been reporting
+    /// "No such host is known" for it since 03:09Z that day. A source switched off would still be a switch on
+    /// the Sources page and a host in the manifest for a site that is not there, so it is removed: its entry,
+    /// its host and its reader.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TorrentzTwoShipsNoEntryNoHostAndNoReader()
+    {
+        IReadOnlyList<SourceDefinition> shipped = new CatalogueLoader(new CapturingLogger()).Load();
+
+        Assert.NotEmpty(shipped);
+        Assert.DoesNotContain(shipped, one => one.Name.Contains("torrentz", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(
+            SourceCatalogue.Build(shipped, [], []).EveryHost,
+            host => host.Contains("torrentz2", StringComparison.OrdinalIgnoreCase));
+
+        string path = Path.Combine(AppContext.BaseDirectory, PluginIdentity.ManifestFileName);
+        PluginManifest manifest = JsonSerializer.Deserialize<PluginManifest>(File.ReadAllText(path))!;
+
+        Assert.DoesNotContain(
+            manifest.Capabilities?.Network?.Hosts ?? [],
+            host => host.Contains("torrentz2", StringComparison.OrdinalIgnoreCase));
+
+        Assert.Null(Readers.Shipped().Named("torrentz2"));
+    }
+
+    /// <remarks>
     /// <c>docs/specs/indexer-search.md</c>: TorrentBay, LimeTorrents and Nyaa are the first-choice indexers —
     /// for a show TorrentBay then LimeTorrents, for an anime Nyaa then those two. Read from the file that
     /// ships, because the order is the catalogue's to declare.

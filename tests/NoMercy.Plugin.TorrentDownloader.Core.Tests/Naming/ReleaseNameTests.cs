@@ -140,16 +140,16 @@ public class ReleaseNameTests
                 "torrent-rss",
                 "[ZeroBuild] Frieren: Beyond Journey's End - S01E13 (WEB 1080p HEVC 10-bit E-AC-3) [Dual Audio] (Sousou no Frieren)")).Languages);
 
-        // DUAL on its own is a dual audio: the word is how Torrentz2 prints the
+        // DUAL on its own is a dual audio: the word is how TorrentBay prints the
         // same thing. Read as nothing, an English-only owner was handed a
         // release carrying a second language — which is what English only is
         // there to refuse.
         Assert.Equal(
             ["dual audio"],
             ReleaseName.Parse(Real(
-                "torrentz2.html",
-                "torrentz2",
-                "Silo.S03E06.1080p.WEB-DL.DUAL.5.1")).Languages);
+                "torrentbay-scene-names.html",
+                "torrentbay",
+                "Silo.S03E08.1080p.WEB-DL.DUAL.5.1")).Languages);
 
         // Subtitles in several languages are not the release being in several
         // languages, and this row claims neither. Reading it as MULTi would
@@ -507,7 +507,6 @@ public class ReleaseNameTests
         ("torrentdownloads.html", "torrentdownloads"),
         ("torrentdownloads-greek.html", "torrentdownloads"),
         ("torrentgalaxy.html", "torrentgalaxy"),
-        ("torrentz2.html", "torrentz2"),
         ("nyaa.xml", "torrent-rss"),
         ("nyaa-absolute.xml", "torrent-rss"),
         ("nyaa-version.xml", "torrent-rss"),

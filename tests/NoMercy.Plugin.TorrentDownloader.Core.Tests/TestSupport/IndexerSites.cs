@@ -14,10 +14,14 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.TestSupport;
 /// <para>
 /// <c>Silo.S02E01.1080p.WEB.H264-SuccessfulCrab</c>, asked of every television indexer, and
 /// <c>Solo.Leveling.S02E01.1080p.WEB.H264-SKYANiME</c> of the three first-choice indexers for anime. The
-/// release was posted twice: once through TGx (hash 87D8…), which six indexers list with a readable
-/// torrent, and once through EZTV (41B0…), which three do. Torrentz2 also lists two more uploads of the
-/// name, each on it alone. EZTV's own page for its row answered 451, and TorrentBay names its torrents only
-/// to a signed request that no test here answers — so neither is readable here.
+/// release was posted twice: once through TGx (hash 87D8…), which five indexers list with a readable
+/// torrent, and once through EZTV (41B0…), which two do. EZTV's own page for its row answered 451, and
+/// TorrentBay names its torrents only to a signed request that no test here answers — so neither is
+/// readable here.
+/// </para>
+/// <para>
+/// Torrentz2 answered that day too, with both uploads and two more of the name on it alone. It left the
+/// catalogue on 15 October 2026, when its domain stopped existing, and its pages went with it.
 /// </para>
 /// <para>
 /// TorrentBay is declared with one page here where it ships with three: the captures are its first page,
@@ -32,8 +36,6 @@ public static class IndexerSites
 
     public const string TgxHash = "87D8113208929B518DCE9EADDCA3E4C74AC72F38";
     public const string EztvHash = "41B0C4067947D7C0BA6FBB1BF2AA8A1C19223D74";
-    public const string PlainHash = "1A57E3F36ABCBFB0B3AA6A67520A77216048BAE5";
-    public const string SecondPlainHash = "4C74774FECABF07B834CAAA015A79DE5E599F2A5";
 
     public static readonly SourceDefinition ThePirateBay = new("The Pirate Bay", "apibay", "https://apibay.org/q.php?q={query}&cat=") { Priority = 45 };
 
@@ -72,12 +74,6 @@ public static class IndexerSites
         Priority = 30,
     };
 
-    public static readonly SourceDefinition Torrentz2 = new("Torrentz2", "site", "https://torrentz2.nz/search?q={query}")
-    {
-        Reader = "torrentz2",
-        Priority = 25,
-    };
-
     public static readonly SourceDefinition TorrentDownloads = new("TorrentDownloads", "site", "https://www.torrentdownloads.pro/search/?search={query}")
     {
         Reader = "torrentdownloads",
@@ -93,16 +89,12 @@ public static class IndexerSites
 
     /// <summary>Every indexer, in the order <c>sources.json</c> lists them.</summary>
     public static readonly SourceDefinition[] Shipped =
-        [ThePirateBay, X1337, LimeTorrents, TorrentBay, Eztv, TorrentGalaxy, Torrentz2, TorrentDownloads, Nyaa];
+        [ThePirateBay, X1337, LimeTorrents, TorrentBay, Eztv, TorrentGalaxy, TorrentDownloads, Nyaa];
 
     /// <summary>The detail pages of the rows that carry no hash, as their listings link them.</summary>
     public const string X1337Detail = "https://www.1337x.to/torrent/6265138/Silo-S02E01-1080p-WEB-H264-SuccessfulCrab-TGx/";
     public const string TorrentGalaxyTgxDetail = "https://torrentgalaxy.one/post-detail/7381b1/silo-s02e01-1080p-web-h264-successfulcrab-tgx/";
     public const string TorrentGalaxyEztvDetail = "https://torrentgalaxy.one/post-detail/79ab7b/silo-s02e01-1080p-web-h264-successfulcrab-eztv/";
-    public const string Torrentz2TgxDetail = "https://torrentz2.nz/torrent/673bad15fba18ebb7b56b7cb";
-    public const string Torrentz2EztvxDetail = "https://torrentz2.nz/torrent/673f9007fba18ebb7b5a07ef";
-    public const string Torrentz2PlainDetail = "https://torrentz2.nz/torrent/6741f0aefba18ebb7b5b3cba";
-    public const string Torrentz2SecondPlainDetail = "https://torrentz2.nz/torrent/6a40ef16906341a7aafe0a73";
     public const string TorrentDownloadsDetail = "https://www.torrentdownloads.pro/torrent/1704988607/Silo-S02E01-1080p-WEB-H264-SuccessfulCrab%5BTGx%5D";
     public const string EztvDetail = "https://eztvx.to/ep/2394161/silo-s02e01-1080p-web-h264-successfulcrab/?d=";
 
@@ -134,7 +126,6 @@ public static class IndexerSites
                      (X1337, "round-silo-1337x-exact.html", "round-silo-1337x-words.html"),
                      (Eztv, "round-silo-eztv-exact.html", "round-silo-eztv-words.html"),
                      (TorrentGalaxy, "round-silo-torrentgalaxy-exact.html", "round-silo-torrentgalaxy-words.html"),
-                     (Torrentz2, "round-silo-torrentz2-exact.html", "round-silo-torrentz2-words.html"),
                      (TorrentDownloads, "round-silo-torrentdownloads-exact.html", "round-silo-torrentdownloads-words.html"),
                  ])
         {
@@ -148,10 +139,6 @@ public static class IndexerSites
             .Answers(X1337Detail, Capture.Fixture("round-silo-1337x-detail-tgx.html"))
             .Answers(TorrentGalaxyTgxDetail, Capture.Fixture("round-silo-torrentgalaxy-detail-tgx.html"))
             .Answers(TorrentGalaxyEztvDetail, Capture.Fixture("round-silo-torrentgalaxy-detail-eztv.html"))
-            .Answers(Torrentz2TgxDetail, Capture.Fixture("round-silo-torrentz2-detail-tgx.html"))
-            .Answers(Torrentz2EztvxDetail, Capture.Fixture("round-silo-torrentz2-detail-eztvx.html"))
-            .Answers(Torrentz2PlainDetail, Capture.Fixture("round-silo-torrentz2-detail-plain.html"))
-            .Answers(Torrentz2SecondPlainDetail, Capture.Fixture("round-silo-torrentz2-detail-plain2.html"))
             .Answers(new Uri(TorrentDownloadsDetail).ToString(), Capture.Fixture("round-silo-torrentdownloads-detail-tgx.html"))
             .Answers(TorrentDownloadsDetail, Capture.Fixture("round-silo-torrentdownloads-detail-tgx.html"))
             .Fails(EztvDetail, FetchOutcome.Refused, "eztvx.to answered 451.");

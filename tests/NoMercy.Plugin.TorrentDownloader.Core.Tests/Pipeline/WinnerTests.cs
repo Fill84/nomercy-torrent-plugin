@@ -14,8 +14,8 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 public sealed class WinnerTests
 {
     /// <remarks>
-    /// The TGx upload is on six indexers, the EZTV upload on three, and two more uploads on Torrentz2
-    /// alone. The one on the most indexers wins, and the rest follow in the same order.
+    /// The TGx upload is on five indexers and the EZTV upload on two. The one on the most indexers wins, and
+    /// the rest follow in the same order.
     /// </remarks>
     [Fact]
     public async Task TheTorrentOnTheMostIndexersWins()
@@ -24,15 +24,15 @@ public sealed class WinnerTests
 
         IReadOnlyList<RankedTorrent> ranked = await Round(fetch).AskAsync([Silo], SiloEpisode, Blacklist.None, new(), CancellationToken.None);
 
-        Assert.Equal([TgxHash, EztvHash, PlainHash, SecondPlainHash], ranked.Select(torrent => torrent.Torrent.InfoHash));
-        Assert.Equal([6, 3, 1, 1], ranked.Select(torrent => torrent.Indexers.Count));
+        Assert.Equal([TgxHash, EztvHash], ranked.Select(torrent => torrent.Torrent.InfoHash));
+        Assert.Equal([5, 2], ranked.Select(torrent => torrent.Indexers.Count));
 
         // And more indexers wins over found first: a torrent found first on one indexer loses to one found
-        // later on three.
-        RankedTorrent foundFirstOnOne = Torrent(PlainHash, "LimeTorrents", foundAt: 1000);
-        RankedTorrent foundLaterOnThree = new(new ReleaseCopy(Silo, "The Pirate Bay", 0, EztvHash), ["The Pirate Bay", "TorrentGalaxy", "Torrentz2"], 2001);
+        // later on two.
+        RankedTorrent foundFirstOnOne = Torrent(TgxHash, "LimeTorrents", foundAt: 1000);
+        RankedTorrent foundLaterOnTwo = new(new ReleaseCopy(Silo, "The Pirate Bay", 0, EztvHash), ["The Pirate Bay", "TorrentGalaxy"], 2001);
 
-        Assert.Equal(EztvHash, Winner.Order([foundFirstOnOne, foundLaterOnThree], Blacklist.None)[0].Torrent.InfoHash);
+        Assert.Equal(EztvHash, Winner.Order([foundFirstOnOne, foundLaterOnTwo], Blacklist.None)[0].Torrent.InfoHash);
     }
 
     /// <remarks>
@@ -42,10 +42,10 @@ public sealed class WinnerTests
     [Fact]
     public void ATieGoesToAFirstChoiceIndexer()
     {
-        RankedTorrent onTorrentz2 = Torrent(PlainHash, "Torrentz2", foundAt: 6000);
+        RankedTorrent onTorrentGalaxy = Torrent(EztvHash, "TorrentGalaxy", foundAt: 6000);
         RankedTorrent onLimeTorrents = Torrent(TgxHash, "LimeTorrents", foundAt: 1000);
 
-        Assert.Equal(TgxHash, Winner.Order([onTorrentz2, onLimeTorrents], Blacklist.None)[0].Torrent.InfoHash);
+        Assert.Equal(TgxHash, Winner.Order([onTorrentGalaxy, onLimeTorrents], Blacklist.None)[0].Torrent.InfoHash);
     }
 
     /// <remarks>For an anime, level on indexers, the one found on Nyaa wins over one found only on TorrentBay or LimeTorrents.</remarks>
@@ -58,17 +58,25 @@ public sealed class WinnerTests
         Assert.Equal(EztvHash, Winner.Order([onTorrentBay, onNyaa], Blacklist.None)[0].Torrent.InfoHash);
     }
 
-    /// <remarks>Still level, the one found first wins: two uploads on Torrentz2 alone, in the order its page listed them.</remarks>
-    [Fact]
-    public async Task StillLevelTheOneFoundFirstWins()
+    /// <remarks>
+    /// Still level, the one found first wins: both uploads on one indexer alone, in the order its page listed
+    /// them. The Pirate Bay lists the TGx upload first and TorrentGalaxy lists the EZTV upload first, so the
+    /// winner follows the page and not the hash. Handed over the other way round, the order holds.
+    /// </remarks>
+    [Theory]
+    [InlineData("The Pirate Bay", TgxHash, EztvHash)]
+    [InlineData("TorrentGalaxy", EztvHash, TgxHash)]
+    public async Task StillLevelTheOneFoundFirstWins(string indexer, string first, string second)
     {
         FakeFetch fetch = new FakeFetch().AnsweringSilo();
+        SourceDefinition alone = Shipped.Single(one => one.Name == indexer);
 
-        IReadOnlyList<RankedTorrent> ranked = await Round(fetch, [Torrentz2]).AskAsync([Silo], SiloEpisode, Blacklist.None, new(), CancellationToken.None);
+        IReadOnlyList<RankedTorrent> ranked = await Round(fetch, [alone]).AskAsync([Silo], SiloEpisode, Blacklist.None, new(), CancellationToken.None);
 
-        Assert.Equal([TgxHash, EztvHash, PlainHash, SecondPlainHash], ranked.Select(torrent => torrent.Torrent.InfoHash));
+        Assert.Equal([first, second], ranked.Select(torrent => torrent.Torrent.InfoHash));
+        Assert.Equal([1, 1], ranked.Select(torrent => torrent.Indexers.Count));
         Assert.Equal(
-            [TgxHash, EztvHash, PlainHash, SecondPlainHash],
+            [first, second],
             Winner.Order([.. ranked.Reverse()], Blacklist.None).Select(torrent => torrent.Torrent.InfoHash));
     }
 
@@ -93,7 +101,7 @@ public sealed class WinnerTests
     /// <remarks>
     /// The torrent listed most is the TGx upload, but where no indexer carries its hash on the listing and
     /// no indexer's page for it can be read, it cannot be offered. The next torrent in the same order — the
-    /// EZTV upload, readable on TorrentGalaxy and Torrentz2 — becomes the winner.
+    /// EZTV upload, readable on TorrentGalaxy — becomes the winner.
     /// </remarks>
     [Fact]
     public async Task AnUnreadableWinnerYieldsToTheNext()
@@ -102,11 +110,10 @@ public sealed class WinnerTests
             .AnsweringSilo()
             .Fails(X1337Detail, FetchOutcome.Unreachable, "gone")
             .Fails(TorrentGalaxyTgxDetail, FetchOutcome.Unreachable, "gone")
-            .Fails(Torrentz2TgxDetail, FetchOutcome.Unreachable, "gone")
             .Fails(new Uri(TorrentDownloadsDetail).ToString(), FetchOutcome.Unreachable, "gone")
             .Fails(TorrentDownloadsDetail, FetchOutcome.Unreachable, "gone");
 
-        IReadOnlyList<RankedTorrent> ranked = await Round(fetch, [X1337, TorrentGalaxy, Torrentz2, TorrentDownloads, Eztv])
+        IReadOnlyList<RankedTorrent> ranked = await Round(fetch, [X1337, TorrentGalaxy, TorrentDownloads, Eztv])
             .AskAsync([Silo], SiloEpisode, Blacklist.None, new(), CancellationToken.None);
 
         Assert.Equal(EztvHash, ranked[0].Torrent.InfoHash);

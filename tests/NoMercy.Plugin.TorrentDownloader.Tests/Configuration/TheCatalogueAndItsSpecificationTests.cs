@@ -108,10 +108,9 @@ public class TheCatalogueAndItsSpecificationTests
         return count switch
         {
             5 => "five",
-            11 => "eleven",
-            14 => "Fourteen",
+            10 => "ten",
+            13 => "Thirteen",
             15 => "Fifteen",
-            16 => "Sixteen",
 
             // Deliberately unhelpful: a catalogue that grew past what this knows
             // needs a person to write the sentence, not a number spelled by a

@@ -13,7 +13,7 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 public sealed class MergeTests
 {
     /// <remarks>
-    /// The TGx upload is six rows on six indexers — two carrying the hash on the listing, four read off the
+    /// The TGx upload is five rows on five indexers — two carrying the hash on the listing, three read off the
     /// row's own page — and it is one torrent. Its magnet carries every tracker any of those rows gave, and
     /// the EZTV upload of the same name stays a torrent of its own.
     /// </remarks>
@@ -27,7 +27,7 @@ public sealed class MergeTests
         RankedTorrent tgx = Assert.Single(ranked, torrent => torrent.Torrent.InfoHash == TgxHash);
 
         Assert.Equal(
-            ["1337x", "LimeTorrents", "The Pirate Bay", "TorrentDownloads", "TorrentGalaxy", "Torrentz2"],
+            ["1337x", "LimeTorrents", "The Pirate Bay", "TorrentDownloads", "TorrentGalaxy"],
             tgx.Indexers.Order(StringComparer.Ordinal));
 
         foreach (string page in (string[])["round-silo-1337x-detail-tgx.html", "round-silo-torrentdownloads-detail-tgx.html", "round-silo-torrentgalaxy-detail-tgx.html"])

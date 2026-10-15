@@ -18,6 +18,15 @@ public sealed class NameJudgeTests
 {
     private static readonly TrackedEpisode SiloSix = Episode("Silo", 3, 6);
 
+    private static readonly TrackedEpisode SiloEight = Episode("Silo", 3, 8);
+
+    /// <summary>A name whose second language is the bare word <c>DUAL</c>, as TorrentBay listed it.</summary>
+    /// <remarks>
+    /// S03E08 and not S03E06: the S03E06 name of this shape was on Torrentz2's page, and Torrentz2 left the
+    /// catalogue on 15 October 2026. This is the same shape on a page of an indexer that still ships.
+    /// </remarks>
+    private static string Dual => Real("torrentbay-scene-names.html", "torrentbay", "Silo.S03E08.1080p.WEB-DL.DUAL.5.1");
+
     /// <remarks>
     /// Its resolution is the show's quality and its codec is the show's codec. A name that does not say
     /// which codec it is cannot be shown to be the one asked for; with codec <c>any</c> that question is
@@ -74,7 +83,7 @@ public sealed class NameJudgeTests
     {
         EffectiveSettings settings = Settings(quality: "1080p", musts: ["WEB"], wishes: ["DL"], forbidden: ["DUAL"]);
 
-        Verdict dual = Judge(settings, Real("torrentz2.html", "torrentz2", "Silo.S03E06.1080p.WEB-DL.DUAL.5.1"));
+        Verdict dual = Judge(settings, Dual, SiloEight);
 
         Assert.False(dual.Accepted);
         Assert.Contains("DUAL", dual.Reason, StringComparison.Ordinal);
@@ -90,14 +99,15 @@ public sealed class NameJudgeTests
     [Fact]
     public void ATagIsAWordOfTheNameAndNotPartOfAWord()
     {
-        EffectiveSettings noWeb = Settings(quality: "2160p", forbidden: ["web"]);
+        // Both at the show's quality, so the forbidden word is the only thing either name could be refused for.
+        EffectiveSettings noWeb = Settings(quality: "1080p", forbidden: ["web"]);
 
-        Assert.False(Judge(noWeb, Real("torrentz2.html", "torrentz2", "Silo S03E06 The Drive 2160p ATVP WEB-DL DDP5 1 Atmos DV HDR H 265-FLUX")).Accepted);
-        Assert.True(Judge(noWeb, Real("torrentz2.html", "torrentz2", "Silo.S03E06.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv")).Accepted);
+        Assert.False(Judge(noWeb, Real("limetorrents.html", "site", "Silo S03E06 The Drive 1080p ATVP WEB-DL DDP5 1 H 264-NTb")).Accepted);
+        Assert.True(Judge(noWeb, Real("torrentgalaxy.html", "torrentgalaxy", "Silo s03e06 [1080p] [HEVC] [webrip]")).Accepted);
 
-        Assert.True(NameJudge.Carries("Silo.S03E06.1080p.WEB-DL.DUAL.5.1", "DUAL"));
+        Assert.True(NameJudge.Carries(Dual, "DUAL"));
         Assert.True(NameJudge.Carries("Silo S03E06 The Drive 1080p ATVP WEB-DL DDP5 1 H 264-NTb", "WEB-DL"));
-        Assert.False(NameJudge.Carries("Silo.S03E06.2160p.HDR10Plus.DV.WEBRip.6CH.x265.HEVC-PSA.mkv", "HDR"));
+        Assert.False(NameJudge.Carries(Real("silo8-limetorrents.html", "site", "Silo S03E08 2160p HDR10Plus DV WEBRip 6CH x265 HEVC-PSA"), "HDR"));
         Assert.False(NameJudge.Carries("Silo S03E06 The Drive 720p ATVP WEB-DL DDP5 1 Atmos H 264-playWEB", "play"));
     }
 
@@ -122,9 +132,9 @@ public sealed class NameJudgeTests
 
         // A real row, and the shape the fault took: English audio and Italian
         // beside it, which is not the plain English release.
-        const string Italian = "Silo.S03E06.The.Drive.1080p.ATVP.WEB-DL.DDP5.1.ENG.ITA.Atmos.H265-TheBlackKing.mkv";
+        const string Italian = "Silo.S03E06.The.Drive.1080p.ATVP.WEB-DL.DDP5.1.ENG.ITA.Atmos.H265-TheBlackKing";
 
-        Verdict italian = Judge(english, Real("torrentz2.html", "torrentz2", Italian));
+        Verdict italian = Judge(english, Real("1337x.html", "1337x", Italian));
 
         Assert.False(italian.Accepted);
         Assert.Contains("italian", italian.Reason, StringComparison.OrdinalIgnoreCase);
@@ -132,11 +142,12 @@ public sealed class NameJudgeTests
 
         // The same name with the setting off is taken, so the refusal is the
         // setting's and not the name's.
-        Assert.True(Judge(Settings(quality: "1080p", codec: "h265"), Real("torrentz2.html", "torrentz2", Italian)).Accepted);
+        Assert.True(Judge(Settings(quality: "1080p", codec: "h265"), Real("1337x.html", "1337x", Italian)).Accepted);
 
         // Several languages at once, English among them, is still not the plain
-        // English release.
-        Assert.False(Judge(english, Real("torrentz2.html", "torrentz2", "Silo.S03E06.1080p.WEB-DL.DUAL.5.1")).Accepted);
+        // English release — and the same name without the setting is taken.
+        Assert.False(Judge(english, Dual, SiloEight).Accepted);
+        Assert.True(Judge(Settings(quality: "1080p"), Dual, SiloEight).Accepted);
 
         // And a name that claims no language is taken, which is most of them.
         Assert.True(Judge(english, Real("eztv.html", "eztv", "Silo S03E06 1080p WEB H264-CAKES")).Accepted);
@@ -302,7 +313,12 @@ public sealed class NameJudgeTests
 
     private static Verdict Judge(EffectiveSettings settings, string name)
     {
-        return new NameJudge(settings).JudgeName(ReleaseName.Parse(name), SiloSix, Blacklist.None);
+        return Judge(settings, name, SiloSix);
+    }
+
+    private static Verdict Judge(EffectiveSettings settings, string name, TrackedEpisode episode)
+    {
+        return new NameJudge(settings).JudgeName(ReleaseName.Parse(name), episode, Blacklist.None);
     }
 
     private static EffectiveSettings Settings(
