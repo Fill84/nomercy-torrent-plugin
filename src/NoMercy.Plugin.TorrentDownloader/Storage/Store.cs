@@ -52,6 +52,13 @@ public sealed class Store : IAsyncDisposable
 
     private IPluginDatabase? _database;
 
+    /// <summary>
+    /// Disposed, and not to be opened again: a cycle still running when the
+    /// server unloads the plugin would otherwise open a connection the next copy
+    /// of the plugin finds held.
+    /// </summary>
+    private bool _disposed;
+
     /// <remarks>
     /// Touches nothing. The plugin constructs this while the server is still
     /// coming up, and <c>Initialize</c> is not allowed to do I/O; the database is
@@ -153,6 +160,8 @@ public sealed class Store : IAsyncDisposable
 
         try
         {
+            _disposed = true;
+
             if (_database is not null)
             {
                 await _database.DisposeAsync();
@@ -174,6 +183,8 @@ public sealed class Store : IAsyncDisposable
 
         try
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+
             return await work(_database ??= await OpenAsync(ct));
         }
         finally

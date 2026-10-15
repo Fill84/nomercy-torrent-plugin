@@ -189,6 +189,25 @@ public class StoreTests : IDisposable
     }
 
     /// <remarks>
+    /// A cycle still running when the server unloads the plugin calls the store
+    /// after it was disposed. Opening the database again then would leave a
+    /// connection open to a file the next copy of the plugin is about to open,
+    /// held by a plugin the server believes is gone.
+    /// </remarks>
+    [Fact]
+    public async Task AStoreThatWasDisposedDoesNotOpenTheDatabaseAgain()
+    {
+        HostShapedStorage storage = new(_folder);
+        Store database = new(_folder, () => storage);
+        await database.MigrateAsync(CancellationToken.None);
+
+        await database.DisposeAsync();
+
+        await Assert.ThrowsAsync<ObjectDisposedException>(() => Count(database, "episodes"));
+        Assert.Equal(1, storage.Opens);
+    }
+
+    /// <remarks>
     /// Migration 009. <c>Unavailable</c> never held — the refresh at the top of
     /// the next run derived the row as missing again and kept the attempt count
     /// climbing regardless, which is exactly what left the owner's Freak
