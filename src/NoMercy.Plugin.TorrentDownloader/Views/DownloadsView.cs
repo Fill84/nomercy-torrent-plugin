@@ -396,7 +396,7 @@ public static class DownloadsView
 
         // Invariant, like every other number a person reads here: a figure
         // whose meaning depends on the server's locale cannot be quoted back.
-        return string.Create(CultureInfo.InvariantCulture, $"{size.ToString(format, CultureInfo.InvariantCulture)} {units[unit]}");
+        return size.ToString(format, CultureInfo.InvariantCulture) + " " + units[unit];
     }
 }
 

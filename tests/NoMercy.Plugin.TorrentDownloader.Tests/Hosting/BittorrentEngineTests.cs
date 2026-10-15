@@ -2357,27 +2357,44 @@ public class BittorrentEngineTests : IDisposable
     /// arrive, so the next step is not taken before the bytes the last one let go.
     /// </summary>
     /// <remarks>
-    /// Waited on through <see cref="BittorrentEngine.Drawn"/>, which the heartbeat reads to know when the
-    /// Downloads page changed: it carries the bytes that have come in, whole pieces or not, so it moves when
-    /// the released bytes land.
+    /// Waited on through the bytes received alone, not on <see cref="BittorrentEngine.Drawn"/> as a whole:
+    /// Drawn carries the download rate too, and the rate meter can read nought on the first look after the
+    /// clock moves with no byte in, so a change of Drawn could let the next step outrun the delivery.
     /// </remarks>
     private static async Task ReceivingAsync(BittorrentEngine engine, FakeTimeProvider clock, int steps, CancellationToken ct)
     {
         for (int step = 0; step < steps; step++)
         {
-            string before = engine.Drawn;
+            long before = BytesIn(engine);
 
             clock.Advance(Step);
 
             DateTimeOffset giveUpAt = DateTimeOffset.UtcNow.AddSeconds(1);
 
-            while (engine.Drawn == before && DateTimeOffset.UtcNow < giveUpAt)
+            while (BytesIn(engine) == before && DateTimeOffset.UtcNow < giveUpAt)
             {
                 await Task.Delay(TimeSpan.FromMilliseconds(5), ct);
             }
 
             Assert.Null((await engine.StatusAsync(ct))[0].Error);
         }
+    }
+
+    /// <summary>
+    /// The bytes the engine has received for its one torrent, whole pieces or not: the Downloaded figure of
+    /// <see cref="BittorrentEngine.Drawn"/>, the one place shipped code reads it from.
+    /// </summary>
+    /// <remarks>
+    /// Read by its place, the fourth figure after the hash. Drawn holds fourteen fields for a torrent with no
+    /// error, so a field added or taken out fails the count here rather than reading another figure.
+    /// </remarks>
+    private static long BytesIn(BittorrentEngine engine)
+    {
+        string[] figures = engine.Drawn.Split('|')[0].Split(':');
+
+        Assert.Equal(14, figures.Length);
+
+        return long.Parse(figures[4], System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>

@@ -2628,8 +2628,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   only.** The percentage already says how far a download is, and nothing on a public swarm is ever
   uploaded, so the rate going out read nought almost always; Ratio stays, for seeding on a private
   tracker. The two together free 261 px at real maximums, and the Release cell has them: 45 characters,
-  not 16. `TorrentStatus.Arrived` stays in the port: the page no longer reads it, but the engine sets it
-  and `BittorrentEngineTests` waits on it for bytes before a piece is whole.
+  not 16 (44 since, measured with a 4K pack's size; see the entry above). `TorrentStatus.Arrived` and
+  `TorrentStatus.UploadRateBytesPerSecond` have since been removed from the port, as no shipped code read
+  them once the page stopped drawing them; `BittorrentEngineTests` waits for bytes before a piece is
+  whole on the Downloaded figure of `BittorrentEngine.Drawn`.
 
 - **15 October 2026, `S15-02`: the Downloads release keeps 16 characters.** The 29 of the entry below
   measured headings at 8 px a character and swarms, rates and progress at their short forms. At real
