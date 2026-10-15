@@ -170,7 +170,7 @@ public sealed class Transfers(
         // Before the plan, and counted with the failures: a grab cancelled here
         // that was still in the plan would be carried on the same tick and put
         // straight back to downloading.
-        failed = [.. failed, .. await NotOursAsync(stored, thisTick, ct)];
+        failed = [.. failed, .. await NotOursAsync(stored, failed, thisTick, ct)];
 
         // What is still open after this tick's failures, which is what the
         // store would answer if it were asked again.
@@ -891,8 +891,17 @@ public sealed class Transfers(
     /// encoder.
     /// </para>
     /// </remarks>
+    /// <param name="stored">Every open grab, as the pass read them.</param>
+    /// <param name="failedThisPass">
+    /// What the client gave up on and this pass has already failed. Failed again here, a torrent of a show
+    /// switched off had its files deleted and its refusal — for ever, when the release itself was the reason —
+    /// replaced by one for six hours.
+    /// </param>
+    /// <param name="thisTick">The library, asked once for the pass.</param>
+    /// <param name="ct">The plugin's own lifetime.</param>
     private async Task<IReadOnlyList<string>> NotOursAsync(
         IReadOnlyList<StoredDownload> stored,
+        IReadOnlyList<string> failedThisPass,
         LibraryThisTick thisTick,
         CancellationToken ct)
     {
@@ -901,7 +910,8 @@ public sealed class Transfers(
 
         foreach (StoredDownload open in stored)
         {
-            if (open.State is GrabState.Staged or GrabState.Dispatched)
+            if (open.State is GrabState.Staged or GrabState.Dispatched
+                || failedThisPass.Contains(open.InfoHash, StringComparer.OrdinalIgnoreCase))
             {
                 continue;
             }

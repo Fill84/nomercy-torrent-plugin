@@ -483,6 +483,49 @@ public class TransfersTests : IDisposable
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent the client gave up on is failed once, however its show stands.</strong> One whose
+    /// show is switched off was failed for its error and then, on the same pass, failed again as not
+    /// searched: its files deleted, and a refusal for ever — the release holds no video — replaced by one
+    /// for six hours, so the next run could take the same empty torrent again.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentTheClientGaveUpOnIsFailedOnceEvenWhenItsShowIsOff()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Downloading() with
+            {
+                State = TorrentState.Error,
+                Error = "there is no video file in it",
+                ErrorIsTheRelease = true,
+            });
+
+        await Transfers(engine, grabs, Server(), searched: false)
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        (string InfoHash, bool DeleteFiles) removed = Assert.Single(engine.Removed);
+
+        Assert.Equal(Hash, removed.InfoHash);
+        Assert.False(removed.DeleteFiles, "A torrent the client gave up on had its files deleted as well.");
+
+        await using Microsoft.Data.Sqlite.SqliteConnection connection = await new Store(_root).OpenAsync(CancellationToken.None);
+        await using Microsoft.Data.Sqlite.SqliteCommand command = connection.CreateCommand();
+
+        command.CommandText = "SELECT reason, until FROM blacklist WHERE key = $key;";
+        command.Parameters.AddWithValue("$key", Hash);
+
+        await using Microsoft.Data.Sqlite.SqliteDataReader reader = await command.ExecuteReaderAsync();
+
+        Assert.True(await reader.ReadAsync(), "The release was not refused at all.");
+        Assert.Equal("there is no video file in it", reader.GetString(0));
+        Assert.True(reader.IsDBNull(1), "A release refused for ever was refused for a while instead.");
+    }
+
     /// <summary>A torrent that is still going, so nothing else in the tick acts on it.</summary>
     private static TorrentStatus Downloading()
     {
