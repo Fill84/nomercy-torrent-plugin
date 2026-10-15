@@ -3627,7 +3627,8 @@ walks a fixed array.
 **As done** (15 October 2026): without the flag a 4 GiB download reserves all 4 GiB at once, takes about
 twice as long, and stalls single writes for 13 s (HDD) and 33 s (SSD); numbers under **Decisions**. The
 call stays; media-server #602 asks for it in the SDK, and its line stays in `expected-findings.txt` until
-that ships.
+that ships. #602 shipped it on `IPluginStorageScope` only (ABI 12.3), which cannot reach the incomplete
+folder — a real local path, not a scope — so #609 asks for it on a local path.
 
 ## S16-03 · Migrations and sources read without reflection
 
