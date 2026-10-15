@@ -9,20 +9,25 @@ using Xunit;
 namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 
 /// <summary>
-/// When no release name gives a torrent, the indexers are asked for the show and episode.
+/// When no release name gives a torrent: a show downloads nothing, and an anime is asked for by show and
+/// episode.
 /// </summary>
 /// <remarks>
 /// <para>
-/// <c>docs/specs/indexer-search.md</c> § When no release name gives a torrent — the owner's rule of
-/// 16 September 2026, after South Park S15E12 could not be found on their server. PreDB.net names
+/// <c>docs/specs/indexer-search.md</c> § When no release name gives a torrent. The search by show and episode
+/// is the owner's rule of 16 September 2026, after South Park S15E12 could not be found: PreDB.net names
 /// <c>South.Park.S15E12.1080p.BluRay.x264-FilmHD</c>, the one scene name that meets 1080p, h264 and English
-/// only, and no indexer has a torrent for it: it is from 2012. What the indexers do have is
-/// <c>CtrlHD</c>'s 1080p WEB-DL, a P2P release no scene database knows.
+/// only, and no indexer has a torrent for it; what the indexers do have is <c>CtrlHD</c>'s 1080p WEB-DL, a P2P
+/// release no scene database knows. On 15 October 2026 the owner kept that search for an anime alone: for a
+/// show it had taken South Park S29E03's ViETNAM capture, which no name source lists
+/// (<c>OnlyANamedReleaseTests</c>).
 /// </para>
 /// <para>
-/// Every page here was captured on that day through the capture tool: PreDB.net's answer to
+/// South Park's pages were captured on 16 September 2026 through the capture tool: PreDB.net's answer to
 /// <c>South Park S15E12</c>, LimeTorrents' answer to the FilmHD name (nothing) and to
-/// <c>South Park S15E12</c>.
+/// <c>South Park S15E12</c>. Solo Leveling's were captured on 15 October 2026: Nyaa's and LimeTorrents'
+/// answers to srrDB's <c>Solo.Leveling.S02E01.1080p.WEB.H264-SKYANiME</c> (nothing) and to
+/// <c>Solo Leveling S02E01</c>.
 /// </para>
 /// </remarks>
 public class ByShowAndEpisodeTests
@@ -30,6 +35,8 @@ public class ByShowAndEpisodeTests
     private const string FilmHd = "South.Park.S15E12.1080p.BluRay.x264-FilmHD";
 
     private const string CtrlHdHash = "C4F76C30869F05E52FE90527354EBE5252844DB5";
+
+    private const string Skyanime = "Solo.Leveling.S02E01.1080p.WEB.H264-SKYANiME";
 
     private static readonly SourceDefinition LimeTorrents =
         new("LimeTorrents", "site", "https://www.limetorrents.fun/search/all/{query}/")
@@ -39,118 +46,22 @@ public class ByShowAndEpisodeTests
         };
 
     /// <remarks>
-    /// The name meets the settings and no indexer lists it, so the episode is asked for as
-    /// <c>South Park S15E12</c>, and the one result that names S15E12 and meets 1080p, h264 and English only
-    /// is handed over — under its own title, which is the name it is downloaded under.
-    /// </remarks>
-    [Fact]
-    public async Task WhenNoReleaseNameGivesATorrentTheEpisodeIsAskedForAndTheBestResultTaken()
-    {
-        FakeTorrentEngine engine = new();
-
-        CycleReport report = await Cycle(Answering(), engine, NameFromPreDbNet()).RunAsync(
-            [SouthPark],
-            new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"),
-            CancellationToken.None);
-
-        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
-
-        Assert.True(outcome.HandedOver, outcome.Detail);
-        Assert.Equal(CtrlHdHash, outcome.InfoHash);
-        Assert.Equal("South Park S15E12 1 1080p HMAX WEB-DL DD5 1 H 264-CtrlHD[TGx]", outcome.Release);
-        Assert.Contains(CtrlHdHash, Assert.Single(engine.Taken).Source, StringComparison.OrdinalIgnoreCase);
-    }
-
-    /// <remarks>
-    /// A result counts only when it names this episode and meets the show's settings. The same page carries
-    /// S15E12 at 1080p from CtrlHD, at 720p from HDTV in x264 (ORENJI) and from WEB in x265 (MiNX), at 480p,
-    /// and from HDTV with no resolution at all. A show wanting 720p in h265 takes MiNX's and nothing else.
-    /// </remarks>
-    [Fact]
-    public async Task OnlyAResultThatMeetsTheShowsSettingsIsTaken()
-    {
-        FakeTorrentEngine engine = new();
-
-        SettingsByShow h265At720 = SettingsByShow.Every(new() { Quality = "720p", Codec = "h265", EnglishOnly = true, Searched = true });
-
-        CycleReport report = await Cycle(Answering(), engine, NameFromPreDbNet()).RunAsync(
-            [SouthPark],
-            new(h265At720, Blacklist.None, DryRun: false, @"C:\downloads"),
-            CancellationToken.None);
-
-        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
-
-        Assert.True(outcome.HandedOver, outcome.Detail);
-        Assert.Equal("2AB3DF9814AF51A4E3E9375750CD968CCD3E9C8C", outcome.InfoHash);
-    }
-
-    /// <remarks>
-    /// And where nothing on any indexer meets the settings, nothing is taken — and the episode still counts as
-    /// searched, because the indexers were asked.
-    /// </remarks>
-    [Fact]
-    public async Task WhereNoResultMeetsTheSettingsNothingIsTakenAndTheEpisodeWasSearched()
-    {
-        FakeTorrentEngine engine = new();
-
-        CycleReport report = await Cycle(Answering(), engine, NameFromPreDbNet()).RunAsync(
-            [SouthPark],
-            new(SettingsByShow.Every(new() { Quality = "2160p", Searched = true }), Blacklist.None, DryRun: false, @"C:\downloads"),
-            CancellationToken.None);
-
-        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
-
-        Assert.False(outcome.HandedOver);
-        Assert.Empty(engine.Taken);
-        Assert.True(outcome.Searched);
-    }
-
-    /// <remarks>
-    /// A name that gives a torrent ends it there: the episode is not asked for as well. Asking anyway is a
-    /// request to every indexer for an answer that would never be used.
-    /// </remarks>
-    [Fact]
-    public async Task AReleaseNameThatGivesATorrentIsNotFollowedByTheEpisodeSearch()
-    {
-        FakeFetch fetch = new FakeFetch().AnsweringSilo();
-
-        await new SearchCycle(
-                new FixedNames((IndexerSites.Silo, "PreDB")),
-                IndexerSites.Finding(fetch),
-                new ActivityJournal(),
-                new Grab(new FakeTorrentEngine(), new EndlessDisk(null), new ActivityJournal()))
-            .RunAsync(
-                [IndexerSites.SiloEpisode],
-                new(SettingsByShow.Every(new() { Quality = "1080p", Searched = true }), Blacklist.None, DryRun: false, @"C:\downloads"),
-                CancellationToken.None);
-
-        Assert.DoesNotContain(
-            fetch.Asked,
-            address => Uri.UnescapeDataString(address.ToString()).Replace('+', ' ').Contains("Silo S02E01/", StringComparison.OrdinalIgnoreCase)
-                       || Uri.UnescapeDataString(address.ToString()).Replace('+', ' ').EndsWith("q=Silo S02E01", StringComparison.OrdinalIgnoreCase));
-    }
-
-    /// <remarks>
     /// <para>
-    /// <strong>A result uploaded long before the episode aired is not a result for it.</strong> Two programmes
-    /// are called Dark Matter, one from 2015 and the owner's from 2024, and their S02E04s share every word of
-    /// an indexer's title. On 17 September 2026, the day the 2024 programme's S02E04 aired, the episode search
-    /// took <c>Dark Matter S02E04 We Were Family 1080p TrueHD 5 1 AVC REMUX-FraMeSToR</c> for it: the 2015
-    /// programme's Blu-ray remux.
-    /// </para>
-    /// <para>
-    /// The Pirate Bay's answer to <c>Dark Matter S02E04</c>, captured that day, dates that row
-    /// 6 February 2026, seven months before the episode aired. It is the one result at 1080p in h264, and it is
-    /// not taken.
+    /// <strong>A show whose release names give no torrent downloads nothing.</strong> FilmHD's name meets the
+    /// settings and no indexer lists it. The episode is not asked for as <c>South Park S15E12</c>, CtrlHD's
+    /// upload — which the search by show and episode took on 16 September 2026 — is not handed over, and the
+    /// Activity page says why. The next run asks again.
     /// </para>
     /// </remarks>
     [Fact]
-    public async Task AResultUploadedLongBeforeTheEpisodeAiredIsNotTakenForIt()
+    public async Task WhenAShowsReleaseNamesGiveNoTorrentNothingIsDownloadedAndTheActivityPageSaysWhy()
     {
+        FakeFetch fetch = Answering();
+        ActivityJournal journal = new();
         FakeTorrentEngine engine = new();
 
-        CycleReport report = await DarkMatterCycle(engine).RunAsync(
-            [DarkMatter2024],
+        CycleReport report = await Cycle(fetch, engine, NameFromPreDbNet(), journal).RunAsync(
+            [SouthPark],
             new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"),
             CancellationToken.None);
 
@@ -158,18 +69,94 @@ public class ByShowAndEpisodeTests
 
         Assert.False(outcome.HandedOver, outcome.Release);
         Assert.Empty(engine.Taken);
+        Assert.True(outcome.Searched);
+        Assert.Equal("no indexer listed a torrent for any of its release names", outcome.Detail);
+        Assert.Contains(
+            journal.Snapshot().History,
+            entry => entry.Stage == ActivityStage.Decide && entry.Detail == outcome.Detail);
+
+        Assert.Contains(fetch.Asked, address => address.ToString() == IndexerSites.Exact(LimeTorrents, FilmHd));
+        Assert.DoesNotContain(
+            fetch.Asked,
+            address => address.ToString() == IndexerSites.Exact(LimeTorrents, "South Park S15E12")
+                       || address.ToString() == IndexerSites.Words(LimeTorrents, "South Park S15E12"));
     }
 
     /// <remarks>
     /// <para>
-    /// The same answer for the 2015 programme's S02E04, which aired on 22 July 2016: MeGusta's 720p x265,
-    /// uploaded the next day, wins the search for it — and takes no part in the 2024 programme's S02E04, ten
-    /// years later.
+    /// <strong>An anime in the same position is still asked for by show and episode.</strong> srrDB names
+    /// SKYANiME's 1080p release of Solo Leveling S02E01, which meets 1080p and h264, and neither Nyaa nor
+    /// LimeTorrents lists it. So the indexers are asked for <c>Solo Leveling S02E01</c>, Nyaa first, and the
+    /// best result that names the episode and meets the settings is taken: ToonsHub's 1080p H.264 upload,
+    /// found first on Nyaa.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnAnimeWhoseReleaseNamesGiveNoTorrentIsStillAskedForByShowAndEpisode()
+    {
+        FakeFetch fetch = AnsweringSkyanimeAndTheEpisode();
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await AnimeCycle(fetch, engine, new FixedNames((Skyanime, "srrDB"))).RunAsync(
+            [SoloLeveling],
+            new(AnimeSettings, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal("D8FA5AC1CE27DAB1F07F0C93111C5763908182E8", outcome.InfoHash);
+        Assert.Equal("Nyaa", outcome.Source);
+
+        string[] asked = [.. fetch.Asked.Select(address => address.ToString())];
+
+        Assert.Equal(IndexerSites.Exact(IndexerSites.Nyaa, Skyanime), asked[0]);
+        Assert.Contains(IndexerSites.Exact(IndexerSites.Nyaa, "Solo Leveling S02E01"), asked);
+    }
+
+    /// <remarks>
+    /// A name that gives a torrent ends it there: an anime's episode is not asked for as well. Asking anyway is
+    /// a request to every indexer for an answer that would never be used. PreDB.net names AMB3R's MULTi 1080p
+    /// release of Solo Leveling S02E01, and LimeTorrents lists its EZTV upload; Nyaa has nothing for it.
+    /// </remarks>
+    [Fact]
+    public async Task AReleaseNameThatGivesATorrentIsNotFollowedByTheEpisodeSearch()
+    {
+        const string amb3r = "Solo.Leveling.S02E01.MULTi.1080p.WEB.x264-AMB3R";
+
+        FakeFetch fetch = new FakeFetch()
+            .Answers(IndexerSites.Exact(IndexerSites.Nyaa, amb3r), Capture.Fixture("anime-nyaa-amb3r-exact.xml"))
+            .Answers(IndexerSites.Words(IndexerSites.Nyaa, amb3r), Capture.Fixture("anime-nyaa-amb3r-words.xml"))
+            .Answers(IndexerSites.Exact(LimeTorrents, amb3r), Capture.Fixture("anime-limetorrents-amb3r-exact.html"))
+            .Answers(IndexerSites.Words(LimeTorrents, amb3r), Capture.Fixture("anime-limetorrents-amb3r-words.html"));
+
+        FakeTorrentEngine engine = new();
+
+        CycleReport report = await AnimeCycle(fetch, engine, new FixedNames((amb3r, "PreDB.net"))).RunAsync(
+            [SoloLeveling],
+            new(AnimeSettings, Blacklist.None, DryRun: false, @"C:\downloads"),
+            CancellationToken.None);
+
+        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
+
+        Assert.True(outcome.HandedOver, outcome.Detail);
+        Assert.Equal("0882B923D90EDDDEAAC17130EC032BCE8418B51D", outcome.InfoHash);
+        Assert.All(fetch.Asked, address => Assert.Contains("AMB3R", address.ToString(), StringComparison.Ordinal));
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A result uploaded long before the episode aired is not a result for it.</strong> Two programmes
+    /// are called Dark Matter, one from 2015 and one from 2024, and their S02E04s share every word of an
+    /// indexer's title. On 17 September 2026, the day the 2024 programme's S02E04 aired, the search by show and
+    /// episode took <c>Dark Matter S02E04 We Were Family 1080p TrueHD 5 1 AVC REMUX-FraMeSToR</c> for it: the
+    /// 2015 programme's Blu-ray remux. The Pirate Bay's answer to <c>Dark Matter S02E04</c>, captured that day,
+    /// dates that row 6 February 2026, seven months before the episode aired.
     /// </para>
     /// <para>
-    /// Asked of the round rather than of the whole cycle since GitHub issue #2: The Pirate Bay reports nought
-    /// seeders for every 720p x265 copy of the episode, so the cycle no longer starts any of them
-    /// (<c>NoSeedersTests</c>), and which copy the dates leave standing is the round's answer.
+    /// The cycle puts this question for an anime only; the round's date rules are held here on the pages where
+    /// they were seen, which are a show's. MeGusta's 720p x265, uploaded the day after the 2015 programme's
+    /// S02E04 aired, wins the round for it — and takes no part in the 2024 programme's S02E04, ten years later.
     /// </para>
     /// </remarks>
     [Fact]
@@ -245,59 +232,35 @@ public class ByShowAndEpisodeTests
     /// <remarks>
     /// <para>
     /// <strong>A torrent any indexer dates too old is left out wherever it is listed.</strong> On 17 September
-    /// 2026, with 0.6.2 in, LimeTorrents listed the 2015 Dark Matter's
-    /// <c>Dark Matter S02E04 We Were Family 1080p TrueHD 5 1 AVC REMUX-FraMeSToR</c> with no date, and it was
+    /// 2026, with 0.6.2 in, LimeTorrents listed the 2015 Dark Matter's FraMeSToR remux with no date, and it was
     /// grabbed for the 2024 programme's S02E04 a third time. The Pirate Bay lists the same torrent — the same
-    /// info hash, <c>FD77A7E3…</c> — dated 6 February 2026.
-    /// </para>
-    /// <para>
-    /// A torrent is uploaded once. Any indexer that dates it is dating it for all of them.
+    /// info hash, <c>FD77A7E3…</c> — dated 6 February 2026. A torrent is uploaded once: any indexer that dates
+    /// it is dating it for all of them.
     /// </para>
     /// <para>
     /// <strong>And where another programme of the same name is known, an undated result is not taken.</strong>
     /// The same LimeTorrents page lists <c>Dark Matter S02E04 1080p WEB x264-FaiLED[PRiME]</c>, another 2015
-    /// release, dated by no indexer at all. The name sources answered this episode with nothing but names from
-    /// 2016 to 2023: there is an older Dark Matter, and a result with no date cannot be told from its episodes.
+    /// release, dated by no indexer at all. Asked with only dated results counting — the cycle's answer when the
+    /// name sources gave nothing but an older programme's names — it takes no part; asked without, it does.
     /// </para>
     /// </remarks>
     [Fact]
     public async Task ATorrentAnyIndexerDatesTooOldIsLeftOutWhereverItIsListed()
     {
-        FakeFetch fetch = new FakeFetch()
-            .AnswersAnything(string.Empty)
-            .Answers("https://api.predb.net/feed/?q=Dark+Matter+S02E04", Capture.Fixture("names-predbnet-search-dark-matter-s02e04.xml"))
-            .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
-            .Answers(IndexerSites.Words(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
-            .Answers(IndexerSites.Exact(LimeTorrents, "Dark Matter S02E04"), Capture.Fixture("fallback-limetorrents-dark-matter-s02e04.html"))
-            .Answers(IndexerSites.Words(LimeTorrents, "Dark Matter S02E04"), Capture.Fixture("fallback-limetorrents-dark-matter-s02e04.html"));
+        const string frameStor = "FD77A7E3EE956D3D1DE9B3BBF0DE99D7047F6A24";
+        const string failed = "6EF5E9C36302F8D23787CC0E7CCA06C2DAC562B4";
 
-        ActivityJournal journal = new();
-        FakeTorrentEngine engine = new();
+        IReadOnlyList<RankedTorrent> datedOnly = await DarkMatterOnBoth(datedOnly: true);
+        IReadOnlyList<RankedTorrent> undatedCount = await DarkMatterOnBoth(datedOnly: false);
 
-        SearchCycle cycle = new(
-            NameSourceSites.Over(fetch, journal),
-            IndexerSites.Finding(fetch, sources: [LimeTorrents, IndexerSites.ThePirateBay], journal: journal),
-            journal,
-            new Grab(engine, new EndlessDisk(null), journal));
+        Assert.DoesNotContain(datedOnly, torrent => torrent.Torrent.InfoHash == frameStor || torrent.Torrent.InfoHash == failed);
 
-        CycleReport report = await cycle.RunAsync(
-            [DarkMatter2024],
-            new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"),
-            CancellationToken.None);
-
-        EpisodeOutcome outcome = Assert.Single(report.Outcomes);
-
-        Assert.False(outcome.HandedOver, outcome.Release);
-        Assert.Empty(engine.Taken);
+        Assert.DoesNotContain(undatedCount, torrent => torrent.Torrent.InfoHash == frameStor);
+        Assert.Contains(undatedCount, torrent => torrent.Torrent.InfoHash == failed);
     }
 
-    /// <remarks>
-    /// The date one indexer gives a torrent holds for every listing of it, even with no name source to show
-    /// another programme of the title. With no names at all, LimeTorrents' undated listing of FraMeSToR's remux
-    /// is still left out, because The Pirate Bay dates the same info hash February 2026.
-    /// </remarks>
-    [Fact]
-    public async Task AnUndatedListingOfATorrentAnotherIndexerDatesTooOldIsLeftOut()
+    /// <summary>LimeTorrents and The Pirate Bay answering <c>Dark Matter S02E04</c>, put for the 2024 programme.</summary>
+    private static Task<IReadOnlyList<RankedTorrent>> DarkMatterOnBoth(bool datedOnly)
     {
         FakeFetch fetch = new FakeFetch()
             .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
@@ -305,47 +268,34 @@ public class ByShowAndEpisodeTests
             .Answers(IndexerSites.Exact(LimeTorrents, "Dark Matter S02E04"), Capture.Fixture("fallback-limetorrents-dark-matter-s02e04.html"))
             .Answers(IndexerSites.Words(LimeTorrents, "Dark Matter S02E04"), Capture.Fixture("fallback-limetorrents-dark-matter-s02e04.html"));
 
-        ActivityJournal journal = new();
-        FakeTorrentEngine engine = new();
+        Decisions decisions = new(Settings, Blacklist.None);
 
-        SearchCycle cycle = new(
-            new FixedNames(),
-            IndexerSites.Finding(fetch, sources: [LimeTorrents, IndexerSites.ThePirateBay], journal: journal),
-            journal,
-            new Grab(engine, new EndlessDisk(null), journal));
-
-        await cycle.RunAsync([DarkMatter2024], new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"), CancellationToken.None);
-
-        Assert.DoesNotContain(engine.Taken, one => one.Source.Contains("FD77A7E3EE956D3D1DE9B3BBF0DE99D7047F6A24", StringComparison.OrdinalIgnoreCase));
+        return IndexerSites.Round(fetch, [LimeTorrents, IndexerSites.ThePirateBay]).AskForEpisodeAsync(
+            DarkMatter2024,
+            title => decisions.JudgeName(ReleaseName.Parse(title), DarkMatter2024).Accepted,
+            Blacklist.None,
+            new(),
+            CancellationToken.None,
+            datedOnly);
     }
 
     /// <remarks>
     /// The other half: with no sign of another programme of the same name, an undated result counts as its
-    /// title says. LimeTorrents writes no dates, and South Park S15E12's CtrlHD was taken from it.
+    /// title says. LimeTorrents writes no dates, and South Park S15E12's CtrlHD wins its answer.
     /// </remarks>
     [Fact]
     public async Task WithNoOtherProgrammeOfTheNameAnUndatedResultStillCounts()
     {
-        FakeFetch fetch = new FakeFetch()
-            .AnswersAnything(string.Empty)
-            .Answers(IndexerSites.Exact(LimeTorrents, "South Park S15E12"), Capture.Fixture("fallback-limetorrents-south-park-s15e12.html"))
-            .Answers(IndexerSites.Words(LimeTorrents, "South Park S15E12"), Capture.Fixture("fallback-limetorrents-south-park-s15e12.html"));
+        Decisions decisions = new(Settings, Blacklist.None);
 
-        ActivityJournal journal = new();
-        FakeTorrentEngine engine = new();
-
-        SearchCycle cycle = new(
-            NameSourceSites.Over(fetch, journal),
-            IndexerSites.Finding(fetch, sources: [LimeTorrents], journal: journal),
-            journal,
-            new Grab(engine, new EndlessDisk(null), journal));
-
-        CycleReport report = await cycle.RunAsync(
-            [SouthPark],
-            new(Settings, Blacklist.None, DryRun: false, @"C:\downloads"),
+        IReadOnlyList<RankedTorrent> ranked = await IndexerSites.Round(Answering(), [LimeTorrents]).AskForEpisodeAsync(
+            SouthPark,
+            title => decisions.JudgeName(ReleaseName.Parse(title), SouthPark).Accepted,
+            Blacklist.None,
+            new(),
             CancellationToken.None);
 
-        Assert.True(Assert.Single(report.Outcomes).HandedOver);
+        Assert.Equal(CtrlHdHash, ranked[0].Torrent.InfoHash);
     }
 
     private static readonly TrackedEpisode DarkMatter2024 =
@@ -354,31 +304,17 @@ public class ByShowAndEpisodeTests
     private static readonly TrackedEpisode DarkMatter2015 =
         new(new(61889, 2, 4), "Dark Matter", 2015, LibraryKind.Television, null, new DateOnly(2016, 7, 22), EpisodeState.Missing);
 
-    /// <summary>No name source, and The Pirate Bay answering <c>Dark Matter S02E04</c> as it did on the day.</summary>
-    /// <remarks>
-    /// Captured with the spaces written as <c>%20</c>, the letter-for-letter ask. The words ask writes them as
-    /// <c>+</c>, which a query string reads as the same spaces, so it is the same search and the same answer.
-    /// </remarks>
-    private static SearchCycle DarkMatterCycle(FakeTorrentEngine engine)
-    {
-        FakeFetch fetch = new FakeFetch()
-            .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"))
-            .Answers(IndexerSites.Words(IndexerSites.ThePirateBay, "Dark Matter S02E04"), Capture.Fixture("fallback-apibay-dark-matter-s02e04.json"));
-
-        ActivityJournal journal = new();
-
-        return new(
-            new FixedNames(),
-            IndexerSites.Finding(fetch, sources: [IndexerSites.ThePirateBay], journal: journal),
-            journal,
-            new Grab(engine, new EndlessDisk(null), journal));
-    }
-
     private static readonly TrackedEpisode SouthPark =
         new(new(2190, 15, 12), "South Park", 1997, LibraryKind.Television, "1%", new DateOnly(2011, 11, 16), EpisodeState.Missing);
 
+    private static readonly TrackedEpisode SoloLeveling =
+        new(new(88, 2, 1), "Solo Leveling", 2024, LibraryKind.Anime, null, new DateOnly(2025, 1, 5), EpisodeState.Missing, 13);
+
     private static SettingsByShow Settings { get; } =
         SettingsByShow.Every(new() { Quality = "1080p", Codec = "h264", EnglishOnly = true, Searched = true });
+
+    private static SettingsByShow AnimeSettings { get; } =
+        SettingsByShow.Every(new() { Quality = "1080p", Codec = "h264", Searched = true });
 
     /// <summary>The one name PreDB.net gave that meets the settings, checked against its captured answer.</summary>
     private static FixedNames NameFromPreDbNet()
@@ -397,13 +333,36 @@ public class ByShowAndEpisodeTests
             .Answers(IndexerSites.Words(LimeTorrents, "South Park S15E12"), Capture.Fixture("fallback-limetorrents-south-park-s15e12.html"));
     }
 
-    private static SearchCycle Cycle(FakeFetch fetch, FakeTorrentEngine engine, IReleaseNames names)
+    /// <summary>Nyaa and LimeTorrents answering SKYANiME's name and the episode as they did on 15 October 2026.</summary>
+    private static FakeFetch AnsweringSkyanimeAndTheEpisode()
+    {
+        return new FakeFetch()
+            .Answers(IndexerSites.Exact(IndexerSites.Nyaa, Skyanime), Capture.Fixture("anime-nyaa-skyanime-exact.xml"))
+            .Answers(IndexerSites.Words(IndexerSites.Nyaa, Skyanime), Capture.Fixture("anime-nyaa-skyanime-words.xml"))
+            .Answers(IndexerSites.Exact(LimeTorrents, Skyanime), Capture.Fixture("anime-limetorrents-skyanime-exact.html"))
+            .Answers(IndexerSites.Words(LimeTorrents, Skyanime), Capture.Fixture("anime-limetorrents-skyanime-words.html"))
+            .Answers(IndexerSites.Exact(IndexerSites.Nyaa, "Solo Leveling S02E01"), Capture.Fixture("anime-nyaa-solo-leveling-s02e01-exact.xml"))
+            .Answers(IndexerSites.Words(IndexerSites.Nyaa, "Solo Leveling S02E01"), Capture.Fixture("anime-nyaa-solo-leveling-s02e01-words.xml"))
+            .Answers(IndexerSites.Exact(LimeTorrents, "Solo Leveling S02E01"), Capture.Fixture("anime-limetorrents-solo-leveling-s02e01-exact.html"))
+            .Answers(IndexerSites.Words(LimeTorrents, "Solo Leveling S02E01"), Capture.Fixture("anime-limetorrents-solo-leveling-s02e01-words.html"));
+    }
+
+    private static SearchCycle Cycle(FakeFetch fetch, FakeTorrentEngine engine, IReleaseNames names, ActivityJournal journal)
+    {
+        return new(
+            names,
+            IndexerSites.Finding(fetch, sources: [LimeTorrents], journal: journal),
+            journal,
+            new Grab(engine, new EndlessDisk(null), journal));
+    }
+
+    private static SearchCycle AnimeCycle(FakeFetch fetch, FakeTorrentEngine engine, IReleaseNames names)
     {
         ActivityJournal journal = new();
 
         return new(
             names,
-            IndexerSites.Finding(fetch, sources: [LimeTorrents], journal: journal),
+            IndexerSites.Finding(fetch, sources: [LimeTorrents, IndexerSites.Nyaa], journal: journal),
             journal,
             new Grab(engine, new EndlessDisk(null), journal));
     }

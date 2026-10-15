@@ -3499,6 +3499,17 @@ real releases and no name source lists them.
 2. Remove the path for shows; keep it for anime. Nothing dormant.
 3. Specs and `docs/04-domain.md` state the rule; **Decisions** records the reversal.
 
+**As done.** `SearchCycle.ByEpisodeToo` is true for an anime alone: a show with no name that meets its
+settings is asked of no indexer and says "no name source gave a release name for it, so nothing is
+downloaded until one does"; a show whose names give no torrent says "no indexer listed a torrent for any of
+its release names". `IndexerRound.AskForEpisodeAsync` is reached for an anime only. Tests on pages captured
+on 15 October 2026 between 11:17 and 11:32 UTC: `OnlyANamedReleaseTests` (South Park S29E03 before 06:00,
+red on the old code, which took ViETNAM's torrent; after 06:00, CAKES's `70AFDB53…` taken; Solo Leveling by
+show and episode on Nyaa), `ByShowAndEpisodeTests` rewritten on its own captures and the new Solo Leveling
+ones (the date rules held on the round), four `SearchCycleTests` back to "no name, no indexer", and
+`NoSeedersTests` reaching the seeder gate through the release names. The cycle's red test for anime alone
+could not be red first: the anime path was already there; it was shown to fail with the path taken out.
+
 ## S15-04 · A wrong episode the plugin delivered is replaced on its own
 
 **Read first:** `Hosting/Transfers.cs`, `Hosting/Stager.cs`, `Storage/GrabRepository.cs`,

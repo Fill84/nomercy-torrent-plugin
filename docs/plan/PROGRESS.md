@@ -6,8 +6,8 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
-the sources name (anime keeps its search by show and episode), `S15-04` a wrong episode the plugin
-delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1. **Current: `S15-03`.**
+the sources name (done; anime keeps its search by show and episode), `S15-04` a wrong episode the plugin
+delivered is replaced on its own, `S15-05` seen on beast-unit, then 0.8.1. **Current: `S15-04`.**
 Nothing is tagged before the owner has seen it.
 
 **14 October 2026: `S14` — the seven GitHub issues Stoney filed on 13 October 2026, on the owner's word
@@ -834,13 +834,20 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 15 — 0.8.1: only real releases, and nothing that scrolls sideways
 - [x] `S15-01` Torrentz2 is gone
 - [x] `S15-02` No table scrolls sideways
-- [ ] `S15-03` A show downloads only a release the sources name
+- [x] `S15-03` A show downloads only a release the sources name
 - [ ] `S15-04` A wrong episode the plugin delivered is replaced on its own
 - [ ] `S15-05` Seen on beast-unit, then 0.8.1
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S15-03` a show downloads only a release the sources name (15 October 2026).** `SearchCycle` asks the
+  indexers by show and episode for an anime only; a show with no name is not searched on any indexer
+  ("no name source gave a release name for it, so nothing is downloaded until one does"). Tests on pages
+  captured that morning: `OnlyANamedReleaseTests` (South Park S29E03 before and after 06:00, Solo Leveling),
+  `ByShowAndEpisodeTests` rewritten, `NoSeedersTests` reach the gate through names. Specs and
+  `04-domain.md` state the rule.
 
 - **`S15-02` three digits before a unit, narrower dot rule (15 October 2026).** `DownloadsView.Bytes`
   moves to the next unit at 1000; Release 44. A dot before a number ends a word unless it is inside one
@@ -2612,6 +2619,18 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **15 October 2026, the owner: a show downloads only a release the sources name; the search by show and
+  episode of 16 September 2026 (`S13-17`) stays for anime only.** If no name source — PreDB, srrDB,
+  PreDB.net, SceneSource — names a release yet, nothing is downloaded and the episode waits for the next
+  run. Anime keeps the search by show and episode, Nyaa first, because fansubs are its real releases and no
+  name source lists them. South Park S29E03, all times UTC: on 14 October between 00:07 and 02:03 that
+  search took five TorrentGalaxy torrents titled "South Park S29E03 1080p WEB H264-MeGusta", "… H264 -
+  CAKES" and "…-FLUX", which held no video; the episode aired at 02:00 on 15 October; at 03:05 it took
+  `South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM` from TorrentBay, which no name source lists; at 06:00
+  the first real release, `South.Park.S29E03.1080p.WEB.H264-CAKES`, reached the name sources (PreDB.net
+  "Thu, 15 Oct 2026 6:00:11 +0000", srrDB "2026-10-15 08:00:15" CEST, SceneSource 2:00 am Eastern). The
+  path for shows is gone, not switched off: `SearchCycle.ByEpisodeToo` is true for an anime alone.
 
 - **15 October 2026, `S15-02`: no size or rate on Downloads has four digits before its unit, and the
   release keeps 44.** Counted in 1024s as before, the next unit from 1000 of one ("0.98 MB/s", not

@@ -3,11 +3,19 @@
 ## Release names first
 
 - An indexer is searched first with the release names that a name source gave.
-- When no release name gives a torrent — because no name source gave a release name that meets the
-  show's settings, or because no indexer listed a torrent for any of them — the indexers are searched
+- A show downloads only a release that a name source names. For a show, an indexer is searched only with
+  the release names that a name source gave.
+- A show's episode for which no name source gave a release name that meets the show's settings is not
+  searched for on any indexer and nothing is downloaded for it. The Activity and History pages say why,
+  and the next run searches for it again.
+- A show's episode whose release names give no torrent on any indexer is not downloaded either, and the
+  next run searches for it again.
+- An anime is the exception: fansubs are its real releases and no name source lists them. When no
+  release name gives an anime's episode a torrent — because no name source gave a release name that meets
+  the show's settings, or because no indexer listed a torrent for any of them — the indexers are searched
   for the show and episode instead (`indexer-search.md` § When no release name gives a torrent).
 - The plugin builds no other search term of its own from a show's title, season or episode than the
-  show and episode, and the show and season for a season pack (§ Season packs).
+  show and season for a season pack (§ Season packs), and for an anime the show and episode.
 
 ## Reading the feeds
 
@@ -52,7 +60,7 @@
 - When no season pack gives a torrent, each episode of the season is searched for one by one.
 - A season with one episode being searched for is not looked for as a season pack.
 - The indexers are asked for the show and episode (`indexer-search.md` § When no release name gives a
-  torrent) for an episode only, never for a season.
+  torrent) for an anime's episode only, never for a season.
 
 ## Choosing the release name
 
@@ -64,7 +72,7 @@
   that episode, whichever source gave it: another programme of the same title answers the same search with
   older names.
 - A torrent an indexer dates more than a week before the episode aired is not taken for it, whether it was
-  found for a release name or for the show and episode.
+  found for a release name or, for an anime, for the show and episode.
 - A release name is judged against the settings of its show: its resolution is the show's quality,
   its codec is the show's codec, it carries every must tag and it carries no forbidden tag.
 - A release name that fails any of those is not searched for.

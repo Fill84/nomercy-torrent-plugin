@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:atom="http://www.w3.org/2005/Atom" xmlns:release="https://api.predb.net/feed/" version="2.0">
+<channel>
+	<title>PreDB.net › Scene Release and NFO Source</title>
+	<link>https://api.predb.net/feed/</link>
+	<atom:link href="https://api.predb.net/feed/" rel="self" type="application/rss+xml"/>
+	<description>PreDB.net › RSS Feed</description>
+	<language>en-us</language>
+	<ttl>5</ttl>
+	<generator>predb.net</generator>
+	<item><title>Nothing found!</title></item>
+</channel>
+</rss>

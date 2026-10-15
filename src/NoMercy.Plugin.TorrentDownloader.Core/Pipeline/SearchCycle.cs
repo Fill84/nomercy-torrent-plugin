@@ -296,6 +296,24 @@ public sealed class SearchCycle(
         {
             IReadOnlyList<IReadOnlyList<string>> groups = Wanted(candidates, episode, decisions, refused, subject);
 
+            // release-names.md § Release names first, the owner's rule of 15 October 2026: a show downloads only
+            // a release a name source names. On that day South Park S29E03 was taken as
+            // "South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM", found by asking the indexers for the show and
+            // episode three hours before any name source named a release of it — a capture with the intro
+            // missing — and on 14 October the same search had taken five torrents titled as WEB releases that
+            // held no video. No name, no indexer: the episode waits for the next run. An anime goes on, because
+            // no name source lists fansubs.
+            if (groups.Count == 0 && !ByEpisodeToo(episode))
+            {
+                string why = refused.Count > 0
+                    ? refused[^1]
+                    : "no name source gave a release name for it, so nothing is downloaded until one does";
+
+                journal.Finished(ActivityStage.Decide, subject, why);
+
+                return new(episode.Key, null, null, null, false, why);
+            }
+
             foreach (IReadOnlyList<string> group in groups)
             {
                 IReadOnlyList<RankedTorrent> ranked = await _round.AskAsync(group, episode, options.Blacklisted, asked, ct);
@@ -314,9 +332,10 @@ public sealed class SearchCycle(
                 journal.Noted(ActivityStage.Decide, subject, $"no torrent for {string.Join(", ", group)}");
             }
 
-            // indexer-search.md § When no release name gives a torrent: the show and
+            // indexer-search.md § When no release name gives a torrent: for an anime only, the show and
             // episode, and the best result that names it and meets the show's settings.
-            if (await ByEpisodeAsync(episode, namesake, decisions, options, subject, trackers, refused, unseeded, asked, ct) is EpisodeOutcome found)
+            if (ByEpisodeToo(episode)
+                && await ByEpisodeAsync(episode, namesake, decisions, options, subject, trackers, refused, unseeded, asked, ct) is EpisodeOutcome found)
             {
                 return found;
             }
@@ -332,9 +351,11 @@ public sealed class SearchCycle(
 
             string none = refused.Count > 0
                 ? refused[^1]
-                : groups.Count == 0
-                    ? "no name source gave a release name for it, and no indexer listed a torrent for the episode"
-                    : "no indexer listed a torrent for any of its release names, or for the episode";
+                : !ByEpisodeToo(episode)
+                    ? "no indexer listed a torrent for any of its release names"
+                    : groups.Count == 0
+                        ? "no name source gave a release name for it, and no indexer listed a torrent for the episode"
+                        : "no indexer listed a torrent for any of its release names, or for the episode";
 
             journal.Finished(ActivityStage.Decide, subject, none);
 
@@ -362,7 +383,7 @@ public sealed class SearchCycle(
     /// letter for letter, then without punctuation, merged by hash, the torrent on the most indexers winning and
     /// one nobody seeds passed over — with the latest-aired episode of the season as the one a name and a row
     /// are dated against. Null when no pack gives a torrent: the episodes are then searched for singly, as they
-    /// always were. The <c>When no release name gives a torrent</c> search stays an episode's: no
+    /// always were. The <c>When no release name gives a torrent</c> search stays an anime episode's: no
     /// <c>Show S03</c> is put to the indexers.
     /// </para>
     /// <para>
@@ -440,14 +461,27 @@ public sealed class SearchCycle(
         return null;
     }
 
+    /// <summary>Whether this episode is asked of the indexers by show and episode when no release name gives a torrent.</summary>
+    /// <remarks>
+    /// An anime's only. Fansubs are an anime's real releases and no name source lists them, so without this an
+    /// anime would download nothing. A show's releases are on the name sources, and on 15 October 2026 the
+    /// search by show and episode took a non-scene capture of South Park S29E03 for one
+    /// (<c>docs/specs/release-names.md</c> § Release names first).
+    /// </remarks>
+    private static bool ByEpisodeToo(TrackedEpisode episode)
+    {
+        return episode.Kind == LibraryKind.Anime;
+    }
+
     /// <summary>
-    /// Asks every indexer for the show and episode, and takes the best result that names it and meets its
-    /// show's settings.
+    /// Asks every indexer for an anime's title and episode, and takes the best result that names it and meets
+    /// its show's settings.
     /// </summary>
     /// <remarks>
-    /// <c>docs/specs/indexer-search.md</c> § When no release name gives a torrent, the owner's rule of
-    /// 16 September 2026. The results that count go through the same merge and the same winner as a release
-    /// name's, one wish group at a time, the group carrying the most wishes first.
+    /// <c>docs/specs/indexer-search.md</c> § When no release name gives a torrent: the owner's rule of
+    /// 16 September 2026, kept for an anime alone by the owner's rule of 15 October 2026. The results that count
+    /// go through the same merge and the same winner as a release name's, one wish group at a time, the group
+    /// carrying the most wishes first.
     /// </remarks>
     private async Task<EpisodeOutcome?> ByEpisodeAsync(
         TrackedEpisode episode,

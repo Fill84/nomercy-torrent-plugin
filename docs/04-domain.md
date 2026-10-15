@@ -53,6 +53,22 @@ Show.Title.S02E13.1080p.WEB.x264-GROUP         ← scene-styled anime, also vali
 and a run does not search for them. A season pack (`Show.S03.…`) names no episode either, and is
 searched for as the pack of its season (§ Season packs).
 
+**A show downloads only a release a name source names** — the owner's rule of 15 October 2026
+(`docs/specs/release-names.md` § Release names first). PreDB, srrDB, PreDB.net and SceneSource say what
+the real releases of an episode are; an indexer is asked only for those names. When no source names a
+release yet, nothing is downloaded and the episode waits for the next run. **Anime is the exception**:
+fansubs are its real releases and no name source lists them, so an anime whose names give no torrent is
+still asked of the indexers by show and episode, Nyaa first (`docs/specs/indexer-search.md` § When no
+release name gives a torrent).
+
+*Replaced, 15 October 2026:* from the owner's rule of 16 September 2026 (`S13-17`), a show whose release
+names gave no torrent was asked of the indexers as `Show SxxEyy`, and the best result meeting its settings
+was taken. South Park S29E03 aired at 02:00 UTC on 15 October 2026; at 03:05 that search took
+`South Park S29E03 1080p HDTV DD 2.0 x264-ViETNAM`, a capture no name source lists, with the intro
+missing; and on 14 October, between 00:07 and 02:03 UTC, it had taken five TorrentGalaxy torrents titled
+as MeGusta's, CAKES's and FLUX's WEB releases that held no video. The first real release, `South.Park.S29E03.1080p.WEB.H264-CAKES`, reached
+the name sources at 06:00.
+
 `TitleMatcher.Matches`: normalise both sides (lowercase, **accents folded**, punctuation to spaces,
 collapse), then the release title must **begin with** the show title and the slot must match.
 Beginning with, not containing — *A Bloody Lucky Day* contains *Lucky* and is a different programme.
@@ -181,7 +197,7 @@ fix it, which replaced the rule below (`docs/specs/release-names.md` § Season p
 
 A pack is the scene `Sxx` form with no episode number, for television and anime alike. The anime batch
 forms — `01~12`, `Batch`, `Complete` with no season — name no season to hold them to, and are still not
-searched for. The search for the show and episode when no release name gives a torrent stays an
+searched for. The search for the show and episode when no release name gives a torrent stays an anime
 episode's; no `Show S03` is put to the indexers.
 
 *Replaced, 14 October 2026:* **a release name without an episode number was not searched for**, the owner's

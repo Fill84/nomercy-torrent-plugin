@@ -46,8 +46,11 @@
 
 ## When no release name gives a torrent
 
-- When no wish group of release names gives a torrent, the indexers are asked for the show's title with
-  the season and episode, as `South Park S15E12`.
+- For a show, when no wish group of release names gives a torrent, nothing is downloaded and the next run
+  searches for the episode again. The indexers are not asked for the show and episode
+  (`release-names.md` § Release names first).
+- For an anime, when no wish group of release names gives a torrent, the indexers are asked for the show's
+  title with the season and episode, as `Solo Leveling S02E01`. Everything below is about that search.
 - The indexers are asked in the same order: the first-choice indexers one after another, then every
   other enabled indexer at the same time.
 - A result counts only when its title names that show, that season and that episode and nothing more,

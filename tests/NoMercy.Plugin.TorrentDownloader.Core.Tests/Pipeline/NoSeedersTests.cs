@@ -18,9 +18,14 @@ namespace NoMercy.Plugin.TorrentDownloader.Core.Tests.Pipeline;
 /// <para>
 /// The rows are LimeTorrents' and The Pirate Bay's own answers, captured on 22 August 2026 for <c>Sugar S02E01</c>
 /// and <c>Sugar S02E08</c>. Both list Queen Sugar's releases of those episodes beside Sugar's, many of them with
-/// nobody seeding, and those are the rows that count when Queen Sugar's episode is asked for. No name source is
-/// behind them, so the episode itself is what the indexers are asked; no air date either, so each row is held to
-/// its title alone.
+/// nobody seeding. No air date is given, so each row is held to its title alone.
+/// </para>
+/// <para>
+/// A show's rows reach the gate only through its release names (<c>release-names.md</c> § Release names first),
+/// so each test puts the names of the releases it is about to the cycle, as each indexer titles them, and each
+/// indexer answers a name with its page for the episode. A row counts only when its title is the name asked for,
+/// so the wider page gives exactly the rows the name's own would have, with the counts they had that day. What is
+/// held here is what happens to a winner nobody seeds, which is the same whichever search found it.
 /// </para>
 /// </remarks>
 public sealed class NoSeedersTests
@@ -44,7 +49,9 @@ public sealed class NoSeedersTests
         List<string> shown = [];
         journal.Recorded += () => shown.AddRange(journal.Snapshot().Notes.Select(note => note.Line));
 
-        CycleReport report = await Cycle(SugarS02E01(), engine, journal).RunAsync(
+        string[] names = [Fgt, NtbWebRip, NtbWebDl];
+
+        CycleReport report = await Cycle(SugarS02E01(names), engine, journal, names).RunAsync(
             [QueenSugar(1)],
             new(At1080p, Blacklist.Of(fgt), DryRun: false, @"C:\downloads"),
             CancellationToken.None);
@@ -68,7 +75,7 @@ public sealed class NoSeedersTests
     {
         FakeTorrentEngine engine = new();
 
-        CycleReport report = await Cycle(SugarS02E01(), engine, new ActivityJournal()).RunAsync(
+        CycleReport report = await Cycle(SugarS02E01(Topkek), engine, new ActivityJournal(), Topkek).RunAsync(
             [QueenSugar(1)],
             new(At720p, Blacklist.None, DryRun: false, @"C:\downloads"),
             CancellationToken.None);
@@ -88,10 +95,10 @@ public sealed class NoSeedersTests
     [Fact]
     public async Task WithNobodySeedingAnyCopyNothingIsStartedAndTheNextRunAsksAgain()
     {
-        FakeFetch fetch = SugarS02E08();
+        FakeFetch fetch = SugarS02E08(Convoy);
         FakeTorrentEngine engine = new();
         ActivityJournal journal = new();
-        SearchCycle cycle = Cycle(fetch, engine, journal);
+        SearchCycle cycle = Cycle(fetch, engine, journal, Convoy);
 
         CycleReport first = await cycle.RunAsync([QueenSugar(8)], new(At720p, Blacklist.None, DryRun: false, @"C:\downloads"), CancellationToken.None);
         int asked = fetch.Asked.Count;
@@ -159,31 +166,55 @@ public sealed class NoSeedersTests
         return new(new(66292, 2, episode), "Queen Sugar", 2016, LibraryKind.Television, null, null, EpisodeState.Missing);
     }
 
-    private static FakeFetch SugarS02E01()
+    /// <summary>FGT's 1080p upload, as LimeTorrents titles it.</summary>
+    private const string Fgt = "Queen Sugar S02E01 1080p WEB-DL DD5 1 H264-FGT";
+
+    /// <summary>NTb's 1080p WEBRip, as LimeTorrents titles it: nought seeders there, and not on The Pirate Bay.</summary>
+    private const string NtbWebRip = "Queen Sugar S02E01 After The Winter 1080p AMZN WEBRip DD5 1 x264 NTb rarbg";
+
+    /// <summary>NTb's 1080p WEB-DL, as The Pirate Bay titles it: twenty-five seeders.</summary>
+    private const string NtbWebDl = "Queen Sugar S02E01 After The Winter 1080p AMZN WEB-DL DDP5 1 H 264-NTb";
+
+    /// <summary>TOPKEK's 720p upload, as The Pirate Bay titles it.</summary>
+    private const string Topkek = "Queen.Sugar.S02E01.After.The.Winter.720p.WEBRiP.H.264-TOPKEK";
+
+    /// <summary>CONVOY's 720p release of S02E08, which LimeTorrents lists twice.</summary>
+    private const string Convoy = "Queen Sugar S02E08 720p WEB H264-CONVOY";
+
+    private static FakeFetch SugarS02E01(params string[] names)
     {
-        return Answering("Queen Sugar S02E01", "sugar1-limetorrents.html", "sugar1-apibay.json");
+        return Answering("Queen Sugar S02E01", names, "sugar1-limetorrents.html", "sugar1-apibay.json");
     }
 
-    private static FakeFetch SugarS02E08()
+    private static FakeFetch SugarS02E08(params string[] names)
     {
-        return Answering("Queen Sugar S02E08", "sugar-limetorrents.html", "sugar-apibay.json");
+        return Answering("Queen Sugar S02E08", names, "sugar-limetorrents.html", "sugar-apibay.json");
     }
 
-    /// <summary>Both indexers answering the episode with their captured pages, and every other page empty.</summary>
-    private static FakeFetch Answering(string episode, string lime, string apibay)
+    /// <summary>
+    /// Both indexers answering the episode, and each of <paramref name="names"/>, with their captured pages for the
+    /// episode, and every other page empty.
+    /// </summary>
+    private static FakeFetch Answering(string episode, string[] names, string lime, string apibay)
     {
-        return new FakeFetch()
-            .AnswersAnything(string.Empty)
-            .Answers(IndexerSites.Exact(LimeTorrents, episode), Capture.Fixture(lime))
-            .Answers(IndexerSites.Words(LimeTorrents, episode), Capture.Fixture(lime))
-            .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, episode), Capture.Fixture(apibay))
-            .Answers(IndexerSites.Words(IndexerSites.ThePirateBay, episode), Capture.Fixture(apibay));
+        FakeFetch fetch = new FakeFetch().AnswersAnything(string.Empty);
+
+        foreach (string question in (string[])[episode, .. names])
+        {
+            fetch
+                .Answers(IndexerSites.Exact(LimeTorrents, question), Capture.Fixture(lime))
+                .Answers(IndexerSites.Words(LimeTorrents, question), Capture.Fixture(lime))
+                .Answers(IndexerSites.Exact(IndexerSites.ThePirateBay, question), Capture.Fixture(apibay))
+                .Answers(IndexerSites.Words(IndexerSites.ThePirateBay, question), Capture.Fixture(apibay));
+        }
+
+        return fetch;
     }
 
-    private static SearchCycle Cycle(FakeFetch fetch, FakeTorrentEngine engine, ActivityJournal journal)
+    private static SearchCycle Cycle(FakeFetch fetch, FakeTorrentEngine engine, ActivityJournal journal, params string[] names)
     {
         return new(
-            new FixedNames(),
+            new FixedNames([.. names.Select(name => (name, "an indexer's own title"))]),
             IndexerSites.Finding(fetch, sources: [LimeTorrents, IndexerSites.ThePirateBay], journal: journal),
             journal,
             new Grab(engine, new EndlessDisk(null), journal));

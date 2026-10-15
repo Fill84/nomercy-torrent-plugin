@@ -213,14 +213,15 @@ public sealed class IndexerRound(Find find, IActivityJournal journal)
     }
 
     /// <summary>
-    /// The show and episode put to every indexer, when no release name gave a torrent.
+    /// An anime's title and episode put to every indexer, when no release name gave a torrent.
     /// </summary>
     /// <remarks>
     /// <c>docs/specs/indexer-search.md</c> § When no release name gives a torrent — the owner's rule of
-    /// 16 September 2026. South Park S15E12 had one scene name that met its show's settings, a 2012 release no
-    /// indexer has a torrent for, and the release the indexers do have was never asked for. A row counts only
-    /// when <paramref name="meets"/> says it names this episode and meets the show's settings, and it goes by
-    /// its own title: no name source gave it one.
+    /// 16 September 2026, which since 15 October 2026 is an anime's alone: fansubs are its real releases and no
+    /// name source lists them. For a show it took South Park S29E03's ViETNAM capture, which no name source
+    /// lists, three hours before the first scene release, so <c>SearchCycle</c> never asks it for one. A row
+    /// counts only when <paramref name="meets"/> says it names this episode and meets the show's settings, and
+    /// it goes by its own title: no name source gave it one.
     /// <para>
     /// A row its indexer dates more than <see cref="SourceName.Before"/> before the episode aired does not
     /// count. Two programmes share the title Dark Matter, and on 17 September 2026 this search took the 2015
