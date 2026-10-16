@@ -921,8 +921,10 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   recycling, closed only on the new encode's playlist, only the encoder's own files, only one episode or
   a season pack, old deliveries checked ten a run after the search, no second replacement while one is
   under way, and the failed-download test seen red. The library writer's test double now moves files as
-  the server does. 516 + 779 + 294 + 7 green; one full run of four failed
-  `OneCycleRunsEveryStepAndSaysWhenItFinished` (on the `S17-04` list).
+  the server does. A review of the branch found three more, fixed before the merge (`SPRINTS.md` § S17-02).
+  517 + 782 + 294 + 7 green. Under a heavily loaded machine `OneCycleRunsEveryStepAndSaysWhenItFinished`
+  and `ARunStagesAFinishedDownloadWhoseStagingFailedBefore` each failed once and passed alone and in the
+  runs after (on the `S17-04` list).
 
 - **`S17-01` (16 October 2026):** `feat/replace-delivered` rebased onto master (`84bfa5e`): its grab and
   episode writes are on the `Store` API, migration 018 runs after the host's count reaches 0.8.1's 17

@@ -3805,6 +3805,15 @@ media-server `dev` (read only), media-server #599 and #600.
 7. Seen red by staging an unfinished replacement (`Recovery.Plan`) and by letting an errored torrent past
    `Transfers.FailedAsync`.
 
+A review of the whole branch before the merge found three more, each fixed red first: a run looked for a
+season's pack at the season's first queued episode, which could be one to be replaced — the pack became
+its outcome, carried its old delivery and never encoded, and the episode was not searched
+(`ASeasonWhoseFirstEpisodeIsToBeReplacedTakesThePackForTheMissingOnes`, `AGrabThatCoversOtherEpisodesReplacesNothing`);
+`recycled_at` is one per grab, so only a one-episode grab may replace; and the time window alone took an
+encode the owner made by hand meanwhile, so a delivery is now done with its master playlist's write time
+and length (`grabs.encoded`, in 018 since it never shipped) and recycled only while it still matches
+(`AnEncodeMadeAfterThePluginsDeliveryIsNeverRecycled`).
+
 ## S17-03 · A plugin unloaded mid-cycle leaves nothing unobserved
 
 **Read first:** `PROGRESS.md` § Current (Known, for the next version), `TorrentDownloaderPlugin.cs`
