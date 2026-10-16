@@ -6,7 +6,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
 Media-server #599 and #600 are closed, so `S15-04` is unblocked. `S17-02` is done and
-`feat/replace-delivered` is merged into master. Current: **`S17-03`**.
+`feat/replace-delivered` is merged into master. `S17-03` is done. Current: **`S17-04`**.
 
 **For the release notes of the version that carries S16 and S17** (not yet in `docs/releases/`): a wrong
 episode the plugin delivered — a show's episode from a release no name source names, such as South Park
@@ -910,12 +910,17 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ### Sprint 17 — The plugin finished: the replacement, and what is known to be wrong
 - [x] `S17-01` The replacement branch on today's master
 - [x] `S17-02` The replacement, finished from its own check
-- [ ] `S17-03` A plugin unloaded mid-cycle leaves nothing unobserved
+- [x] `S17-03` A plugin unloaded mid-cycle leaves nothing unobserved
 - [ ] `S17-04` The `S14` known list
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-03` (16 October 2026):** a plugin unloaded mid-run ends the run quietly: `Lifetime` is a token
+  taken once, closing a cycle after `Dispose` swallows only cancellation and disposed objects, and a run
+  that meets a disposed object after `Dispose` is Stopped. `FakeLibraryQuery.HoldEpisodes` holds a run in
+  its refresh, for any test that needs a run held in the middle.
 
 - **`S17-02` (16 October 2026):** the replacement is finished and merged (`S15-04`): all-or-nothing
   recycling, closed only on the new encode's playlist, only the encoder's own files, only one episode or

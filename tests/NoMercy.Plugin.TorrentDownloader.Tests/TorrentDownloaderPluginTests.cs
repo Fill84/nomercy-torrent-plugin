@@ -206,6 +206,72 @@ public class TorrentDownloaderPluginTests
 
     /// <remarks>
     /// <para>
+    /// <strong>A plugin unloaded in the middle of a run ends the run without a fault.</strong> The server
+    /// unloads the plugin while a cycle runs — an update through the catalogue — and the cycle carries on to its
+    /// end on a token that is cancelled and a plugin that is gone. On beast-unit, 15 October 2026 16:04:21Z, it
+    /// read the lifetime's token after <c>Dispose</c> had disposed its source, threw, and the server logged an
+    /// <c>UnobservedTaskException</c> from the finalizer thread.
+    /// </para>
+    /// <para>
+    /// The run is held on the library's answer, so the order is the server's every time: the run is in the
+    /// middle of its work, the plugin is disposed, and only then does the answer come.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APluginDisposedInTheMiddleOfARunEndsItWithoutAFault()
+    {
+        FakeLibraryQuery shelves = new FakeLibraryQuery()
+            .Library("01HQ5W4AVF30N10RT6XCF6AJHM", "Series", "tv")
+            .Show(41, "Silo", "01HQ5W4AVF30N10RT6XCF6AJHM", 2021, folder: "/Silo.(2021)")
+            .Episode(41, 3, 5, "The Getaway", new DateTime(2020, 1, 1), hasFile: false);
+
+        string folder = Path.Combine(Path.GetTempPath(), "nomercy-torrent-tests", Guid.NewGuid().ToString("n"));
+        Directory.CreateDirectory(folder);
+
+        try
+        {
+            FakePluginContext context = new()
+            {
+                DataFolderPath = folder,
+                Shelves = shelves,
+                Permits = new FakeGrants(),
+                Encodes = new FakeEncoder(),
+            };
+            TorrentDownloaderPlugin plugin = new();
+            plugin.Initialize(context);
+
+            Settings settings = new() { IncompleteFolder = folder, IntakeFolder = folder };
+            DisableEveryShippedSource(settings);
+            await plugin.Settings.SaveAsync(settings, CancellationToken.None);
+
+            // Switched on, so the run's refresh asks for its episodes — which is where it is held.
+            Assert.Empty(await plugin.SaveShowSettingsAsync(
+                41,
+                new Dictionary<string, string?> { ["switchedOn"] = "true", ["quality"] = "1080p" },
+                CancellationToken.None));
+
+            TaskCompletionSource answer = new(TaskCreationOptions.RunContinuationsAsynchronously);
+            shelves.HoldEpisodes = answer;
+
+            Task run = plugin.RunCycleAsync(CancellationToken.None);
+            await shelves.EpisodesAsked.Task.WaitAsync(Hang.Limit);
+
+            plugin.Dispose();
+            answer.SetResult();
+
+            // Ended, and ended without a fault: a fault here is the one nobody was waiting for in the server.
+            await run.WaitAsync(Hang.Limit);
+
+            Assert.DoesNotContain(context.Log.Entries, entry => entry.Level >= Microsoft.Extensions.Logging.LogLevel.Error);
+        }
+        finally
+        {
+            TemporaryFolder.Forget(folder);
+        }
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>One cycle, and the steps are steps rather than schedules.</strong>
     /// This used to assert that a tick ran whichever of feed, search and
     /// maintenance the clock said was due, and that a second tick a moment later

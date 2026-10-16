@@ -38,6 +38,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     public TorrentDownloaderPlugin()
     {
         _transfersTurn = new(OnePassAsync);
+
+        // Taken once, while the source is alive. A token stays readable after its source is disposed;
+        // the source's Token property does not, and a cycle still running when the server unloads the
+        // plugin read it after Dispose (beast-unit, 15 October 2026 16:04:21Z).
+        Lifetime = _lifetime.Token;
     }
 
     /// <summary>
@@ -284,7 +289,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// journal writer — stops on this, so none of it outlives the plugin inside
     /// a server that believes it is gone.
     /// </summary>
-    public CancellationToken Lifetime => _lifetime.Token;
+    public CancellationToken Lifetime { get; }
 
     /// <summary>
     /// What the host ticks this plugin on, which is not the owner's cadence.
@@ -801,7 +806,17 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         // On the plugin's lifetime, not the run's Stop: closing a stopped run is
         // exactly what has to happen after Stop, and on a cancelled token its
         // finish would never be written down nor the clock wound again.
-        await SettledAsync(Lifetime);
+        try
+        {
+            await SettledAsync(Lifetime);
+        }
+        catch (Exception unloaded) when (_disposed && unloaded is OperationCanceledException or ObjectDisposedException)
+        {
+            // The server unloaded the plugin while this cycle ran: what is left
+            // of closing it is cancelled, or meets the store already closed.
+            // That is the unload doing its work, not a fault — and out of a task
+            // nobody waits on, it reached the server as an unobserved exception.
+        }
     }
 
     /// <summary>
@@ -1536,6 +1551,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             // Stopped on purpose — the owner pressed Stop, or the server is
             // going away. Not a fault, and the page says so, and when.
+            how = RunEnd.Stopped;
+        }
+        catch (ObjectDisposedException) when (_disposed)
+        {
+            // The server unloaded the plugin while this run was in its middle —
+            // an update through the catalogue — and what the run reached next was
+            // already closed: the browser's tabs, the store. The server going away
+            // is a stop, not a fault, and logged as one it read as the plugin
+            // failing on every update.
             how = RunEnd.Stopped;
         }
         catch (Exception wrong)

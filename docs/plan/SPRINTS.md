@@ -3822,6 +3822,18 @@ and length (`grabs.encoded`, in 018 since it never shipped) and recycled only wh
 A test that disposes the plugin while a cycle runs and sees no unobserved task exception, red first; then
 the fix.
 
+**As done** (16 October 2026): the stack on beast-unit was `CycleThroughAsync` reading `Lifetime`
+(`_lifetime.Token`, which throws once the source is disposed) for `SettledAsync` after the run.
+`APluginDisposedInTheMiddleOfARunEndsItWithoutAFault` holds the run on the library's episodes
+(`FakeLibraryQuery.HoldEpisodes`, which only a run's refresh asks), disposes, then answers — red every time
+with that same stack. Held on shows instead it held the transfers pass, and the run reached `SettledAsync`
+while `Dispose` was still running: a cancelled task, which the server does not report — the fault was
+timing. Fixed three ways: `Lifetime` is taken once in the constructor; closing a cycle after `Dispose`
+ends quietly on a cancellation or a disposed object; and a run that meets something already disposed after
+`Dispose` ends as stopped, not failed — the browser's tabs' semaphore logged "The search cycle stopped" at
+Error on every such unload. The test fails only with both of the first two taken out; the third alone
+turns it red through the Error line.
+
 ## S17-04 · The `S14` known list
 
 **Read first:** `PROGRESS.md` § Current, the five items under `S14`.

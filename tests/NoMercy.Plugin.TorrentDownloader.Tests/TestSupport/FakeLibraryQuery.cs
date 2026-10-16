@@ -42,6 +42,17 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
     /// <inheritdoc cref="Libraries"/>
     public int Files { get; private set; }
 
+    /// <summary>
+    /// When set, every question about a show's episodes waits for this before it answers, and does not give
+    /// up when it is cancelled — the way a server that is slow to answer holds a run in the middle of its work.
+    /// Only a run's refresh asks for every searched show's episodes; a transfers pass asks only about the
+    /// episodes its grabs cover.
+    /// </summary>
+    public TaskCompletionSource? HoldEpisodes { get; set; }
+
+    /// <summary>Set once a question about episodes has arrived and is being held.</summary>
+    public TaskCompletionSource EpisodesAsked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
     public FakeLibraryQuery Library(string id, string title, string type)
     {
         _libraries.Add(new(id, title, type));
@@ -111,14 +122,19 @@ public sealed class FakeLibraryQuery : IPluginLibraryQuery
             [.. _shows.Where(show => libraryId is null || show.LibraryId == libraryId)]);
     }
 
-    public Task<IReadOnlyList<PluginLibraryEpisode>> GetEpisodesAsync(
+    public async Task<IReadOnlyList<PluginLibraryEpisode>> GetEpisodesAsync(
         int showId,
         CancellationToken ct = default)
     {
         Episodes++;
 
-        return Task.FromResult<IReadOnlyList<PluginLibraryEpisode>>(
-            [.. _episodes.GetValueOrDefault(showId, [])]);
+        if (HoldEpisodes is TaskCompletionSource hold)
+        {
+            EpisodesAsked.TrySetResult();
+            await hold.Task;
+        }
+
+        return [.. _episodes.GetValueOrDefault(showId, [])];
     }
 
     public Task<IReadOnlyList<PluginLibraryMovie>> GetMoviesAsync(
