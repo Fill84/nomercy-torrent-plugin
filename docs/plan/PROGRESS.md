@@ -5,8 +5,19 @@ Read this first, update it last. Nothing else decides what happens next.
 ## Current
 
 **16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
-Media-server #599 and #600 are closed, so `S15-04` is unblocked. Current: **`S17-02`**, on the branch
-`feat/replace-delivered`, which merges into master when `S17-02` is done.
+Media-server #599 and #600 are closed, so `S15-04` is unblocked. `S17-02` is done and
+`feat/replace-delivered` is merged into master. Current: **`S17-03`**.
+
+**For the release notes of the version that carries S16 and S17** (not yet in `docs/releases/`): a wrong
+episode the plugin delivered — a show's episode from a release no name source names, such as South Park
+S29E03's ViETNAM capture — is searched for again by release name, and once the real release has
+downloaded and its video is staged, the old episode's encoded files go to the server's recycle area
+(`.recycled` beside them, where they can be got back) before the new one is encoded. This needs library
+write: `plugin.json` now names `libraryWrite`, so after the update the server loads the plugin disabled
+until the owner approves it once more on its page and grants the library or libraries it may recycle in.
+Until a library is granted, a replacement waits in the intake folder and the Downloads page says why. The
+plugin also needs a server on plugin ABI 12.4 (`S16-08`), and its database moves to the server's
+(`S16-04`).
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
@@ -883,7 +894,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S15-01` Torrentz2 is gone
 - [x] `S15-02` No table scrolls sideways
 - [x] `S15-03` A show downloads only a release the sources name
-- [ ] `S15-04` A wrong episode the plugin delivered is replaced on its own — on `feat/replace-delivered`, waits for media-server #599 and #600
+- [x] `S15-04` A wrong episode the plugin delivered is replaced on its own — finished in `S17-02`, merged 16 October 2026
 - [x] `S15-05` 0.8.1 released on the owner's word, after the list of what changes
 
 ### Sprint 16 — Through the SDK: what the marketplace scan refuses (media-server #476)
@@ -898,13 +909,20 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 
 ### Sprint 17 — The plugin finished: the replacement, and what is known to be wrong
 - [x] `S17-01` The replacement branch on today's master
-- [ ] `S17-02` The replacement, finished from its own check
+- [x] `S17-02` The replacement, finished from its own check
 - [ ] `S17-03` A plugin unloaded mid-cycle leaves nothing unobserved
 - [ ] `S17-04` The `S14` known list
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-02` (16 October 2026):** the replacement is finished and merged (`S15-04`): all-or-nothing
+  recycling, closed only on the new encode's playlist, only the encoder's own files, only one episode or
+  a season pack, old deliveries checked ten a run after the search, no second replacement while one is
+  under way, and the failed-download test seen red. The library writer's test double now moves files as
+  the server does. 516 + 779 + 294 + 7 green; one full run of four failed
+  `OneCycleRunsEveryStepAndSaysWhenItFinished` (on the `S17-04` list).
 
 - **`S17-01` (16 October 2026):** `feat/replace-delivered` rebased onto master (`84bfa5e`): its grab and
   episode writes are on the `Store` API, migration 018 runs after the host's count reaches 0.8.1's 17

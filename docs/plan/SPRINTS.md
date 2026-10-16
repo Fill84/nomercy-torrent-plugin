@@ -3784,6 +3784,27 @@ media-server `dev` (read only), media-server #599 and #600.
 
 **Done when** all seven hold, the branch is merged into master, and `S15-04` is ticked.
 
+**As done** (16 October 2026), each red first:
+
+1. `RecordingLibraryWriter` moves a file to `.recycled/` beside it with `File.Move(…, overwrite: false)`, as
+   the server's `PluginLibraryWriter` and `LocalStorageDriver` do. That showed the replacement stalling half
+   way when a copy of the same name was already there (the fixture had one, of the master playlist), so the
+   `Recycler` now checks every file first and moves none or all (`ASecondCopyInTheRecycleAreaMovesNothingAndSaysWhy`).
+2. Closed only when the playlist the library names was written after `recycled_at`
+   (`AReplacementIsDoneOnlyOnTheNewEncodeItself`); "finished" alone keeps it open.
+3. Only the encoder's own files, read off its source: the master, `.nomercy.json`, `manifest.json`,
+   `chapters.vtt`, `fonts.json`, `thumbs_*.webp`/`.vtt`, `video_*`, `audio_*`, `subtitles`, `fonts`. The plan's
+   `metadata` and `thumbs` folders are not the encoder's; `manifest.json` and `fonts.json` were missing from it
+   (`OnlyWhatTheEncoderWroteIsRecycled`).
+4. One episode or `ReleaseName.IsSeasonPack` (`ADoubleEpisodeIsNeverToBeReplaced`,
+   `ASeasonPackNoSourceNamesIsToBeReplacedEpisodeByEpisode`).
+5. `DeliveredNames.PerRun` = 10, after the search inside the run (challenges still cleared), never on a
+   hand-run (`AtMostSoManyDeliveriesAreCheckedInOneRun`; the wiring is on the `S17-04` list).
+6. A delivery whose replacement is open or done marks nothing (`AnEpisodeWhoseReplacementIsUnderwayIsNotMarkedAgain`,
+   `AReplacementThatFailedLetsTheEpisodeBeReplacedAgain`).
+7. Seen red by staging an unfinished replacement (`Recovery.Plan`) and by letting an errored torrent past
+   `Transfers.FailedAsync`.
+
 ## S17-03 · A plugin unloaded mid-cycle leaves nothing unobserved
 
 **Read first:** `PROGRESS.md` § Current (Known, for the next version), `TorrentDownloaderPlugin.cs`
@@ -3800,7 +3821,10 @@ One slice each, in that list's order: rarest-first over every peer's bitfield; `
 and sets `_levelsChosen` in one step; a test that drives a whole plugin cycle through `OpenHashes` and the
 `handedOver` pass (and the `HostSparse` hand-over of `S16-08`, and the old-delivery check of `S17-02`
 running after the search and not on a hand-run); `PeerWelcomeTests` under parallel suites;
-the disk-space check counts only the videos a pack fetches.
+the disk-space check counts only the videos a pack fetches; and
+`TorrentDownloaderPluginTests.OneCycleRunsEveryStepAndSaysWhenItFinished`, which failed once in four full
+runs on 16 October 2026 ("the cycle stayed open with nothing in hand") and passed alone five times —
+unproven: the clock wound by the folders being saved may start a second cycle as the first one closes.
 
 ## What is not this repository's, and is written down so it is not looked for here again
 
