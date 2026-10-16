@@ -164,8 +164,9 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
     /// <remarks>
     /// <strong>A failed or unfinished new download leaves the old episode untouched.</strong> Nothing is staged,
     /// so nothing is recycled and nothing is encoded, and every file of the old episode is where it was.
-    /// Sabotage: recycling when the grab is made rather than once its video is staged takes the old episode
-    /// for a download that never came.
+    /// Sabotage, seen red on 16 October 2026: staging a replacement before every byte is on disk
+    /// (<c>Recovery.Plan</c>) recycles the old episode for half a download; letting an errored torrent past
+    /// <c>Transfers.FailedAsync</c> recycles it for one the client gave up on.
     /// </remarks>
     [Theory]
     [InlineData(TorrentState.Error)]
