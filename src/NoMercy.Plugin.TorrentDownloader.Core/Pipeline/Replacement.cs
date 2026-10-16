@@ -1,4 +1,5 @@
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
+using NoMercy.Plugin.TorrentDownloader.Core.Naming;
 
 namespace NoMercy.Plugin.TorrentDownloader.Core.Pipeline;
 
@@ -34,12 +35,21 @@ public static class Replacement
     /// by hand is their own choice of release and is never marked. An episode the owner put in the library
     /// has no grab of the plugin's at all, so there is nothing of the plugin's to replace.
     /// </para>
+    /// <para>
+    /// Only a delivery of one episode, or a real season pack (<see cref="ReleaseName.IsSeasonPack"/>, the test
+    /// the transfers use). A double episode is one file, encoded into the first episode's folder, so replacing
+    /// the second recycles nothing of its own; and a run of episodes is not a name any name source gives, so it
+    /// would be marked whatever it was.
+    /// </para>
     /// </remarks>
     public static Replacing? Marked(IReadOnlyList<StoredDownload>? delivered, EpisodeKey episode)
     {
         StoredDownload? last = LastDelivery(delivered, episode);
 
-        return last is { Named: false, ByHand: false } ? new(last.InfoHash, last.ReleaseTitle) : null;
+        return last is { Named: false, ByHand: false }
+               && (last.Covers.Count == 1 || ReleaseName.Parse(last.ReleaseTitle).IsSeasonPack)
+            ? new(last.InfoHash, last.ReleaseTitle)
+            : null;
     }
 
     /// <summary>Where the library holds an episode's encode, or why that cannot be said.</summary>

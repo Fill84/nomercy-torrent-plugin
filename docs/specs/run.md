@@ -14,9 +14,10 @@
   the shows and anime that are switched on with a quality, their own or their library's, and the
   episodes to be replaced.
 - A grab records whether its release is a name a name source gave. An episode of a show whose latest
-  delivery by the plugin is a release no name source gave is to be replaced. An anime's episode is never
-  to be replaced, and neither is an episode the owner put in the library or a torrent the owner added by
-  hand.
+  delivery by the plugin is a release no name source gave is to be replaced, when that delivery is of that
+  one episode or is a season pack. A double episode or a run of episodes is never to be replaced: one file
+  holds both, and no name source names such a release. An anime's episode is never to be replaced, and
+  neither is an episode the owner put in the library or a torrent the owner added by hand.
 - A delivery recorded without that is checked once, before the run searches, against the search of
   every name source for its episode, the same search the run asks; a release none of them names makes
   its episode to be replaced. A delivery a name source did not answer about is checked again by the next

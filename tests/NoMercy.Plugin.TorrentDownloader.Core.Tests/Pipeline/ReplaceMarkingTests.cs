@@ -131,11 +131,63 @@ public class ReplaceMarkingTests
         Assert.Empty(tracked);
     }
 
-    private static StoredDownload Delivered(EpisodeKey episode, bool? named, string release = Vietnam, string hash = VietnamHash)
+    /// <remarks>
+    /// <para>
+    /// <strong>A release of a few episodes that is not a season pack is never marked.</strong> A double
+    /// episode is one file, encoded into the first episode's folder: replacing the second would recycle
+    /// nothing of its own and search for a release no name source gives for it alone. A run of episodes is
+    /// not a name a name source gives either, so it would be marked whatever it was.
+    /// </para>
+    /// <para>Sabotage: marking on the release alone marks both episodes.</para>
+    /// </remarks>
+    [Fact]
+    public async Task ADoubleEpisodeIsNeverToBeReplaced()
+    {
+        EpisodeKey fourth = new(2190, 29, 4);
+        FakeLibrary library = new FakeLibrary()
+            .Show(2190, "South Park", 1997)
+            .Episode(2190, 29, 3, airDate: Aired, hasFile: true)
+            .Episode(2190, 29, 4, airDate: Aired, hasFile: true);
+
+        Assert.Empty(await Derive(
+            library,
+            [Delivered(SouthPark, named: false, release: "South Park S29E03E04 1080p HDTV x264-ViETNAM", covers: [SouthPark, fourth])]));
+    }
+
+    /// <remarks>
+    /// <strong>A real season pack is marked, every episode of it.</strong> Its name says the whole season
+    /// (<c>ReleaseName.IsSeasonPack</c>, the same test the transfers use), and name sources do list season
+    /// packs. Sabotage: marking only a delivery of one episode leaves the pack's episodes in the library.
+    /// </remarks>
+    [Fact]
+    public async Task ASeasonPackNoSourceNamesIsToBeReplacedEpisodeByEpisode()
+    {
+        EpisodeKey first = new(2190, 29, 1);
+        EpisodeKey second = new(2190, 29, 2);
+        FakeLibrary library = new FakeLibrary()
+            .Show(2190, "South Park", 1997)
+            .Episode(2190, 29, 1, airDate: Aired, hasFile: true)
+            .Episode(2190, 29, 2, airDate: Aired, hasFile: true)
+            .Episode(2190, 29, 3, airDate: Aired, hasFile: true);
+
+        IReadOnlyList<TrackedEpisode> tracked = await Derive(
+            library,
+            [Delivered(SouthPark, named: false, release: "South Park S29 1080p HDTV x264-ViETNAM", covers: [first, second, SouthPark])]);
+
+        Assert.Equal([first, second, SouthPark], tracked.Select(one => one.Key));
+        Assert.All(tracked, one => Assert.Equal(EpisodeState.Replace, one.State));
+    }
+
+    private static StoredDownload Delivered(
+        EpisodeKey episode,
+        bool? named,
+        string release = Vietnam,
+        string hash = VietnamHash,
+        IReadOnlyList<EpisodeKey>? covers = null)
     {
         return new(hash, $"magnet:?xt=urn:btih:{hash}", release, GrabState.Done)
         {
-            Covers = [episode],
+            Covers = covers ?? [episode],
             Named = named,
             GrabbedAt = Today.AddHours(-9),
         };
