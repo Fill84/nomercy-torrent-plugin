@@ -17,7 +17,9 @@
   delivery by the plugin is a release no name source gave is to be replaced, when that delivery is of that
   one episode or is a season pack. A double episode or a run of episodes is never to be replaced: one file
   holds both, and no name source names such a release. An anime's episode is never to be replaced, and
-  neither is an episode the owner put in the library or a torrent the owner added by hand.
+  neither is an episode the owner put in the library or a torrent the owner added by hand. A delivery
+  whose replacement is open or done marks nothing more: a second replacement would recycle what the
+  first one's new encode wrote. One that failed or was lost makes way for another.
 - A delivery recorded without that is checked once, after the run's own search, against the search of
   every name source for its episode, the same search the run asks; a release none of them names makes
   its episode to be replaced, and the next run searches for it. At most ten are checked in one run, the

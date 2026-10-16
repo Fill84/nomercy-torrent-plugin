@@ -48,8 +48,23 @@ public static class Replacement
 
         return last is { Named: false, ByHand: false }
                && (last.Covers.Count == 1 || ReleaseName.Parse(last.ReleaseTitle).IsSeasonPack)
+               && !Underway(delivered, last)
             ? new(last.InfoHash, last.ReleaseTitle)
             : null;
+    }
+
+    /// <summary>Whether a replacement of <paramref name="last"/> is open or done.</summary>
+    /// <remarks>
+    /// A full run leaves out what an open grab covers, but a run the owner starts for one episode does not, and
+    /// a second replacement of the same delivery would recycle what the first one's new encode wrote — it sits
+    /// in the episode's folder, written after the old delivery and before the second grab. One that failed or
+    /// was lost went nowhere, so the old delivery is still the one in the library and may be replaced again.
+    /// </remarks>
+    private static bool Underway(IReadOnlyList<StoredDownload>? delivered, StoredDownload last)
+    {
+        return (delivered ?? []).Any(one =>
+            string.Equals(one.Replaces, last.InfoHash, StringComparison.OrdinalIgnoreCase)
+            && one.State is not (GrabState.Failed or GrabState.Lost));
     }
 
     /// <summary>Where the library holds an episode's encode, or why that cannot be said.</summary>

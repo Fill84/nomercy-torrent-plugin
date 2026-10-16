@@ -178,6 +178,59 @@ public class ReplaceMarkingTests
         Assert.All(tracked, one => Assert.Equal(EpisodeState.Replace, one.State));
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>An episode whose replacement is under way is not marked a second time.</strong> A full run leaves
+    /// out every episode an open grab covers, but a run the owner starts for one episode does not, and a second
+    /// replacement of the same delivery would recycle what the first one's new encode wrote: it sits in the
+    /// episode's folder, written after the old delivery and before the second grab. So while a replacement of
+    /// a delivery is open or done, that delivery marks nothing.
+    /// </para>
+    /// <para>Sabotage: marking on the old delivery alone marks it while its replacement downloads.</para>
+    /// </remarks>
+    [Theory]
+    [InlineData(GrabState.Downloading)]
+    [InlineData(GrabState.Dispatched)]
+    public async Task AnEpisodeWhoseReplacementIsUnderwayIsNotMarkedAgain(GrabState replacement)
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(2190, "South Park", 1997)
+            .Episode(2190, 29, 3, airDate: Aired, hasFile: true);
+
+        Assert.Empty(await Derive(library, [Delivered(SouthPark, named: false), Replacing(replacement)]));
+    }
+
+    /// <remarks>
+    /// <strong>A replacement that failed lets the episode be replaced again.</strong> Its download went nowhere,
+    /// so the old delivery is still the one in the library. Sabotage: refusing on any replacement at all leaves
+    /// the wrong episode in place for ever after one failed download.
+    /// </remarks>
+    [Fact]
+    public async Task AReplacementThatFailedLetsTheEpisodeBeReplacedAgain()
+    {
+        FakeLibrary library = new FakeLibrary()
+            .Show(2190, "South Park", 1997)
+            .Episode(2190, 29, 3, airDate: Aired, hasFile: true);
+
+        TrackedEpisode marked = Assert.Single(await Derive(library, [Delivered(SouthPark, named: false), Replacing(GrabState.Failed)]));
+
+        Assert.Equal(EpisodeState.Replace, marked.State);
+    }
+
+    /// <summary>CAKES's grab that replaces the ViETNAM delivery, in the given state.</summary>
+    private static StoredDownload Replacing(GrabState state)
+    {
+        const string cakesHash = "70AFDB530DD7CD04D1C36E142CC523A56E738DE8";
+
+        return new(cakesHash, $"magnet:?xt=urn:btih:{cakesHash}", "South.Park.S29E03.1080p.WEB.H264-CAKES", state)
+        {
+            Covers = [SouthPark],
+            Named = true,
+            Replaces = VietnamHash,
+            GrabbedAt = Today.AddHours(-2),
+        };
+    }
+
     private static StoredDownload Delivered(
         EpisodeKey episode,
         bool? named,
