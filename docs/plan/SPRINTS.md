@@ -3838,14 +3838,32 @@ turns it red through the Error line.
 
 **Read first:** `PROGRESS.md` § Current, the five items under `S14`.
 
-One slice each, in that list's order: rarest-first over every peer's bitfield; `SettleTheLogAsync` checks
-and sets `_levelsChosen` in one step; a test that drives a whole plugin cycle through `OpenHashes` and the
+One slice each, in that list's order — except the whole-run test, which is `S17-05`: rarest-first over every
+peer's bitfield; `SettleTheLogAsync` checks and sets `_levelsChosen` in one step; (moved to `S17-05`) a test
+that drives a whole plugin cycle through `OpenHashes` and the
 `handedOver` pass (and the `HostSparse` hand-over of `S16-08`, and the old-delivery check of `S17-02`
 running after the search and not on a hand-run); `PeerWelcomeTests` under parallel suites;
 the disk-space check counts only the videos a pack fetches; and
 `TorrentDownloaderPluginTests.OneCycleRunsEveryStepAndSaysWhenItFinished`, which failed once in four full
 runs on 16 October 2026 ("the cycle stayed open with nothing in hand") and passed alone five times —
 unproven: the clock wound by the folders being saved may start a second cycle as the first one closes.
+
+## S17-05 · A whole plugin run, driven by a test
+
+Split out of `S17-04` (its third item) on 16 October 2026: no test drives the plugin from its name sources
+to a grab to the torrent client, because `FakePluginContext` gives no `HttpClient` and the plugin always
+builds its real client. So these lines are wired and untested: `OpenHashes = openHashes`, the `handedOver`
+pass, `markSparse: HostSparse.Through(...)` (`S16-08`), and the old-delivery check running after the search
+and not on a hand-run (`S17-02`).
+
+**Steps**
+
+1. `FakePluginContext` takes an `HttpClient` over `FakeHttp`, answering the captures of one name source and
+   one indexer for one episode, with the indexer's torrent pointing at a local tracker (`RealSwarm`) that a
+   seeding engine answers.
+2. One test per line above, each red with that line taken out: a run grabs, the download is handed over and
+   lands sparse; a second run does not take the open hash again; a delivery from before `named` was kept is
+   asked about after the search and not on a run for one episode.
 
 ## What is not this repository's, and is written down so it is not looked for here again
 

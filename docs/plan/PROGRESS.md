@@ -910,6 +910,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S17-02` The replacement, finished from its own check
 - [x] `S17-03` A plugin unloaded mid-cycle leaves nothing unobserved
 - [ ] `S17-04` The `S14` known list
+- [ ] `S17-05` A whole plugin run, driven by a test
 
 ## Log
 
