@@ -75,8 +75,8 @@ through the plugin catalogue and restarts the server once. **No slice is open.**
 done, in the order worth doing:
 
 1. ~~Rarest-first ranks pieces by one peer's bitfield at a time~~ — fixed in `S17-04` (16 October 2026).
-2. `SettleTheLogAsync` checks and sets `_levelsChosen` in two steps; a save landing between them puts the
-   log level back to the stored one until the next save.
+2. ~~`SettleTheLogAsync` checks and sets `_levelsChosen` in two steps~~ — one lock in `S17-04` (16 October
+   2026); reasoned, not tested: no test can stand between two statements.
 3. Two lines of plugin wiring have no test that fails when they are deleted, because no test drives a
    whole plugin cycle: `OpenHashes = openHashes` and the `handedOver` pass.
 4. `PeerWelcomeTests.APeerThatDialsInEncryptedIsAnsweredToo` failed once with two BitTorrent suites run in
@@ -914,6 +914,10 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-04`, 2 of the known list (16 October 2026):** the stored log level and a save choose the level
+  under one lock (`_levelLock`), so a save landing during the first read is not put back. No test: the race
+  was between two adjacent statements, and a stress test would fail only by luck.
 
 - **`S17-04`, 1 of the known list (16 October 2026):** rarest-first is rarest across every connected peer:
   `TorrentSession` counts each peer's bitfield once and its `have`s one at a time (`_counted`), and takes it

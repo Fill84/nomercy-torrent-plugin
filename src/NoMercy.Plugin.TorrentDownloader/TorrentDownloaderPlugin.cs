@@ -421,8 +421,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             // On this thread and before anything else, so the save's own next
             // line is already at the new level: an owner turning Debug on is
             // chasing something, and a restart would lose what they were chasing.
-            Interlocked.Increment(ref _levelsChosen);
-            log.Level = saved.LogLevel;
+            lock (_levelLock)
+            {
+                _levelsChosen++;
+                log.Level = saved.LogLevel;
+            }
 
             _ = Task.Run(() => StartUpAsync(Lifetime), CancellationToken.None);
         };
@@ -440,6 +443,17 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// <summary>How many saves have set the level, so a slow first read cannot undo a save it raced with.</summary>
     private int _levelsChosen;
 
+    /// <summary>
+    /// Held while the level is chosen, by a save or by the first read of the stored one.
+    /// </summary>
+    /// <remarks>
+    /// The first read checked that no save had come since and then set the level, as two steps: a save landing
+    /// between them was put back to the stored level until the next save. Under one lock the check and the
+    /// setting are one step. No test can stand between two statements, so this is reasoned, not shown
+    /// (<c>S17-04</c>).
+    /// </remarks>
+    private readonly Lock _levelLock = new();
+
     /// <summary>Puts the stored level on the log, and teaches it every stored secret.</summary>
     /// <remarks>
     /// Secrets first: they matter whatever the level, and a Debug line about a tracker written before they
@@ -451,12 +465,21 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         {
             await Log.LearnSecretsAsync(Context.Secrets, ct);
 
-            int before = Volatile.Read(ref _levelsChosen);
+            int before;
+
+            lock (_levelLock)
+            {
+                before = _levelsChosen;
+            }
+
             Settings stored = await Settings.LoadAsync(ct);
 
-            if (Volatile.Read(ref _levelsChosen) == before && PluginLog.Offered.Contains(stored.LogLevel))
+            lock (_levelLock)
             {
-                Log.Level = stored.LogLevel;
+                if (_levelsChosen == before && PluginLog.Offered.Contains(stored.LogLevel))
+                {
+                    Log.Level = stored.LogLevel;
+                }
             }
         }
         catch (Exception wrong) when (wrong is not OperationCanceledException)
