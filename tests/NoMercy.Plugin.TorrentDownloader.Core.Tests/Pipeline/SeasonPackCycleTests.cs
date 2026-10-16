@@ -59,6 +59,44 @@ public sealed class SeasonPackCycleTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A season whose first episode is to be replaced takes its pack for the missing ones.</strong> An
+    /// episode to be replaced is never answered for by a pack, but it was still the first of its season in the
+    /// queue, so the pack was looked for when the run reached it: the pack's outcome was E01's, it covered E02
+    /// and E03, it was written down as replacing E01's old delivery — and that grab never encoded, because E02
+    /// and E03 have no old encode to recycle. E01 was not searched for at all that run.
+    /// </para>
+    /// <para>Sabotage: looking for the pack at the season's first queued episode, whatever its state.</para>
+    /// </remarks>
+    [Fact]
+    public async Task ASeasonWhoseFirstEpisodeIsToBeReplacedTakesThePackForTheMissingOnes()
+    {
+        FakeFetch fetch = Sites(packListed: true);
+        FakeTorrentEngine engine = new();
+        TrackedEpisode replacing = Adolescence(1) with
+        {
+            State = EpisodeState.Replace,
+            Replaces = new("7445E4910B7A4D7E1F3C35D5A4A9C2E1B0C0FFEE", "Adolescence S01E01 1080p HDTV x264-ViETNAM"),
+        };
+
+        CycleReport report = await Cycle(fetch, engine).RunAsync(
+            [replacing, Adolescence(2), Adolescence(3)],
+            Options,
+            CancellationToken.None);
+
+        EpisodeOutcome pack = Assert.Single(report.Outcomes, outcome => outcome.InfoHash == PackHash);
+
+        Assert.Equal([Adolescence(2).Key, Adolescence(3).Key], pack.Covers);
+        Assert.Contains(pack.Episode, pack.Covers);
+
+        // And E01 was looked for on its own, by name.
+        EpisodeOutcome own = Assert.Single(report.Outcomes, outcome => outcome.Episode == replacing.Key);
+
+        Assert.NotEqual(PackHash, own.InfoHash);
+        Assert.Contains(fetch.Asked, address => address.ToString().Contains("S01E01", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <remarks>
     /// One episode of the season is searched for, so no pack is looked for — the season's search is never
     /// asked — and the single episode is taken.
     /// </remarks>

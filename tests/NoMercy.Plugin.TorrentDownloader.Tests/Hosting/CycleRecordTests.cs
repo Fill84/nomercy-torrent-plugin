@@ -51,6 +51,28 @@ public class CycleRecordTests : IDisposable
     /// the replacement to encode over the old episode, which the server skips.
     /// </remarks>
     [Fact]
+    public async Task AGrabThatCoversOtherEpisodesReplacesNothing()
+    {
+        // A replacement is one release for one episode, whose old encode is recycled for that episode alone.
+        // A grab covering others — the season pack a run once took at the turn of an episode to be replaced —
+        // carried that episode's old delivery, waited to recycle an encode its episodes never had, and never
+        // encoded. Sabotage: tagging every grab whose episode is to be replaced.
+        GrabRepository grabs = await Repository();
+
+        const string Old = "FEDCBA9876543210FEDCBA9876543210FEDCBA98";
+        EpisodeKey next = new(Episode.ShowId, Episode.Season, Episode.Number + 1);
+
+        await CycleRecord.WriteAsync(
+            new([Taken with { Covers = [next], Named = true }]),
+            [Tracked with { State = EpisodeState.Replace, Replaces = new(Old, "Silo S03E06 HDTV x264-NOBODY") }],
+            grabs,
+            When,
+            CancellationToken.None);
+
+        Assert.Null(Assert.Single(await grabs.OpenAsync(CancellationToken.None)).Replaces);
+    }
+
+    [Fact]
     public async Task AGrabForAnEpisodeToBeReplacedNamesTheDeliveryItReplaces()
     {
         GrabRepository grabs = await Repository();

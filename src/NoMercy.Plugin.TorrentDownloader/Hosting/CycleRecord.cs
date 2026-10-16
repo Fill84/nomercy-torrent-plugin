@@ -92,7 +92,13 @@ public static class CycleRecord
                 // owner's rule of 15 October 2026. The transfers pass recycles that delivery's encode once this
                 // one is staged, and a named release is never marked to be replaced in its turn.
                 named: outcome.Named,
-                replaces: replacing.GetValueOrDefault(outcome.Episode)?.InfoHash);
+
+                // Only a grab of that one episode: a replacement's old encode is recycled for its own episode,
+                // so one covering others waits for ever on an encode they never had (Transfers keeps one
+                // recycled_at per grab for the same reason).
+                replaces: covers is [EpisodeKey only] && only == outcome.Episode
+                    ? replacing.GetValueOrDefault(outcome.Episode)?.InfoHash
+                    : null);
         }
 
         await CountSearchesAsync(report, at, episodes, ct);

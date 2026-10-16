@@ -220,8 +220,14 @@ public sealed class SearchCycle(
 
             EpisodeOutcome? outcome = null;
 
+            // At the first episode the pack is for, not the first of its season in the queue: an episode to be
+            // replaced sorts among the missing ones and is never answered for by a pack, and the pack looked
+            // for at its turn was its outcome — written down as replacing its old delivery while covering
+            // other episodes, so it never encoded — and it was not searched for itself.
             if (!decisions.Settled(episode.Key)
-                && packFirst.Remove((episode.Key.ShowId, episode.Key.Season), out IReadOnlyList<TrackedEpisode>? season))
+                && packFirst.TryGetValue((episode.Key.ShowId, episode.Key.Season), out IReadOnlyList<TrackedEpisode>? season)
+                && season.Any(one => one.Key == episode.Key)
+                && packFirst.Remove((episode.Key.ShowId, episode.Key.Season)))
             {
                 outcome = await PackAsync(episode, season, taken, decisions, options, trackers, asked, ct);
             }
