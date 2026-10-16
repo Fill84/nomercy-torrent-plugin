@@ -74,8 +74,7 @@ Forgejo and GitHub (sha256 `13efca76…`), and `repository.json` names 0.8.0 (`e
 through the plugin catalogue and restarts the server once. **No slice is open.** Known and not
 done, in the order worth doing:
 
-1. Rarest-first ranks pieces by one peer's bitfield at a time (`PiecePicker`, see **Decisions**, S14-04):
-   speed only, nothing is lost.
+1. ~~Rarest-first ranks pieces by one peer's bitfield at a time~~ — fixed in `S17-04` (16 October 2026).
 2. `SettleTheLogAsync` checks and sets `_levelsChosen` in two steps; a save landing between them puts the
    log level back to the stored one until the next save.
 3. Two lines of plugin wiring have no test that fails when they are deleted, because no test drives a
@@ -915,6 +914,10 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-04`, 1 of the known list (16 October 2026):** rarest-first is rarest across every connected peer:
+  `TorrentSession` counts each peer's bitfield once and its `have`s one at a time (`_counted`), and takes it
+  out as it put it in. `RarestFirstTests` (two peers, the rare four asked first) was red three of three.
 
 - **`S17-03` (16 October 2026):** a plugin unloaded mid-run ends the run quietly: `Lifetime` is a token
   taken once, closing a cycle after `Dispose` swallows only cancellation and disposed objects, and a run

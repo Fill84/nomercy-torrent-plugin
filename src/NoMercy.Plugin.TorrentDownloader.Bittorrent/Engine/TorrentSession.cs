@@ -454,7 +454,13 @@ public sealed class TorrentSession(
             lock (_lock)
             {
                 _peers.Remove(peer);
-                _picker.Left(peer.Has);
+
+                // Exactly what was counted for it, which is not what it last
+                // said it has if a bitfield arrived since.
+                if (_counted.Remove(peer, out Bitfield? counted))
+                {
+                    _picker.Left(counted);
+                }
 
                 // Its ledger goes with it. What it was asked for is not owed by
                 // whoever dials in next.
@@ -529,6 +535,11 @@ public sealed class TorrentSession(
             return;
         }
 
+        lock (_lock)
+        {
+            Count(peer, message);
+        }
+
         switch (message.Id)
         {
             case PeerMessageId.Piece:
@@ -548,6 +559,51 @@ public sealed class TorrentSession(
         await Turn(peer, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// What each connected peer's pieces are counted as in the picker, so a peer is taken out exactly as it was
+    /// put in.
+    /// </summary>
+    /// <remarks>
+    /// Availability is every connected peer's at once. It used to be added for the one peer a message came from,
+    /// picked from and taken out again, so every piece that peer had was as rare as every other, a peer still
+    /// choking was never counted, and rarest-first picked at random (<c>S14-04</c>, <c>RarestFirstTests</c>).
+    /// </remarks>
+    private readonly Dictionary<PeerConnection, Bitfield> _counted = [];
+
+    /// <summary>Brings the picker's count of one peer up to what it says it has. Under <c>_lock</c>.</summary>
+    /// <remarks>
+    /// The whole bitfield once, when the peer is first seen or sends a bitfield; a piece at a time after that,
+    /// on its <c>have</c>s. Never on every message: a download is hundreds of thousands of block messages, and
+    /// walking every piece for each one would be the client's whole cost.
+    /// </remarks>
+    private void Count(PeerConnection peer, PeerMessage? message)
+    {
+        if (!_counted.TryGetValue(peer, out Bitfield? counted) || message?.Id == PeerMessageId.Bitfield)
+        {
+            if (counted is not null)
+            {
+                _picker.Left(counted);
+            }
+
+            Bitfield now = Bitfield.Read(peer.Has.Write(), peer.Has.Pieces);
+            _picker.Saw(now);
+            _counted[peer] = now;
+
+            return;
+        }
+
+        if (message?.Id == PeerMessageId.Have
+            && message.AsHave() is int piece
+            && piece >= 0
+            && piece < counted.Pieces
+            && peer.Has.Has(piece)
+            && !counted.Has(piece))
+        {
+            _picker.Saw(piece);
+            counted.Set(piece);
+        }
+    }
+
     /// <summary>Asks this peer for whatever it has that is wanted.</summary>
     private async Task Turn(PeerConnection peer, CancellationToken ct)
     {
@@ -562,7 +618,8 @@ public sealed class TorrentSession(
         {
             Abandoned();
 
-            _picker.Saw(peer.Has);
+            // A peer seen for the first time, before any message of its own.
+            Count(peer, null);
 
             // What this peer is already on the hook for. Pieces claimed for
             // somebody else do not count against it, and its own do — however
@@ -600,10 +657,6 @@ public sealed class TorrentSession(
                 _claimedFor[piece] = peer;
                 _asked[piece] = Now();
             }
-
-            // Undone straight away: availability is counted once per peer, and
-            // this is asked on every message that arrives.
-            _picker.Left(peer.Has);
 
             // Once: the endgame is the moment the picker starts asking several
             // peers for the same piece, which changes what the traffic means.
