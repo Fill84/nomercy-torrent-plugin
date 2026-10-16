@@ -51,7 +51,16 @@ public sealed class Recycler(IPluginLibraryWriter? writer)
     /// is carried on with.
     /// </para>
     /// </remarks>
-    public async Task<string?> RecycleAsync(EncodedEpisode encoded, DateTimeOffset from, DateTimeOffset until, CancellationToken ct)
+    /// <param name="delivered">
+    /// The master playlist as it was when the delivery was done, or null for a delivery done before that was
+    /// written down, which only the time window can speak for.
+    /// </param>
+    public async Task<string?> RecycleAsync(
+        EncodedEpisode encoded,
+        DateTimeOffset from,
+        DateTimeOffset until,
+        EncodedStamp? delivered,
+        CancellationToken ct)
     {
         if (writer is null)
         {
@@ -84,6 +93,18 @@ public sealed class Recycler(IPluginLibraryWriter? writer)
         if (named is null && !File.Exists(Path.Combine(encoded.Folder, RecycleFolder, Path.GetFileName(encoded.File))))
         {
             return $"the file the library names for it, {encoded.File}, is not there";
+        }
+
+        // The playlist is still the one the delivery's encode wrote, to the tick and the byte, or the encode in
+        // the library is somebody else's: the owner's, made by hand while the replacement was waited for,
+        // written in the same hours and so passing the window below for the delivery's.
+        if (named is not null
+            && delivered is not null
+            && new FileInfo(named) is var now
+            && (now.LastWriteTimeUtc.Ticks != delivered.Written.Ticks || now.Length != delivered.Length))
+        {
+            return $"its file in the library, {Path.GetFileName(named)}, is not the one the plugin delivered (that one was "
+                   + $"written at {delivered.Written:u}, this one at {now.LastWriteTimeUtc:u}), so it is not the plugin's";
         }
 
         if (named is not null && !Caused(named, from, until))

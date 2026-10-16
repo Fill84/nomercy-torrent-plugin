@@ -912,6 +912,37 @@ public sealed class Transfers(
         return true;
     }
 
+    /// <summary>
+    /// The master playlist each episode of a grab has in the library, as the grab is done; an episode whose
+    /// encode cannot be found is left out.
+    /// </summary>
+    /// <remarks>
+    /// Never a reason not to finish the grab: a delivery without a stamp is one only the time window speaks
+    /// for at a replacement, which is how every delivery before this was kept stands.
+    /// </remarks>
+    private async Task<IReadOnlyDictionary<EpisodeKey, EncodedStamp>> StampsAsync(
+        StoredDownload sent,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        Dictionary<EpisodeKey, EncodedStamp> stamps = [];
+
+        foreach (EpisodeKey episode in sent.Covers)
+        {
+            Show? show = (await thisTick.GetShowsAsync(ct)).FirstOrDefault(candidate => candidate.Id == episode.ShowId);
+
+            if (show is not null
+                && Replacement.EncodedOf(episode, show.Folder, await thisTick.GetFilesAsync(show.Id, ct)).Found
+                    is EncodedEpisode encoded
+                && new FileInfo(encoded.File) is { Exists: true } master)
+            {
+                stamps[episode] = new(master.LastWriteTimeUtc, master.Length);
+            }
+        }
+
+        return stamps;
+    }
+
     /// <summary>What was said about each replacement whose old episode could not be recycled, so it is said once.</summary>
     private readonly SaidBefore _notRecycled = new();
 
@@ -977,7 +1008,7 @@ public sealed class Transfers(
             EncodedLookup found = Replacement.EncodedOf(episode, show.Folder, await thisTick.GetFilesAsync(show.Id, ct));
 
             why = found.Found is EncodedEpisode encoded
-                ? await recycler.RecycleAsync(encoded, old.GrabbedAt, grab.GrabbedAt, ct)
+                ? await recycler.RecycleAsync(encoded, old.GrabbedAt, grab.GrabbedAt, old.Encoded.GetValueOrDefault(episode), ct)
                 : found.Why;
         }
 
@@ -1423,6 +1454,9 @@ public sealed class Transfers(
             // any more.
             await engine.RemoveAsync(sent.InfoHash, deleteFiles: true, ct);
             ClearOwnFolder(sent);
+            // What its encode is in the library, written down as it is done: a later replacement of this
+            // delivery recycles only an encode that is still this one.
+            await grabs.EncodedAsync(sent.InfoHash, await StampsAsync(sent, thisTick, ct), ct);
             await grabs.StateAsync(sent.InfoHash, GrabState.Done, ct);
 
             lock (_failures)

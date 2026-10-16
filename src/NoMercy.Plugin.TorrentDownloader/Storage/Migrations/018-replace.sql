@@ -16,6 +16,11 @@ ALTER TABLE grabs ADD COLUMN named INTEGER;
 ALTER TABLE grabs ADD COLUMN replaces TEXT;
 ALTER TABLE grabs ADD COLUMN recycled_at TEXT;
 
+-- grabs.encoded: the master playlist each episode's encode had when the grab was done, as space-separated
+-- "showXseasonXnumber:ticks:length". At a replacement the playlist has to be that one still, or the encode in
+-- the library is not the one the delivery caused - the owner may have encoded the episode by hand since.
+ALTER TABLE grabs ADD COLUMN encoded TEXT;
+
 -- episodes.state gains 'replace': the library has a file, and it is one the plugin delivered from a release
 -- no name source names. Not missing, so the overview does not count it; searched for by release name all the
 -- same. The delivery it is to be replaced over is kept beside it, for the grab that replaces it and for the

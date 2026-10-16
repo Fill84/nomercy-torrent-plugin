@@ -153,7 +153,7 @@ public sealed class GrabRepository(Store database)
         IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
             SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source,
-                   grabbed_at, named, replaces, recycled_at FROM grabs
+                   grabbed_at, named, replaces, recycled_at, encoded FROM grabs
             WHERE info_hash IS NOT NULL AND state NOT IN ('done', 'failed', 'lost');
             """,
             null,
@@ -176,7 +176,7 @@ public sealed class GrabRepository(Store database)
         IReadOnlyList<StoredRow> rows = await database.QueryAsync(
             """
             SELECT info_hash, magnet, release_title, state, covers, staged_path, folder, encode_jobs, source,
-                   grabbed_at, named, replaces, recycled_at FROM grabs
+                   grabbed_at, named, replaces, recycled_at, encoded FROM grabs
             WHERE info_hash IS NOT NULL;
             """,
             null,
@@ -213,7 +213,50 @@ public sealed class GrabRepository(Store database)
             RecycledAt = row.TextOrNull("recycled_at") is string recycled
                 ? DateTimeOffset.Parse(recycled, CultureInfo.InvariantCulture)
                 : null,
+            Encoded = row.TextOrNull("encoded") is string encoded ? Stamps(encoded) : new Dictionary<EpisodeKey, EncodedStamp>(),
         };
+    }
+
+    /// <summary>Writes down the master playlist each episode's encode has, as the grab is done.</summary>
+    public async Task EncodedAsync(string infoHash, IReadOnlyDictionary<EpisodeKey, EncodedStamp> stamps, CancellationToken ct)
+    {
+        await database.ExecuteAsync(
+            "UPDATE grabs SET encoded = $encoded WHERE info_hash = $hash;",
+            new Dictionary<string, object?>
+            {
+                ["$encoded"] = string.Join(
+                    ' ',
+                    stamps.Select(one => string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{Tag(one.Key)}:{one.Value.Written.Ticks}:{one.Value.Length}"))),
+                ["$hash"] = infoHash.ToUpperInvariant(),
+            },
+            ct);
+    }
+
+    /// <summary>The stamps of a grab, as the column holds them; a part that does not read as one is skipped.</summary>
+    private static IReadOnlyDictionary<EpisodeKey, EncodedStamp> Stamps(string column)
+    {
+        Dictionary<EpisodeKey, EncodedStamp> stamps = [];
+
+        foreach (string part in column.Split(' ', StringSplitOptions.RemoveEmptyEntries))
+        {
+            string[] fields = part.Split(':');
+            string[] numbers = fields[0].Split('x');
+
+            if (fields.Length == 3
+                && numbers.Length == 3
+                && int.TryParse(numbers[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out int show)
+                && int.TryParse(numbers[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out int season)
+                && int.TryParse(numbers[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out int number)
+                && long.TryParse(fields[1], NumberStyles.Integer, CultureInfo.InvariantCulture, out long ticks)
+                && long.TryParse(fields[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out long length))
+            {
+                stamps[new(show, season, number)] = new(new DateTime(ticks, DateTimeKind.Utc), length);
+            }
+        }
+
+        return stamps;
     }
 
     /// <summary>Writes down, once, whether a grab recorded before this was kept has a release a name source names.</summary>

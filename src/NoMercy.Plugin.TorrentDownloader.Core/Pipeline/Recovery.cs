@@ -155,7 +155,24 @@ public sealed record StoredDownload(string InfoHash, string Magnet, string Relea
     /// folder holds what the new encode is writing.
     /// </remarks>
     public DateTimeOffset? RecycledAt { get; init; }
+
+    /// <summary>
+    /// The master playlist each episode's encode had when this delivery was done, or nothing for a delivery
+    /// done before this was kept.
+    /// </summary>
+    /// <remarks>
+    /// The proof, at the time of a replacement, that the encode in the library is still the one this delivery
+    /// caused. A time window alone took an encode the owner made by hand while the replacement was being
+    /// waited for: its files were written after the delivery, so they passed for the delivery's.
+    /// </remarks>
+    public IReadOnlyDictionary<EpisodeKey, EncodedStamp> Encoded { get; init; } =
+        new Dictionary<EpisodeKey, EncodedStamp>();
 }
+
+/// <summary>A file as it was: when it was last written and how long it was.</summary>
+/// <param name="Written">The last write, in UTC, to the tick.</param>
+/// <param name="Length">Its length in bytes.</param>
+public sealed record EncodedStamp(DateTime Written, long Length);
 
 /// <summary>
 /// What has to happen to make the client and the store agree again.

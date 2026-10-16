@@ -15,6 +15,7 @@ public class StoreTests : IDisposable
         ALTER TABLE grabs DROP COLUMN named;
         ALTER TABLE grabs DROP COLUMN replaces;
         ALTER TABLE grabs DROP COLUMN recycled_at;
+        ALTER TABLE grabs DROP COLUMN encoded;
         ALTER TABLE episodes DROP COLUMN replaces_hash;
         ALTER TABLE episodes DROP COLUMN replaces_release;
         """;
@@ -139,7 +140,7 @@ public class StoreTests : IDisposable
         // so the state this test is pretending to be in has to lack it.
         await database.ExecuteAsync("ALTER TABLE grabs DROP COLUMN encode_jobs;", null, CancellationToken.None);
 
-        // And the five 018 adds, for the same reason.
+        // And the six 018 adds, for the same reason.
         await database.ExecuteAsync(Before018, null, CancellationToken.None);
 
         await database.MigrateAsync(CancellationToken.None);
@@ -254,7 +255,7 @@ public class StoreTests : IDisposable
         // IF NOT EXISTS either.
         await database.ExecuteAsync("ALTER TABLE grabs DROP COLUMN encode_jobs;", null, CancellationToken.None);
 
-        // And the five 018 adds, for the same reason.
+        // And the six 018 adds, for the same reason.
         await database.ExecuteAsync(Before018, null, CancellationToken.None);
 
         // And the other way about for 015, which adds two columns: they are

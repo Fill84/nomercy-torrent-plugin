@@ -104,6 +104,11 @@
   the library names goes first. The rest of the library is never touched: not the show's folder, not
   another episode's, not a file in a recycle area, not a file from before the old delivery, not a file
   the encoder does not write — an `.nfo`, the owner's extras.
+- A delivery is done with its encode's master playlist written down: when it was last written and how long
+  it is. A replacement recycles only while the playlist the library names is still that one, to the tick
+  and the byte; otherwise the encode is somebody else's — the owner's, made by hand while the replacement
+  was waited for — and nothing is recycled, nothing encoded, and why is said. A delivery done before this
+  was kept has nothing written down, and the time window alone speaks for it.
 - The server recycles a file under its own name into a `.recycled` folder beside it and never over one
   already there. Where any of the old encode's files has such a copy already, nothing is recycled and the
   replacement waits, saying why, until the owner takes that copy out.

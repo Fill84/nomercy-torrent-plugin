@@ -302,6 +302,67 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>An encode made after the plugin's delivery is not the plugin's.</strong> The delivery was done
+    /// with its master playlist written down; the owner then encoded the episode by hand while the replacement
+    /// was being waited for, which wrote a new playlist in the same folder and inside the same hours. Taken by
+    /// the time window alone it passed for the delivery's and went to the recycle area. The playlist is
+    /// compared with what was written down, so nothing moves, nothing is encoded, and why is said.
+    /// </para>
+    /// <para>Sabotage: recycling on the time window alone takes the owner's own encode.</para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEncodeMadeAfterThePluginsDeliveryIsNeverRecycled()
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+        await grabs.EncodedAsync(OldHash, new Dictionary<EpisodeKey, EncodedStamp> { [S29E03] = Stamp($"{EpisodeFolder}/{Master}") }, CancellationToken.None);
+
+        // The owner's own encode, an hour after the plugin's and before the replacement was taken on.
+        Write($"{EpisodeFolder}/{Master}", Encoded.AddHours(1));
+
+        FakeProvider host = new();
+        RecordingLibraryWriter writer = new(host.Encoder);
+        Transfers transfers = Transfers(Holding(Finished()), grabs, host, writer);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(writer.Recycled);
+        Assert.Null(host.Encoder.Job);
+        Assert.True(File.Exists($"{EpisodeFolder}/{Master}"));
+        Assert.Contains("is not the one the plugin delivered", transfers.FailureOf(NewHash), StringComparison.Ordinal);
+    }
+
+    /// <remarks>
+    /// <strong>An encode that is still the delivery's, as written down, is recycled.</strong> Sabotage: refusing
+    /// whenever a stamp is kept leaves every replacement waiting.
+    /// </remarks>
+    [Fact]
+    public async Task AnEncodeThatIsStillTheDeliverysIsRecycled()
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+        await grabs.EncodedAsync(OldHash, new Dictionary<EpisodeKey, EncodedStamp> { [S29E03] = Stamp($"{EpisodeFolder}/{Master}") }, CancellationToken.None);
+
+        FakeProvider host = new();
+        RecordingLibraryWriter writer = new(host.Encoder);
+
+        await Transfers(Holding(Finished()), grabs, host, writer).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(5, writer.Recycled.Count);
+        Assert.NotNull(host.Encoder.Job);
+    }
+
+    private static EncodedStamp Stamp(string path)
+    {
+        FileInfo file = new(path);
+
+        return new(file.LastWriteTimeUtc, file.Length);
+    }
+
+    /// <remarks>
     /// <strong>A file of the same name already in the recycle area moves nothing.</strong> The server recycles
     /// under the file's own name and never over one already there; asked anyway, it refuses half way, with the
     /// master playlist gone and the rest of the old encode still in place. So it is asked of every file first,
@@ -385,6 +446,11 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
         await Transfers(Holding(Finished()), grabs, server, writer, says).TickAsync(Incomplete, Intake, CancellationToken.None);
 
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+
+        // And done with the playlist its encode has written down, for the next replacement to be held to.
+        StoredDownload done = Assert.Single(await grabs.EveryAsync(CancellationToken.None), one => one.InfoHash == NewHash);
+
+        Assert.Equal(Stamp($"{EpisodeFolder}/{Master}"), done.Encoded[S29E03]);
     }
 
     /// <summary>The server's word about the one job asked for, as a test sets it.</summary>
