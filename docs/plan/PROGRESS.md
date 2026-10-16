@@ -6,7 +6,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
 Media-server #599 and #600 are closed, so `S15-04` is unblocked. `S17-02` is done and
-`feat/replace-delivered` is merged into master. `S17-03` is done. `S17-04` is done but for the owner's choice on a pack's room (**Blocked**) and the cycle test it watches. Current: **`S17-05`**.
+`feat/replace-delivered` is merged into master. `S17-03` is done. `S17-04` is done but for the cycle test it watches. Current: **`S17-05`**.
 
 **For the release notes of the version that carries S16 and S17** (not yet in `docs/releases/`): a wrong
 episode the plugin delivered — a show's episode from a release no name source names, such as South Park
@@ -17,7 +17,9 @@ write: `plugin.json` now names `libraryWrite`, so after the update the server lo
 until the owner approves it once more on its page and grants the library or libraries it may recycle in.
 Until a library is granted, a replacement waits in the intake folder and the Downloads page says why. The
 plugin also needs a server on plugin ABI 12.4 (`S16-08`), and its database moves to the server's
-(`S16-04`).
+(`S16-04`). A season pack is no longer turned down because the whole torrent is bigger than the free
+space when only some of its episodes are wanted, and a download that does not fit is tried again six
+hours later rather than never (`S17-04`).
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
@@ -83,12 +85,9 @@ done, in the order worth doing:
    side-by-side runs on 16 October 2026; its own twenty-second bound was the one thing load could break, and
    it is `Hang.Limit` now, as the project's rule says (`S17-04`). Unproven, so watched.
 5. Three small ones, looked at in `S17-04` (16 October 2026):
-   - The disk-space check counts a whole pack although only its covered videos are fetched — **the
-     owner's choice, see Blocked.** The plugin's check (`Grab.Room`) uses the indexer's size of the whole
-     torrent, so a pack that would fit is declined and the run takes the single episodes instead. The
-     engine's own check (`Cramped`) already counts only the wanted files, but it calls a torrent that does
-     not fit the release's fault, which refuses it for good. Letting packs through the first check alone
-     would turn "the singles are taken" into "the pack is refused for ever".
+   - ~~The disk-space check counts a whole pack although only its covered videos are fetched~~ — on the
+     owner's choice (B, see **Decisions**): a pack is judged by the engine on its wanted videos, and a
+     torrent that does not fit is refused for six hours instead of for ever.
    - ~~The overview builds every library's block on each render~~ — only the drawn tab is built
      (`bcd0f2d`).
    - Tab counts do not follow the filter — **not a fault: `docs/specs/pages.md` says a tab's count is its
@@ -718,13 +717,6 @@ looking and goes stale on its own when the last page closes.
 
 ## Blocked
 
-- **A pack that would fit is declined for room (`S17-04`, 5 of the known list) — the owner's choice.**
-  A: leave it. A pack too big by the indexer's size is declined, and the run takes the single episodes;
-  nothing is lost but the pack. B: the plugin's room check counts only the videos the pack covers, and the
-  engine's "it does not fit" stops refusing the release for good and refuses it for `RefusedFor` (6 hours)
-  like a passing fault, so a pack that really does not fit is tried again once space is cleared. Nothing is
-  changed until the owner picks one.
-
 - **`S16-06`, the solver on `IPluginBrowser`, waits on media-server #601** (filed 15 October 2026): every
   host refuses `IPluginContext.Browser`, and the interface lacks reload, content type, readiness, the
   in-page fetch, the user agent and availability. Until it ships the solver stays on PuppeteerSharp and
@@ -938,6 +930,11 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   chosen by the rule `Tabs.Draw` uses (`bcd0f2d`); `ALibraryThatIsGoneDrawsTheFirstLibrarysShows` was red
   against a choice that ignored a library no longer there. The tab counts stay totals, as the spec says.
   The pack's room check waits on the owner (**Blocked**). `S17-04` is done but for that choice.
+  The owner chose B the same day: `Grab.Room` leaves a pack to the engine and still counts its whole size
+  against the run's later grabs, and the engine's "it does not fit" is refused for six hours.
+  `APackIsNotDeclinedForTheEpisodesItWillNotFetch` and the engine's no-room test were red;
+  `APackHoldsItsWholeSizeAgainstTheGrabsAfterIt` and `ATorrentThatDidNotFitIsRefusedForSixHours` each
+  failed when their rule was taken out.
 
 - **`S17-04`, 4 of the known list (16 October 2026):** `PeerWelcomeTests` did not fail in ten runs beside a
   second BitTorrent suite and the integration suite. Its three tests bounded an in-memory MSE handshake by
@@ -2784,6 +2781,13 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **16 October 2026, the owner's choice (B of two): a pack is handed over on its wanted videos, and a
+  torrent that does not fit is refused for six hours (`S17-04`).** `Grab.Room` no longer declines a season
+  pack on the indexer's whole size; the engine's `Cramped` measures the videos it will fetch once the file
+  list arrives, and "it does not fit" is a passing fault (`ErrorIsTheRelease` false), so the release comes
+  round again after `RefusedFor`. A pack still counts its whole size against the grabs after it in the
+  same run. The other choice, A, was to leave it: the pack declined and the single episodes taken.
 
 - **16 October 2026: the deliveries of 0.8.1 and earlier are checked ten a run (`S17-02`,
   `DeliveredNames.PerRun`).** Each check is a paced question to every name source, about fifteen seconds

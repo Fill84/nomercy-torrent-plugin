@@ -93,7 +93,7 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
         CancellationToken ct,
         IReadOnlyList<EpisodeKey>? episodes = null)
     {
-        if (Room(copy, folder) is string full)
+        if (Room(copy, folder, pack: episodes is not null) is string full)
         {
             journal.Failed(ActivityStage.Download, copy.Title, full);
 
@@ -144,6 +144,11 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
             // Counted against the disk from here, for as long as this cycle
             // lasts. A grab lives exactly one cycle, which is the span over
             // which the disk has not caught up with what was taken.
+            //
+            // A pack counts its whole size, more than it will fetch: until its
+            // file list arrives that is the most it can write, and counting less
+            // would let the grabs after it fill the disk. The cost of the
+            // overcount is a grab declined until the next cycle.
             _committed += copy.SizeBytes ?? 0;
 
             return new(GrabResult.Taken, handle.InfoHash, null);
@@ -167,8 +172,20 @@ public sealed class Grab(ITorrentEngine engine, IStorageSpace space, IActivityJo
     /// disk takes the media server down with it — the same disk holds the
     /// library and the database.
     /// </remarks>
-    private string? Room(ReleaseCopy copy, string folder)
+    private string? Room(ReleaseCopy copy, string folder, bool pack)
     {
+        // A pack is judged by the engine, not here. Only the videos of the
+        // episodes it is taken for are fetched, and the indexer's size is the
+        // whole torrent's, so a pack whose wanted episodes fitted was declined
+        // for the ones it would never fetch (S17-04). What those videos weigh is
+        // not known before the file list arrives, and a magnet has none; the
+        // engine measures exactly that the moment it does (Cramped). The pack's
+        // whole size is still counted against the grabs after it in TakeAsync.
+        if (pack)
+        {
+            return null;
+        }
+
         if (copy.SizeBytes is not long needed || space.FreeBytes(folder) is not long measured)
         {
             return null;

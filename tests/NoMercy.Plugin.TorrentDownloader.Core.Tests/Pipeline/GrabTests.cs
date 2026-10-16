@@ -199,6 +199,71 @@ public class GrabTests
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>A pack is not judged on what the whole torrent weighs.</strong> Only the videos of the
+    /// episodes it is taken for are fetched, and an indexer publishes the size of the whole torrent — so a
+    /// pack whose two wanted episodes fitted with room to spare was declined for the twenty it would never
+    /// fetch, and the run took the single episodes instead (`S17-04`, 5 of the known list).
+    /// </para>
+    /// <para>
+    /// Nobody can say what the wanted videos weigh before the torrent's file list arrives, and a magnet has
+    /// none. The engine measures exactly that the moment it arrives, so the pack is handed over and
+    /// judged there.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APackIsNotDeclinedForTheEpisodesItWillNotFetch()
+    {
+        FakeEngine engine = new();
+
+        Grabbed grabbed = await new Grab(engine, Room(1_000_000_000), new ActivityJournal()).TakeAsync(
+            Copy() with { Title = "Silo S03 1080p WEB-DL x265" },
+            "D:\\incomplete",
+            [],
+            [],
+            CancellationToken.None,
+            [new(1, 3, 6), new(1, 3, 7)]);
+
+        Assert.Equal(GrabResult.Taken, grabbed.Result);
+        Assert.NotNull(engine.Asked);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A pack still holds its whole size against the rest of the run.</strong> Free space is what
+    /// the disk says now, and a torrent taken a moment ago has written almost none of itself yet; until its
+    /// file list arrives the most it can fetch is the whole torrent. Counting less would let the grabs after
+    /// it each pass against a number that has not moved, which is how ten grabs in one run filled the disk.
+    /// </para>
+    /// <para>
+    /// The whole size is more than the pack will fetch. What that costs is a grab declined until the next
+    /// run; what counting less could cost is a full disk, and the library and the database live on it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task APackHoldsItsWholeSizeAgainstTheGrabsAfterIt()
+    {
+        FakeEngine engine = new();
+
+        // Room for the pack's whole size and less than one more episode beside it.
+        Grab grab = new(engine, Room(6_000_000_000), new ActivityJournal());
+
+        Assert.Equal(
+            GrabResult.Taken,
+            (await grab.TakeAsync(
+                Copy() with { Title = "Silo S03 1080p WEB-DL x265" },
+                "D:\\incomplete",
+                [],
+                [],
+                CancellationToken.None,
+                [new(1, 3, 6), new(1, 3, 7)])).Result);
+
+        Grabbed after = await grab.TakeAsync(Copy(), "D:\\incomplete", [], [], CancellationToken.None);
+
+        Assert.Equal(GrabResult.NoRoom, after.Result);
+    }
+
+    /// <remarks>
     /// <strong>B2.</strong> 0.3.4 counted a failed grab as a search attempt, so
     /// three failures in a row exhausted the episode and it was never looked
     /// for again — while the attempt count made it look like work was

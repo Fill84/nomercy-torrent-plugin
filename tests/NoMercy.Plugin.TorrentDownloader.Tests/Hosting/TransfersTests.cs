@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.Extensions.Time.Testing;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
 using NoMercy.Plugin.TorrentDownloader.Core.Naming;
@@ -523,6 +524,54 @@ public class TransfersTests : IDisposable
         StoredRow row = Assert.Single(refused);
         Assert.Equal("there is no video file in it", row.Text("reason"));
         Assert.True(row.TextOrNull("until") is null, "A release refused for ever was refused for a while instead.");
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A torrent that did not fit tonight is refused for six hours, not for ever.</strong> The
+    /// owner's choice of 16 October 2026 (`S17-04`): a pack is handed over on the room its wanted videos
+    /// need, and when they turn out not to fit after all it comes round again once the owner has cleared
+    /// some, rather than never.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ATorrentThatDidNotFitIsRefusedForSixHours()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Downloading() with
+            {
+                State = TorrentState.Error,
+                Error = "It needs 7.5 GB more and D:\\incomplete has 1 KB free.",
+                ErrorIsTheRelease = false,
+            });
+
+        DateTimeOffset before = DateTimeOffset.UtcNow;
+
+        await Transfers(engine, grabs, Server())
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        DateTimeOffset after = DateTimeOffset.UtcNow;
+
+        await using Store store = TestStore.In(_root);
+
+        IReadOnlyList<StoredRow> refused = await store.QueryAsync(
+            "SELECT until FROM blacklist WHERE key = $key;",
+            new Dictionary<string, object?> { ["$key"] = Hash },
+            CancellationToken.None);
+
+        string? until = Assert.Single(refused).TextOrNull("until");
+
+        Assert.True(until is not null, "A torrent that did not fit tonight was refused for ever.");
+
+        DateTimeOffset ends = DateTimeOffset.Parse(until, CultureInfo.InvariantCulture);
+
+        // Named in full: this class's own helper that builds a Transfers is called Transfers too.
+        TimeSpan refusedFor = global::NoMercy.Plugin.TorrentDownloader.Hosting.Transfers.RefusedFor;
+
+        Assert.InRange(ends, before + refusedFor, after + refusedFor);
     }
 
     /// <remarks>

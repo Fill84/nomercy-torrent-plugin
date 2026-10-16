@@ -3843,8 +3843,9 @@ peer's bitfield; `SettleTheLogAsync` checks and sets `_levelsChosen` in one step
 that drives a whole plugin cycle through `OpenHashes` and the
 `handedOver` pass (and the `HostSparse` hand-over of `S16-08`, and the old-delivery check of `S17-02`
 running after the search and not on a hand-run); `PeerWelcomeTests` under parallel suites;
-the disk-space check counts only the videos a pack fetches (**on the owner's choice**: on its own it would
-make the engine refuse a pack that does not fit for good — `PROGRESS.md` § Blocked); the overview builds
+the disk-space check counts only the videos a pack fetches (done on the owner's choice B of 16 October
+2026: the engine judges a pack on its wanted videos and refuses one that does not fit for six hours, not
+for good — `PROGRESS.md` § Decisions); the overview builds
 only the tab it draws (done, `bcd0f2d`); tab counts following the filter is dropped, since
 `docs/specs/pages.md` says they are the tables' totals; and
 `TorrentDownloaderPluginTests.OneCycleRunsEveryStepAndSaysWhenItFinished`, which failed once in four full

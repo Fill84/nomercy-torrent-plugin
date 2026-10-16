@@ -58,6 +58,9 @@
   cover aired is not a name for that season.
 - The winning torrent of a season pack is offered to the download client once, for every episode of the
   season being searched for, and those episodes are not searched for one by one in that run.
+- A season pack is offered whatever the indexer says the whole torrent weighs: only the videos of the
+  episodes it is taken for are fetched, and the client measures those against the free space once the
+  torrent's file list is known. Until then the pack's whole size counts against what else that run takes.
 - When no season pack gives a torrent, each episode of the season is searched for one by one.
 - A season with one episode being searched for is not looked for as a season pack.
 - The indexers are asked for the show and episode (`indexer-search.md` § When no release name gives a

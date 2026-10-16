@@ -1853,11 +1853,12 @@ public sealed class BittorrentEngine(
         held.Error =
             $"It needs {Size(needed - progress.BytesDone)} more and {held.Run.Folder()} has {Size(free)} free.";
 
-        // About the torrent and not about tonight: no amount of waiting makes
-        // it fit, and the owner has to do something before it can be asked for
-        // again.
-        held.ErrorIsTheRelease = true;
-
+        // About the disk tonight and not about the torrent, so ErrorIsTheRelease
+        // stays false and the release is refused for six hours rather than for
+        // ever: once the owner clears room it fits. Refused for ever, a pack that
+        // did not fit was never asked for again — which is what kept Grab.Room
+        // from handing a pack over on its wanted videos (S17-04, the owner's
+        // choice of 16 October 2026).
         held.Run.Pause();
 
         logger.LogWarning("{Name} was stopped: {Reason}", held.Run.Torrent?.Name ?? held.Name, held.Error);

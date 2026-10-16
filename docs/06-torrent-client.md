@@ -170,6 +170,9 @@ Both disabled for a private torrent.
 ## Disk
 
 - Files created sparse at full size; the host marks them sparse (`IPluginStorage.MarkSparseAsync`, media-server #609), so the plugin makes no native call.
+- The free space is checked against what will be fetched, the moment the file list is known. A torrent that
+  does not fit is stopped, and its release is refused for six hours, not for ever: the room is about the disk
+  that evening, not about the torrent (the owner's choice, 16 October 2026).
 - Writes through a bounded buffer, flushed per completed piece.
 - SHA-1 verification before a piece counts as done.
 - Reads for uploading from a small LRU cache.

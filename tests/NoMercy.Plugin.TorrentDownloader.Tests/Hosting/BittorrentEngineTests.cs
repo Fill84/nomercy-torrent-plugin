@@ -1581,9 +1581,13 @@ public class BittorrentEngineTests : IDisposable
             Assert.Contains("needs", status.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
             Assert.Contains("free", status.Error ?? string.Empty, StringComparison.OrdinalIgnoreCase);
 
-            // And it is about this torrent rather than about tonight: no amount
-            // of waiting makes it fit.
-            Assert.True(status.ErrorIsTheRelease);
+            // And it is about the disk tonight, not about the torrent: once the
+            // owner clears room it fits. Refused for ever, a pack that did not fit
+            // was never asked for again, which is what kept the room check from
+            // being let to judge a pack on its wanted videos (`S17-04`).
+            Assert.False(
+                status.ErrorIsTheRelease,
+                "a torrent that did not fit tonight was refused for ever, and clearing room would never bring it back.");
         }
         finally
         {
