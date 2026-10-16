@@ -6,7 +6,7 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
 Media-server #599 and #600 are closed, so `S15-04` is unblocked. `S17-02` is done and
-`feat/replace-delivered` is merged into master. `S17-03` is done. Current: **`S17-04`**.
+`feat/replace-delivered` is merged into master. `S17-03` is done. `S17-04` is done but for the owner's choice on a pack's room (**Blocked**) and the cycle test it watches. Current: **`S17-05`**.
 
 **For the release notes of the version that carries S16 and S17** (not yet in `docs/releases/`): a wrong
 episode the plugin delivered — a show's episode from a release no name source names, such as South Park
@@ -82,8 +82,18 @@ done, in the order worth doing:
 4. ~~`PeerWelcomeTests.APeerThatDialsInEncryptedIsAnsweredToo` failed once~~ — not reproduced in ten
    side-by-side runs on 16 October 2026; its own twenty-second bound was the one thing load could break, and
    it is `Hang.Limit` now, as the project's rule says (`S17-04`). Unproven, so watched.
-5. The disk-space check counts a whole pack although only its covered videos are fetched; the overview
-   builds every library's block on each render; tab counts do not follow the filter.
+5. Three small ones, looked at in `S17-04` (16 October 2026):
+   - The disk-space check counts a whole pack although only its covered videos are fetched — **the
+     owner's choice, see Blocked.** The plugin's check (`Grab.Room`) uses the indexer's size of the whole
+     torrent, so a pack that would fit is declined and the run takes the single episodes instead. The
+     engine's own check (`Cramped`) already counts only the wanted files, but it calls a torrent that does
+     not fit the release's fault, which refuses it for good. Letting packs through the first check alone
+     would turn "the singles are taken" into "the pack is refused for ever".
+   - ~~The overview builds every library's block on each render~~ — only the drawn tab is built
+     (`bcd0f2d`).
+   - Tab counts do not follow the filter — **not a fault: `docs/specs/pages.md` says a tab's count is its
+     table's total whatever `filter` keeps** (S14-07, see **Decisions**). The filter applies to the table
+     shown, so the other tabs' counts could not follow it anyway. Changed only on the owner's word.
 
 **Where things stand, 22 September 2026 (read this before picking anything up).** The plugin is
 **0.7.1**, built against plugin contract 12, released on both forges, in the owner's catalogue and
@@ -708,6 +718,13 @@ looking and goes stale on its own when the last page closes.
 
 ## Blocked
 
+- **A pack that would fit is declined for room (`S17-04`, 5 of the known list) — the owner's choice.**
+  A: leave it. A pack too big by the indexer's size is declined, and the run takes the single episodes;
+  nothing is lost but the pack. B: the plugin's room check counts only the videos the pack covers, and the
+  engine's "it does not fit" stops refusing the release for good and refuses it for `RefusedFor` (6 hours)
+  like a passing fault, so a pack that really does not fit is tried again once space is cleared. Nothing is
+  changed until the owner picks one.
+
 - **`S16-06`, the solver on `IPluginBrowser`, waits on media-server #601** (filed 15 October 2026): every
   host refuses `IPluginContext.Browser`, and the interface lacks reload, content type, readiness, the
   in-page fetch, the user agent and availability. Until it ships the solver stays on PuppeteerSharp and
@@ -916,6 +933,11 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-04`, 5 of the known list (16 October 2026):** the overview builds only the library tab it draws,
+  chosen by the rule `Tabs.Draw` uses (`bcd0f2d`); `ALibraryThatIsGoneDrawsTheFirstLibrarysShows` was red
+  against a choice that ignored a library no longer there. The tab counts stay totals, as the spec says.
+  The pack's room check waits on the owner (**Blocked**). `S17-04` is done but for that choice.
 
 - **`S17-04`, 4 of the known list (16 October 2026):** `PeerWelcomeTests` did not fail in ten runs beside a
   second BitTorrent suite and the integration suite. Its three tests bounded an in-memory MSE handshake by
