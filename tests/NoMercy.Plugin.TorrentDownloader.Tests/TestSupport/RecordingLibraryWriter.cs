@@ -14,8 +14,11 @@ namespace NoMercy.Plugin.TorrentDownloader.Tests.TestSupport;
 /// that moment, so a test can say the old episode went before the new one was encoded.
 /// </para>
 /// <para>
-/// It moves nothing: what a recycled file becomes is the server's business, and the plugin never reads it
-/// back.
+/// It moves a recycled file exactly as the server does (media-server <c>dev</c>, read 16 October 2026:
+/// <c>PluginLibraryWriter.RecycleAsync</c> and <c>RecyclePathFor</c>, then <c>LocalStorageDriver.MoveFile</c>):
+/// into a <c>.recycled</c> folder beside it, under the same name, and never over a file already there —
+/// <c>File.Move(…, overwrite: false)</c>, so a second copy of the same name is an <see cref="IOException"/>.
+/// A double that moved nothing hid that, and a folder that still held every old file after its recycling.
 /// </para>
 /// </remarks>
 /// <param name="encoder">The encoder whose asks are counted at each recycle, so the order can be asserted.</param>
@@ -43,6 +46,13 @@ public sealed class RecordingLibraryWriter(FakeEncoder? encoder = null) : IPlugi
         {
             throw new PluginLibraryAccessDeniedException(path, reason);
         }
+
+        string normalised = path.Replace('\\', '/');
+        int cut = normalised.LastIndexOf('/');
+        string recycled = $"{normalised[..cut]}/.recycled/{normalised[(cut + 1)..]}";
+
+        Directory.CreateDirectory(Path.GetDirectoryName(recycled)!);
+        File.Move(path, recycled, overwrite: false);
 
         _recycled.Add((path, encoder?.Asked.Count ?? 0));
 

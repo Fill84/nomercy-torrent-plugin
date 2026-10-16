@@ -104,6 +104,16 @@ public sealed class Recycler(IPluginLibraryWriter? writer)
             return null;
         }
 
+        // The server moves a file to a .recycled folder beside it under the same name, and never over one
+        // already there (File.Move without overwrite): the second would be refused half way, with the master
+        // playlist already gone and the rest of the old encode still in place. Asked of every file first, so
+        // either all of it moves or none does.
+        if (ours.FirstOrDefault(path => File.Exists(RecyclePathOf(path))) is string taken)
+        {
+            return $"a file named {Path.GetFileName(taken)} is already in the recycle area beside it, and the server "
+                   + "will not put a second one there; take it out of that folder to let the replacement through";
+        }
+
         try
         {
             // Asked once, before anything moves, so a library the plugin may not write in moves nothing at all.
@@ -133,6 +143,15 @@ public sealed class Recycler(IPluginLibraryWriter? writer)
         DateTime written = File.GetLastWriteTimeUtc(path);
 
         return written >= from.UtcDateTime && written < until.UtcDateTime;
+    }
+
+    /// <summary>Where the server puts a recycled file: a <c>.recycled</c> folder beside it, under its own name.</summary>
+    private static string RecyclePathOf(string path)
+    {
+        string normalised = path.Replace('\\', '/');
+        int cut = normalised.LastIndexOf('/');
+
+        return $"{normalised[..cut]}/{RecycleFolder}/{normalised[(cut + 1)..]}";
     }
 
     /// <summary>Whether a file is already in a recycle area inside the episode's folder.</summary>

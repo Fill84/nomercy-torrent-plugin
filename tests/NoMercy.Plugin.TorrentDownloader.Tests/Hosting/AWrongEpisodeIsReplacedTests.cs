@@ -110,8 +110,9 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
     /// <strong>Recycled once, however often the encode is asked for.</strong> An encode the server refuses is
     /// asked for again by the next look, from the staged file; the recycling was written down before the first
     /// ask, so the next look recycles nothing — by then the folder may hold what the new encode is writing.
-    /// The double moves nothing, so every old file is still there to be taken a second time. Sabotage: not
-    /// reading the record back recycles all five again.
+    /// The double moves the files as the server does, so the second look finds none of the old ones left; what
+    /// it would find is what the new encode wrote, which is newer than the replacement's grab and so never the
+    /// old delivery's.
     /// </remarks>
     [Fact]
     public async Task AnEncodeAskedForAgainRecyclesNothingASecondTime()
@@ -243,6 +244,42 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
     }
 
     /// <remarks>
+    /// <strong>A file of the same name already in the recycle area moves nothing.</strong> The server recycles
+    /// under the file's own name and never over one already there; asked anyway, it refuses half way, with the
+    /// master playlist gone and the rest of the old encode still in place. So it is asked of every file first,
+    /// nothing moves, and why is said once. Sabotage: moving without asking first leaves the master playlist in
+    /// the recycle area and the segments in the library.
+    /// </remarks>
+    [Fact]
+    public async Task ASecondCopyInTheRecycleAreaMovesNothingAndSaysWhy()
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+
+        // A copy of one of the files the encode wrote, put there by an earlier recycling.
+        Write($"{EpisodeFolder}/video_1920x1080_SDR/.recycled/video_1920x1080_SDR-0000.ts", Encoded);
+
+        FakeProvider host = new();
+        RecordingLibraryWriter writer = new(host.Encoder);
+        Transfers transfers = Transfers(Holding(Finished()), grabs, host, writer);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Empty(writer.Recycled);
+        Assert.True(File.Exists($"{EpisodeFolder}/{Master}"), "The master playlist was recycled although the rest could not be.");
+        Assert.Null(host.Encoder.Job);
+        Assert.Equal(GrabState.Staged, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+
+        string? why = transfers.FailureOf(NewHash);
+
+        Assert.NotNull(why);
+        Assert.Contains("video_1920x1080_SDR-0000.ts is already in the recycle area", why, StringComparison.Ordinal);
+        Assert.Single(host.Journal.Snapshot().History, entry => entry.Stage == ActivityStage.Dispatch && entry.Detail == why);
+    }
+
+    /// <remarks>
     /// <strong>The replacement is done only once the server says its encode finished.</strong> The episode had a
     /// file all along, so the library having it proves nothing: closed on that, the staged video would be
     /// deleted before the new encode had read it. Sabotage: closing a replacement as any other grab is closed
@@ -313,8 +350,10 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
         Write($"{EpisodeFolder}/video_1920x1080_SDR/video_1920x1080_SDR-0000.ts", at);
         Write($"{EpisodeFolder}/subtitles/South.Park.S29E03.Episode.3.NoMercy.eng.full.vtt", at);
 
-        // Already in the recycle area beside it, from something earlier: not moved a second time.
-        Write($"{EpisodeFolder}/.recycled/South.Park.S29E03.Episode.3.NoMercy.m3u8", at);
+        // Already in the recycle area beside it, from something earlier: not moved a second time. Under a
+        // name of its own — one of the same name as a file being recycled refuses the recycling
+        // (ASecondCopyInTheRecycleAreaMovesNothingAndSaysWhy).
+        Write($"{EpisodeFolder}/.recycled/South.Park.S29E03.Episode.3.Earlier.m3u8", at);
 
         // In the folder from before the delivery, so not the delivery's.
         Write($"{EpisodeFolder}/folder.jpg", Delivered.AddDays(-30));
