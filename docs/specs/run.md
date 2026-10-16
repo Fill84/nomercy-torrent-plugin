@@ -18,10 +18,11 @@
   one episode or is a season pack. A double episode or a run of episodes is never to be replaced: one file
   holds both, and no name source names such a release. An anime's episode is never to be replaced, and
   neither is an episode the owner put in the library or a torrent the owner added by hand.
-- A delivery recorded without that is checked once, before the run searches, against the search of
+- A delivery recorded without that is checked once, after the run's own search, against the search of
   every name source for its episode, the same search the run asks; a release none of them names makes
-  its episode to be replaced. A delivery a name source did not answer about is checked again by the next
-  run.
+  its episode to be replaced, and the next run searches for it. At most ten are checked in one run, the
+  rest on the runs after; a run for one episode the owner asked for checks none. A delivery a name
+  source did not answer about is checked again by a later run.
 - An episode to be replaced is searched for by release name like an episode without a file, and only
   by release name. It is not missing and is not counted as missing, and it is never answered for by a
   season pack.

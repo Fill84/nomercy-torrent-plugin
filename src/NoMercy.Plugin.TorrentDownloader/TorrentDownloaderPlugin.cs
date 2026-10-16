@@ -1316,22 +1316,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
             return;
         }
 
-        // A delivery from before 0.8.1 wrote down nothing about where its release came from, so it is checked
-        // once against the name sources' search; one no source names marks its episode, and the list is
-        // derived again so this run already looks for its replacement. Never a reason to skip the search.
-        try
-        {
-            if (await new DeliveredNames(await GrabsAsync(ct), new HostLibrary(Context.Library), await AppliedAsync(ct), Log)
-                    .CheckAsync(chain.Names(settings), ct) > 0)
-            {
-                await RefreshAsync(ct);
-            }
-        }
-        catch (Exception wrong) when (wrong is not OperationCanceledException)
-        {
-            Log.LogWarning(wrong, "The deliveries from before this version could not be checked against the name sources: {Reason}", wrong.Message);
-        }
-
         IReadOnlyList<TrackedEpisode> tracked = await Tracked(ct);
 
         if (only is EpisodeKey wanted)
@@ -1440,6 +1424,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     OpenHashes = openHashes,
                 },
                 ct);
+
+            // After the run's own search, while its challenges are still cleared, and never on a hand-run: the
+            // owner asked for one episode, not for the past. Before the search it held up every run after the
+            // update by as many paced questions as the plugin had deliveries.
+            if (only is null)
+            {
+                await CheckOldDeliveriesAsync(chain, settings, ct);
+            }
         }
         finally
         {
@@ -1461,6 +1453,31 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         SearchSummary.Tell(Log, _lastCycle);
 
         await KeepTrackersAsync(settings, _lastCycle.Trackers, ct);
+    }
+
+    /// <summary>
+    /// Checks the deliveries of 0.8.1 and earlier against the name sources' search,
+    /// <see cref="DeliveredNames.PerRun"/> at a time.
+    /// </summary>
+    /// <remarks>
+    /// A delivery from 0.8.1 or earlier wrote down nothing about where its release came from; one no source names
+    /// marks its episode, which the next run then searches for by name. The list is derived again so the pages
+    /// show it at once. Never a reason to fail the run: the run's own work is already done.
+    /// </remarks>
+    private async Task CheckOldDeliveriesAsync(Chain chain, Settings settings, CancellationToken ct)
+    {
+        try
+        {
+            if (await new DeliveredNames(await GrabsAsync(ct), new HostLibrary(Context.Library), await AppliedAsync(ct), Log)
+                    .CheckAsync(chain.Names(settings), ct) > 0)
+            {
+                await RefreshAsync(ct);
+            }
+        }
+        catch (Exception wrong) when (wrong is not OperationCanceledException)
+        {
+            Log.LogWarning(wrong, "The deliveries from before this version could not be checked against the name sources: {Reason}", wrong.Message);
+        }
     }
 
     /// <summary>

@@ -3798,7 +3798,8 @@ the fix.
 
 One slice each, in that list's order: rarest-first over every peer's bitfield; `SettleTheLogAsync` checks
 and sets `_levelsChosen` in one step; a test that drives a whole plugin cycle through `OpenHashes` and the
-`handedOver` pass (and the `HostSparse` hand-over of `S16-08`); `PeerWelcomeTests` under parallel suites;
+`handedOver` pass (and the `HostSparse` hand-over of `S16-08`, and the old-delivery check of `S17-02`
+running after the search and not on a hand-run); `PeerWelcomeTests` under parallel suites;
 the disk-space check counts only the videos a pack fetches.
 
 ## What is not this repository's, and is written down so it is not looked for here again

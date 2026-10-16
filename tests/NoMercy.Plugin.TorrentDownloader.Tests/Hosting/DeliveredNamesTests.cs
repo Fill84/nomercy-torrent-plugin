@@ -93,6 +93,32 @@ public sealed class DeliveredNamesTests : IDisposable
         Assert.Equal(2, names.Asked.Count);
     }
 
+    /// <remarks>
+    /// <strong>No more than <see cref="DeliveredNames.PerRun"/> in one run.</strong> Each is a paced question
+    /// to every name source, and 0.8.0 delivered hundreds: asked all at once, the first run after the update
+    /// spends an hour on the past before it looks for anything new. The rest are asked on the runs after.
+    /// Sabotage: no cap asks about all of them in the first run.
+    /// </remarks>
+    [Fact]
+    public async Task AtMostSoManyDeliveriesAreCheckedInOneRun()
+    {
+        GrabRepository grabs = await Grabs();
+
+        for (int episode = 1; episode <= DeliveredNames.PerRun + 2; episode++)
+        {
+            await Done(grabs, $"{episode:X40}", $"South Park S29E{episode:00} 1080p HDTV DD 2.0 x264-ViETNAM", new(2190, 29, episode));
+        }
+
+        NamesAnswering names = new(Cakes);
+        DeliveredNames check = Check(grabs, moreOfSeason29: DeliveredNames.PerRun + 2);
+
+        await check.CheckAsync(names, CancellationToken.None);
+        Assert.Equal(DeliveredNames.PerRun, names.Asked.Count);
+
+        await check.CheckAsync(names, CancellationToken.None);
+        Assert.Equal(DeliveredNames.PerRun + 2, names.Asked.Count);
+    }
+
     /// <summary>The name sources' searches, answering the same names for every episode, and counting what was asked.</summary>
     private sealed class NamesAnswering(params string[] names) : IReleaseNames
     {
@@ -143,7 +169,9 @@ public sealed class DeliveredNamesTests : IDisposable
         await grabs.StateAsync(hash, GrabState.Done, CancellationToken.None);
     }
 
-    private static DeliveredNames Check(GrabRepository grabs)
+    /// <param name="grabs">The plugin's grabs.</param>
+    /// <param name="moreOfSeason29">Every South Park season 29 episode up to this one has a file too.</param>
+    private static DeliveredNames Check(GrabRepository grabs, int moreOfSeason29 = 0)
     {
         FakeLibraryQuery query = new FakeLibraryQuery()
             .Library(TelevisionLibrary, "Series", "tv")
@@ -153,6 +181,14 @@ public sealed class DeliveredNamesTests : IDisposable
             .Episode(2190, 29, 3, hasFile: true, airDate: new DateTime(2026, 10, 15))
             .Show(88, "Solo Leveling", AnimeLibrary, year: 2024, folder: "/Solo.Leveling.(2024)")
             .Episode(88, 2, 1, hasFile: true, airDate: new DateTime(2025, 1, 5));
+
+        for (int episode = 1; episode <= moreOfSeason29; episode++)
+        {
+            if (episode is not (2 or 3))
+            {
+                query.Episode(2190, 29, episode, hasFile: true, airDate: new DateTime(2026, 7, 1).AddDays(episode));
+            }
+        }
 
         return new(grabs, new HostLibrary(query), AppliedToEveryShow.Searched, new CapturingLogger());
     }

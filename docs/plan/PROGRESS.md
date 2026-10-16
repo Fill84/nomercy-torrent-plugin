@@ -2725,6 +2725,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 ## Decisions
 
+- **16 October 2026: the deliveries of 0.8.1 and earlier are checked ten a run (`S17-02`,
+  `DeliveredNames.PerRun`).** Each check is a paced question to every name source, about fifteen seconds
+  apart on most, and asked all at once the first run after the update would spend an hour on the past
+  before looking for anything new. Ten is a couple of minutes a run. Not a setting; the owner can have it
+  changed.
+
 - **15 October 2026, the owner: S16 ships as one version, after media-server #601.** The database
   carry-over (`S16-04`) is on master and is not released on its own; it goes to beast-unit with the solver
   on `IPluginBrowser` (`S16-06`), so #476 closes in one release.

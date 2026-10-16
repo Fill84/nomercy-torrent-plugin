@@ -15,6 +15,15 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// <param name="logger">The server's log.</param>
 public sealed class DeliveredNames(GrabRepository grabs, ILibrary library, IAppliedSettings applied, ILogger logger)
 {
+    /// <summary>How many deliveries one run asks about.</summary>
+    /// <remarks>
+    /// Each is a paced question to every name source — fifteen seconds apart on most of them — and 0.8.0
+    /// delivered hundreds, so asked all at once the first run after the update spent an hour on the past
+    /// before it looked for anything new. Ten is a couple of minutes a run; the rest are asked on the runs
+    /// after (<c>PROGRESS.md</c> § Decisions, 16 October 2026).
+    /// </remarks>
+    public const int PerRun = 10;
+
     /// <summary>Checks every delivery not yet checked; answers how many it found no name source names.</summary>
     /// <remarks>
     /// <para>
@@ -33,12 +42,19 @@ public sealed class DeliveredNames(GrabRepository grabs, ILibrary library, IAppl
         DeliveredCheck check = new(names);
 
         int unnamed = 0;
+        int asked = 0;
 
         foreach (UncheckedDelivery one in await refresh.UncheckedAsync(ct))
         {
             if (one.Covered.Count == 0)
             {
                 continue;
+            }
+
+            // Counted whether or not a source answers: the cost is the asking.
+            if (asked++ == PerRun)
+            {
+                break;
             }
 
             if (await check.NamedAsync(one.Grab.ReleaseTitle, one.Covered, ct) is not bool named)
