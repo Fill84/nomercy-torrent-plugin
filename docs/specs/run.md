@@ -93,18 +93,26 @@
 - For an episode to be replaced, once its new release has downloaded whole and its video is staged,
   the files of the old episode's encode go to the server's recycle area first, and then the encode is
   asked for. Those files are the episode's own folder in the library — the folder the library's file for
-  the episode sits in, named for the episode, inside the show's folder — and in it only the files written
-  between the old delivery's grab and the new one's. The file the library names goes first. The rest of
-  the library is never touched: not the show's folder, not another episode's, not a file in a recycle
-  area, not a file from before the old delivery.
+  the episode sits in, named for the episode, inside the show's folder — and in it only the files the
+  encoder writes (the master playlist the library names, `.nomercy.json`, `manifest.json`,
+  `chapters.vtt`, `fonts.json`, the sprite `thumbs_{w}x{h}.webp` and `.vtt`, and everything in `video_*`,
+  `audio_*`, `subtitles` and `fonts`), written between the old delivery's grab and the new one's. The file
+  the library names goes first. The rest of the library is never touched: not the show's folder, not
+  another episode's, not a file in a recycle area, not a file from before the old delivery, not a file
+  the encoder does not write — an `.nfo`, the owner's extras.
+- The server recycles a file under its own name into a `.recycled` folder beside it and never over one
+  already there. Where any of the old encode's files has such a copy already, nothing is recycled and the
+  replacement waits, saying why, until the owner takes that copy out.
 - Where the owner has granted the plugin no library to write in, the server does not let it write in
   the episode's library, or the server refuses, nothing is recycled and nothing is encoded: the new video
   waits in the intake folder, and the Downloads page, the log and the Activity and History pages say why,
   once. Every later look tries again.
 - The old episode's files are recycled once. A later look that asks for the encode again recycles
   nothing.
-- A grab for an episode to be replaced is done once the server says its encode finished, never on the
-  library having the episode: the library had it all along.
+- A grab for an episode to be replaced is done once the file the library names for the episode was written
+  after the old encode went to the recycle area — never on the library having the episode (it had it all
+  along) and never on the server saying the encode finished (media-server #599 said so of one still
+  running). While the server says the encode is queued or running it is not done either way.
 - The plugin looks at what the download client holds when the client says a download finished, at the
   start of every run, once a torrent the client was handed has its grab written down, and every minute
   while a finished download waits to be staged or a grab waits on an encode. A plugin with nothing waiting looks at nothing between runs.

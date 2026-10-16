@@ -244,6 +244,63 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>Only what the encoder writes is recycled.</strong> The episode's folder is the encode's, but not
+    /// only the encode's: a metadata tool writes an <c>.nfo</c> beside it, the owner keeps extras in it. Written
+    /// in the same hours as the encode, they passed for the delivery's. The encoder's own output, read off
+    /// media-server <c>dev</c> on 16 October 2026 (<c>FinalizeStage</c>, <c>BuildStage</c>,
+    /// <c>MediaBlueprintWriter</c>, <c>HlsOnDiskPlanReconstructor</c>, <c>FontExtractor</c>): the master
+    /// playlist the library names, <c>.nomercy.json</c>, <c>manifest.json</c>, <c>chapters.vtt</c>,
+    /// <c>fonts.json</c>, the sprite <c>thumbs_{w}x{h}.webp</c> and its <c>.vtt</c>, and the folders
+    /// <c>video_*</c>, <c>audio_*</c>, <c>subtitles</c> and <c>fonts</c>.
+    /// </para>
+    /// <para>Sabotage: recycling every file written in the window takes the owner's extras with it.</para>
+    /// </remarks>
+    [Fact]
+    public async Task OnlyWhatTheEncoderWroteIsRecycled()
+    {
+        GrabRepository grabs = await Grabs();
+        await DeliveredAndReplacing(grabs);
+        Library();
+
+        string[] encoderOutput =
+        [
+            $"{EpisodeFolder}/manifest.json",
+            $"{EpisodeFolder}/chapters.vtt",
+            $"{EpisodeFolder}/fonts.json",
+            $"{EpisodeFolder}/thumbs_320x180.webp",
+            $"{EpisodeFolder}/thumbs_320x180.vtt",
+            $"{EpisodeFolder}/audio_eng_aac/audio_eng_aac.m3u8",
+            $"{EpisodeFolder}/fonts/Arial.ttf",
+        ];
+        string[] notTheEncoders =
+        [
+            $"{EpisodeFolder}/South.Park.S29E03.nfo",
+            $"{EpisodeFolder}/extras/Behind.The.Scenes.mkv",
+        ];
+
+        foreach (string path in encoderOutput.Concat(notTheEncoders))
+        {
+            Write(path, Encoded);
+        }
+
+        FakeProvider server = new();
+        RecordingLibraryWriter writer = new(server.Encoder);
+
+        await Transfers(Holding(Finished()), grabs, server, writer).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        IReadOnlyList<string> recycled = [.. writer.Recycled.Select(one => one.Path)];
+
+        Assert.All(encoderOutput, path => Assert.Contains(path, recycled));
+        Assert.All(notTheEncoders, path =>
+        {
+            Assert.DoesNotContain(path, recycled);
+            Assert.True(File.Exists(path), $"{path} is not the encoder's and was taken anyway.");
+        });
+        Assert.NotNull(server.Encoder.Job);
+    }
+
+    /// <remarks>
     /// <strong>A file of the same name already in the recycle area moves nothing.</strong> The server recycles
     /// under the file's own name and never over one already there; asked anyway, it refuses half way, with the
     /// master playlist gone and the rest of the old encode still in place. So it is asked of every file first,

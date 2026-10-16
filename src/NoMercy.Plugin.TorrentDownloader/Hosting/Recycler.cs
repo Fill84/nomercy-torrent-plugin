@@ -94,7 +94,7 @@ public sealed class Recycler(IPluginLibraryWriter? writer)
         string[] ours =
         [
             .. files
-                .Where(path => Caused(path, from, until))
+                .Where(path => EncoderWrote(encoded, path) && Caused(path, from, until))
                 .OrderBy(path => string.Equals(path, named, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
                 .ThenBy(path => path, StringComparer.Ordinal),
         ];
@@ -135,6 +135,63 @@ public sealed class Recycler(IPluginLibraryWriter? writer)
         }
 
         return null;
+    }
+
+    /// <summary>The files the encoder writes at the root of an episode's folder, beside the master playlist.</summary>
+    /// <remarks>
+    /// Read off media-server <c>dev</c> on 16 October 2026: <c>MediaBlueprintWriter.FileName</c>, the bundle's
+    /// <c>manifest.json</c>, <c>chapters.vtt</c> and <c>fonts.json</c> from <c>FinalizeStage</c>.
+    /// </remarks>
+    private static readonly HashSet<string> EncoderFiles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".nomercy.json",
+        "manifest.json",
+        "chapters.vtt",
+        "fonts.json",
+    };
+
+    /// <summary>
+    /// Whether the encoder writes a file of this name at this place in an episode's folder.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The folder is the encode's but not only the encode's: a metadata tool writes an <c>.nfo</c> beside it,
+    /// and the owner keeps extras in it. Written in the same hours, those passed for the delivery's and went to
+    /// the recycle area with it. So a file is taken only when the encoder is what writes such a file there.
+    /// </para>
+    /// <para>
+    /// Besides <see cref="EncoderFiles"/>: the master playlist the library names, the sprite
+    /// (<c>thumbs_{w}x{h}.webp</c> and its <c>.vtt</c>, <c>BuildStage</c>), and everything in the rendition and
+    /// track folders <c>video_*</c>, <c>audio_*</c>, <c>subtitles</c> (<c>HlsOnDiskPlanReconstructor</c>) and
+    /// <c>fonts</c> (<c>FontExtractor</c>).
+    /// </para>
+    /// </remarks>
+    private static bool EncoderWrote(EncodedEpisode encoded, string path)
+    {
+        string[] parts = path[encoded.Folder.Length..].Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+        if (parts.Length == 0)
+        {
+            return false;
+        }
+
+        if (parts.Length > 1)
+        {
+            string folder = parts[0];
+
+            return folder.StartsWith("video_", StringComparison.OrdinalIgnoreCase)
+                   || folder.StartsWith("audio_", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(folder, "subtitles", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(folder, "fonts", StringComparison.OrdinalIgnoreCase);
+        }
+
+        string name = parts[0];
+
+        return string.Equals(path, encoded.File, StringComparison.OrdinalIgnoreCase)
+               || EncoderFiles.Contains(name)
+               || (name.StartsWith("thumbs_", StringComparison.OrdinalIgnoreCase)
+                   && (name.EndsWith(".webp", StringComparison.OrdinalIgnoreCase)
+                       || name.EndsWith(".vtt", StringComparison.OrdinalIgnoreCase)));
     }
 
     /// <summary>Whether a file was written while the delivery's encode could have written it.</summary>
