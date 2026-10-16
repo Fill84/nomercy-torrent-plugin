@@ -79,8 +79,9 @@ done, in the order worth doing:
    2026); reasoned, not tested: no test can stand between two statements.
 3. Two lines of plugin wiring have no test that fails when they are deleted, because no test drives a
    whole plugin cycle: `OpenHashes = openHashes` and the `handedOver` pass.
-4. `PeerWelcomeTests.APeerThatDialsInEncryptedIsAnsweredToo` failed once with two BitTorrent suites run in
-   parallel; not looked into.
+4. ~~`PeerWelcomeTests.APeerThatDialsInEncryptedIsAnsweredToo` failed once~~ — not reproduced in ten
+   side-by-side runs on 16 October 2026; its own twenty-second bound was the one thing load could break, and
+   it is `Hang.Limit` now, as the project's rule says (`S17-04`). Unproven, so watched.
 5. The disk-space check counts a whole pack although only its covered videos are fetched; the overview
    builds every library's block on each render; tab counts do not follow the filter.
 
@@ -915,6 +916,11 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-04`, 4 of the known list (16 October 2026):** `PeerWelcomeTests` did not fail in ten runs beside a
+  second BitTorrent suite and the integration suite. Its three tests bounded an in-memory MSE handshake by
+  twenty seconds of their own; they use `Hang.Limit` now. Whether that was the 14 October failure cannot be
+  said — its message was not kept.
 
 - **`S17-04`, 2 of the known list (16 October 2026):** the stored log level and a save choose the level
   under one lock (`_levelLock`), so a save landing during the first read is not put back. No test: the race

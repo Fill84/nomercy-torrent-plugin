@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests.TestSupport;
 using Xunit;
 
 namespace NoMercy.Plugin.TorrentDownloader.Bittorrent.Tests;
@@ -17,7 +18,7 @@ public class PeerWelcomeTests
     [Fact]
     public async Task APeerThatDialsInInTheClearIsAnsweredAndSaysWhichTorrentItWants()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(20));
+        using CancellationTokenSource stopping = new(Hang.Limit);
 
         PeerWire wire = new();
 
@@ -55,7 +56,7 @@ public class PeerWelcomeTests
     [Fact]
     public async Task APeerAskingForATorrentThisClientIsNotHoldingIsDropped()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(20));
+        using CancellationTokenSource stopping = new(Hang.Limit);
 
         PeerWire wire = new();
 
@@ -80,7 +81,7 @@ public class PeerWelcomeTests
     [Fact]
     public async Task APeerThatDialsInEncryptedIsAnsweredToo()
     {
-        using CancellationTokenSource stopping = new(TimeSpan.FromSeconds(20));
+        using CancellationTokenSource stopping = new(Hang.Limit);
 
         PeerWire wire = new();
 
