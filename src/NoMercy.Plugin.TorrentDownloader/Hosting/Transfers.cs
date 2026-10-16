@@ -879,6 +879,39 @@ public sealed class Transfers(
         await grabs.StateAsync(infoHash, GrabState.Dispatched, ct);
     }
 
+    /// <summary>
+    /// Whether every episode a replacement covers has been encoded again: the file the library names for it,
+    /// written after the old encode went to the recycle area.
+    /// </summary>
+    /// <remarks>
+    /// The recycling moved the old episode's master playlist away first, so a playlist the library names in
+    /// that folder and written after it can only be the new encode's. Nothing recorded as recycled is proof of
+    /// nothing, and is read that way.
+    /// </remarks>
+    private async Task<bool> EncodedAfreshAsync(StoredDownload sent, LibraryThisTick thisTick, CancellationToken ct)
+    {
+        if (sent.RecycledAt is not DateTimeOffset recycled)
+        {
+            return false;
+        }
+
+        foreach (EpisodeKey episode in sent.Covers)
+        {
+            Show? show = (await thisTick.GetShowsAsync(ct)).FirstOrDefault(candidate => candidate.Id == episode.ShowId);
+
+            if (show is null
+                || Replacement.EncodedOf(episode, show.Folder, await thisTick.GetFilesAsync(show.Id, ct)).Found
+                    is not EncodedEpisode encoded
+                || !File.Exists(encoded.File)
+                || File.GetLastWriteTimeUtc(encoded.File) < recycled.UtcDateTime)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>What was said about each replacement whose old episode could not be recycled, so it is said once.</summary>
     private readonly SaidBefore _notRecycled = new();
 
@@ -1320,9 +1353,13 @@ public sealed class Transfers(
 
             // A replacement's episode had a file before its encode began — the
             // one it replaces, whose row the library keeps — so the library
-            // having it proves nothing. Only the server saying its encode
-            // finished does, and until it says so the staged video is kept.
-            if (sent.Replaces is not null && standing is not { State: EncodeJobState.Finished })
+            // having it proves nothing. Nor does the server saying the encode
+            // finished: media-server #599 called one finished while it ran. The
+            // new encode itself is the proof, and until it is there the staged
+            // video is kept for the encoder to read.
+            if (sent.Replaces is not null
+                && (standing is { State: EncodeJobState.Queued or EncodeJobState.Running }
+                    || !await EncodedAfreshAsync(sent, thisTick, ct)))
             {
                 await StillWaitingAsync(sent, thisTick, ct);
 

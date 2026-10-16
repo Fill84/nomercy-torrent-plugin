@@ -280,13 +280,20 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
     }
 
     /// <remarks>
-    /// <strong>The replacement is done only once the server says its encode finished.</strong> The episode had a
-    /// file all along, so the library having it proves nothing: closed on that, the staged video would be
-    /// deleted before the new encode had read it. Sabotage: closing a replacement as any other grab is closed
-    /// deletes it on the first look where the server has said nothing yet.
+    /// <para>
+    /// <strong>The replacement is done only on the new encode itself.</strong> The episode had a file all along,
+    /// so the library having it proves nothing; and the server's "finished" is not proof either — media-server
+    /// #599 called an encode finished while it was still running. The proof is the file the library names for
+    /// the episode, written after the old one went to the recycle area. Until it is there the staged video is
+    /// kept: deleted early, the new encode has nothing left to read.
+    /// </para>
+    /// <para>
+    /// Sabotage: closing on the library having the episode deletes it on the first look; closing on the server
+    /// saying "finished" deletes it while the folder still holds no new playlist.
+    /// </para>
     /// </remarks>
     [Fact]
-    public async Task AReplacementIsDoneOnlyOnceTheServerSaysItsEncodeFinished()
+    public async Task AReplacementIsDoneOnlyOnTheNewEncodeItself()
     {
         GrabRepository grabs = await Grabs();
         await DeliveredAndReplacing(grabs);
@@ -304,9 +311,19 @@ public sealed class AWrongEpisodeIsReplacedTests : IDisposable
         await Transfers(Holding(Finished()), grabs, server, writer, says).TickAsync(Incomplete, Intake, CancellationToken.None);
 
         Assert.Equal(GrabState.Dispatched, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
-        Assert.True(File.Exists(Path.Combine(Intake, Staged)), "The staged video went before the server said its encode was done.");
+        Assert.True(File.Exists(Path.Combine(Intake, Staged)), "The staged video went before anything said its encode was done.");
 
+        // The server says it finished, and the folder holds no new playlist.
         says.State = EncodeJobState.Finished;
+        await Transfers(Holding(Finished()), grabs, server, writer, says).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Equal(GrabState.Dispatched, Assert.Single(await grabs.OpenAsync(CancellationToken.None)).State);
+        Assert.True(File.Exists(Path.Combine(Intake, Staged)), "The staged video went on the server's word alone.");
+
+        // The new encode's playlist, written after the old one was recycled.
+        DateTimeOffset recycled = Assert.Single(await grabs.EveryAsync(CancellationToken.None), one => one.InfoHash == NewHash).RecycledAt!.Value;
+        Write($"{EpisodeFolder}/{Master}", recycled.AddMinutes(20));
+
         await Transfers(Holding(Finished()), grabs, server, writer, says).TickAsync(Incomplete, Intake, CancellationToken.None);
 
         Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
