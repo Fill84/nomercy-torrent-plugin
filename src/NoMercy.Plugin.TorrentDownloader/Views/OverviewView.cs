@@ -83,6 +83,14 @@ public static class OverviewView
     {
         // The page number belongs to the library the path names. On the overview's own address, or a
         // library that is not there any more, the first tab is drawn from its first page.
+        //
+        // Only the drawn tab's block is built: every other one was sorted, filtered and laid out as rows on
+        // every render, and thrown away by Tabs.Draw, which shows one. Which tab is drawn is decided by the
+        // same rule Tabs.Draw uses — the one the path names, or else the first — so the two cannot part.
+        string? drawn = libraries.Any(library => string.Equals(library.Library.Id, onlyLibraryId, StringComparison.OrdinalIgnoreCase))
+            ? onlyLibraryId
+            : libraries.FirstOrDefault()?.Library.Id;
+
         Tab[] tabs =
         [
             .. libraries.Select(library => new Tab(
@@ -92,7 +100,9 @@ public static class OverviewView
                 // What is listed under the tab, so a search says which library the show is in.
                 library.Shows.Count(one => Found(find, one.Show.Title)),
                 ShowsRoute(library.Library.Id, 1),
-                [.. Block(library, library.Library.Id == onlyLibraryId ? Math.Max(page, 1) : 1, find, query ?? TableQuery.None)])),
+                string.Equals(library.Library.Id, drawn, StringComparison.OrdinalIgnoreCase)
+                    ? [.. Block(library, library.Library.Id == onlyLibraryId ? Math.Max(page, 1) : 1, find, query ?? TableQuery.None)]
+                    : [])),
         ];
 
         return new()

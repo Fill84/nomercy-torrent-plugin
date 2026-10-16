@@ -35,6 +35,26 @@ public class OverviewViewTests
     }
 
     /// <remarks>
+    /// A path naming a library that is not there any more — removed from the server since the page was
+    /// bookmarked — draws the first library's shows, not a page with no table. Only the drawn tab's block is
+    /// built (<c>S17-04</c>), so which one that is has to be decided as <c>Tabs.Draw</c> decides it.
+    /// Sabotage: building the block of the library the path names, whatever it names, draws nothing.
+    /// </remarks>
+    [Fact]
+    public void ALibraryThatIsGoneDrawsTheFirstLibrarysShows()
+    {
+        LibraryListing[] libraries =
+        [
+            Listing(Tv, "Series", LibraryKind.Television, Listed(41, "Silo", Tv), Listed(52, "Sugar", Tv)),
+            Listing(Anime, "Anime", LibraryKind.Anime, Listed(90, "Frieren", Anime)),
+        ];
+
+        Assert.Equal(
+            ["Silo", "Sugar"],
+            Titles(OverviewView.Render(Idle(), libraries, onlyLibraryId: "01HQ5W4GAVF30N10RT6XCF6AZZ"), Tv));
+    }
+
+    /// <remarks>
     /// On or off, and nothing between: a show switched on follows its library until the owner sets
     /// something on the show itself (the owner's rule of 16 September 2026), so there is no "On, not saved".
     /// </remarks>
