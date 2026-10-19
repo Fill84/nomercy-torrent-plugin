@@ -3855,8 +3855,19 @@ the moment its folders are saved (`Clock.NextAsync` counts from `DateTimeOffset.
 starts a cycle at once; the test's `RunCycleAsync` then arrives on an open cycle, is "added to that one",
 and the search runs once more when the first finishes — two searches in one open cycle, the second over
 nothing. `AWholeRunTests` records a cadence finish before saving the folders so only the test's own cycle
-runs; whether this test does the same, and whether a run that joins a clock-started cycle should search
-again at all, is what is left of this slice.
+runs.
+
+**As done** (20 October 2026): traced to its end in the code. `Saved` runs `StartUpAsync` on a thread-pool
+thread, whose `WindAsync` reads the cadence table and, finding no finish, arms a timer of nought; the
+timer's `Trigger` is one more hop. Against the test's own cycle that read and that hop can land in three
+places: during the search, where the trigger is "added to that one" and the search runs once more inside
+the task the test awaits (harmless); between the search and the close, where it opens a second search that
+closes in its turn (harmless); or after the close has written its finish, where it starts a second cycle
+and the test's last assertion finds the plugin running. The third is the failure seen, and it needs a loaded
+machine to stretch the hops. The plugin is right to start a cycle when a never-run plugin is configured,
+and a trigger during a search is right to search again — the owner pressing Run during a search wants a
+fresh look — so the plugin is unchanged. The test now writes a cadence finish before saving the folders and
+waits for a finish later than it; green five times running. `S17-04` is done.
 
 ## S17-05 · A whole plugin run, driven by a test
 

@@ -318,6 +318,24 @@ public class TorrentDownloaderPluginTests
             // So the feed reads nobody — these tests touch no network.
             DisableEveryShippedSource(settings);
 
+            // A second reader of the same file, never the plugin's own
+            // repository: what is under test is what actually landed on disk.
+            // Asked of the plugin's repository first, so the table exists.
+            await plugin.GrabsAsync(CancellationToken.None);
+
+            CadenceRepository cadences = new(TestStore.In(folder));
+
+            // A cycle that finished a moment ago, written before the folders
+            // are saved. A plugin that has never run is due the moment it is
+            // configured, so the save below wound a clock that started a cycle
+            // of its own, on its own thread; one that fired after this test's
+            // cycle had closed left the plugin running at the last assertion —
+            // once in four full runs on 16 October 2026, never alone. The one
+            // cycle here must be the one this test asks for.
+            DateTimeOffset before = DateTimeOffset.UtcNow;
+
+            await cadences.RecordFinishedAsync(JobNames.Cycle, before, CancellationToken.None);
+
             await plugin.Settings.SaveAsync(settings, CancellationToken.None);
 
             // Switched on and saved, or the refresh has no show to search for.
@@ -325,10 +343,6 @@ public class TorrentDownloaderPluginTests
                 41,
                 new Dictionary<string, string?> { ["switchedOn"] = "true", ["quality"] = "1080p" },
                 CancellationToken.None));
-
-            // A second reader of the same file, never the plugin's own
-            // repository: what is under test is what actually landed on disk.
-            CadenceRepository cadences = new(TestStore.In(folder));
 
             await plugin.RunCycleAsync(CancellationToken.None);
 
@@ -339,13 +353,15 @@ public class TorrentDownloaderPluginTests
             Assert.Single(tracked);
 
             // And the cycle wrote down that it finished, which is what the next
-            // one is timed from.
+            // one is timed from: a finish later than the one written above.
             IReadOnlyDictionary<string, DateTimeOffset> finished = await UntilAsync(
                 cadences,
-                done => done.ContainsKey(JobNames.Cycle),
+                done => done.TryGetValue(JobNames.Cycle, out DateTimeOffset at) && at > before,
                 TimeSpan.FromSeconds(20));
 
-            Assert.True(finished.ContainsKey(JobNames.Cycle), "the cycle never recorded a finish");
+            Assert.True(
+                finished.TryGetValue(JobNames.Cycle, out DateTimeOffset ended) && ended > before,
+                "the cycle never recorded a finish");
 
             // Nothing was downloading and nothing was waiting on an encode, so
             // the cycle closed itself rather than staying open.

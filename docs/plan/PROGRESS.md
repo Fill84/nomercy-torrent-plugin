@@ -6,9 +6,9 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
 Media-server #599 and #600 are closed, so `S15-04` is unblocked. `S17-02` is done and
-`feat/replace-delivered` is merged into master. `S17-03` is done. `S17-05` is done. `S17-04` is done but for
-the cycle test it watches, whose mechanism `S17-05` found (`SPRINTS.md` § S17-04, last item). Current:
-**that item of `S17-04`**.
+`feat/replace-delivered` is merged into master. `S17-03`, `S17-04` and `S17-05` are done (20 October 2026):
+**`S17` is finished.** Media-server #601 closed and its PR #610 merged on 16 October 2026, so `S16-06` is
+unblocked. Current: **`S16-06`**, the solver on `IPluginBrowser`; then `S16-07`.
 
 **For the release notes of the version that carries S16 and S17** (not yet in `docs/releases/`): a wrong
 episode the plugin delivered — a show's episode from a release no name source names, such as South Park
@@ -27,10 +27,10 @@ request for a magnet's metadata, so one instance of this plugin can seed to anot
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
-by us.** `SPRINTS.md` § S16. Current: **nothing the plugin can do alone.** `S16-06` waits on
-media-server #601 (the browser, PR #610 open); `Sparse.DeviceIoControl` is gone (`S16-08`, #609). **The owner's word, 15 October 2026:
-no version until #601 ships**, so `S16-07` (the carry-over seen on beast-unit's own database, then a
-version) comes after `S16-06` and #476 closes in one release.
+by us.** `SPRINTS.md` § S16. `S16-06` waited on media-server #601 (the browser), which closed with PR #610
+merged on 16 October 2026 — read off GitHub on 20 October; `Sparse.DeviceIoControl` is gone (`S16-08`,
+#609). **The owner's word, 15 October 2026: no version until #601 ships**, so `S16-07` (the carry-over seen
+on beast-unit's own database, then a version) comes after `S16-06` and #476 closes in one release.
 
 **15 October 2026: `S15` — 0.8.1, on the owner's word that day.** `SPRINTS.md` § S15: `S15-01` Torrentz2
 is gone (done, `b54ef94`), `S15-02` no table scrolls sideways (done), `S15-03` a show downloads only a release
@@ -721,10 +721,9 @@ looking and goes stale on its own when the last page closes.
 
 ## Blocked
 
-- **`S16-06`, the solver on `IPluginBrowser`, waits on media-server #601** (filed 15 October 2026): every
-  host refuses `IPluginContext.Browser`, and the interface lacks reload, content type, readiness, the
-  in-page fetch, the user agent and availability. Until it ships the solver stays on PuppeteerSharp and
-  the marketplace scan keeps refusing the `Solver/` findings of #476.
+- **`S16-06` is no longer blocked.** Media-server #601 (filed 15 October 2026, the browser facade with what
+  a challenge solver needs) closed on 16 October 2026 with PR #610 merged on `dev`; read off GitHub on
+  20 October. What that facade turned out to offer is `S16-06`'s to read before it starts.
 
 **Nothing is blocked on a deploy any more.** That paragraph said the first install went over with
 every hash matching and the plugin still could not load. The cause was found and fixed on 21 August
@@ -923,12 +922,18 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S17-01` The replacement branch on today's master
 - [x] `S17-02` The replacement, finished from its own check
 - [x] `S17-03` A plugin unloaded mid-cycle leaves nothing unobserved
-- [ ] `S17-04` The `S14` known list
+- [x] `S17-04` The `S14` known list
 - [x] `S17-05` A whole plugin run, driven by a test
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-04`, the last of the known list (20 October 2026):** the cycle test's flake traced to the clock a
+  first save winds on a never-run plugin, whose trigger can land after the test's own cycle has closed
+  (`SPRINTS.md` § S17-04 **As done**). The plugin is unchanged; `OneCycleRunsEveryStepAndSaysWhenItFinished`
+  writes a cadence finish before saving the folders and waits for a later one. Green five times running;
+  519 + 295 + 7 + 791. `S17` is finished. #601 is closed, so `S16-06` is next.
 
 - **`S17-05` (20 October 2026):** `AWholeRunTests` drives the plugin from PreDB.net and The Pirate Bay's
   S29E03 captures to a grab to its own torrent client, over `TorrentDownloaderPlugin.Network` (one handler
@@ -2794,6 +2799,12 @@ One line per finished slice: the id, what landed, and anything the next slice sh
   nought. Ports are UPnP then NAT-PMP, with every refusal kept for the Settings page.
 
 ## Decisions
+
+- **20 October 2026: a plugin configured for the first time starts a cycle at once, and a trigger during a
+  search makes it search once more; both stand (`S17-04`).** The first is what a fresh install owes an
+  owner who has just set the folders; the second is the owner pressing Run during a search and wanting a
+  fresh look. The cycle test that tripped over them owns its cycle now by writing a cadence finish first,
+  rather than the plugin learning to tell a test's cycle from the clock's.
 
 - **20 October 2026: the whole-run test reaches the network through a handler the plugin takes, not the
   context's `HttpClient` (`S17-05`).** The slice's first step said the context; the host's client, read off
