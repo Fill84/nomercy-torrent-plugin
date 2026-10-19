@@ -99,6 +99,17 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     public Hiding? BrowserHiding { get; init; }
 
+    /// <summary>How the plugin reaches the network when a test says so; null is the real network.</summary>
+    /// <remarks>
+    /// One handler under the sites' client and the trackers' client both, so a test can drive a whole run from
+    /// the name sources to a grab to the torrent client without a wire (<c>S17-05</c>). Not the host's
+    /// <c>IPluginContext.HttpClient</c>: read off media-server <c>dev</c> on 19 October 2026, that client
+    /// replaces the user agent with the server's and refuses every host outside the manifest and the grants,
+    /// and a tracker a magnet names is neither — so a plugin tested through it would not be the one that
+    /// ships. Nothing on a server sets it.
+    /// </remarks>
+    public HttpMessageHandler? Network { get; init; }
+
     /// <summary>
     /// What the overview is being narrowed to, or null for every show.
     /// </summary>
@@ -2183,6 +2194,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 Context,
                 _journal,
                 Shipped(),
+                handler: Network,
                 engine: engine,
                 ledger: ledger,
                 logger: Log,
@@ -2242,8 +2254,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 // The trackers get an HttpClient of their own, not the one the
                 // sites use: that one carries a browser's user agent because
                 // half the indexers challenge anything else, and a tracker has
-                // no such quarrel.
-                _trackerHttp ??= new();
+                // no such quarrel. Over the test's handler when there is one,
+                // which is shared with the sites' client and so not disposed
+                // with this one.
+                _trackerHttp ??= Network is null ? new() : new(Network, disposeHandler: false);
 
                 _engine = new(
                     settings.Client.ListenPort,

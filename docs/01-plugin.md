@@ -130,7 +130,7 @@ EF context, and no reference to the server's assemblies.
 | `Jobs` | what became of an encode, by the job id `EncodeAsync` handed back |
 | `LibraryWriter` | putting the encode of an episode the plugin delivered from a release no name source names in the server's recycle area, once its replacement is staged; handed over only because `plugin.json` names the `libraryWrite` hook and the owner granted a library — see `docs/09-host-contract.md` |
 | `Server` | `GrantedPaths`, the places a folder may be chosen from |
-| `HttpClient` | outbound requests |
+| `HttpClient` | **not used.** The plugin builds its own clients, one for the sites and one for the trackers. Read off media-server `dev` on 19 October 2026: the host's client replaces the `User-Agent` with the server's and the plugin's attribution (`PluginUserAgentHandler`, deliberately), which breaks replaying a `cf_clearance` cookie under the user agent it was issued to (`docs/07-solver.md`); and it refuses every host outside the manifest's `network.hosts` and the owner's grants (`PluginNetworkAllowlistHandler`), which a tracker a magnet names never is. The SDK's analyzer (`NMP0001`) flags `new HttpClient()`; the marketplace's IL scan (`docs/plan/SPRINTS.md` § S16) does not. Whether the plugin should move to the host's client is the owner's to decide and needs the media server to change both behaviours first. A test hands the plugin one handler for both clients through `TorrentDownloaderPlugin.Network` (`S17-05`). |
 
 `Services` — the server's own container — was here until contract 12 took it away on 22 September
 2026. Nothing reaches into the server outside this contract any more; see `docs/09-host-contract.md`.

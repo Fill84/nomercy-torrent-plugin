@@ -1560,7 +1560,8 @@ public sealed class TorrentRun : IDisposable
     }
 
     /// <summary>What this client calls itself to a peer.</summary>
-    private const string Client = "NoMercy Torrent Downloader";
+    /// <remarks>Shared with <see cref="TorrentSession"/>, which greets the peers that arrive once the metadata is in.</remarks>
+    internal const string Client = "NoMercy Torrent Downloader";
 
     /// <summary>
     /// The session, opened the first time there is metadata to open it with.

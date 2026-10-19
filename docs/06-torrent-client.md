@@ -89,6 +89,14 @@ metadata does not hash correctly is dropped.
 Metadata that has not arrived within `MetadataTimeoutMinutes` fails the torrent, blacklists the hash
 with the reason, and returns the episode to missing.
 
+The other half of BEP 9 is answered too. A peer whose handshake advertises the extension protocol is
+sent our extension handshake, with `metadata_size` when the torrent is private; a `ut_metadata` request
+from it is answered with that piece of the info dictionary, byte for byte as it was read, under the id
+the peer's own handshake named. On a public torrent the size is not claimed and a request is rejected,
+because the metadata is bytes like any other (§ Uploading). Until 20 October 2026 the client only ever
+asked: a client holding a magnet for a torrent this one had whole sat at `FetchingMetadata` for as long
+as this one was its only seed, so one instance could not seed a magnet to another.
+
 ## Trackers
 
 **HTTP** — GET with `info_hash`, `peer_id`, `port`, `uploaded`, `downloaded`, `left`, `compact=1`,
@@ -241,7 +249,8 @@ at 0.2% downloaded with a ratio of 0.17. It costs download speed: a swarm recipr
 that gives nothing back is choked by the peers that notice. That is the trade the owner chose.
 
 Only a torrent whose metadata says `private` uploads, because there the tracker keeps an account of
-what the owner has given back and a client that took without giving would cost them it.
+what the owner has given back and a client that took without giving would cost them it. The metadata
+a peer asks for over BEP 9 is uploading too, and follows the same rule (§ Metadata).
 
 ## Seeding
 

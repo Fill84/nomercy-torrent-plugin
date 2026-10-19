@@ -473,7 +473,7 @@ public class DhtTests
 
     private static TorrentMetadata Torrent(byte[] hash, bool priv)
     {
-        return new(Convert.ToHexString(hash), "something", 262144, [], [], 0, [], priv);
+        return new(Convert.ToHexString(hash), "something", 262144, [], [], 0, [], priv, []);
     }
 
     /// <summary>Something to announce to, for the test that nothing is announced.</summary>

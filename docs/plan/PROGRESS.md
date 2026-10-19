@@ -6,7 +6,9 @@ Read this first, update it last. Nothing else decides what happens next.
 
 **16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
 Media-server #599 and #600 are closed, so `S15-04` is unblocked. `S17-02` is done and
-`feat/replace-delivered` is merged into master. `S17-03` is done. `S17-04` is done but for the cycle test it watches. Current: **`S17-05`**.
+`feat/replace-delivered` is merged into master. `S17-03` is done. `S17-05` is done. `S17-04` is done but for
+the cycle test it watches, whose mechanism `S17-05` found (`SPRINTS.md` § S17-04, last item). Current:
+**that item of `S17-04`**.
 
 **For the release notes of the version that carries S16 and S17** (not yet in `docs/releases/`): a wrong
 episode the plugin delivered — a show's episode from a release no name source names, such as South Park
@@ -19,7 +21,9 @@ Until a library is granted, a replacement waits in the intake folder and the Dow
 plugin also needs a server on plugin ABI 12.4 (`S16-08`), and its database moves to the server's
 (`S16-04`). A season pack is no longer turned down because the whole torrent is bigger than the free
 space when only some of its episodes are wanted, and a download that does not fit is tried again six
-hours later rather than never (`S17-04`).
+hours later rather than never (`S17-04`). On a private torrent the client now answers another client's
+request for a magnet's metadata, so one instance of this plugin can seed to another from a hash alone
+(`S17-05`).
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
@@ -920,11 +924,20 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S17-02` The replacement, finished from its own check
 - [x] `S17-03` A plugin unloaded mid-cycle leaves nothing unobserved
 - [ ] `S17-04` The `S14` known list
-- [ ] `S17-05` A whole plugin run, driven by a test
+- [x] `S17-05` A whole plugin run, driven by a test
 
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S17-05` (20 October 2026):** `AWholeRunTests` drives the plugin from PreDB.net and The Pirate Bay's
+  S29E03 captures to a grab to its own torrent client, over `TorrentDownloaderPlugin.Network` (one handler
+  under both clients) and a `FakeHttp` that answers by address; each of the five tests was red with its
+  line taken out. The client now serves a magnet's metadata on a private torrent (`TorrentSession`,
+  `MetadataFromThisClientTests`, red at `FetchingMetadata` for the whole bound first); `TorrentMetadata`
+  carries its raw `Info` bytes for it. Found on the way: a never-run plugin is due the moment its folders
+  are saved, which is `S17-04`'s cycle-test mechanism; and the host's `HttpClient` is not one this plugin
+  can use yet (§ Facts). 519 + 295 + 7 + 791 green.
 
 - **`S17-04`, 5 of the known list (16 October 2026):** the overview builds only the library tab it draws,
   chosen by the rule `Tabs.Draw` uses (`bcd0f2d`); `ALibraryThatIsGoneDrawsTheFirstLibrarysShows` was red
@@ -2782,6 +2795,24 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 ## Decisions
 
+- **20 October 2026: the whole-run test reaches the network through a handler the plugin takes, not the
+  context's `HttpClient` (`S17-05`).** The slice's first step said the context; the host's client, read off
+  media-server `dev` on 19 October, replaces the user agent and refuses hosts outside the manifest and the
+  grants, so a plugin tested through it would not be the plugin that ships. `TorrentDownloaderPlugin.Network`
+  is set by a test and by nothing on a server, like `BrowserHiding`. Whether the plugin should move to the
+  host's client is the owner's call and waits on the media server (§ Facts).
+
+- **20 October 2026: the client serves a magnet's metadata, on a private torrent only (`S17-05`).** The
+  other half of BEP 9, missing until now; the slice needed a seeding instance to answer a hash the search
+  chain hands over. Private only because the metadata is bytes like any other and a public torrent never
+  uploads (`docs/06-torrent-client.md` § Uploading); on a public one the request is rejected, so the peer
+  asks somebody else.
+
+- **20 October 2026: the one edit to a capture is its hash (`S17-05`).** The CAKES row of The Pirate Bay's
+  S29E03 captures carries the test torrent's hash instead of the listed one, because a real swarm can only
+  be for a torrent made in the test. Nothing else about any page is touched, and the rule that parsers are
+  tested against unedited captures stands: these tests are of the run, not of a reader.
+
 - **16 October 2026, the owner's choice (B of two): a pack is handed over on its wanted videos, and a
   torrent that does not fit is refused for six hours (`S17-04`).** `Grab.Room` no longer declines a season
   pack on the indexer's whole size; the engine's `Cramped` measures the videos it will fetch once the file
@@ -3566,6 +3597,24 @@ and note it here.
 ## Facts, measured
 
 Kept here so no slice re-discovers them.
+
+- **The host's `IPluginContext.HttpClient` rewrites and allowlists** (media-server `dev`, 19 October 2026,
+  `src/NoMercy.Plugins/Network/`). `PluginHttpClientFactory.Create` wraps a `SocketsHttpHandler` in
+  `PluginUserAgentHandler`, which clears the request's `User-Agent` and sets the server's configured agent
+  plus `NoMercyPlugin-<name>/<version>` — "replacing whatever the plugin set", deliberately — and in
+  `PluginNetworkAllowlistHandler`, which throws `PluginNetworkDeniedException` for any host matching neither
+  the manifest's `network.hosts` nor a grant (globs: `*` within a label, `**` across dots). So through it the
+  solver's `cf_clearance` cookie travels under the wrong agent and a tracker a magnet names is refused. The
+  SDK's Roslyn analyzer `BannedApiAnalyzer` flags `HttpClient` (NMP0001), `Socket`/`UdpClient`/`TcpClient`
+  (NMP0002), `TcpListener`/`HttpListener` (NMP0003) and `Process` (NMP0004); this plugin does not reference
+  the analyzer package, and the marketplace's IL scan (§ S16) has no such rule.
+
+- **A plugin that has never run is due the moment its folders are saved.** `Clock.NextAsync` counts the
+  cadence from `DateTimeOffset.MinValue` when nothing has finished, so `WindAsync` after the first save sets a
+  timer of nought and the clock starts a cycle. A caller's `RunCycleAsync` arriving then is "added to that
+  one" and the search runs once more after the first — seen in the plugin's log on 20 October 2026, where the
+  second search "looked at 0 episodes" and became `LastCycle`. A test that wants only its own cycle records
+  a cadence finish first (`AWholeRunTests.StartAsync`).
 
 - **`FakeTimeProvider` 10.9.0 fires due timers on whichever thread reads it.** `GetUtcNow`, `CreateTimer`
   and `Advance` all run every timer that is due, on the calling thread, unless another thread is already

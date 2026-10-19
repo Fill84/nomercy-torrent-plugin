@@ -306,7 +306,7 @@ public class PeerExchangeTests
 
     private static TorrentMetadata Torrent(bool priv)
     {
-        return new(priv ? Archive : Ubuntu, "something", 262144, [], [], 0, [], priv);
+        return new(priv ? Archive : Ubuntu, "something", 262144, [], [], 0, [], priv, []);
     }
 
     /// <remarks>

@@ -148,6 +148,10 @@ public sealed class TorrentSession(
     /// endgame asks several on purpose.
     /// </remarks>
     private readonly Dictionary<PeerConnection, RequestLedger> _ledgers = [];
+
+    /// <summary>The id each peer asked to be sent <c>ut_metadata</c> messages under, from its extension handshake.</summary>
+    private readonly Dictionary<PeerConnection, int> _metadataIds = [];
+
     private readonly List<PeerConnection> _peers = [];
     private readonly Lock _lock = new();
     private readonly Random _random = new();
@@ -407,6 +411,21 @@ public sealed class TorrentSession(
         {
             await peer.SendAsync(new(PeerMessageId.Bitfield, verified.Write()), ct).ConfigureAwait(false);
 
+            if (peer.Introduction.Extensions)
+            {
+                // Our extension handshake, to a peer whose own handshake said it
+                // speaks BEP 10. Without it a peer holding only a magnet never
+                // learns the id to ask us for the metadata under, and this
+                // client — which fetched metadata from the day it could — never
+                // served a byte of it: one instance of it could not seed a
+                // magnet to another. Sent again for a peer the run already
+                // greeted while fetching, which BEP 10 allows; the size is
+                // claimed only where a request for it is answered (Uploading).
+                await peer
+                    .SendAsync(Extensions.Handshake(TorrentRun.Client, torrent.Private ? torrent.Info.Length : null), ct)
+                    .ConfigureAwait(false);
+            }
+
             if (torrent.Private)
             {
                 // Unchoked from the start. Choking properly is a decision
@@ -465,6 +484,7 @@ public sealed class TorrentSession(
                 // Its ledger goes with it. What it was asked for is not owed by
                 // whoever dials in next.
                 _ledgers.Remove(peer);
+                _metadataIds.Remove(peer);
 
                 // And its claims stop counting against it, so the peer that
                 // takes its place is not held to a pipeline full of pieces
@@ -504,6 +524,32 @@ public sealed class TorrentSession(
     /// <summary>What to do with one message from one peer.</summary>
     private async Task Handle(PeerConnection peer, PeerMessage message, CancellationToken ct)
     {
+        if (message.Id == PeerMessageId.Extended && message.Payload.Length > 0)
+        {
+            if (message.Payload[0] == Extensions.HandshakeId)
+            {
+                // The id this peer wants ut_metadata messages under is whatever
+                // it chose, and is in here. Kept per peer: the one that asks is
+                // the one that is answered, under its own number.
+                if (Extensions.Read(message).MetadataId is int theirs)
+                {
+                    lock (_lock)
+                    {
+                        _metadataIds[peer] = theirs;
+                    }
+                }
+
+                return;
+            }
+
+            if (message.Payload[0] == Extensions.OurMetadataId)
+            {
+                await ServeMetadataAsync(peer, message, ct).ConfigureAwait(false);
+
+                return;
+            }
+        }
+
         // Peer exchange, before anything this session itself wants. A swarm is
         // learned from the peers already in it: a tracker's fifty addresses are
         // mostly stale, and without this a download runs on the one or two that
@@ -569,6 +615,61 @@ public sealed class TorrentSession(
     /// choking was never counted, and rarest-first picked at random (<c>S14-04</c>, <c>RarestFirstTests</c>).
     /// </remarks>
     private readonly Dictionary<PeerConnection, Bitfield> _counted = [];
+
+    /// <summary>
+    /// Answers a peer's <c>ut_metadata</c> request with a piece of the info dictionary, or refuses it.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The other half of BEP 9. This client fetched metadata from peers from the start and never served it,
+    /// so a client holding only a magnet for a torrent this one had whole sat at "fetching metadata" for as
+    /// long as this one was its only seed.
+    /// </para>
+    /// <para>
+    /// Only on a private torrent, which is the rule for every byte this client sends (Uploading): a public
+    /// torrent never uploads, and the metadata is bytes like any other. A request on one is refused rather
+    /// than ignored, so the peer asks somebody else instead of waiting on us.
+    /// </para>
+    /// </remarks>
+    private async Task ServeMetadataAsync(PeerConnection peer, PeerMessage message, CancellationToken ct)
+    {
+        MetadataPart part = MetadataTransfer.Read(message);
+
+        if (part.Kind != MetadataMessage.Request)
+        {
+            // Data this session did not ask for, or a reject for nothing: the
+            // run fetched the metadata before this session existed.
+            return;
+        }
+
+        int theirs;
+
+        lock (_lock)
+        {
+            if (!_metadataIds.TryGetValue(peer, out theirs))
+            {
+                // Asked under our id by a peer that never said what its own is,
+                // so there is no number to answer under.
+                return;
+            }
+        }
+
+        int pieces = MetadataTransfer.Pieces(torrent.Info.Length);
+
+        if (!torrent.Private || part.Piece < 0 || part.Piece >= pieces)
+        {
+            await peer.SendAsync(MetadataTransfer.Reject(theirs, part.Piece), ct).ConfigureAwait(false);
+
+            return;
+        }
+
+        int at = part.Piece * MetadataTransfer.PieceLength;
+        int length = Math.Min(MetadataTransfer.PieceLength, torrent.Info.Length - at);
+
+        await peer
+            .SendAsync(MetadataTransfer.Data(theirs, part.Piece, torrent.Info.Length, torrent.Info.AsSpan(at, length)), ct)
+            .ConfigureAwait(false);
+    }
 
     /// <summary>Brings the picker's count of one peer up to what it says it has. Under <c>_lock</c>.</summary>
     /// <remarks>

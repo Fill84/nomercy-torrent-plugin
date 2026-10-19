@@ -45,7 +45,7 @@ Contract 12 (`NoMercy.PluginSdk.Abstractions`, 22 September 2026). What the plug
 Ulid                  PluginId
 string                DataFolderPath
 ILogger               Logger
-HttpClient            HttpClient
+HttpClient            HttpClient           (offered; not used — it rewrites the user agent and allowlists hosts, docs/01-plugin.md § What the server gives it)
 IPluginConfiguration  Configuration
 IPluginSecretStore    Secrets
 IPluginLibraryQuery   Library

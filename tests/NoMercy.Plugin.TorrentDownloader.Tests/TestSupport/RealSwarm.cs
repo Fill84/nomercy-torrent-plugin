@@ -127,21 +127,34 @@ public sealed class RealSwarm(string root)
         return File.ReadAllBytes(Path.Combine(directory!.FullName, "tests", "fixtures", name));
     }
 
+    /// <summary>What an HTTP tracker answers when the swarm is one peer on this machine, or nobody at all.</summary>
+    /// <remarks>
+    /// The same bytes whether handed back by a transport (<see cref="PointingTrackers"/>) or served over a
+    /// <see cref="FakeHttp"/> route to a client that builds its own transport, as the plugin does.
+    /// </remarks>
+    public static byte[] Announce(int? port)
+    {
+        byte[] peer = new byte[port is null ? 0 : 6];
+
+        if (port is int at)
+        {
+            IPAddress.Loopback.GetAddressBytes().CopyTo(peer, 0);
+            BinaryPrimitives.WriteUInt16BigEndian(peer.AsSpan(4), (ushort)at);
+        }
+
+        return Bencode.Write(new BencodeDictionary(
+        [
+            new("interval"u8.ToArray(), new BencodeInteger(60)),
+            new("peers"u8.ToArray(), new BencodeBytes(peer)),
+        ]));
+    }
+
     /// <summary>A tracker that answers with one peer: the other client.</summary>
     public sealed class PointingTrackers(int port) : ITrackerTransport
     {
         public Task<byte[]> GetAsync(Uri address, CancellationToken ct)
         {
-            byte[] peer = new byte[6];
-
-            IPAddress.Loopback.GetAddressBytes().CopyTo(peer, 0);
-            BinaryPrimitives.WriteUInt16BigEndian(peer.AsSpan(4), (ushort)port);
-
-            return Task.FromResult(Bencode.Write(new BencodeDictionary(
-            [
-                new("interval"u8.ToArray(), new BencodeInteger(60)),
-                new("peers"u8.ToArray(), new BencodeBytes(peer)),
-            ])));
+            return Task.FromResult(Announce(port));
         }
 
         public Task<byte[]> ExchangeAsync(string host, int port, byte[] datagram, TimeSpan patience, CancellationToken ct)

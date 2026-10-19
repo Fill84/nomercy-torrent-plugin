@@ -38,6 +38,10 @@ public sealed record TorrentSlice(TorrentFileEntry File, long OffsetInFile, long
 /// BEP 27. A private torrent never touches the DHT, peer exchange or local
 /// discovery, and announces only to its own trackers.
 /// </param>
+/// <param name="Info">
+/// The info dictionary's own bytes, as they were read. What a peer asking for the metadata over BEP 9 is
+/// sent, and what <see cref="InfoHash"/> was taken over: a re-encode would hash the same only by luck.
+/// </param>
 public sealed record TorrentMetadata(
     string InfoHash,
     string Name,
@@ -46,7 +50,8 @@ public sealed record TorrentMetadata(
     IReadOnlyList<TorrentFileEntry> Files,
     long TotalLength,
     IReadOnlyList<string> Trackers,
-    bool Private)
+    bool Private,
+    byte[] Info)
 {
     /// <summary>How many pieces the torrent has.</summary>
     public int PieceCount => Pieces.Count;
@@ -246,7 +251,11 @@ public sealed record TorrentMetadata(
             FilesOf(info, name, out long total),
             total,
             trackers,
-            info.Number("private") == 1);
+            info.Number("private") == 1,
+
+            // The bytes as they arrived, not a re-encode: they are what a peer asking for the metadata is owed,
+            // and what the info hash was taken over.
+            raw.ToArray());
     }
 
     /// <summary>

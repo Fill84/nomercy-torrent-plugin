@@ -3849,8 +3849,14 @@ for good — `PROGRESS.md` § Decisions); the overview builds
 only the tab it draws (done, `bcd0f2d`); tab counts following the filter is dropped, since
 `docs/specs/pages.md` says they are the tables' totals; and
 `TorrentDownloaderPluginTests.OneCycleRunsEveryStepAndSaysWhenItFinished`, which failed once in four full
-runs on 16 October 2026 ("the cycle stayed open with nothing in hand") and passed alone five times —
-unproven: the clock wound by the folders being saved may start a second cycle as the first one closes.
+runs on 16 October 2026 ("the cycle stayed open with nothing in hand") and passed alone five times.
+The mechanism, seen in the plugin's log on 20 October 2026 (`S17-05`): a plugin that has never run is due
+the moment its folders are saved (`Clock.NextAsync` counts from `DateTimeOffset.MinValue`), so saving them
+starts a cycle at once; the test's `RunCycleAsync` then arrives on an open cycle, is "added to that one",
+and the search runs once more when the first finishes — two searches in one open cycle, the second over
+nothing. `AWholeRunTests` records a cadence finish before saving the folders so only the test's own cycle
+runs; whether this test does the same, and whether a run that joins a clock-started cycle should search
+again at all, is what is left of this slice.
 
 ## S17-05 · A whole plugin run, driven by a test
 
@@ -3862,12 +3868,32 @@ and not on a hand-run (`S17-02`).
 
 **Steps**
 
-1. `FakePluginContext` takes an `HttpClient` over `FakeHttp`, answering the captures of one name source and
-   one indexer for one episode, with the indexer's torrent pointing at a local tracker (`RealSwarm`) that a
-   seeding engine answers.
+1. The plugin takes one `HttpMessageHandler` for the sites' client and the trackers' client
+   (`TorrentDownloaderPlugin.Network`, set by a test and by nothing on a server), over a `FakeHttp` that
+   answers by address: the captures of one name source and one indexer for one episode, and a tracker whose
+   answer names a seeding engine (`RealSwarm`) on this machine, or nobody. Not the context's `HttpClient`,
+   which the step first said: on the server that client rewrites the user agent and refuses hosts outside the
+   manifest and the grants (`docs/01-plugin.md` § What the server gives it), so a plugin driven through it
+   would not be the one that ships.
 2. One test per line above, each red with that line taken out: a run grabs, the download is handed over and
    lands sparse; a second run does not take the open hash again; a delivery from before `named` was kept is
    asked about after the search and not on a run for one episode.
+
+**As done** (20 October 2026): `AWholeRunTests`, five tests, PreDB.net and The Pirate Bay answering the
+S29E03 captures of 15 October with the CAKES row's hash replaced by the test torrent's — the one edit, because
+a swarm can only be for a torrent made here. Each was run with its line taken out: `handedOver` null, the
+grab was never read as downloading; `markSparse` null, the file was not sparse; `OpenHashes` gone, the run took
+the hand-added torrent again; the check moved before the search, the order flipped; the `only is null` guard
+gone, the hand-run asked about the delivery. Three things the slice did not foresee. The client never
+*answered* a `ut_metadata` request, so a magnet from the search chain could not be served by a seeding
+instance of this client: `MetadataFromThisClientTests` was red at `FetchingMetadata` for the whole bound,
+and `TorrentSession` now greets a peer that speaks BEP 10 and serves the info dictionary on a private
+torrent (`docs/06-torrent-client.md` § Metadata). A never-run plugin is due the moment its folders are saved,
+so the clock started a cycle that the test's own call joined and ran once more — the tests record a cadence
+finish before saving (and this is `S17-04`'s cycle-test mechanism, below). The "second run" that must not
+take the open hash is a torrent the owner added by hand, which is the shortest whole run through the same
+line; the pack of `CycleOptions.OpenHashes`' remark needs a multi-file swarm the engine narrows, which
+`RealSwarm` does not make.
 
 ## What is not this repository's, and is written down so it is not looked for here again
 

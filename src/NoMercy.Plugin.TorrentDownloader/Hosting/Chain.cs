@@ -76,7 +76,10 @@ public sealed class Chain : IAsyncDisposable
         _gate = new(TimeProvider.System);
         Shipped = shipped;
 
-        _http = handler is null ? new() : new(handler);
+        // A handler a test hands over is the test's, and is shared with the
+        // trackers' client: disposing it with this client would pull the wire
+        // out from under the other.
+        _http = handler is null ? new() : new(handler, disposeHandler: false);
         _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgent);
 
         // Asked of the machine unless a test says what the machine is: a machine with no browser is one the
