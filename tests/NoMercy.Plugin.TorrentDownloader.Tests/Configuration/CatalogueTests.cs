@@ -155,8 +155,14 @@ public class CatalogueTests
         // Including the hosts of a source that is switched off: the manifest
         // cannot change at runtime, so switching one on next month must not
         // need a new release to make it reachable.
+        //
+        // And one host no source is: the host's browser aborts every request a
+        // page makes outside the manifest, and a managed challenge loads its own
+        // frame and script from challenges.cloudflare.com (docs/07-solver.md
+        // § No window, and ManifestTests names it on its own). Anything else in
+        // the manifest is still permission asked for nothing.
         Assert.Equal(
-            catalogue.EveryHost.Order(StringComparer.OrdinalIgnoreCase),
+            catalogue.EveryHost.Append("challenges.cloudflare.com").Order(StringComparer.OrdinalIgnoreCase),
             declared.Order(StringComparer.OrdinalIgnoreCase));
     }
 

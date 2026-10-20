@@ -4,6 +4,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Solver;
+using NoMercy.Plugin.TorrentDownloader.Tools.DeveloperBrowser;
 using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tools.SourceHealth;
@@ -66,12 +67,9 @@ internal static class Program
             }
         }
 
-        Browser browser = new(
-            new BrowserInstall(Path.Combine(repository, "_capture"), new PuppeteerBrowserDownloader(), logger),
-            new HiddenStages(logger),
-            logger);
-
-        await using PuppeteerTabs tabs = new(browser, logger);
+        // The tool's own Chrome, not the server's hidden one: there is no
+        // server here to ask for a browser.
+        await using DeveloperTabs tabs = new(Path.Combine(repository, "_capture"), logger);
         BrowserSolver solver = new(tabs, logger);
 
         using HttpClient http = new();
@@ -94,7 +92,7 @@ internal static class Program
             logger.LogInformation("{Name}: {Detail}", source.Name, result.Detail);
         }
 
-        browser.Dispose();
+        await tabs.CloseAllAsync(CancellationToken.None);
 
         string folder = Path.Combine(repository, "health");
 

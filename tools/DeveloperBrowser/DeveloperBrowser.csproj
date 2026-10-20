@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The browser the developer tools solve challenges in. The plugin itself
+    solves them in the hidden browser the media server provides, and a tool
+    running on a developer's machine has no server to ask, so it drives a
+    Chrome of its own through the same IBrowserTabs seam the solver uses.
+    Nothing here is shipped.
+  -->
+
+  <PropertyGroup>
+    <RootNamespace>NoMercy.Plugin.TorrentDownloader.Tools.DeveloperBrowser</RootNamespace>
+    <AssemblyName>DeveloperBrowser</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\NoMercy.Plugin.TorrentDownloader\NoMercy.Plugin.TorrentDownloader.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="PuppeteerSharp" Version="25.6.0" />
+  </ItemGroup>
+
+</Project>

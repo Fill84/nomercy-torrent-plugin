@@ -9,6 +9,7 @@ using NoMercy.Plugin.TorrentDownloader.Core.Sources;
 using NoMercy.Plugin.TorrentDownloader.Core.Sources.Readers;
 using NoMercy.Plugin.TorrentDownloader.Hosting;
 using NoMercy.Plugin.TorrentDownloader.Solver;
+using NoMercy.Plugin.TorrentDownloader.Tools.DeveloperBrowser;
 using NoMercy.PluginSdk.Abstractions;
 
 namespace NoMercy.Plugin.TorrentDownloader.Tools.Capture;
@@ -154,13 +155,10 @@ internal static class Program
         HostGate gate = new(TimeProvider.System);
         gate.Configure(address.Host, TimeSpan.FromSeconds(source.MinimumIntervalSeconds));
 
+        // The tool's own Chrome, not the server's hidden one: there is no
+        // server here to ask for a browser.
         string dataFolder = Path.Combine(repository, "_capture");
-        Browser browser = new(
-            new BrowserInstall(dataFolder, new PuppeteerBrowserDownloader(), logger),
-            new HiddenStages(logger),
-            logger);
-
-        await using PuppeteerTabs tabs = new(browser, logger);
+        await using DeveloperTabs tabs = new(dataFolder, logger);
         BrowserSolver solver = new(tabs, logger);
 
         using HttpClient http = new();
@@ -184,7 +182,7 @@ internal static class Program
         {
             logger.LogError("{Name} did not answer: {Reason}", source.Name, result.Failure);
 
-            browser.Dispose();
+            await tabs.CloseAllAsync(CancellationToken.None);
 
             return 1;
         }
@@ -215,7 +213,7 @@ internal static class Program
         // the token belongs to.
         await ProveTheClaimAsync(source, result.Body!, address, fetch, logger);
 
-        browser.Dispose();
+        await tabs.CloseAllAsync(CancellationToken.None);
 
         return 0;
     }

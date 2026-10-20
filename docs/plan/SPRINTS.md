@@ -3728,16 +3728,90 @@ download (the same gap as **Known** item 3 under `S14`). The contract is packed 
 
 ## S16-06 · The solver on `IPluginBrowser`
 
-**Waits on** the S16-05 issue shipping in a server release.
+**Waited on** the S16-05 issue: media-server #601 closed on 16 October 2026 with PR #610 (`7a0b061e3`,
+"browser host for plugins") merged on `dev`; the contract is repacked at 12.5 from `dev` on 20 October,
+because the 12.5 packed on 16 October predated the merge and had none of the page's members.
+
+**Read first:** `docs/07-solver.md`; on media-server `dev` (read only) `src/NoMercy.PluginSdk.Abstractions/
+Facades/IPluginBrowser.cs`, `IPluginBrowserPage.cs`, `PluginBrowserOptions.cs`, `PluginBrowserCookie.cs`,
+`src/NoMercy.Plugins/Browser/PluginBrowser.cs`, `PluginBrowserPage.cs`, `HiddenChrome.cs`,
+`src/NoMercy.Plugins/Capabilities/PluginCapabilityBroker.cs`; `Solver/IBrowserTab.cs`, `Solver/BrowserSolver.cs`,
+`Hosting/Chain.cs`, `Views/SourcesView.cs`.
+
+**Facts read off `dev` on 20 October 2026**, so they are not looked for again:
+
+- `IPluginContext.Browser` is on the interface since 12.0 and throws `FacadeNotOnThisHost` by default; the
+  in-process host wires it through `PluginBrowserRegistry` (one `PluginBrowser` per plugin). The page's
+  members this solver needs — `ReloadAsync`, `ContentTypeAsync`, `IsReadableAsync`, `FetchTextAsync`,
+  `UserAgentAsync`, `CookiesAsync` — arrived with `7a0b061e3` under 12.5 without an ABI bump of their own
+  (`PluginAbi.Current` went to 12.5 the same day for the port check). `targetAbi` 12.5 is the nearest the
+  manifest can say.
+- `OpenAsync(url, options)` first asks the capability broker for `browser.headless`: the manifest must
+  carry it in `capabilities.hooks` (`PluginCapabilityGuard.DeclaresHook` reads that list, case-insensitive)
+  and the owner must have approved it, or the call throws `PluginRefusedException`. **Only there**: the
+  facade is handed over regardless, and `IsAvailable` says nothing about the approval. Adding a hook widens
+  the manifest (`HasWidened`), so the update loads disabled until the owner approves again — as
+  `libraryWrite` did — and the broker approves per capability, so an owner can approve the update and still
+  refuse the browser.
+- A page may only go to, and fetch from, a host matching the manifest's `network.hosts` or a grant
+  (`PluginBrowser.Allows`; `BrowserNavigationBlocked` otherwise), and the page's request interceptor aborts
+  every subresource outside them too. The five gated hosts are in the manifest, and so is
+  `challenges.cloudflare.com`, which the captured interstitial's CSP names for the challenge's own frame and
+  script. `IsAvailable`/`UnavailableReason` come from `HiddenChrome.Availability()`: Windows or Linux,
+  a Chrome at `NOMERCY_CHROME_PATH` or an installed one (`Program Files\Google\Chrome`, `/usr/bin/
+  google-chrome`, `chromium`, `chromium-browser`), and on Linux `Xvfb` and `setsid` on `PATH`. **The host
+  does not download a Chrome**; the plugin used to. The owner's server needs one installed.
+- The host starts Chrome on the first page and stops it when the last page is disposed; the profile is a
+  fresh temporary folder per start, so cookies live only as long as a page of the run does. Navigation is
+  `DOMContentLoaded` with `options.Timeout` (30 s default); a read during a navigation answers empty or
+  false rather than throwing.
 
 **Steps**
 
-1. `IBrowserTab` and `IBrowserTabs` are implemented over `IPluginBrowser`; the policy above them
-   (`BrowserSolver`, `ChallengeAwareFetch`) and its tests do not change.
-2. `PuppeteerTabs`, `UnobservedContexts`, `BrowserInstall`, `IdleBrowser`, `DiesWithTheServer`,
-   `WindowsDesktopStage`, `XvfbStage`, `XvfbLookup`, `HiddenStages`, `IHiddenStage` and the `PuppeteerSharp`
-   reference are removed; "sources behind a challenge are off" comes from the host's answer.
-3. `expected-findings.txt` is empty; #476 is closed with a comment.
+1. `FakePluginContext` takes an `IPluginBrowser` (`Hidden`), refusing as a host without one when none is
+   given; `FakeBrowser`/`FakePage` in `TestSupport` answer `IsAvailable`, open pages and record what was
+   asked. `HostTabsTests`, red first: a host's tab opens one page at its first navigation and reuses it for
+   the next; two hosts open two pages; `CloseAllAsync` disposes every page; an unavailable browser answers
+   no tab and `WhyNot` carries the host's reason followed by "so sources behind a challenge are off"; a
+   refused facade does the same with the refusal's message; the clearance comes from the page's cookies
+   and user agent.
+2. `Solver/HostTabs` implements `IBrowserTabs` and `IBrowserTab` over `IPluginBrowser`: one page per host,
+   kept for the run (`docs/07-solver.md` § The browser), opened lazily at `GoToAsync` with
+   `PluginBrowserOptions`, disposed by `CloseAllAsync` — which is what lets the host stop Chrome between
+   runs. `BrowserSolver` and `ChallengeAwareFetch` do not change.
+3. `Chain` builds `HostTabs` over `context.Browser` and takes no `hiding`; `WhyNot` is the tabs'. The
+   plugin loses `BrowserHiding`; the Sources page's "off" reason reads `Context.Browser` without starting
+   one. The plugin-level tests of the browser being off (`TheBrowserIsOffWithoutXvfbTests`: the pass says
+   why, the Sources page names the sources and the reason, the warning once) are rewritten against the fake
+   browser as `TheBrowserIsOffWhenTheHostHasNoneTests`.
+4. `Browser`, `BrowserInstall`, `DiesWithTheServer`, `HiddenStages`, `IHiddenStage`, `IdleBrowser`,
+   `PuppeteerTabs`, `UnobservedContexts`, `WindowsDesktopStage`, `XvfbLookup`, `XvfbStage`, the
+   `PuppeteerSharp` reference and their tests (`BrowserTests`, `DiesWithTheServerTests`,
+   `PuppeteerSharpInternalsTests`, `TheBrowserIsClosedWhenItHasNothingToDoTests`,
+   `TheBrowserOutlivesItsTabsTests`, `RecordingStages`) are removed.
+5. `plugin.json`: `browser.headless` in `hooks`, `targetAbi` 12.5; `ManifestTests` names both (red first).
+   `expected-findings.txt` keeps only its two comment lines; `TheMarketplaceScanTests` is red until step 4
+   is whole.
+6. `docs/07-solver.md` (the browser is the host's: § No window and § The browser), `docs/01-plugin.md`
+   (§ What the server gives it, § Deploying: no driver travels), `docs/03-architecture.md`.
+7. #476 is not closed here: the scan test proves the folder clean, and whether #476 is done is seen on
+   beast-unit first (`S16-07`), where Chrome has to be installed for the solver to have a browser at all.
+
+**As done** (20 October 2026): steps 1 to 6 as written; `HostTabsTests` (15), `TheBrowserIsOffWhenTheHost
+HasNoneTests` (5), three `ManifestTests` red first. A fresh review of the whole change found what the
+facade's source alone had not said, and each finding got its test before its fix: the host checks the
+owner's approval at `OpenAsync`, not at `IsAvailable`, so a refusal is kept per run and forgotten at its
+end (`ARefusedPageIsRememberedForTheRunAndForgottenWithIt`); the host's own twenty-second start timeout
+throws a cancellation the caller never asked for, which would have ended the cycle as a Stop, so a tab
+turns it into a `TimeoutException` (`ACancellationTheCallerDidNotAskForIsAPageThatDidNotLoad`); one page
+that will not close no longer keeps the others open (`OnePageThatWillNotCloseDoesNotKeepTheOthersOpen`); a
+tab from before the run's end opens nothing after it (`ATabFromBeforeTheCloseOpensNothingAfterIt`); and
+the page's request interceptor would have aborted the challenge's own frame, so
+`challenges.cloudflare.com` is in `network.hosts` (`TheManifestNamesTheHostAChallengeIsClearedThrough`).
+The developer tools (`tools/DeveloperBrowser`, written by a second agent) launch a visible Chrome from
+`_capture/browser` without the automation flag. Not verified here and left to `S16-07` on beast-unit:
+whether a managed challenge clears through the host's interceptor at all, and whether Chrome is installed
+there.
 
 ## S16-07 · Seen on beast-unit, then a version
 

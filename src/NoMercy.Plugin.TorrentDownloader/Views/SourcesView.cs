@@ -30,7 +30,7 @@ public sealed record SourceReport(
 /// <summary>
 /// The sources a machine with no browser cannot read, and the plain-words reason.
 /// </summary>
-/// <param name="Why">The sentence the owner is told, from <c>HiddenStages.WhyNot</c>.</param>
+/// <param name="Why">The sentence the owner is told, from <c>HostTabs.Off</c>: the host's reason, then what it costs.</param>
 /// <param name="Sources">The sources behind a challenge, which are the ones that are off.</param>
 public sealed record BrowserOff(string Why, IReadOnlyCollection<string> Sources);
 

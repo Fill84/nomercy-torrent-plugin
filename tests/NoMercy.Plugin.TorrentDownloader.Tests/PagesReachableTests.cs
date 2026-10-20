@@ -147,7 +147,11 @@ public class PagesReachableTests
     public async Task TheSourcesRouteSaysWhatEachSiteLastAnswered()
     {
         using TorrentDownloaderPlugin plugin = new();
-        FakePluginContext context = new();
+
+        // A host with a browser: on one without, the gated sites' rows carry
+        // the reason they are off instead of what they last answered, which is
+        // TheBrowserIsOffWhenTheHostHasNoneTests' subject and not this one's.
+        FakePluginContext context = new() { Hidden = new FakeBrowser() };
         plugin.Initialize(context);
 
         await Configure(plugin);

@@ -92,13 +92,6 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// </remarks>
     public TimeSpan LookAgainInterval { get; init; } = TimeSpan.FromMinutes(1);
 
-    /// <summary>How this machine hides a browser window, when a test says so; null asks the machine.</summary>
-    /// <remarks>
-    /// A machine with no browser — the server's Docker images — is one the tests otherwise never run on, and
-    /// what the plugin does there is skip the sources behind a challenge and say so. Nothing on a server sets it.
-    /// </remarks>
-    public Hiding? BrowserHiding { get; init; }
-
     /// <summary>How the plugin reaches the network when a test says so; null is the real network.</summary>
     /// <remarks>
     /// One handler under the sites' client and the trackers' client both, so a test can drive a whole run from
@@ -1484,10 +1477,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         }
         finally
         {
-            // The run is over, so the browser goes. Every tab it kept per site
-            // is closed with it; the clearance those tabs earned is already in
-            // the clearance store and the profile is a folder on disk, so
-            // nothing is lost but the memory.
+            // The run is over, so the browser goes. Every page it kept per site
+            // is closed with it and the host stops its Chrome; the clearance
+            // those pages earned is already in the clearance store, so nothing
+            // is lost but the memory and the cookies a site issued no cookie for.
             //
             // Never on the run's own token. A run that was stopped arrives here
             // with that token already cancelled, and closing the browser on it
@@ -2197,8 +2190,7 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                 handler: Network,
                 engine: engine,
                 ledger: ledger,
-                logger: Log,
-                hiding: BrowserHiding);
+                logger: Log);
         }
         finally
         {
@@ -2745,13 +2737,15 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// Which sources this machine cannot read for want of a browser, and why. Null where it can run one.
     /// </summary>
     /// <remarks>
-    /// Asked of a fresh <see cref="HiddenStages"/> rather than of the chain: the chain is built lazily and
-    /// rendering a page must not start anything, and the answer is the same for both because it is read from
-    /// the machine.
+    /// Asked of the host through <see cref="HostTabs.Off"/> rather than of the chain: the chain is built
+    /// lazily and rendering a page must not start anything, and the answer is the same for both because it
+    /// is the host's.
     /// </remarks>
     private async Task<BrowserOff?> BrowserOffAsync(CancellationToken ct)
     {
-        if (new HiddenStages(Log, BrowserHiding).WhyNot is not string why)
+        // Asked of the host's facade, which starts nothing by being asked: a page
+        // render must not start a browser.
+        if (HostTabs.Off(() => Context.Browser) is not string why)
         {
             return null;
         }

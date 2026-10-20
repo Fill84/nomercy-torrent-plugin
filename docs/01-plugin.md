@@ -130,6 +130,7 @@ EF context, and no reference to the server's assemblies.
 | `Jobs` | what became of an encode, by the job id `EncodeAsync` handed back |
 | `LibraryWriter` | putting the encode of an episode the plugin delivered from a release no name source names in the server's recycle area, once its replacement is staged; handed over only because `plugin.json` names the `libraryWrite` hook and the owner granted a library — see `docs/09-host-contract.md` |
 | `Server` | `GrantedPaths`, the places a folder may be chosen from |
+| `Browser` | the hidden browser the challenge solver drives — see `docs/07-solver.md`. The host hands the facade over regardless and checks, when a page is opened, that `plugin.json` names `browser.headless` among its hooks and that the owner approved it; a page reaches only the hosts `network.hosts` or a grant names, `challenges.cloudflare.com` among them |
 | `HttpClient` | **not used.** The plugin builds its own clients, one for the sites and one for the trackers. Read off media-server `dev` on 19 October 2026: the host's client replaces the `User-Agent` with the server's and the plugin's attribution (`PluginUserAgentHandler`, deliberately), which breaks replaying a `cf_clearance` cookie under the user agent it was issued to (`docs/07-solver.md`); and it refuses every host outside the manifest's `network.hosts` and the owner's grants (`PluginNetworkAllowlistHandler`), which a tracker a magnet names never is. The SDK's analyzer (`NMP0001`) flags `new HttpClient()`; the marketplace's IL scan (`docs/plan/SPRINTS.md` § S16) does not. Whether the plugin should move to the host's client is the owner's to decide and needs the media server to change both behaviours first. A test hands the plugin one handler for both clients through `TorrentDownloaderPlugin.Network` (`S17-05`). |
 
 `Services` — the server's own container — was here until contract 12 took it away on 22 September
@@ -219,8 +220,8 @@ and the old build stays in place — which looks exactly like a deploy that work
 nothing. `scripts/deploy-to-server.ps1` compares every file's hash afterwards, which is the only
 way to tell those two apart.
 
-Files that travel: the plugin assemblies, `deps.json`, `plugin.json`, and the browser driver's
-assemblies. The source catalogue is inside the plugin assembly. `Newtonsoft.Json`, `Ulid` and every `NoMercy.*` are deliberately
+Files that travel: the plugin assemblies, `deps.json` and `plugin.json`. No browser driver since
+`S16-06`: the browser is the server's. The source catalogue is inside the plugin assembly. `Newtonsoft.Json`, `Ulid` and every `NoMercy.*` are deliberately
 absent — they are in `PluginHostOptions.DefaultSharedAssemblies`, so the load context returns null
 for them and the host's copy is used. Shipping a second copy means a second assembly identity for
 `[JsonProperty]`, which is the bug that list exists to prevent.

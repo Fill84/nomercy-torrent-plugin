@@ -7,8 +7,15 @@ Read this first, update it last. Nothing else decides what happens next.
 **16 October 2026: `S17` — the plugin finished, on the owner's word that day.** `SPRINTS.md` § S17.
 Media-server #599 and #600 are closed, so `S15-04` is unblocked. `S17-02` is done and
 `feat/replace-delivered` is merged into master. `S17-03`, `S17-04` and `S17-05` are done (20 October 2026):
-**`S17` is finished.** Media-server #601 closed and its PR #610 merged on 16 October 2026, so `S16-06` is
-unblocked. Current: **`S16-06`**, the solver on `IPluginBrowser`; then `S16-07`.
+**`S17` is finished.** Media-server #601 closed and its PR #610 merged on 16 October 2026, so `S16-06` was
+unblocked and is done (20 October 2026): the solver drives the server's hidden browser, and nothing the
+marketplace scan refuses is left in the plugin folder. Current: **`S16-07`**, seen on beast-unit, then a
+version — on the owner's word, with three things to know first: the server on beast-unit must carry
+`7a0b061e3` or later (the browser facade's page members; `dev` of 16 October 2026 onwards); **a Chrome
+must be installed on beast-unit** (or `NOMERCY_CHROME_PATH` set), because the host downloads none and
+without one every source behind a challenge is off and the Sources page says so; and after the update the
+server loads the plugin disabled until the owner approves it once more, now for `browser.headless` beside
+`libraryWrite`.
 
 **For the release notes of the version that carries S16 and S17** (not yet in `docs/releases/`): a wrong
 episode the plugin delivered — a show's episode from a release no name source names, such as South Park
@@ -23,7 +30,11 @@ plugin also needs a server on plugin ABI 12.4 (`S16-08`), and its database moves
 space when only some of its episodes are wanted, and a download that does not fit is tried again six
 hours later rather than never (`S17-04`). On a private torrent the client now answers another client's
 request for a magnet's metadata, so one instance of this plugin can seed to another from a hash alone
-(`S17-05`).
+(`S17-05`). The challenge solver no longer downloads and hides a Chrome of its own: it drives the hidden
+browser the server provides (`S16-06`), so the plugin passes the marketplace scan — and the server needs a
+Chrome installed for the sites behind a challenge to be read at all; where it has none, the Sources page
+says so and names the sites that are off. The update asks the owner to approve the plugin again, for
+`browser.headless`.
 
 **15 October 2026: `S16` — media-server #476, on the owner's word that day: solve all of it, the challenge
 solver stays, and what the media server must provide is asked for there as an issue, never changed there
@@ -915,7 +926,7 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 - [x] `S16-04` The database is the SDK's, and every row comes along
 - [x] `S16-05` The browser the solver needs, asked of the media server — #601
 - [x] `S16-08` Files made sparse by the host (media-server #609)
-- [ ] `S16-06` The solver on `IPluginBrowser` — waits on media-server #601
+- [x] `S16-06` The solver on `IPluginBrowser` — media-server #601 shipped on `dev` 16 October 2026; done 20 October
 - [ ] `S16-07` Seen on beast-unit, then a version
 
 ### Sprint 17 — The plugin finished: the replacement, and what is known to be wrong
@@ -928,6 +939,18 @@ Tick a box only when the whole definition of done in `CLAUDE.md` holds.
 ## Log
 
 One line per finished slice: the id, what landed, and anything the next slice should know.
+
+- **`S16-06` (20 October 2026):** the solver's tabs are `Solver/HostTabs` over `IPluginContext.Browser` —
+  one page per host, opened at its first navigation, kept for the run, all disposed at the run's end so
+  the host stops Chrome; `BrowserSolver` and `ChallengeAwareFetch` unchanged. The plugin's own Chrome
+  (`Browser`, `BrowserInstall`, `HiddenStages`, the stages, `PuppeteerTabs`, `UnobservedContexts`,
+  `DiesWithTheServer`, `IdleBrowser`) and the `PuppeteerSharp` reference are gone, so
+  `expected-findings.txt` is empty and `TheMarketplaceScanTests` passes on it. `plugin.json` names
+  `browser.headless` and `targetAbi` 12.5; the contract was repacked from `dev` because the 12.5 of 16
+  October predated the facade's page members. The two developer tools got a PuppeteerSharp
+  `IBrowserTabs` of their own (`tools/DeveloperBrowser`), since they run with no server to ask. Tests:
+  `HostTabsTests` (10), `TheBrowserIsOffWhenTheHostHasNoneTests` (5), `ManifestTests` (two red first).
+  519 + 295 + 7 + 771 green.
 
 - **`S17-04`, the last of the known list (20 October 2026):** the cycle test's flake traced to the clock a
   first save winds on a never-run plugin, whose trigger can land after the test's own cycle has closed
@@ -2800,6 +2823,29 @@ One line per finished slice: the id, what landed, and anything the next slice sh
 
 ## Decisions
 
+- **20 October 2026: a host page lives per host for the run, not per solve (`S16-06`).** `BrowserSolver`
+  still hands its tab back after every solve, and the tab keeps its page: the host throws its Chrome's
+  profile away when the last page goes, so a page closed per solve would be a clearance earned again on
+  every address of the host. The run's end (`Chain.RunEndedAsync`) disposes every page and the host stops
+  Chrome — the leak the per-solve closing was for is the host's to prevent now. `docs/07-solver.md` § The
+  browser says so.
+
+- **20 October 2026: a refusal the host gives at a page is kept for the run, not for the plugin's life
+  (`S16-06`).** The owner's approval of `browser.headless` is checked when a page opens; kept for ever, an
+  approval given later would need a restart; not kept at all, every gated question of every run would open,
+  be refused and log it. The run's end forgets it, so the next run asks once more. The manifest also names
+  `challenges.cloudflare.com`: the host's page aborts every request outside the manifest and a managed
+  challenge loads its own frame from there — a widening the owner approves with the rest of this update.
+
+- **20 October 2026: media-server #476 is not closed from here (`S16-06`).** The scan test proves the
+  plugin folder clean against an empty list; whether the solver works through the host's browser is seen
+  on beast-unit first (`S16-07`), where a Chrome has to be installed. The owner closes #476 when it has.
+
+- **20 October 2026: the developer tools keep a browser of their own (`S16-06`).** `tools/Capture` and
+  `tools/SourceHealth` run on a developer's machine with no server to ask, so `tools/DeveloperBrowser`
+  drives a visible, non-headless Chrome through PuppeteerSharp. Nothing under `tools/` ships, so the
+  marketplace scan has no view of it.
+
 - **20 October 2026: a plugin configured for the first time starts a cycle at once, and a trigger during a
   search makes it search once more; both stand (`S17-04`).** The first is what a fresh install owes an
   owner who has just set the folders; the second is the owner pressing Run during a search and wanting a
@@ -3608,6 +3654,22 @@ and note it here.
 ## Facts, measured
 
 Kept here so no slice re-discovers them.
+
+- **The host's browser is an installed Chrome, not a downloaded one** (media-server `dev` `7a0b061e3`,
+  read 20 October 2026). `HiddenChrome.Availability()` looks at `NOMERCY_CHROME_PATH`, then `Program
+  Files\Google\Chrome\Application\chrome.exe` (and x86) on Windows, `/usr/bin/google-chrome`,
+  `/usr/bin/chromium`, `/usr/bin/chromium-browser` on Linux, and on Linux also wants `Xvfb` and `setsid`
+  on `PATH`; anywhere else, or without them, `IsAvailable` is false with the reason in a sentence. Chrome
+  starts on the first page a plugin opens, with a fresh temporary profile, and stops when the last page is
+  disposed. `OpenAsync` asks the capability broker for `browser.headless` first (the manifest's `hooks`
+  list, and the owner's approval) — and only `OpenAsync` does: the facade is handed over regardless and
+  `IsAvailable` says nothing about the approval, so a refused page is the first sign (`HostTabs` keeps it
+  per run). A page may only reach hosts the manifest or a grant names, and its request interceptor aborts
+  every subresource outside them, so `challenges.cloudflare.com` has to be in the manifest. The host's own
+  start waits twenty seconds for Chrome's control channel and throws a cancellation of its own on timeout
+  — a cancellation the plugin never asked for, which `HostTab` turns into a `TimeoutException`. The
+  facade's page members arrived in the 12.5 contract without a bump of their own; the 12.5 packed here on
+  16 October had none of them, and `scripts/fetch-abstractions.sh dev` repacked it on 20 October.
 
 - **The host's `IPluginContext.HttpClient` rewrites and allowlists** (media-server `dev`, 19 October 2026,
   `src/NoMercy.Plugins/Network/`). `PluginHttpClientFactory.Create` wraps a `SocketsHttpHandler` in

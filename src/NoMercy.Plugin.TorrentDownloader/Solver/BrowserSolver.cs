@@ -87,13 +87,12 @@ public sealed class BrowserSolver(
 
     private async Task<Clearance?> SolvingAsync(Uri url, CancellationToken ct)
     {
-        // The tab is this method's, and it closes when the method ends however
-        // it ends. A tab left open is a Chrome left running: they were kept one
-        // per host for the life of the plugin, and sixteen chrome processes were
-        // found on the owner's machine with the server already stopped.
-        //
-        // Nothing is lost by closing it. The clearance is a cookie, and it is
-        // read out into the clearance store below before this returns.
+        // The tab is this method's, and it is handed back when the method ends
+        // however it ends. What that closes is the tabs' decision: over the
+        // host's browser the page stays for the run, because the host throws the
+        // cookies away with its Chrome when the last page goes (HostTabs). The
+        // clearance itself is read out into the clearance store below before
+        // this returns, so nothing here depends on the page outliving the solve.
         await using IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
 
         if (tab is null)
@@ -154,11 +153,12 @@ public sealed class BrowserSolver(
 
     private async Task<string?> ReadingAsync(Uri url, CancellationToken ct)
     {
-        // Closed however this returns. The browser stays up between solves —
-        // that is what keeps a gated source's clearance — and a tab does not:
-        // a page is read on every name of every cycle, so one left open is a
-        // tab per search for ever. Ninety Chrome processes were found on the
-        // owner's machine with nothing running at all.
+        // Handed back however this returns; the tabs decide what stays. A page
+        // is read on every name of every cycle, and with the plugin's own
+        // browser a tab per read was a tab per search for ever — ninety Chrome
+        // processes were found on the owner's machine with nothing running at
+        // all. Over the host's browser one page per host lives for the run and
+        // goes with it (HostTabs), which keeps the clearance and bounds the pages.
         await using IBrowserTab? tab = await tabs.ForAsync(url.Host, ct);
 
         if (tab is null)

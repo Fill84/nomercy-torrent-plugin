@@ -169,7 +169,11 @@ public class ManifestTests
     /// </para>
     /// <para>
     /// 12.4 is <c>IPluginStorage.MarkSparseAsync(localPath)</c> (media-server
-    /// #609), which every new download calls.
+    /// #609), which every new download calls. 12.5 is the nearest the manifest
+    /// can say for <c>IPluginBrowserPage</c>'s <c>ReloadAsync</c>,
+    /// <c>ContentTypeAsync</c>, <c>IsReadableAsync</c>, <c>FetchTextAsync</c> and
+    /// <c>UserAgentAsync</c> (media-server #601), which arrived under 12.5 without
+    /// a bump of their own and which every solve calls.
     /// </para>
     /// </remarks>
     [Fact]
@@ -178,8 +182,41 @@ public class ManifestTests
         Version declared = Version.Parse(Manifest().TargetAbi!);
 
         Assert.True(
-            declared >= new Version(12, 4),
-            $"targetAbi '{declared}' lets a server without IPluginStorage.MarkSparseAsync(localPath) (12.4) load the plugin.");
+            declared >= new Version(12, 5),
+            $"targetAbi '{declared}' lets a server without IPluginBrowserPage.FetchTextAsync (12.5) load the plugin.");
+    }
+
+    /// <remarks>
+    /// <c>IPluginContext.Browser</c> opens a page only for a plugin whose manifest
+    /// names <c>browser.headless</c> among its hooks and whose owner approved it
+    /// (<c>PluginCapabilityBroker.Check</c>); without the line every solve is
+    /// refused and every source behind a challenge is off, with a refusal that
+    /// says to add exactly this line.
+    /// </remarks>
+    [Fact]
+    public void TheManifestNamesTheBrowserCapability()
+    {
+        Assert.Contains(
+            "browser.headless",
+            Manifest().Capabilities?.Hooks ?? [],
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <remarks>
+    /// The host's page aborts every request to a host outside the manifest's
+    /// <c>network.hosts</c> and the grants (<c>PluginBrowserPage.ConfigureAsync</c>),
+    /// and a managed challenge loads its own frame and script from
+    /// <c>challenges.cloudflare.com</c> (the captured interstitial's CSP names it).
+    /// Without that host no challenge can clear: the page sits on "Just a
+    /// moment…" for the whole solve, and every gated source is lost.
+    /// </remarks>
+    [Fact]
+    public void TheManifestNamesTheHostAChallengeIsClearedThrough()
+    {
+        Assert.Contains(
+            "challenges.cloudflare.com",
+            Manifest().Capabilities?.Network?.Hosts ?? [],
+            StringComparer.OrdinalIgnoreCase);
     }
 
     /// <remarks>

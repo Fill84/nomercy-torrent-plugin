@@ -64,16 +64,18 @@ public interface IBrowserTab : IAsyncDisposable
 /// </summary>
 /// <remarks>
 /// <para>
-/// A tab is opened for one task and closed when that task ends — the caller
-/// owns it and disposes it. When the last one closes the browser is stopped,
-/// so a plugin with nothing to solve has no Chrome running at all.
+/// A tab is asked for per task and handed back when that task ends; what lives
+/// behind it is the implementation's to decide. Over the host's browser a page
+/// is kept per host for the run and closed with it (<c>HostTabs</c>), because
+/// the host throws its Chrome's profile — and the cookies a clearance lives in
+/// — away when the last page goes.
 /// </para>
 /// <para>
-/// They used to be kept one per host for the life of the plugin, because
-/// clearance is issued per host. It is, but the solver reads that cookie into
-/// the clearance store the moment it has it, so closing the tab that earned it
-/// loses nothing — and keeping them left sixteen chrome processes running on
-/// the owner's machine with the server stopped.
+/// The plugin's own browser kept them one per host for the life of the plugin,
+/// and sixteen chrome processes were found running on the owner's machine with
+/// the server stopped; it then closed them per task. Neither is this interface's
+/// business any more: the run's end (<see cref="IBrowserTabs.CloseAllAsync"/>)
+/// is when every page goes, and the host owns the Chrome.
 /// </para>
 /// </remarks>
 public interface IBrowserTabs : IAsyncDisposable

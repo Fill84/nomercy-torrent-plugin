@@ -23,9 +23,9 @@ namespace NoMercy.Plugin.TorrentDownloader.Hosting;
 /// looks dead.
 /// </para>
 /// <para>
-/// One <see cref="HostGate"/> and one <see cref="Browser"/> for the process, or
-/// two cadences ticking at once would each keep their own pace against the same
-/// host and each start their own Chrome.
+/// One <see cref="HostGate"/> and one set of <see cref="HostTabs"/> for the process,
+/// or two cadences ticking at once would each keep their own pace against the
+/// same host and each hold their own pages in the host's browser.
 /// </para>
 /// </remarks>
 public sealed class Chain : IAsyncDisposable
@@ -37,9 +37,7 @@ public sealed class Chain : IAsyncDisposable
     private readonly Readers _readers = Readers.Shipped();
     private readonly ClearanceStore _clearances = new();
     private readonly HttpClient _http;
-    private readonly HiddenStages _stages;
-    private readonly Browser _browser;
-    private readonly PuppeteerTabs _tabs;
+    private readonly HostTabs _tabs;
     private readonly BrowserSolver _solver;
     private readonly ISourceLedger? _ledger;
     private readonly ITorrentEngine? _engine;
@@ -62,8 +60,7 @@ public sealed class Chain : IAsyncDisposable
         HttpMessageHandler? handler = null,
         ITorrentEngine? engine = null,
         ISourceLedger? ledger = null,
-        ILogger? logger = null,
-        Hiding? hiding = null)
+        ILogger? logger = null)
     {
         _context = context;
 
@@ -82,15 +79,11 @@ public sealed class Chain : IAsyncDisposable
         _http = handler is null ? new() : new(handler, disposeHandler: false);
         _http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", UserAgent);
 
-        // Asked of the machine unless a test says what the machine is: a machine with no browser is one the
-        // tests otherwise only meet on the server's Docker images.
-        _stages = new(_logger, hiding);
-        _browser = new(
-            new BrowserInstall(Path.Combine(context.DataFolderPath, "browser"), new PuppeteerBrowserDownloader(), _logger),
-            _stages,
-            _logger);
-
-        _tabs = new(_browser, _logger);
+        // The host's browser, read through the context at each ask rather than
+        // taken now: a context's facade refuses until the owner has approved
+        // the capability, and one approved later must take effect without a
+        // restart (media-server #601, S16-06).
+        _tabs = new(() => context.Browser, _logger);
         _solver = new(_tabs, _logger);
     }
 
@@ -278,7 +271,7 @@ public sealed class Chain : IAsyncDisposable
 
         // Nothing to clear them with. The sources behind these challenges are skipped when they are asked, and
         // the Sources page says which and why; starting a browser that cannot start would only repeat that here.
-        if (_stages.WhyNot is string browserOff)
+        if (_tabs.WhyNot is string browserOff)
         {
             _journal.Finished(ActivityStage.Clearance, pass, browserOff);
 
@@ -408,11 +401,10 @@ public sealed class Chain : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Every page of the run goes, and the host stops its Chrome with the last
+        // of them: the browser is the host's to kill, with the plugin.
         await _tabs.DisposeAsync();
 
-        // After the tabs: closing the desktop out from under a window still on
-        // it is the one order that can leave a stray process with nowhere to be.
-        _browser.Dispose();
         _http.Dispose();
     }
 
@@ -422,7 +414,7 @@ public sealed class Chain : IAsyncDisposable
     /// </summary>
     private ChallengeAwareFetch Fetch()
     {
-        return new(_http, _gate, _context.Grants, _clearances, _solver, _solver, _stages.WhyNot);
+        return new(_http, _gate, _context.Grants, _clearances, _solver, _solver, _tabs.WhyNot);
     }
 
     /// <summary>An indexer the owner added, as a source like any other.</summary>

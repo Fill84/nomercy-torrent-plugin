@@ -3,7 +3,7 @@
   "name": "Torrent Downloader",
   "description": "Downloads every episode missing from a TV or anime library and hands it to the encoder.",
   "version": "0.8.1",
-  "targetAbi": "12.4",
+  "targetAbi": "12.5",
   "assembly": "NoMercy.Plugin.TorrentDownloader.dll",
   "autoEnabled": true,
   "capabilities": {
@@ -11,7 +11,8 @@
       "scheduledTask",
       "ui",
       "encoder",
-      "libraryWrite"
+      "libraryWrite",
+      "browser.headless"
     ],
     "rest": true,
     "ws": false,
@@ -31,7 +32,8 @@
         "www.torrentdownloads.pro",
         "nyaa.si",
         "yts.gg",
-        "api.predb.net"
+        "api.predb.net",
+        "challenges.cloudflare.com"
       ]
     },
     "ui": {

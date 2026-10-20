@@ -49,6 +49,12 @@ public sealed class FakePluginContext : IPluginContext
 
     public HttpClient HttpClient => throw NotProvided(nameof(HttpClient));
 
+    /// <summary>The host's hidden browser, or none: a host that wired no browser refuses the facade by name.</summary>
+    public FakeBrowser? Hidden { get; init; }
+
+    public IPluginBrowser Browser => Hidden
+        ?? throw new PluginRefusedException(PluginRefusalMessages.FacadeNotOnThisHost(PluginId.ToString(), "IPluginContext.Browser"));
+
     public FakeLibraryQuery? Shelves { get; init; }
 
     public IPluginLibraryQuery Library => Shelves ?? throw NotProvided(nameof(Library));

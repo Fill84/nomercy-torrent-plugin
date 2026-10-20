@@ -15,6 +15,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\NoMercy.Plugin.TorrentDownloader\NoMercy.Plugin.TorrentDownloader.csproj" />
+    <ProjectReference Include="..\DeveloperBrowser\DeveloperBrowser.csproj" />
   </ItemGroup>
 
   <ItemGroup>

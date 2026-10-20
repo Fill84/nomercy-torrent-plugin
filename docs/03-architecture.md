@@ -116,8 +116,8 @@ Both in-process, both started once when the plugin initialises:
 
 - **Torrent client** — `docs/06-torrent-client.md`. The BitTorrent protocol written in this
   repository, behind `ITorrentEngine` so `Core` never sees it.
-- **Challenge solver** — `docs/07-solver.md`. A Chrome the plugin downloads and drives on a hidden
-  desktop.
+- **Challenge solver** — `docs/07-solver.md`. The hidden browser the media server provides
+  (`IPluginContext.Browser`), driven one page per host.
 
 ## Storage
 
@@ -151,7 +151,7 @@ src/
   NoMercy.Plugin.TorrentDownloader.Bittorrent/   the protocol: bencode, peers, pieces, trackers, DHT
   NoMercy.Plugin.TorrentDownloader/          the shell: everything touching the host
     Hosting/         wiring, library adapter, encode dispatch, grants
-    Solver/          Chrome, hidden desktop, clearance
+    Solver/          the host's browser, driven per host; clearance
     Storage/         SQLite and migrations
     Views/           dashboard and detail pages
     Controllers/     the plugin's endpoints

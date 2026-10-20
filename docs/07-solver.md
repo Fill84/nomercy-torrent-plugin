@@ -1,6 +1,8 @@
 # The challenge solver
 
-The plugin has its own. It downloads a Chrome, drives it, and keeps it for the life of the server.
+The plugin drives the hidden browser the media server provides (`IPluginContext.Browser`, media-server
+#601, since `S16-06` on 20 October 2026). It used to download and hide a Chrome of its own; the
+marketplace scan refused everything that took (media-server #476), and the server now does it.
 
 ## What it must do
 
@@ -12,31 +14,42 @@ The plugin has its own. It downloads a Chrome, drives it, and keeps it for the l
 
 ## No window, on any platform
 
-| Platform | How |
-| --- | --- |
-| Windows | a desktop of its own via `CreateDesktop`, Chrome launched with `STARTUPINFO.lpDesktop` pointing at it |
-| Linux with `Xvfb` | an `Xvfb` display, `DISPLAY` set for the child process only |
-| Linux without `Xvfb` | the server's Docker images. There is no display to put a window on. **Gated sources are skipped**, and the plugin says "Xvfb is not installed, so sources behind a challenge are off." |
-| macOS | there is nowhere to put a window that is not somebody's Space. **Gated sources are skipped**, and the plugin says so |
+The host's business (media-server `src/NoMercy.Plugins/Browser/HiddenChrome.cs`, read 20 October 2026):
+on Windows a desktop of its own, on Linux an `Xvfb` display with `setsid`, and nothing anywhere else.
+The host finds a Chrome at `NOMERCY_CHROME_PATH` or installed in the usual place (`Program
+Files\Google\Chrome`, `/usr/bin/google-chrome`, `chromium`, `chromium-browser`); **it downloads none**,
+so the owner's server needs a Chrome installed for the solver to have a browser at all. Whether there is
+one is `IPluginBrowser.IsAvailable`, and why not is `UnavailableReason`, in the host's words: "Chrome is
+not installed on this host.", "Xvfb is not installed on this host.", "A hidden browser window is only
+available on Windows and Linux."
 
-`HiddenStages.CanHideABrowser` is the one place that decides, from the operating system and from whether
-an executable file named `Xvfb` is in one of the folders of `PATH` (`XvfbLookup`; on Linux it needs an
-execute bit). The decision, `HiddenStages.HidingFor`, is a pure function of those inputs so the Linux
-answer without `Xvfb` can be tested on any machine. The stage is created **before** Chrome starts: start
-it first and the window appears on the owner's desktop for the half second it takes to move it.
+The facade itself is refused outright — before there is a browser to ask — only on a host that wired
+none. Whether the plugin's manifest names `browser.headless` among its hooks and whether the owner has
+approved that capability is checked by the host when a page is **opened** (`PluginCapabilityBroker.Check`
+in `OpenAsync`), not when it says whether it has a browser: `IsAvailable` is true and the first navigation
+throws `PluginRefusedException`. `HostTabs` keeps that refusal for the rest of the run — every later tab
+is refused without asking, and the sentence carries the refusal — and forgets it at the run's end, so an
+approval given in the meantime takes effect on the next run without a restart.
 
-Where the browser is off (GitHub issue 6, 14 October 2026; the rows for Linux without `Xvfb` and macOS):
+The host's page also aborts every request to a host outside the manifest's `network.hosts` and the
+grants, subresources included. A managed challenge loads its frame and script from
+`challenges.cloudflare.com`, so that host is in the manifest; without it no challenge could clear.
 
-- The reason is logged **once** per plugin lifetime, at Warning, by `Browser`; every later attempt is
-  logged at Debug. Before this, every search that met a challenge logged it again, and with `Xvfb`
-  missing the plugin tried to start the program on every one of them and failed with ".NET could not
-  start 'Xvfb' with working directory /app".
+Where the browser is off (GitHub issue 6, 14 October 2026):
+
+- The reason is logged **once** per plugin lifetime, at Warning, by `HostTabs` when a tab is asked for
+  all the same; every later ask is logged at Debug. Before this, every search that met a challenge logged
+  it again. In the ordinary case nothing asks: the clearance pass and the fetch read the sentence first and
+  skip the solve, so the sentence reaches the activity journal and the Sources page rather than the log.
+- The sentence the owner reads is the host's reason followed by what it costs: "Chrome is not installed
+  on this host, so sources behind a challenge are off." (`HostTabs.Off`).
 - A source behind a challenge (`SourceDefinition.NeedsABrowser`) is skipped without a solve being tried,
   unless the host already holds a clearance, which needs no browser to be read. Its failure is
-  `NoBrowser` and carries the reason. Every source that is not behind a challenge answers as usual.
-- The run's clearance pass starts no browser; it ends with the reason in the activity journal.
-- The Sources page names the sources that are off and the reason, above the table, and the reason stands
-  in the refusal column of each of those rows.
+  `NoBrowser` and carries the sentence. Every source that is not behind a challenge answers as usual.
+- The run's clearance pass starts no browser; it ends with the sentence in the activity journal.
+- The Sources page names the sources that are off and the sentence, above the table, and the sentence
+  stands in the refusal column of each of those rows. Asking the host whether it has a browser starts
+  nothing, so a page render may ask.
 
 The server's Docker images ship neither `Xvfb` nor the libraries Chrome needs, and headless is not an
 answer (below). NoMercy-Entertainment/nomercy-media-server#597 asks for them in the images.
@@ -48,11 +61,20 @@ interstitial forever.
 
 ## The browser
 
-- Downloaded once into the plugin's data folder and reused across restarts. 0.3.4 re-downloaded it
-  on every server start because it looked in the wrong place.
-- The headless shell shipped alongside is deleted after download.
-- One browser for the process. One tab per host, kept open and reused — clearance is issued per
-  host, and two tabs on one host solve the same gate twice.
+- The host's, one per plugin: started on the first page a plugin opens, stopped when the last page is
+  disposed, killed with the plugin. Its profile is a fresh temporary folder per start, so the cookies a
+  page earned live exactly as long as a page of the run does.
+- A page may only go to, and fetch from, a host the manifest's `network.hosts` or a grant names
+  (`BrowserNavigationBlocked` otherwise). Every gated host is in the manifest.
+- One tab per host, kept for the run (`HostTabs`): clearance is issued per host, and two tabs on one
+  host solve the same gate twice. A tab opens its page at its first navigation, never at the ask —
+  opening a page is starting a Chrome, and the solver asks for a tab before it knows where it goes. At
+  the run's end (`Chain.RunEndedAsync`) every page is disposed, which is what lets the host stop Chrome
+  between runs. The plugin's own browser was kept per host for the plugin's life and sixteen Chrome
+  processes were found on the owner's machine with the server stopped; the host now owns that.
+- Navigation waits for `DOMContentLoaded` with the host's thirty-second timeout, and the poll below
+  decides the rest: "load" waits on adverts that never arrive, and "networkidle" waits out the whole
+  timeout because a challenge page keeps talking to its own endpoint.
 
 ## The body, not a picture of it
 
@@ -65,9 +87,10 @@ The body is re-fetched **inside the page** with `fetch()` and the text returned.
 ## Clearing a challenge
 
 - Poll until cleared, up to `SolveTimeout` (default 45 seconds).
-- A navigation during the poll throws `Execution Context was destroyed`. That is the page doing what
-  it is supposed to do — catch it and carry on polling. 0.3.4 logged it four times in one run as a
-  source failure.
+- A navigation during the poll is the page doing what it is supposed to do. The host's page answers a
+  read made during one as a page not there yet (empty content, not loaded) rather than throwing; a
+  driver that throws `Execution Context was destroyed` is caught and polled on. 0.3.4 logged it four
+  times in one run as a source failure.
 - One reload if it has not cleared, then give up with a sentence naming the host.
 - A challenge still there after a solve is solved again and the question asked again — twice at most,
   `docs/specs/run.md`. Still there after the second solve, the site cannot be read this run, and the
@@ -131,6 +154,6 @@ its addresses needs it.
 
 ## What is visible
 
-Browser downloaded, hidden stage created, browser started and on which port, challenge met on which
-host, cleared or not and after how long, clearance kept, clearance spent — all to the activity
-journal, so the dashboard can say "waiting on eztvx.to, 45s".
+Whether the host has a browser and why not, challenge met on which host, cleared or not and after how
+long, clearance kept, clearance spent — all to the activity journal, so the dashboard can say "waiting
+on eztvx.to, 45s". A page opened for a host goes to the log at Debug.
