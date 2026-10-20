@@ -10,12 +10,15 @@ Media-server #599 and #600 are closed, so `S15-04` is unblocked. `S17-02` is don
 **`S17` is finished.** Media-server #601 closed and its PR #610 merged on 16 October 2026, so `S16-06` was
 unblocked and is done (20 October 2026): the solver drives the server's hidden browser, and nothing the
 marketplace scan refuses is left in the plugin folder. Current: **`S16-07`**, seen on beast-unit, then a
-version — on the owner's word, with three things to know first: the server on beast-unit must carry
-`7a0b061e3` or later (the browser facade's page members; `dev` of 16 October 2026 onwards); **a Chrome
-must be installed on beast-unit** (or `NOMERCY_CHROME_PATH` set), because the host downloads none and
-without one every source behind a challenge is off and the Sources page says so; and after the update the
-server loads the plugin disabled until the owner approves it once more, now for `browser.headless` beside
-`libraryWrite`.
+version — **waiting on the owner's word**, and on two things on beast-unit that are the owner's to do
+(read there on 20 October 2026, § Facts): the server runs **0.1.575** and the first server release whose
+contract carries the browser's page and ABI 12.5 is **0.1.584** (16 October), so beast-unit must update
+to 0.1.584 or later before this plugin can load; and **no Chrome is installed there** and
+`NOMERCY_CHROME_PATH` is not set, so until one is, every source behind a challenge is off and the Sources
+page says so. The release notes are drafted as `docs/releases/0.9.0.md` — the number is a proposal, a
+minor bump for the replacement, the browser and the database — and say what the owner approves again
+after the update (`browser.headless`, `libraryWrite`, the challenge host). No tag, no version bump, no
+package until the owner says so.
 
 **For the release notes of the version that carries S16 and S17** (not yet in `docs/releases/`): a wrong
 episode the plugin delivered — a show's episode from a release no name source names, such as South Park
@@ -3654,6 +3657,14 @@ and note it here.
 ## Facts, measured
 
 Kept here so no slice re-discovers them.
+
+- **beast-unit on 20 October 2026** (read over ssh, nothing started or stopped): `NoMercyMediaServer`
+  **0.1.575** (`c75b041f`, built 13 October) running since 15 October 18:06; the installed plugin is 0.8.1
+  on `targetAbi` 12.0; **no Chrome** at either `Program Files` path and `NOMERCY_CHROME_PATH` unset. In the
+  server's release tags, read tree by tree because the release commits have no branch ancestry: 0.1.575 and
+  0.1.580 carry ABI 12.2, **0.1.583** (15 October) 12.5 without the browser page's members, **0.1.584**
+  (16 October) onwards 12.5 with them; the newest is 0.1.587 (19 October). So a plugin on 12.5 loads on
+  0.1.584 or later and nowhere before.
 
 - **The host's browser is an installed Chrome, not a downloaded one** (media-server `dev` `7a0b061e3`,
   read 20 October 2026). `HiddenChrome.Availability()` looks at `NOMERCY_CHROME_PATH`, then `Program

@@ -3818,6 +3818,29 @@ there.
 Built as S15-05: the owner sees what changes, the carry-over is watched on beast-unit's own database,
 and a version is released only on the owner's word.
 
+**Read first:** `docs/releases/0.9.0.md` (the draft, 20 October 2026), `PROGRESS.md` § Facts "beast-unit
+on 20 October 2026", the memory note on showing before release (no hand-copied build, no developer mode:
+the server refuses both).
+
+**Before anything here can be seen**, two things on beast-unit that are the owner's: the server to
+0.1.584 or later (0.1.575 runs there; the browser's page and ABI 12.5 are in 0.1.584 onwards), and a
+Chrome installed or `NOMERCY_CHROME_PATH` set, or the solver has no browser and every gated source is off.
+
+**Steps**
+
+1. The owner reads `docs/releases/0.9.0.md` and says the word, or says what is missing. The number is a
+   proposal.
+2. On the word: the version goes to 0.9.0 in `Directory.Build.props`, `PluginIdentity.cs` and
+   `plugin.json` (one commit, as `85970f2` did for 0.8.1), the tag is pushed, the release workflow is
+   watched, both forges carry the same package, `repository.json` names 0.9.0, and the `nomercy-plugins`
+   catalogue workflow is started so the catalogue shows it at once.
+3. The owner installs through the catalogue, approves the plugin once more (`browser.headless`,
+   `libraryWrite`, the challenge host), grants the library, and walks through Sources (which sources are
+   off and why, if Chrome is missing), the carry-over of 0.8.1's settings and downloads, History, Activity,
+   and South Park S29E03's replacement. What they find is fixed in a slice of its own.
+4. Only once a managed challenge has been seen to clear through the server's browser on beast-unit is
+   media-server #476 closed, with a comment naming the version.
+
 ## S17 · The plugin finished: the replacement, and what is known to be wrong
 
 The owner's word, 16 October 2026: carry on making the plugin finished and better. Media-server #599 and
