@@ -35,7 +35,7 @@ public static class ShowSettingsView
                 Ui.Form(
                     FormId,
                     "Save",
-                    PluginActionIntent.CallPlugin($"shows/{id}/settings", null, PluginActionTransport.Rest),
+                    PluginActionIntent.CallPlugin($"shows-{id}-settings", null, PluginActionTransport.Rest),
                     [
                         new PluginFormField
                         {

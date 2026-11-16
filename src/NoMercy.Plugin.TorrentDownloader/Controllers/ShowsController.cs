@@ -29,13 +29,18 @@ public sealed class ShowsController(IPluginManager plugins) : PluginControllerBa
         }
     }
 
+    // Two routes on every action a page draws. The one-segment name is what the pages ask for: the web
+    // app sends a method only when it is one path segment, and drops one with a slash without a word
+    // (web #149, 12 October 2026). The slashed one stays for any client that still posts to it.
     [HttpPost("shows/{id:int}/on")]
+    [HttpPost("shows-{id:int}-on")]
     public Task<IActionResult> On(int id, CancellationToken ct)
     {
         return Switch(id, on: true, ct);
     }
 
     [HttpPost("shows/{id:int}/off")]
+    [HttpPost("shows-{id:int}-off")]
     public Task<IActionResult> Off(int id, CancellationToken ct)
     {
         return Switch(id, on: false, ct);
@@ -50,6 +55,7 @@ public sealed class ShowsController(IPluginManager plugins) : PluginControllerBa
     /// plugin holds, exactly as Show advanced is, and the page is drawn again from it.
     /// </remarks>
     [HttpPost("shows/find")]
+    [HttpPost("shows-find")]
     public IActionResult Find([FromBody] Dictionary<string, object?> fields)
     {
         if (Live is not TorrentDownloaderPlugin plugin)
@@ -64,6 +70,7 @@ public sealed class ShowsController(IPluginManager plugins) : PluginControllerBa
 
     /// <summary>Puts the whole list back.</summary>
     [HttpPost("shows/find/clear")]
+    [HttpPost("shows-find-clear")]
     public IActionResult Clear()
     {
         if (Live is not TorrentDownloaderPlugin plugin)
@@ -77,6 +84,7 @@ public sealed class ShowsController(IPluginManager plugins) : PluginControllerBa
     }
 
     [HttpPost("shows/{id:int}/settings")]
+    [HttpPost("shows-{id:int}-settings")]
     public async Task<IActionResult> Settings(int id, [FromBody] Dictionary<string, object?> fields, CancellationToken ct)
     {
         if (Live is not TorrentDownloaderPlugin plugin)
@@ -88,6 +96,7 @@ public sealed class ShowsController(IPluginManager plugins) : PluginControllerBa
     }
 
     [HttpPost("libraries/{id}/preferences")]
+    [HttpPost("libraries-{id}-preferences")]
     public async Task<IActionResult> Preferences(string id, [FromBody] Dictionary<string, object?> fields, CancellationToken ct)
     {
         if (Live is not TorrentDownloaderPlugin plugin)

@@ -43,10 +43,10 @@ public static class OverviewView
     public const string FindFormId = "find";
 
     /// <summary>What the box posts to.</summary>
-    public const string FindAction = "shows/find";
+    public const string FindAction = "shows-find";
 
     /// <summary>And what puts the whole list back.</summary>
-    public const string ClearAction = "shows/find/clear";
+    public const string ClearAction = "shows-find-clear";
 
     /// <summary>The id of one library's table of shows.</summary>
     public static string TableId(string libraryId) => $"shows-{libraryId}";
@@ -292,7 +292,7 @@ public static class OverviewView
             {
                 Label = on ? "Switch off" : "Switch on",
                 Action = PluginActionIntent.CallPlugin(
-                    $"shows/{show}/{(on ? "off" : "on")}",
+                    $"shows-{show}-{(on ? "off" : "on")}",
                     null,
                     PluginActionTransport.Rest),
             },

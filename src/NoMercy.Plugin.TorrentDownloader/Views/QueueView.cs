@@ -26,7 +26,7 @@ public static class QueueView
     // plugins/{id}/{method}, straight through. Naming the action instead of the
     // route gave every button on every page a URL this plugin does not serve,
     // and nothing anyone pressed did anything at all.
-    public const string SearchAction = "queue/search";
+    public const string SearchAction = "queue-search";
     public const string WaitingTableId = "waiting";
 
     /// <summary>The list of the episodes to be replaced (the owner's rule of 15 October 2026).</summary>

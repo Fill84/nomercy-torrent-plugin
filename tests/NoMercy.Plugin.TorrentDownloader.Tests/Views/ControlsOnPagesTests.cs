@@ -40,7 +40,7 @@ public class ControlsOnPagesTests
         // The path the client posts to, spelled out. Asserting the constant
         // against itself is what let every one of these name a route that does
         // not exist.
-        Assert.Equal($"downloads/{Hash}/{verb}", Assert.IsType<string>(button.Action!.Payload["method"]));
+        Assert.Equal($"downloads-{Hash}-{verb}", Assert.IsType<string>(button.Action!.Payload["method"]));
     }
 
     /// <remarks>
@@ -58,7 +58,7 @@ public class ControlsOnPagesTests
 
         Assert.Equal("Cancel", button.Label);
         Assert.Equal("danger", button.Variant);
-        Assert.Equal($"downloads/{Hash}/cancel", Assert.IsType<string>(button.Action!.Payload["method"]));
+        Assert.Equal($"downloads-{Hash}-cancel", Assert.IsType<string>(button.Action!.Payload["method"]));
 
         PluginConfirmation confirm = Assert.IsType<PluginConfirmation>(button.Action!.Confirm);
 
@@ -105,7 +105,7 @@ public class ControlsOnPagesTests
             Assert.IsAssignableFrom<IReadOnlyList<PluginTableAction>>(row.Props["controls"]));
 
         Assert.Null(row.Action);
-        Assert.Equal("queue/search", Assert.IsType<PluginActionIntent>(button.Action).Payload["method"]);
+        Assert.Equal("queue-search", Assert.IsType<PluginActionIntent>(button.Action).Payload["method"]);
 
         // The episode travels with it. A control that named the action and not
         // which row it was on would search for whatever the server felt like.

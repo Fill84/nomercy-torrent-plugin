@@ -64,7 +64,7 @@ public class SettingsViewTests
         // prop to make the inputs, collects them when its own button is
         // pressed, and posts them under the action carried here.
         Assert.Equal(
-            "settings/edit",
+            "settings-edit",
             Assert.IsType<PluginActionIntent>(form.Action).Payload["method"]);
 
         Assert.Contains(field, Rendered.EveryValue(view).OfType<string>());

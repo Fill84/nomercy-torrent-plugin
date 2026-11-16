@@ -95,7 +95,11 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
     /// and a refusal is an answer the page renders, not an error status.
     /// </para>
     /// </remarks>
+    // Two routes on every action a page draws. The one-segment name is what the pages ask for: the web
+    // app sends a method only when it is one path segment, and drops one with a slash without a word
+    // (web #149, 12 October 2026). The slashed one stays for any client that still posts to it.
     [HttpPost("settings/edit")]
+    [HttpPost("settings-edit")]
     public async Task<IActionResult> Edit(
         [FromBody] Dictionary<string, object?> fields,
         CancellationToken ct)
@@ -189,6 +193,7 @@ public sealed class SettingsController(IPluginManager plugins) : PluginControlle
     /// again from it.
     /// </remarks>
     [HttpPost("settings/advanced")]
+    [HttpPost("settings-advanced")]
     public IActionResult Advanced()
     {
         if (Live is not TorrentDownloaderPlugin plugin)

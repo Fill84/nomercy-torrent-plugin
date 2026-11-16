@@ -28,7 +28,7 @@ public static class LibraryPreferencesView
                 Ui.Form(
                     FormId,
                     "Save",
-                    PluginActionIntent.CallPlugin($"libraries/{library.Id}/preferences", null, PluginActionTransport.Rest),
+                    PluginActionIntent.CallPlugin($"libraries-{library.Id}-preferences", null, PluginActionTransport.Rest),
                     [
                         new PluginFormField
                         {
