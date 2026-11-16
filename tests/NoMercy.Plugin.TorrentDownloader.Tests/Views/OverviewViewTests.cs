@@ -123,7 +123,7 @@ public class OverviewViewTests
         IReadOnlyList<PluginTableAction> on = Controls(page, Tv, "Silo");
 
         Assert.Equal("Switch off", on[0].Label);
-        Assert.Equal("shows/41/off", on[0].Action!.Payload["method"]);
+        Assert.Equal("shows-41-off", on[0].Action!.Payload["method"]);
         Assert.Equal("Settings", on[1].Label);
         Assert.Equal(PluginActionType.Navigate, on[1].Action!.Type);
         Assert.Equal(Pages.Routes.PathTo(Pages.ShowSettingsName, new Dictionary<string, string> { ["id"] = "41" }), on[1].Action!.Payload["route"]);
@@ -131,7 +131,7 @@ public class OverviewViewTests
         IReadOnlyList<PluginTableAction> off = Controls(page, Tv, "Sugar");
 
         Assert.Equal("Switch on", off[0].Label);
-        Assert.Equal("shows/52/on", off[0].Action!.Payload["method"]);
+        Assert.Equal("shows-52-on", off[0].Action!.Payload["method"]);
     }
 
     [Fact]

@@ -30,7 +30,7 @@ public static class SettingsView
     public const string StopAction = "stop";
 
     /// <summary>Saving whatever section of the page was filled in.</summary>
-    public const string SaveAction = "settings/edit";
+    public const string SaveAction = "settings-edit";
 
     /// <summary>Shows or hides every advanced block on this page.</summary>
     /// <remarks>
@@ -39,7 +39,7 @@ public static class SettingsView
     /// changes what is drawn and nothing about what the plugin does, and a
     /// field hidden behind it still applies.
     /// </remarks>
-    public const string AdvancedAction = "settings/advanced";
+    public const string AdvancedAction = "settings-advanced";
 
     /// <summary>
     /// The page. <c>secretsSet</c> is the keys the secret store holds — names

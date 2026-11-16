@@ -41,13 +41,13 @@ public static class DownloadsView
     // and nothing anyone pressed did anything at all.
 
     /// <summary>Pausing a transfer, keeping its pieces.</summary>
-    public static string PauseAction(string infoHash) => $"downloads/{infoHash}/pause";
+    public static string PauseAction(string infoHash) => $"downloads-{infoHash}-pause";
 
     /// <summary>Starting a paused one again.</summary>
-    public static string ResumeAction(string infoHash) => $"downloads/{infoHash}/resume";
+    public static string ResumeAction(string infoHash) => $"downloads-{infoHash}-resume";
 
     /// <summary>Stopping it, forgetting it, and putting its episodes back.</summary>
-    public static string CancelAction(string infoHash) => $"downloads/{infoHash}/cancel";
+    public static string CancelAction(string infoHash) => $"downloads-{infoHash}-cancel";
 
     /// <summary>Taking on a torrent the owner found themselves.</summary>
     public const string AddAction = "downloads";

@@ -2,6 +2,8 @@ using System.Reflection;
 using System.Text.RegularExpressions;
 
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Template;
 
 using NoMercy.Plugin.TorrentDownloader.Core.Activity;
 using NoMercy.Plugin.TorrentDownloader.Core.Domain;
@@ -55,6 +57,43 @@ public class ControlsReachTheirEndpointsTests
                 + "serve. A CallPlugin method is the path the client posts to. Served: "
                 + string.Join(", ", routes));
         }
+    }
+
+    /// <summary>
+    /// A control asks for one path segment, because that is all the client sends.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Since 12 October 2026 the web app puts a <c>CallPlugin</c> method into the path only when
+    /// it is a single safe segment (<c>nomercy-app-web</c>, <c>src/lib/plugin/pluginPath.ts</c>,
+    /// web #149): a slash or a dot segment could walk out of <c>plugins/{id}/</c> and reach
+    /// another server route with the viewer's token. Anything else it drops — no request, no
+    /// error on the page. Every route here was written with slashes, so Save, Find, the show
+    /// switches, the show and library settings and pause, resume and cancel all did nothing
+    /// from that day on, and only Run, Stop and adding a torrent by hand still reached the
+    /// plugin.
+    /// </para>
+    /// <para>
+    /// The pattern is the client's own, spelled out: <c>\w</c> in JavaScript is ASCII only, so
+    /// it is written as the ASCII range rather than trusting .NET's wider one.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void EveryControlAsksForOneSegmentTheClientWillSend()
+    {
+        foreach ((string page, string method) in Methods())
+        {
+            Assert.True(
+                OneSafeSegment(method),
+                $"The {page} page has a control asking for '{method}'. The web app sends a "
+                + "CallPlugin method only when it is one path segment of [A-Za-z0-9_.~-], and drops "
+                + "anything else without a request or a word on the page.");
+        }
+    }
+
+    private static bool OneSafeSegment(string method)
+    {
+        return Regex.IsMatch(method, "^[A-Za-z0-9_.~-]+$") && method is not "." and not "..";
     }
 
     /// <remarks>
@@ -126,19 +165,21 @@ public class ControlsReachTheirEndpointsTests
     }
 
     /// <summary>
-    /// Whether a method reaches a route, treating a <c>{parameter}</c> segment
-    /// as the one thing it is: a segment the caller fills in.
+    /// Whether a method reaches a route, treating a <c>{parameter}</c> as the
+    /// one thing it is: text the caller fills in, within its own segment.
     /// </summary>
+    /// <remarks>
+    /// ASP.NET's own matcher, not a pattern written here: a parameter can share a segment with
+    /// literal text — <c>shows-{id:int}-on</c> — and how the router splits such a segment is the
+    /// router's business. The server puts these templates under <c>api/v{version}/plugins/{id}</c>
+    /// with ordinary attribute routing (media-server <c>PluginRouteConvention</c>), so what
+    /// matches here matches there.
+    /// </remarks>
     private static bool Reaches(string route, string method)
     {
-        string pattern = "^" + string.Join(
-            "/",
-            route.Split('/').Select(segment =>
-                segment.StartsWith('{') && segment.EndsWith('}')
-                    ? "[^/]+"
-                    : Regex.Escape(segment))) + "$";
+        TemplateMatcher matcher = new(TemplateParser.Parse(route), new RouteValueDictionary());
 
-        return Regex.IsMatch(method, pattern);
+        return matcher.TryMatch("/" + method, new RouteValueDictionary());
     }
 
     /// <summary>Every page, rendered with enough on it to carry its controls.</summary>
@@ -150,6 +191,15 @@ public class ControlsReachTheirEndpointsTests
             [new(new(41, 3, 6), "Silo", 2021, LibraryKind.Television, null, null, EpisodeState.Missing)]));
 
         yield return ("Settings", SettingsView.Render(new(), [], []));
+
+        // With its switches drawn, which is the one control it has: they save through the same
+        // action as the Settings page, and were left out of this walk until now.
+        yield return ("Sources", SourcesView.Render(
+            [],
+            DateTimeOffset.UnixEpoch,
+            [new("PreDB", "rss", "https://predb.me/?rss=1")],
+            new(),
+            advanced: true));
 
         yield return ("Activity", ActivityView.Render(
             ActivitySnapshot.Empty,

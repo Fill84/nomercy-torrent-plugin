@@ -65,7 +65,11 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
     /// not used: the search belongs to the plugin, and a page closed while it
     /// runs must not throw it away.
     /// </remarks>
+    // Two routes on every action a page draws. The one-segment name is what the pages ask for: the web
+    // app sends a method only when it is one path segment, and drops one with a slash without a word
+    // (web #149, 12 October 2026). The slashed one stays for any client that still posts to it.
     [HttpPost("queue/search")]
+    [HttpPost("queue-search")]
     public async Task<IActionResult> Search([FromBody] SearchNowRequest request, CancellationToken ct)
     {
 
@@ -83,6 +87,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
     }
 
     [HttpPost("downloads/{infoHash}/pause")]
+    [HttpPost("downloads-{infoHash}-pause")]
     public async Task<IActionResult> Pause(string infoHash, CancellationToken ct)
     {
 
@@ -96,6 +101,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
     }
 
     [HttpPost("downloads/{infoHash}/resume")]
+    [HttpPost("downloads-{infoHash}-resume")]
     public async Task<IActionResult> Resume(string infoHash, CancellationToken ct)
     {
 
@@ -118,6 +124,7 @@ public sealed class DownloadsController(IPluginManager plugins) : PluginControll
     /// for ever.
     /// </remarks>
     [HttpPost("downloads/{infoHash}/cancel")]
+    [HttpPost("downloads-{infoHash}-cancel")]
     public async Task<IActionResult> Cancel(string infoHash, CancellationToken ct)
     {
 

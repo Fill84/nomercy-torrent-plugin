@@ -22,7 +22,7 @@ public class ShowSettingsViewTests
 
         PluginComponent form = Assert.Single(Rendered.All(page), one => one.Component == Ui.FormComponent);
 
-        Assert.Equal("shows/41/settings", form.Action!.Payload["method"]);
+        Assert.Equal("shows-41-settings", form.Action!.Payload["method"]);
 
         IReadOnlyList<PluginFormField> fields = Fields(form);
 
@@ -93,7 +93,7 @@ public class ShowSettingsViewTests
 
         PluginComponent form = Assert.Single(Rendered.All(page), one => one.Component == Ui.FormComponent);
 
-        Assert.Equal($"libraries/{Tv}/preferences", form.Action!.Payload["method"]);
+        Assert.Equal($"libraries-{Tv}-preferences", form.Action!.Payload["method"]);
 
         IReadOnlyList<PluginFormField> fields = Fields(form);
 
