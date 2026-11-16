@@ -292,27 +292,3 @@ jobs:
 
           git push "${FORGEJO_URL}/${GITHUB_REPOSITORY}.git" HEAD:master
           git config --local --unset-all http.extraHeader
-
-      # The marketplace, which is where servers install this plugin from. A tag
-      # that reaches both forges and not the marketplace is a release no server
-      # is offered: 0.8.2 did exactly that until it was uploaded by hand.
-      #
-      # Last, so the forges and the index are published whatever the marketplace
-      # says. It reads from the tag's commit because the Index step has moved the
-      # checkout to master. Red when the marketplace holds the release back, with
-      # its reason; the scan report is in the publisher console.
-      - name: Marketplace
-        if: startsWith(github.ref, 'refs/tags/v')
-        env:
-          MARKETPLACE_REFRESH_TOKEN: ${{ secrets.MARKETPLACE_REFRESH_TOKEN }}
-          VERSION: ${{ steps.package.outputs.version }}
-        run: |
-          set -eu
-          tagged="$(mktemp -d)"
-          git show "$GITHUB_SHA:docs/releases/$VERSION.md" > "$tagged/notes.md"
-          git show "$GITHUB_SHA:src/$PLUGIN/plugin.json" > "$tagged/plugin.json"
-          git show "$GITHUB_SHA:scripts/publish-marketplace.sh" > "$tagged/publish-marketplace.sh"
-          git show "$GITHUB_SHA:scripts/marketplace-token.sh" > "$tagged/marketplace-token.sh"
-          chmod +x "$tagged"/*.sh
-
-          "$tagged/publish-marketplace.sh" "$VERSION" "$tagged/notes.md" "$tagged/plugin.json" "$GITHUB_SHA"
