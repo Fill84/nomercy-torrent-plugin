@@ -224,6 +224,13 @@ gate above, the package, a check of the package, and the release — **to Forgej
 one build**, so both carry the same bytes — and then `repository.json` is brought up to date. The notes
 come from `docs/releases/<version>.md`, written and reviewed here rather than generated from a tag.
 
+Last, the tagged source goes to the **NoMercy Marketplace**, which is where servers install the plugin
+from: the marketplace builds, scans and signs it, and the run waits until it is released. A release the
+marketplace holds back turns the run red with its reason. The upload uses the publisher's Keycloak
+offline token, stored once with `python scripts/marketplace-login.py` as the `MARKETPLACE_REFRESH_TOKEN`
+secret; `.forgejo/workflows/marketplace-token.yml` uses it every Monday so it never lapses, and goes red
+when it has.
+
 ## Licence
 
 [MIT](LICENSE) © 2026 Phillippe Pelzer.

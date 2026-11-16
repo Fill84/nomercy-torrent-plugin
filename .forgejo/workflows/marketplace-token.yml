@@ -1,0 +1,49 @@
+name: marketplace token
+
+# Keeps the token the release job publishes to the marketplace with alive.
+#
+# It is a Keycloak offline token, and those lapse when nobody uses them for a
+# while; this plugin can go weeks between releases. Used once a week here, it
+# never sits idle that long — and if it lapses anyway, this run goes red on a
+# Monday instead of the release job going red on the day a fix has to ship.
+#
+# A few seconds of curl, nothing else: no checkout of the build, no SDK.
+# Run scripts/marketplace-login.py to store a new token when this is red.
+
+on:
+  schedule:
+    - cron: '17 6 * * 1'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Tooling
+        run: |
+          set -eu
+          missing=""
+          for tool in curl jq; do
+            command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
+          done
+          [ -n "$missing" ] || exit 0
+
+          if [ "$(id -u)" = "0" ]; then sudo=""
+          elif command -v sudo >/dev/null 2>&1; then sudo="sudo"
+          else echo "cannot install$missing — not root and no sudo" >&2; exit 1
+          fi
+
+          $sudo apt-get update -y
+          $sudo apt-get install -y --no-install-recommends ca-certificates $missing
+
+      # The script from master, fetched rather than checked out: this job needs
+      # one file, not the repository.
+      - name: Use the token
+        env:
+          MARKETPLACE_REFRESH_TOKEN: ${{ secrets.MARKETPLACE_REFRESH_TOKEN }}
+        run: |
+          set -eu
+          script="$(mktemp)"
+          curl -fsSL "https://forgejo.phillippepelzer.me/${GITHUB_REPOSITORY}/raw/branch/master/scripts/marketplace-token.sh" -o "$script"
+          bash "$script" --keepalive
