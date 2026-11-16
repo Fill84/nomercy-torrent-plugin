@@ -258,10 +258,30 @@ jobs:
           ZIP: ${{ steps.package.outputs.zip }}
         run: |
           set -eu
-          chmod +x scripts/update-repository-index.sh
-          ./scripts/update-repository-index.sh             "$VERSION" "$ZIP" "docs/releases/$VERSION.md" "src/$PLUGIN/plugin.json"
+          umask 077
+          auth="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+          git config --local http.extraHeader "$auth"
 
-          git diff --quiet -- repository.json && { echo "index: unchanged"; exit 0; }
+          # Written into master's index, not the tag's. A tag cut beside master
+          # (a fix for the released line while master carries the next version)
+          # has an older repository.json than master's, and its commit cannot be
+          # pushed onto master at all: the push is refused as not a fast-forward,
+          # the run goes red and the catalogue never hears of the release. For a
+          # tag at master's tip the two are the same commit and nothing changes.
+          git fetch -q "${FORGEJO_URL}/${GITHUB_REPOSITORY}.git" master
+          index="$(mktemp)"
+          git show FETCH_HEAD:repository.json > "$index"
+
+          chmod +x scripts/update-repository-index.sh
+          INDEX_FILE="$index" ./scripts/update-repository-index.sh \
+            "$VERSION" "$ZIP" "docs/releases/$VERSION.md" "src/$PLUGIN/plugin.json"
+
+          # Forced: the build may have touched tracked files, and nothing after
+          # this point needs them - the package is already made.
+          git checkout -q -f FETCH_HEAD
+          cp "$index" repository.json
+
+          git diff --quiet -- repository.json && { echo "index: unchanged"; git config --local --unset-all http.extraHeader; exit 0; }
 
           # Onto master, because a tag does not move and the catalogue reads a
           # branch. [skip ci] so this does not start a run of its own.
@@ -270,8 +290,5 @@ jobs:
           git add repository.json
           git commit -q -m "index: $VERSION [skip ci]"
 
-          umask 077
-          auth="Authorization: basic $(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
-          git config --local http.extraHeader "$auth"
           git push "${FORGEJO_URL}/${GITHUB_REPOSITORY}.git" HEAD:master
           git config --local --unset-all http.extraHeader
