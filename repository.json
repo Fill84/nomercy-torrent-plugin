@@ -10,6 +10,14 @@
       "projectUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin",
       "versions": [
         {
+          "version": "0.8.2",
+          "targetAbi": "12.0",
+          "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.8.2/NoMercy.Plugin.TorrentDownloader-0.8.2.zip",
+          "checksum": "02613f74c3f5d382722feed4047da91c5cd0fba153da2f25fc222d70e2b5a95a",
+          "changelog": "Save, the show switches and every other button on the plugin's pages work again in the web app.",
+          "timestamp": "2026-11-16T19:27:40Z"
+        },
+        {
           "version": "0.8.1",
           "targetAbi": "12.0",
           "downloadUrl": "https://forgejo.phillippepelzer.me/FiLL/nomercy-torrent-plugin/releases/download/v0.8.1/NoMercy.Plugin.TorrentDownloader-0.8.1.zip",
