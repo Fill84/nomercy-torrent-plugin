@@ -1343,6 +1343,16 @@ public sealed class TorrentRun : IDisposable
 
             if (await SessionAsync(ct).ConfigureAwait(false) is TorrentSession session)
             {
+                // A peer met while this was a magnet said what it has before
+                // anybody could count the pieces. Read against the count
+                // before the session sees it, or a seed is a leecher for as
+                // long as it stays. One that fails the reading is talking
+                // about another torrent and goes the way any such peer does.
+                if (Torrent is TorrentMetadata known)
+                {
+                    peer.Sized(known.PieceCount);
+                }
+
                 await session.RunAsync(peer, ct, pending).ConfigureAwait(false);
             }
         }
