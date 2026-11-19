@@ -69,11 +69,16 @@ public enum TorrentState
 /// (<c>Staging.ForEpisodes</c>). Null fetches every video, which is what an episode's own release and a torrent
 /// added by hand want.
 /// </param>
+/// <param name="Already">
+/// For a torrent added by hand, the episodes the library already holds of the show it is named for: the
+/// videos naming only those are not fetched (<c>Staging.NotAlready</c>). Null or empty leaves nothing out.
+/// </param>
 public sealed record TorrentRequest(
     string Source,
     IReadOnlyList<string> Trackers,
     string DownloadFolder,
-    IReadOnlyList<Domain.EpisodeKey>? Episodes = null);
+    IReadOnlyList<Domain.EpisodeKey>? Episodes = null,
+    IReadOnlyList<Domain.EpisodeKey>? Already = null);
 
 /// <summary>What the client calls a torrent it has taken on.</summary>
 /// <param name="InfoHash">Forty hex characters, upper case.</param>

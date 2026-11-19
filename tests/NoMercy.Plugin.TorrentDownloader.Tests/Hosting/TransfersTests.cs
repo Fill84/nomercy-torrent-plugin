@@ -103,6 +103,124 @@ public class TransfersTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>No episode is encoded twice</strong>, the owner's rule of 19 November 2026. An encode is asked
+    /// for in one place, and that place asks for none when the library already holds the episode: the
+    /// download is done with as though its own encode had landed.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeTheLibraryAlreadyHasIsNotEncodedAgain()
+    {
+        GrabRepository grabs = await Grabs();
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        await Transfers(engine, grabs, server, encoded: true).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Null(server.Encoder.Job);
+
+        // And it is not left waiting on an encode nobody asked for: once the torrent has stopped seeding, the
+        // next pass finds the episode in the library and is done with the download.
+        await Transfers(new StandingEngine(), grabs, server, encoded: true)
+            .TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Null(server.Encoder.Job);
+        Assert.Empty(await grabs.OpenAsync(CancellationToken.None));
+    }
+
+    /// <remarks>
+    /// The other way an episode is encoded twice: two downloads of it, the second finishing while the first
+    /// one's encode is still running. The library does not hold it yet, and the first has it in hand.
+    /// </remarks>
+    [Fact]
+    public async Task AnEpisodeAnotherDownloadIsAlreadyEncodingIsNotEncodedAgain()
+    {
+        GrabRepository grabs = await Grabs();
+        await Racing(grabs);
+        await grabs.EncodeAsync(Rival, Episode, "job-of-the-first", CancellationToken.None);
+        await grabs.StateAsync(Rival, GrabState.Dispatched, CancellationToken.None);
+        await Grabbed(grabs);
+
+        string episode = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(episode), 900_000_000));
+
+        FakeProvider server = Server();
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Null(server.Encoder.Job);
+    }
+
+    /// <remarks>
+    /// A pack added by hand answers for what it holds that the library does not have. The episode the library
+    /// holds is not staged and not encoded, and the pack is written down as answering for the other one only.
+    /// </remarks>
+    [Fact]
+    public async Task APackAddedByHandLeavesOutTheEpisodesTheLibraryAlreadyHas()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string wanted = Downloaded("Silo.S03E06.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+        string held = Downloaded("Silo.S01E01.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(wanted), 900_000_000),
+            new TorrentFile(Path.GetFileName(held), 900_000_000));
+
+        FakeProvider server = Server();
+
+        await Transfers(engine, grabs, server).TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.True(File.Exists(Staged), "The episode the library does not have was never staged.");
+        Assert.Equal([Episode], Assert.Single(await grabs.EveryAsync(CancellationToken.None)).Covers);
+        Assert.True(File.Exists(held), "The episode the library already has was moved out of the download folder.");
+        Assert.Single(Directory.GetFiles(Intake));
+    }
+
+    /// <remarks>
+    /// And one holding nothing the library lacks is encoded not at all. It is the owner's own download, so it
+    /// is left where it is and the history says why, once.
+    /// </remarks>
+    [Fact]
+    public async Task APackAddedByHandThatHoldsNothingNewIsLeftAndSaysWhy()
+    {
+        GrabRepository grabs = await Grabs();
+        await ByHand(grabs);
+
+        string held = Downloaded("Silo.S01E01.1080p.WEB.H264-CAKES.mkv", 900_000_000);
+
+        StandingEngine engine = new StandingEngine().Holding(
+            Finished(),
+            new TorrentFile(Path.GetFileName(held), 900_000_000));
+
+        FakeProvider server = Server();
+        Transfers transfers = Transfers(engine, grabs, server);
+
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+        await transfers.TickAsync(Incomplete, Intake, CancellationToken.None);
+
+        Assert.Null(server.Encoder.Job);
+        Assert.True(File.Exists(held));
+
+        HistoryRow said = Assert.Single(await grabs.HistoryAsync(CancellationToken.None));
+
+        Assert.Contains("already in the library", said.Detail, StringComparison.Ordinal);
+    }
+
+    /// <remarks>
     /// Both halves of a failure, or the episode is lost one way or the other:
     /// blacklisting without returning it leaves it looking grabbed for ever,
     /// and returning it without blacklisting has the next cycle choose the same

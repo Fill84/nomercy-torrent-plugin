@@ -553,7 +553,14 @@ public sealed class Transfers(
             // Into the folder it had, when it had one of its own: a second copy
             // of a release put back into the shared folder writes over the
             // first copy's file of the same name.
-            await engine.AddAsync(new(lost.Magnet, trackers, lost.Folder ?? incompleteFolder, PackEpisodes(lost)), ct);
+            await engine.AddAsync(
+                new(
+                    lost.Magnet,
+                    trackers,
+                    lost.Folder ?? incompleteFolder,
+                    PackEpisodes(lost),
+                    lost.ByHand ? await AlreadyHeld.OfAsync(lost.ReleaseTitle, library, ct) : null),
+                ct);
         }
         catch (Exception refused) when (refused is not OperationCanceledException)
         {
@@ -641,6 +648,24 @@ public sealed class Transfers(
                     return [];
                 }
 
+                // Without what is already there or already coming, the owner's
+                // rule of 19 November 2026: no episode is encoded twice. A pack
+                // added by hand held every episode of its season, and each was
+                // staged and encoded whether the library had it or another
+                // download was bringing it.
+                covers = await StillToComeAsync(finished, covers, thisTick, ct);
+
+                if (covers.Count == 0)
+                {
+                    await SaidOnceAsync(
+                        finished,
+                        "every episode in it is already in the library or on its way from another download, "
+                        + "so nothing of it was encoded and it was left where it is",
+                        ct);
+
+                    return [];
+                }
+
                 // No longer unplaceable, if it ever was: the show has been
                 // added since, and a later one must be said out loud again.
                 _unplaceable.Remove(finished.InfoHash);
@@ -716,7 +741,14 @@ public sealed class Transfers(
                 // moved files missing and download them a second time; let go of, its
                 // grab goes on to its encodes and what is left is deleted when the
                 // grab is done, by what the client kept of it.
-                await engine.AddAsync(new(finished.Magnet, trackers, finished.Folder ?? incompleteFolder, PackEpisodes(finished)), ct);
+                await engine.AddAsync(
+                    new(
+                        finished.Magnet,
+                        trackers,
+                        finished.Folder ?? incompleteFolder,
+                        PackEpisodes(finished),
+                        finished.ByHand ? await AlreadyHeld.OfAsync(finished.ReleaseTitle, thisTick, ct) : null),
+                    ct);
 
                 logger.LogDebug(
                     "{Release}: nothing reached the intake folder, so the client holds it again and the next pass tries again.",
@@ -838,6 +870,28 @@ public sealed class Transfers(
                 staged,
                 episode,
                 show.Title);
+
+            return;
+        }
+
+        // No episode is encoded twice, the owner's rule of 19 November 2026, and this is the one place an
+        // encode is asked for. The library holding it already is one way: another download brought it while
+        // this one ran. A replacement's episode has a file by definition, the one it replaces, so it is not
+        // judged by that. The grab goes on as though its encode had been asked for, and is done with as soon
+        // as the library has what it answers for.
+        if (grab.Replaces is null && row.HasFile)
+        {
+            await NoSecondEncodeAsync(grab, episode, "it is already in the library", ct);
+
+            return;
+        }
+
+        // The other way: another download of the same episode whose encode is still running.
+        if ((await grabs.OpenAsync(ct)).Any(other =>
+                !string.Equals(other.InfoHash, infoHash, StringComparison.OrdinalIgnoreCase)
+                && other.EncodeJobs.ContainsKey(episode)))
+        {
+            await NoSecondEncodeAsync(grab, episode, "another download of it is already being encoded", ct);
 
             return;
         }
@@ -1568,10 +1622,20 @@ public sealed class Transfers(
         IReadOnlyList<TorrentFile> files,
         CancellationToken ct)
     {
-        if (!_unplaceable.TryGetValue(finished.InfoHash, out string? reason))
-        {
-            reason = Reason(files);
+        await SaidOnceAsync(finished, Reason(files), ct);
+    }
 
+    /// <summary>
+    /// Says in the history, once, why a finished download added by hand is left where it is.
+    /// </summary>
+    /// <remarks>
+    /// Once for as long as the reason is the same: the pass comes round every minute, and the history is read
+    /// by a person. The Activity page is told every pass, because it shows what is so now.
+    /// </remarks>
+    private async Task SaidOnceAsync(StoredDownload finished, string reason, CancellationToken ct)
+    {
+        if (!_unplaceable.TryGetValue(finished.InfoHash, out string? said) || said != reason)
+        {
             _unplaceable[finished.InfoHash] = reason;
 
             await grabs.NotedAsync(
@@ -1582,6 +1646,62 @@ public sealed class Transfers(
         }
 
         journal.Failed(ActivityStage.Download, finished.ReleaseTitle, reason);
+    }
+
+    /// <summary>
+    /// The episodes a download added by hand holds that the library does not have and no other download is
+    /// bringing.
+    /// </summary>
+    /// <remarks>
+    /// Another download that is still open answers for its episodes whether it is downloading, staged or being
+    /// encoded: it was chosen by the search, and it finishes or fails on its own account.
+    /// </remarks>
+    private async Task<IReadOnlyList<EpisodeKey>> StillToComeAsync(
+        StoredDownload byHand,
+        IReadOnlyList<EpisodeKey> holds,
+        LibraryThisTick thisTick,
+        CancellationToken ct)
+    {
+        HashSet<EpisodeKey> coming =
+        [
+            .. (await grabs.OpenAsync(ct))
+                .Where(other => !string.Equals(other.InfoHash, byHand.InfoHash, StringComparison.OrdinalIgnoreCase))
+                .SelectMany(other => other.Covers),
+        ];
+
+        List<EpisodeKey> left = [];
+
+        foreach (IGrouping<int, EpisodeKey> show in holds.GroupBy(one => one.ShowId))
+        {
+            IReadOnlyList<Episode> episodes = await thisTick.GetEpisodesAsync(show.Key, ct);
+
+            left.AddRange(show.Where(wanted =>
+                !coming.Contains(wanted)
+                && !episodes.Any(one => one.Season == wanted.Season && one.Number == wanted.Number && one.HasFile)));
+        }
+
+        return left;
+    }
+
+    /// <summary>
+    /// Goes on with a staged episode without asking for its encode, and says why.
+    /// </summary>
+    /// <remarks>
+    /// Dispatched, as though the encode had been asked for: from there the grab is done with the moment the
+    /// library holds every episode it answers for, and its staged copy and its download are deleted by the
+    /// same step that clears up after an encode of its own.
+    /// </remarks>
+    private async Task NoSecondEncodeAsync(StoredDownload grab, EpisodeKey episode, string why, CancellationToken ct)
+    {
+        logger.LogInformation(
+            "{Release}: no encode was asked for {Episode}, because {Why}.",
+            grab.ReleaseTitle,
+            episode,
+            why);
+
+        journal.Finished(ActivityStage.Dispatch, grab.ReleaseTitle, $"no encode asked for {episode}: {why}");
+
+        await grabs.StateAsync(grab.InfoHash, GrabState.Dispatched, ct);
     }
 
     /// <summary>Why a torrent was left alone, in words the owner can act on.</summary>

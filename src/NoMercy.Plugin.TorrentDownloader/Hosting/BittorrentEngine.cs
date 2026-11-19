@@ -375,7 +375,12 @@ public sealed class BittorrentEngine(
                 [
                     .. (request.Episodes is IReadOnlyList<EpisodeKey> episodes
                             ? Staging.ForEpisodes([.. files.Select(file => new TorrentFile(file.Path, file.Length))], episodes)
-                            : Staging.Wanted([.. files.Select(file => new TorrentFile(file.Path, file.Length))]))
+
+                            // One added by hand is taken for no episode, so it is narrowed from
+                            // the other side: what the library already holds is left out.
+                            : request.Already is { Count: > 0 } already
+                                ? Staging.NotAlready([.. files.Select(file => new TorrentFile(file.Path, file.Length))], already)
+                                : Staging.Wanted([.. files.Select(file => new TorrentFile(file.Path, file.Length))]))
                         .Select(kept => files.First(file => string.Equals(file.Path, kept.Path, StringComparison.Ordinal))),
                 ],
                 _limits,
@@ -406,7 +411,10 @@ public sealed class BittorrentEngine(
             run.Opened += () => Knows(infoHash);
             run.PeersChanged += () => PeersMoved(infoHash);
 
-            Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time));
+            Held held = new(run, name, _time.GetUtcNow(), new(stallLimit, _time))
+            {
+                LeavesOutWhatIsHeld = request.Already is { Count: > 0 },
+            };
 
             _torrents[infoHash] = held;
 
@@ -1794,9 +1802,14 @@ public sealed class BittorrentEngine(
 
         // A season pack can hold videos and none for the episodes it was taken for (GitHub issue #1); saying
         // there is no video in it would send the owner looking for a fake release that is not one.
-        held.Error = held.Run.Torrent?.Files.Any(file => Staging.IsVideo(file.Path)) == true
-            ? "There is no video file in it for the episodes it was taken for, so nothing in it was downloaded."
-            : "There is no video file in it, so nothing in it was downloaded.";
+        held.Error = held.Run.Torrent?.Files.Any(file => Staging.IsVideo(file.Path)) != true
+            ? "There is no video file in it, so nothing in it was downloaded."
+
+            // One added by hand holding only episodes the library has: said as that, because "the
+            // episodes it was taken for" is true of nothing the owner did.
+            : held.LeavesOutWhatIsHeld
+                ? "Every episode in it is already in the library, so nothing in it was downloaded."
+                : "There is no video file in it for the episodes it was taken for, so nothing in it was downloaded.";
 
         // The one refusal that is about the torrent rather than about tonight.
         // Nothing will ever put a video file into it, so it is never worth
@@ -2430,6 +2443,9 @@ public sealed class BittorrentEngine(
 
         /// <summary>Why it was given up on, in the client's own words.</summary>
         public string? Error { get; set; }
+
+        /// <summary>Whether it was added by hand with episodes the library already holds left out of it.</summary>
+        public bool LeavesOutWhatIsHeld { get; init; }
 
         /// <summary>Whether that reason is about the release rather than the moment.</summary>
         public bool ErrorIsTheRelease { get; set; }

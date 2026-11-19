@@ -84,6 +84,12 @@
   own name. A name carrying more than one title, as a fansub batch does, is matched on each of them, and
   the longest title a library holds wins. A video naming no show a library holds and sitting in no folder
   that does is left alone, and so is one naming no episode.
+- A torrent added by hand whose own name is the name of a show in a library downloads no video whose every
+  episode the library already holds. Where its name names no show in a library, or the library cannot be
+  read, every video in it is downloaded.
+- Of the episodes a finished torrent added by hand holds, one the library already holds, or one another
+  open download answers for, is not staged and not encoded. A torrent added by hand holding no other
+  episode is left where it is, and the History page says so once.
 - When every video moved, what else that torrent downloaded, and the folders it came in, are deleted from
   the download folder. When none moved, the client holds the torrent again. When only some moved, the
   rest stays until the grab is done, and is deleted then.
@@ -94,6 +100,10 @@
 - An encode is asked for each staged video. The grab is done once the library has the episode, or holds
   a file named for the episode under another episode and the server has not said the encode is still
   running. The server says nothing about an encode it skips because every output already exists.
+- No episode is encoded twice. No encode is asked for a staged video whose episode the library already
+  holds, unless that episode is being replaced, nor for one whose episode another open download has
+  already asked an encode for. Such a download goes on as though its encode had been asked for, and is
+  done once the library has its episodes.
 - For an episode to be replaced, once its new release has downloaded whole and its video is staged,
   the files of the old episode's encode go to the server's recycle area first, and then the encode is
   asked for. Those files are the episode's own folder in the library — the folder the library's file for

@@ -1891,7 +1891,14 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         try
         {
             TorrentHandle taken = await engine.AddAsync(
-                new(source, [], settings.IncompleteFolder),
+                new(
+                    source,
+                    [],
+                    settings.IncompleteFolder,
+
+                    // What the library already holds of the show it is named for is
+                    // left out of the download, the owner's rule of 19 November 2026.
+                    Already: await AlreadyHeldAsync(source, ct)),
                 ct);
 
             await (await GrabsAsync(ct)).RecordAsync(
@@ -1926,6 +1933,28 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
         catch (Exception refused) when (refused is not OperationCanceledException)
         {
             return (null, refused.Message);
+        }
+    }
+
+    /// <summary>
+    /// The episodes the library already holds of the show a torrent added by hand is named for, or null.
+    /// </summary>
+    /// <remarks>
+    /// Null as well when the library cannot be read. Leaving episodes out is a saving, and a library that
+    /// does not answer must not stop the owner adding a torrent: the whole of it is downloaded then, and
+    /// what it holds twice is still not encoded twice.
+    /// </remarks>
+    private async Task<IReadOnlyList<EpisodeKey>?> AlreadyHeldAsync(string source, CancellationToken ct)
+    {
+        try
+        {
+            return await AlreadyHeld.OfAsync(Magnet.Parse(source)?.DisplayName, new HostLibrary(Context.Library), ct);
+        }
+        catch (Exception unread) when (unread is not OperationCanceledException)
+        {
+            _log?.LogDebug(unread, "The library could not be read for a torrent added by hand, so nothing is left out of it.");
+
+            return null;
         }
     }
 

@@ -310,6 +310,67 @@ public static partial class Staging
         return [.. Wanted(files).Where(file => episodes.Any(episode => Answers(file, episode)))];
     }
 
+    /// <summary>
+    /// Which files of a torrent added by hand are downloaded: the videos <see cref="Wanted"/> keeps, without
+    /// those whose every episode is among <paramref name="already"/>, the ones the library holds.
+    /// </summary>
+    /// <remarks>
+    /// The owner's rule of 19 November 2026: an episode that is already there is not downloaded again. A
+    /// torrent added by hand is taken for no episode, so it cannot be narrowed to the ones searched for the way
+    /// a season pack is; it is narrowed from the other side. A video is left out only when its own name gives a
+    /// season and an episode and the library holds every episode it names: one naming no episode, or a double
+    /// episode the library holds half of, is downloaded.
+    /// </remarks>
+    public static IReadOnlyList<TorrentFile> NotAlready(IReadOnlyList<TorrentFile> files, IReadOnlyList<EpisodeKey> already)
+    {
+        return [.. Wanted(files).Where(file => !EveryEpisodeAmong(file, already))];
+    }
+
+    /// <summary>
+    /// The show in a library that a torrent's own name is the name of, or null.
+    /// </summary>
+    /// <remarks>
+    /// Read off the title before the season tag, the way a file's own name is read, and matched whole: a
+    /// torrent taken for the wrong show would have that show's episodes left out of it, so a name that only
+    /// carries a show's title somewhere inside it names nobody. The longest title wins, as it does for a folder.
+    /// </remarks>
+    public static Show? ShowNamed(string? name, IReadOnlyList<Show> shows)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return null;
+        }
+
+        string title = ReleaseName.Parse(name).Title;
+
+        return string.IsNullOrWhiteSpace(title)
+            ? null
+            : shows.Where(candidate => TitleMatcher.Matches(title, candidate.Title))
+                .OrderByDescending(candidate => candidate.Title.Length)
+                .FirstOrDefault();
+    }
+
+    /// <summary>Whether a file names a season and an episode, and every episode it names is among <paramref name="episodes"/>.</summary>
+    private static bool EveryEpisodeAmong(TorrentFile file, IReadOnlyList<EpisodeKey> episodes)
+    {
+        ReleaseName name = ReleaseName.Parse(System.IO.Path.GetFileName(file.Path));
+
+        if (name.Season is not int season || name.Episode is not int first)
+        {
+            return false;
+        }
+
+        for (int at = first; at <= (name.LastEpisode ?? first); at++)
+        {
+            if (!episodes.Any(episode => episode.Season == season && episode.Number == at))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>Which of <paramref name="episodes"/> a video in the torrent answers for.</summary>
     /// <remarks>
     /// An episode a pack turns out not to hold is released from its grab and searched for singly
