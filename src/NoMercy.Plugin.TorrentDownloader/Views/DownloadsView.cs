@@ -291,6 +291,11 @@ public static class DownloadsView
     ///
     /// The swarm's own count comes from the trackers, which report it on every
     /// announce; it was read for the interval and thrown away.
+    ///
+    /// It is never drawn smaller than what is connected. A peer found through
+    /// the DHT or a peer exchange is in no tracker's count, and that count is
+    /// as old as the last announce, so the connected can pass it: "5 of 1" on
+    /// 19 November 2026. Five connected is a swarm of at least five.
     /// </remarks>
     private static string Swarm(int? connected, int? swarm)
     {
@@ -302,7 +307,7 @@ public static class DownloadsView
         }
 
         return swarm is int all
-            ? $"{has} of {all}"
+            ? $"{has} of {Math.Max(has, all)}"
             : has.ToString(CultureInfo.InvariantCulture);
     }
 
