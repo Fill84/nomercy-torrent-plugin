@@ -666,6 +666,86 @@ public class TorrentRunTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The owner's report of 19 November 2026: after a pause and a resume it no longer connects.</strong>
+    /// A 17 GB pack came back at 3 of 55 seeds and half a megabyte a second. A run dials only when its pass
+    /// comes round, and between passes it rests for as long as the trackers asked, half an hour by default.
+    /// A pause in the middle of that rest and a resume after it started nothing: the run stood with every
+    /// connection dropped until the rest it began before the pause was over.
+    /// </para>
+    /// <para>
+    /// A resume ends the rest. The pass that follows offers every address again.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AResumedRunPassesAtOnceInsteadOfSleepingOutItsRest()
+    {
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler());
+
+        await run.OnceAsync(CancellationToken.None);
+
+        run.Pause();
+
+        Task resting = run.RestAsync(CancellationToken.None);
+
+        Assert.False(resting.IsCompleted, "the rest was over before anything resumed the run.");
+
+        run.Resume();
+
+        Assert.Same(resting, await Task.WhenAny(resting, Task.Delay(TimeSpan.FromSeconds(10))));
+    }
+
+    /// <remarks>
+    /// And a rest ends when the client stops, as the wait it replaces did.
+    /// </remarks>
+    [Fact]
+    public async Task ARestEndsWhenTheClientStops()
+    {
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler());
+        using CancellationTokenSource stopping = new();
+
+        Task resting = run.RestAsync(stopping.Token);
+
+        await stopping.CancelAsync();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => resting);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// The other half of the same report. Once one peer was connected the next pass was the trackers' whole
+    /// interval away, so a download that came back with three seeds out of fifty-five stayed at three: nothing
+    /// dialled the other fifty-two for half an hour.
+    /// </para>
+    /// <para>
+    /// A run that still has something to download and room for more peers comes round after a minute, as one
+    /// with nobody does. The announce keeps the trackers' own interval whatever this says.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ARunStillDownloadingWithRoomForMorePeersComesRoundSoonerThanTheTrackerAsked()
+    {
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+
+        using TorrentRun run = Run(new AnsweringTrackers(), new RecordingDialler());
+
+        await run.OnceAsync(CancellationToken.None);
+
+        PeerWire wire = new();
+
+        PeerConnection?[] introduced = await Task.WhenAll(
+            PeerConnection.IntroduceAsync(wire.Receiver, ArchiveHash, Id("QUIET0"), 0, dialling: false, stopping.Token),
+            PeerConnection.IntroduceAsync(wire.Initiator, ArchiveHash, Id("NM0002"), 0, dialling: true, stopping.Token));
+
+        run.Take(introduced[1]!, stopping.Token);
+
+        Assert.True(run.Interval > TorrentRun.LookAgainAfter);
+        Assert.Equal(TorrentRun.LookAgainAfter, run.Wait);
+
+        introduced[0]!.Dispose();
+    }
+
+    /// <remarks>
     /// A paused run dials nobody. One that kept announcing and answering peers
     /// while the owner had stopped it is not paused, whatever the page says.
     /// </remarks>

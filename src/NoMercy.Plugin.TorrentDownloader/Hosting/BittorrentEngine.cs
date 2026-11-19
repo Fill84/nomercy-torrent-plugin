@@ -1171,8 +1171,10 @@ public sealed class BittorrentEngine(
                 // What the run asks for rather than the tracker's interval,
                 // which is not the same number when the run has lost everybody:
                 // it announces at the tracker's interval either way, and dials
-                // oftener while it has nobody to dial anyone from.
-                await Task.Delay(held.Run.Wait, _time, ct).ConfigureAwait(false);
+                // oftener while it has nobody to dial anyone from. The run's
+                // own rest, because a resume ends it: a plain wait here slept
+                // out the trackers' half hour after the owner pressed Resume.
+                await held.Run.RestAsync(ct).ConfigureAwait(false);
             }
             catch (OperationCanceledException)
             {

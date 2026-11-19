@@ -503,12 +503,23 @@ public sealed class TorrentRun : IDisposable
 
     /// <summary>How long before this run's next pass.</summary>
     /// <remarks>
+    /// <para>
     /// The tracker's interval while there is somebody to talk to, and a minute
     /// while there is not. A run with no peers has nothing to do but look for
     /// some, and half an hour of having nothing to do is what an owner sees as
     /// nought per cent in front of a swarm somebody else can see three hundred
     /// seeds in. The announce keeps the tracker's own interval whatever this
     /// says, so coming round sooner asks the tracker for nothing.
+    /// </para>
+    /// <para>
+    /// A minute as well while there is still something to download and room
+    /// for more peers. One peer used to be "somebody to talk to": on
+    /// 19 November 2026 a pack came back from a pause with three seeds of
+    /// fifty-five and stayed there at half a megabyte a second, because
+    /// nothing dialled the other fifty-two until the trackers' half hour was
+    /// over. A run that is whole, or has all the peers it wants, has no reason
+    /// to come round sooner.
+    /// </para>
     /// </remarks>
     public TimeSpan Wait
     {
@@ -516,9 +527,51 @@ public sealed class TorrentRun : IDisposable
         {
             lock (_lock)
             {
-                return _peers.Count > 0 ? Interval : LookAgainAfter;
+                if (_peers.Count == 0)
+                {
+                    return LookAgainAfter;
+                }
+
+                bool whole = _session is not null && _session.Progress().Complete;
+
+                return !whole && _peers.Count < PeersWanted ? LookAgainAfter : Interval;
             }
         }
+    }
+
+    /// <summary>What a resume completes, so a rest begun before it ends with it.</summary>
+    private TaskCompletionSource _resumed = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>
+    /// Rests until this run's next pass is due: for <see cref="Wait"/>, or until it is resumed.
+    /// </summary>
+    /// <remarks>
+    /// A run dials only when its pass comes round. Resting was a plain wait, so a
+    /// pause in the middle of it and a resume after it started nothing: every
+    /// connection had been dropped by the pause, and nobody was dialled until the
+    /// rest begun before it was over, which is the trackers' interval. A resume
+    /// ends the rest instead, and the pass that follows offers every address again.
+    /// </remarks>
+    public async Task RestAsync(CancellationToken ct)
+    {
+        Task resumed;
+
+        lock (_lock)
+        {
+            resumed = _resumed.Task;
+        }
+
+        // Its own token, so the timer is let go of when a resume ends the rest
+        // rather than standing for what is left of half an hour.
+        using CancellationTokenSource resting = CancellationTokenSource.CreateLinkedTokenSource(ct);
+
+        Task waited = Task.Delay(Wait, _time, resting.Token);
+
+        await Task.WhenAny(waited, resumed).ConfigureAwait(false);
+
+        await resting.CancelAsync().ConfigureAwait(false);
+
+        ct.ThrowIfCancellationRequested();
     }
 
     /// <summary>
@@ -1038,6 +1091,8 @@ public sealed class TorrentRun : IDisposable
     /// <summary>Starts dialling again from what is already verified.</summary>
     public void Resume()
     {
+        TaskCompletionSource resumed;
+
         lock (_lock)
         {
             Paused = false;
@@ -1045,7 +1100,14 @@ public sealed class TorrentRun : IDisposable
             // Every address is offered again, because the peers that were
             // dropped are the ones most likely still to be there.
             _tried.Clear();
+
+            // And the rest it is in ends, so they are offered now and not when
+            // the wait begun before the pause is over.
+            resumed = _resumed;
+            _resumed = new(TaskCreationOptions.RunContinuationsAsynchronously);
         }
+
+        resumed.TrySetResult();
     }
 
     public void Dispose()
