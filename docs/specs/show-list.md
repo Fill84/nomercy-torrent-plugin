@@ -6,11 +6,14 @@
   every library at once — it does not matter which library a show is in or which page it was on. Part
   of a title is enough, and case, accents and punctuation are ignored. A button puts the whole list
   back, the box keeps what was typed, and nothing about it is saved: a restart shows every show again.
+- A show that matches what is typed is listed even when the library holds no video file of it, so a
+  show the owner has no episode of yet can be found and switched on.
 - The plugin's overview page lists every show of every `tv` library and every anime of every `anime`
   library, in one list per library, each library under a tab of its own labelled with its name and how
   many of its shows are listed.
-- A show or anime the library holds no video file of is not listed, unless it is switched on. The
-  server keeps a row for every show it ever identified, and those are not the owner's shows.
+- A show or anime the library holds no video file of is not listed, unless it is switched on or is
+  being looked for by its title. The server keeps a row for every show it ever identified, and those
+  are not the owner's shows.
 - The missing column says, for every show listed, how many of its aired episodes have no video file,
   whether the show is switched on or off. It counts season 0 only where that show takes specials. An
   episode whose file is in the library under its own name, registered by the server against another
