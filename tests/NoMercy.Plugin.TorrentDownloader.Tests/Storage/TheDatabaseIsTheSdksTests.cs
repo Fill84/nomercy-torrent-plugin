@@ -100,12 +100,77 @@ public sealed class TheDatabaseIsTheSdksTests : IDisposable
         Assert.Equal(Enumerable.Range(1, numbers.Count).Select(number => (long)number), numbers);
     }
 
+    /// <remarks>
+    /// <para>
+    /// <strong>The owner's server, 19 November 2026: an update while the server ran left the plugin dead.</strong>
+    /// Windows refuses to move a file another handle holds, and after an update the old copy's pooled
+    /// connection holds the database for minutes. The open was refused and the owner was told to restart
+    /// the server — in the middle of an encode, for a plugin update.
+    /// </para>
+    /// <para>
+    /// SQLite holds its file sharing it for reading and writing, so it can be read while it is held: a
+    /// database that cannot be moved is copied, log first, and the old one is left where it is.
+    /// </para>
+    /// </remarks>
     [Fact]
-    public async Task AFileThatCannotBeMovedIsLeftWhereItIsAndSaysWhy()
+    public async Task ADatabaseTheOldCopyStillHoldsIsCarriedOverWhileItIsHeld()
     {
-        // Windows refuses to move a file another handle holds, which is what an
-        // update while the server runs leaves: the old copy's pooled connection
-        // still has it. Linux moves an open file, so there is nothing to refuse.
+        OldDatabase.Write(_folder);
+        string old = Path.Combine(_folder, OldDatabase.FileName);
+
+        await using FileStream held = new(old, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+
+        await using Store store = TestStore.In(_folder);
+        await store.MigrateAsync(CancellationToken.None);
+
+        await RowsAreThere(store);
+
+        // Left as it was: the old copy of the plugin is still attached to it.
+        Assert.True(File.Exists(old));
+    }
+
+    [Fact]
+    public async Task RowsOnlyInTheLogOfAHeldDatabaseComeAlongToo()
+    {
+        OldDatabase.WriteLeavingTheLog(_folder);
+        string old = Path.Combine(_folder, OldDatabase.FileName);
+
+        await using FileStream held = new(old, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+        await using FileStream log = new(old + "-wal", FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+
+        await using Store store = TestStore.In(_folder);
+        await store.MigrateAsync(CancellationToken.None);
+
+        await RowsAreThere(store);
+    }
+
+    [Fact]
+    public async Task AHeldDatabaseIsCarriedOverOnce()
+    {
+        OldDatabase.Write(_folder);
+        string old = Path.Combine(_folder, OldDatabase.FileName);
+
+        await using FileStream held = new(old, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite);
+
+        await using (Store first = TestStore.In(_folder))
+        {
+            await first.MigrateAsync(CancellationToken.None);
+            await new CadenceRepository(first).RecordFinishedAsync("later", DateTimeOffset.UtcNow, CancellationToken.None);
+        }
+
+        // The old file is still there beside the carried one. A second open reads
+        // what the first wrote, rather than carrying the old rows over it again.
+        await using Store second = TestStore.In(_folder);
+        await second.MigrateAsync(CancellationToken.None);
+
+        Assert.True((await new CadenceRepository(second).LastFinishedAsync(CancellationToken.None)).ContainsKey("later"));
+    }
+
+    [Fact]
+    public async Task AFileThatCannotBeReadIsLeftWhereItIsAndSaysWhy()
+    {
+        // Held by something that shares nothing, which is not SQLite: there is no
+        // reading it either. Linux moves an open file, so there is nothing to refuse.
         if (!OperatingSystem.IsWindows())
         {
             return;
@@ -114,14 +179,14 @@ public sealed class TheDatabaseIsTheSdksTests : IDisposable
         OldDatabase.Write(_folder);
         string old = Path.Combine(_folder, OldDatabase.FileName);
 
-        await using (FileStream held = new(old, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+        await using (FileStream held = new(old, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
         {
             await using Store store = TestStore.In(_folder);
 
             InvalidOperationException refused = await Assert.ThrowsAsync<InvalidOperationException>(
                 () => store.MigrateAsync(CancellationToken.None));
 
-            Assert.Contains("restart the server", refused.Message, StringComparison.Ordinal);
+            Assert.Contains("nothing in it changed", refused.Message, StringComparison.Ordinal);
         }
 
         // Nothing made in its place: an empty database opened beside it would be

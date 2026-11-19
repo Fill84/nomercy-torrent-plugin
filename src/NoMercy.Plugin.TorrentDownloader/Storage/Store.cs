@@ -240,11 +240,18 @@ public sealed class Store : IAsyncDisposable
     /// a fresh install.
     /// </para>
     /// <para>
-    /// A file that cannot be moved is left exactly where it is and the open
-    /// refused. On Windows that is an update while the server runs: the old copy
-    /// of the plugin still holds the file. Opening the host's database anyway
-    /// would make an empty one and migrate it, and the plugin would start again
-    /// from nothing while the owner's months of history sat beside it unread.
+    /// <strong>A file that cannot be moved is copied.</strong> On Windows that is
+    /// an update while the server runs: the old copy of the plugin still holds
+    /// the file, through a pooled connection that lets go minutes later. The open
+    /// was refused until it did and the owner told to restart the server — on
+    /// 19 November 2026 in the middle of an encode, for a plugin update. SQLite
+    /// holds its file sharing it, so it can be read while it is held.
+    /// </para>
+    /// <para>
+    /// Only a file that cannot be read either is left exactly where it is and the
+    /// open refused. Opening the host's database anyway would make an empty one
+    /// and migrate it, and the plugin would start again from nothing while the
+    /// owner's months of history sat beside it unread.
     /// </para>
     /// </remarks>
     private void CarryOver(string carried)
@@ -271,13 +278,90 @@ public sealed class Store : IAsyncDisposable
 
             File.Move(old, carried);
         }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+        catch (Exception held) when (held is IOException or UnauthorizedAccessException)
         {
-            throw new InvalidOperationException(
-                $"The plugin's database at {old} could not be moved to {carried} ({failure.Message}). "
-                + "The database itself was not moved and nothing in it changed; restart the server to finish the update.",
-                failure);
+            try
+            {
+                CopyOver(old, carried);
+            }
+            catch (Exception failure) when (failure is IOException or UnauthorizedAccessException)
+            {
+                throw new InvalidOperationException(
+                    $"The plugin's database at {old} could be neither moved nor copied to {carried} ({failure.Message}). "
+                    + "The database itself was not moved and nothing in it changed; it is carried over the next time "
+                    + "the plugin starts and nothing else holds the file.",
+                    failure);
+            }
         }
+    }
+
+    /// <summary>
+    /// Copies a database something still holds to the name the host opens, and
+    /// leaves the held one where it is.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The log first and the main file after it, the order that stays whole if
+    /// the holder writes its log into the file in between: what the log says
+    /// again over a page already written is the same page. The wal-index
+    /// (<c>-shm</c>) is not copied; it describes the holder's view and SQLite
+    /// builds a new one.
+    /// </para>
+    /// <para>
+    /// The main file arrives under a name of its own and is renamed last, so a
+    /// copy interrupted half way leaves no database the next open would take for
+    /// the carried one. Once it is there the old file is never read again: what
+    /// the old copy of the plugin might still write to it is not carried, and it
+    /// writes nothing once it has been unloaded.
+    /// </para>
+    /// </remarks>
+    private static void CopyOver(string old, string carried)
+    {
+        string arriving = carried + ".arriving";
+
+        try
+        {
+            File.Delete(carried + "-shm");
+
+            foreach (string suffix in (string[])["-wal", "-journal"])
+            {
+                if (File.Exists(old + suffix))
+                {
+                    CopyHeld(old + suffix, carried + suffix);
+                }
+            }
+
+            CopyHeld(old, arriving);
+            File.Move(arriving, carried);
+        }
+        catch
+        {
+            // Nothing half made is left for the host to open as though it were
+            // the plugin's database.
+            foreach (string made in (string[])[arriving, carried + "-wal", carried + "-journal"])
+            {
+                try
+                {
+                    File.Delete(made);
+                }
+                catch (Exception left) when (left is IOException or UnauthorizedAccessException)
+                {
+                    // The refusal that follows names the real fault.
+                }
+            }
+
+            throw;
+        }
+    }
+
+    /// <summary>Reads a file sharing it with whoever has it open, which is how SQLite holds its own.</summary>
+    private static void CopyHeld(string from, string to)
+    {
+        using FileStream source = new(from, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using FileStream target = new(to, FileMode.Create, FileAccess.Write, FileShare.None);
+
+        source.CopyTo(target);
+        target.Flush(flushToDisk: true);
     }
 
     /// <summary>
