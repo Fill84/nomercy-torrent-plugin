@@ -267,6 +267,37 @@ public sealed class TheShowListTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The owner's report of 19 November 2026: The Ark, 0 of 36, was nowhere to be found.</strong>
+    /// A show the library holds no file of is left off the list, and the only switch is on a row of the
+    /// list, so a show the owner added and has no episode of yet could never be switched on. The remark
+    /// above promised it would be found; the test switched the show on first and so never asked.
+    /// </para>
+    /// <para>
+    /// Typing a title is the owner asking for that show. The whole list still leaves it out, so the rows
+    /// the server wrote on a guess stay off the page until somebody looks for one by name.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task AShowTheLibraryHoldsNoFileOfIsFoundByLookingForIt()
+    {
+        using TorrentDownloaderPlugin plugin = Loaded();
+
+        plugin.Find("brilliant");
+
+        PluginView narrowed = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
+
+        Assert.Contains(Rendered.All(narrowed), one => one.Id == "show-42");
+        Assert.Equal("Off", Assert.IsType<string>(Rendered.ById(narrowed, "show-42").Props["state"]));
+
+        plugin.Find(null);
+
+        PluginView whole = await plugin.GetViewAsync(Requests.View(Pages.OverviewRoute), CancellationToken.None);
+
+        Assert.DoesNotContain(Rendered.All(whole), one => one.Id == "show-42");
+    }
+
+    /// <remarks>
     /// An empty box is nothing to look for, not a search nothing matches: pressing Find on one puts the
     /// whole list back rather than emptying the page.
     /// </remarks>

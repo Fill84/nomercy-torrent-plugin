@@ -2392,6 +2392,11 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
     /// it on. The server keeps a row for every show it ever identified — twelve of the owner's
     /// sixty-nine — and listing those read as recommendations for programmes they do not have.
     /// </para>
+    /// <para>
+    /// <strong>Unless it is being looked for.</strong> A show the owner added and has no episode of yet
+    /// is such a row too — The Ark, 0 of 36, on 19 November 2026 — and it could not be switched on,
+    /// because the switch is on the row. A title typed into the box lists every show that matches it.
+    /// </para>
     /// </remarks>
     private async Task<PluginView> OverviewAsync(string? onlyLibraryId, int page, TableQuery query, CancellationToken ct)
     {
@@ -2441,8 +2446,10 @@ public sealed class TorrentDownloaderPlugin : IPlugin, IScheduledTaskPlugin, IUi
                     gap ? await library.GetFilesAsync(show.Id, ct) : []);
 
                 // Nothing of it on disk and nobody asked for it: a row the
-                // server wrote on a guess, and not the owner's show.
-                if (!facts.Held && !settings.SwitchedOn)
+                // server wrote on a guess, and not the owner's show. Typing its
+                // title is asking for it: the only switch is on a row, so a show
+                // left out here for good could never be switched on at all.
+                if (!facts.Held && !settings.SwitchedOn && !(Finding is not null && OverviewView.Found(Finding, show.Title)))
                 {
                     continue;
                 }
