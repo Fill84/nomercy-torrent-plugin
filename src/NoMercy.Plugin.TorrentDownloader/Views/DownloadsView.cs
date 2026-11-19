@@ -296,6 +296,12 @@ public static class DownloadsView
     /// the DHT or a peer exchange is in no tracker's count, and that count is
     /// as old as the last announce, so the connected can pass it: "5 of 1" on
     /// 19 November 2026. Five connected is a swarm of at least five.
+    ///
+    /// That holds before a tracker has said anything too, the owner's rule of
+    /// the same day: a download coming in from one seed read "1", and one of
+    /// what? One connected is a swarm of at least one, so it is "1 of 1". Only
+    /// nought connected with no tracker's count stays the one number, "0":
+    /// there is nothing yet to count it out of.
     /// </remarks>
     private static string Swarm(int? connected, int? swarm)
     {
@@ -306,9 +312,12 @@ public static class DownloadsView
             return Unknown;
         }
 
-        return swarm is int all
-            ? $"{has} of {Math.Max(has, all)}"
-            : has.ToString(CultureInfo.InvariantCulture);
+        if (swarm is null && has == 0)
+        {
+            return "0";
+        }
+
+        return $"{has} of {Math.Max(has, swarm ?? 0)}";
     }
 
     /// <summary>A state's own name, as words an owner reads.</summary>

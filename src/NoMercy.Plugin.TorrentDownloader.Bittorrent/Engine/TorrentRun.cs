@@ -1100,13 +1100,15 @@ public sealed class TorrentRun : IDisposable
             return;
         }
 
-        _swarmSeeds = said.Select(one => one.Seeders).OfType<int>().DefaultIfEmpty().Max() is int seeds and > 0
-            ? seeds
-            : _swarmSeeds;
+        // Nought is an answer. It was thrown away with "nobody said", so a
+        // release no tracker knew a seed of read as a bare "0" beside a peers
+        // cell that had its count: nought of what? Only a round in which no
+        // tracker gave the number leaves the last one standing.
+        int[] seeds = [.. said.Select(one => one.Seeders).OfType<int>()];
+        int[] peers = [.. said.Select(one => one.Leechers).OfType<int>()];
 
-        _swarmPeers = said.Select(one => one.Leechers).OfType<int>().DefaultIfEmpty().Max() is int peers and > 0
-            ? peers
-            : _swarmPeers;
+        _swarmSeeds = seeds.Length > 0 ? seeds.Max() : _swarmSeeds;
+        _swarmPeers = peers.Length > 0 ? peers.Max() : _swarmPeers;
 
         TimeSpan wanted = said
             .Select(one => one.Interval)

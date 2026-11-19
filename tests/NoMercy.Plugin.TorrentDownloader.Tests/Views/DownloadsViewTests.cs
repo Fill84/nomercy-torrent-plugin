@@ -83,8 +83,9 @@ public class DownloadsViewTests
         // fifteen leechers. The peers column counts leechers: this used to
         // assert "24" against a column headed with the swarm's leechers, which
         // is two populations in one place.
-        Assert.Contains(Rendered.EveryValue(view), one => one == "15");
-        Assert.Contains(Rendered.EveryValue(view), one => one == "9");
+        // No tracker has given a count here, so each is out of at least itself.
+        Assert.Contains(Rendered.EveryValue(view), one => one == "15 of 15");
+        Assert.Contains(Rendered.EveryValue(view), one => one == "9 of 9");
     }
 
     /// <remarks>
@@ -394,6 +395,76 @@ public class DownloadsViewTests
         Assert.Contains("2 of 7", cells);
         Assert.Contains("5 of 5", cells);
         Assert.DoesNotContain("5 of 1", cells);
+    }
+
+    /// <remarks>
+    /// <para>
+    /// <strong>A bare "0" in the Seeds column beside "3 of 4" peers, 19 November 2026: nought of what?</strong>
+    /// The trackers had said there were no seeds. That is drawn "0 of 0", a release nobody serves.
+    /// </para>
+    /// <para>
+    /// The owner's rules of the same day for a count no tracker has given: something connected is out of
+    /// at least itself ("1" beside a download arriving at 7 MB/s read as one of what, and is "1 of 1"), and
+    /// nothing connected stays "0", never "0 of ?".
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void ASwarmCellSaysWhatItIsOutOfUnlessNothingIsConnectedAndNoTrackerHasSaid()
+    {
+        PluginView unsaid = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "The Ark S03E01 1080p",
+                    TorrentState.Downloading,
+                    BytesDone: 95_000_000,
+                    BytesTotal: 1_800_000_000,
+                    DownloadRateBytesPerSecond: 7 * 1024 * 1024,
+                    Peers: 1,
+                    Seeds: 1,
+                    Ratio: 0,
+                    Eta: TimeSpan.FromMinutes(4),
+                    Error: null,
+                    Leechers: 0)),
+        ]);
+
+        PluginComponent row = Assert.Single(Rendered.ById(unsaid, DownloadsView.TableId).Items);
+
+        Assert.Equal("1 of 1", row.Props["seeds"]);
+        Assert.Equal("0", row.Props["peers"]);
+    }
+
+    [Fact]
+    public void NoughtTheTrackersSaidIsDrawnOutOfNought()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "The Ark S02E06 1080p",
+                    TorrentState.Downloading,
+                    BytesDone: 0,
+                    BytesTotal: 2_500_000_000,
+                    DownloadRateBytesPerSecond: 0,
+                    Peers: 3,
+                    Seeds: 0,
+                    Ratio: 0,
+                    Eta: null,
+                    Error: null,
+                    SwarmSeeds: 0,
+                    SwarmPeers: null,
+                    Leechers: 3)),
+        ]);
+
+        IReadOnlyList<string> cells = [.. Rendered.EveryValue(view)];
+
+        Assert.Contains("0 of 0", cells);
+        Assert.Contains("3 of 3", cells);
+        Assert.DoesNotContain("0", cells);
     }
 
     /// <remarks>

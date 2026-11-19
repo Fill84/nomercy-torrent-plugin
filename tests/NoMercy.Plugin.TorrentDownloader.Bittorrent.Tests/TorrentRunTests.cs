@@ -23,6 +23,29 @@ public class TorrentRunTests : IDisposable
         "nomercy-run-" + Guid.NewGuid().ToString("n")[..8]);
 
     /// <remarks>
+    /// <para>
+    /// <strong>The owner's Downloads page, 19 November 2026: seeds "0", peers "3 of 4".</strong> Nought
+    /// of what? The trackers had answered — the peers cell had their count — and what they said about
+    /// seeds was nought, which was thrown away as though nobody had said anything.
+    /// </para>
+    /// <para>
+    /// A tracker saying nought is an answer. Nought out of nought is a release nobody is serving, and it
+    /// is the one thing this count was added to tell apart from a client that has met nobody yet.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ASwarmTheTrackersSayHasNoSeedsHasNoughtNotAnUnknownNumber()
+    {
+        using TorrentRun run = Run(new AnsweringTrackers { Seeds = 0 }, new RecordingDialler());
+
+        Assert.Null(run.SwarmSeeds);
+
+        await run.OnceAsync(CancellationToken.None);
+
+        Assert.Equal(0, run.SwarmSeeds);
+    }
+
+    /// <remarks>
     /// Every tracker, and the peers each names. A magnet is a hash and a list
     /// of trackers and nothing else: without the announce there is nobody to
     /// ask for the metadata, so the torrent sits saying "fetching metadata" for
@@ -1096,6 +1119,9 @@ public class TorrentRunTests : IDisposable
         /// </remarks>
         public int MinimumSeconds { get; init; }
 
+        /// <summary>A seed count of its own, when a test wants one; null is the captured answer's.</summary>
+        public int? Seeds { get; init; }
+
         /// <summary>Every tracker address that was really fetched.</summary>
         public IReadOnlyList<string> Asked
         {
@@ -1132,9 +1158,27 @@ public class TorrentRunTests : IDisposable
             // The captured answer with its floor rewritten, so the rule about
             // whose floor wins is judged against a real tracker response rather
             // than one written here.
+            if (Seeds is int seeds)
+            {
+                answer = Saying(answer, "complete"u8, seeds);
+            }
+
             return Task.FromResult(MinimumSeconds == 0
                 ? answer
                 : Rewritten(answer, MinimumSeconds));
+        }
+
+        /// <summary>The same answer with one of its numbers replaced.</summary>
+        private static byte[] Saying(byte[] answer, ReadOnlySpan<byte> key, int value)
+        {
+            byte[] name = key.ToArray();
+            BencodeDictionary root = (BencodeDictionary)Bencode.Read(answer).Root;
+
+            return Bencode.Write(new BencodeDictionary(
+            [
+                .. root.Entries.Where(entry => !name.AsSpan().SequenceEqual(entry.Key)),
+                new(name, new BencodeInteger(value)),
+            ]));
         }
 
         /// <summary>The same answer with a different <c>min interval</c>.</summary>
