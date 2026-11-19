@@ -47,6 +47,28 @@ public sealed class PeerConnection(Stream wire, PeerHandshake introduction, int 
     /// </remarks>
     private readonly SemaphoreSlim _sending = new(1, 1);
 
+    /// <summary>
+    /// How many <c>have</c>s a peer may say before the piece count is known.
+    /// </summary>
+    /// <remarks>
+    /// They are kept until then (<see cref="Sized"/>), and the metadata of a
+    /// magnet is seconds away, in which a peer finishes a handful of pieces. A
+    /// peer that says more than this before anybody can check a word of it is
+    /// not kept a list for.
+    /// </remarks>
+    public const int MostEarlyHaves = 4096;
+
+    /// <summary>
+    /// Held wherever <see cref="Has"/> is replaced or written: by the read
+    /// that takes a bitfield or a <c>have</c>, and by <see cref="Sized"/>,
+    /// which comes from the peer's conversation while a read it began earlier
+    /// may still be going.
+    /// </summary>
+    private readonly Lock _having = new();
+
+    /// <summary>The pieces a peer announced before the piece count was known.</summary>
+    private readonly List<int> _early = [];
+
     /// <summary>Who they said they were.</summary>
     public PeerHandshake Introduction => introduction;
 
@@ -70,6 +92,54 @@ public sealed class PeerConnection(Stream wire, PeerHandshake introduction, int 
 
     /// <summary>Whether they have the lot.</summary>
     public bool Seed => Has.All;
+
+    /// <summary>
+    /// Tells a connection made for a magnet how many pieces the torrent has,
+    /// now that the metadata says.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// A peer says what it has the moment the handshake is done, which for a
+    /// magnet is before this side can count the pieces. Its bitfield was kept
+    /// as it came, a bit for every bit of its bytes, and never looked at again:
+    /// a seed of 379 pieces had 379 out of 384 for as long as it stayed and was
+    /// counted as a leecher, and a peer that had sent no bitfield had nought
+    /// out of nought, which is all of it, and was counted as a seed. On
+    /// 19 November 2026 the owner's page read "0 of 7" seeds beside "5 of 1"
+    /// peers on a download arriving at seventy megabytes a second.
+    /// </para>
+    /// <para>
+    /// So what was said early is read again here against the real count, by
+    /// the rule every later bitfield is read by: the wrong number of bytes, or
+    /// a bit set past the end, is a peer talking about another torrent, and it
+    /// throws. The <c>have</c>s that came early are set on top.
+    /// </para>
+    /// <para>
+    /// Nothing happens on a connection that knew the count when it was made.
+    /// </para>
+    /// </remarks>
+    public void Sized(int count)
+    {
+        lock (_having)
+        {
+            if (pieces > 0 || count <= 0)
+            {
+                return;
+            }
+
+            byte[] said = Has.Write();
+            Bitfield has = said.Length == 0 ? new(count) : Bitfield.Read(said, count);
+
+            foreach (int piece in _early)
+            {
+                has.Set(piece);
+            }
+
+            _early.Clear();
+            pieces = count;
+            Has = has;
+        }
+    }
 
     /// <summary>Sends one message.</summary>
     public async Task SendAsync(PeerMessage message, CancellationToken ct)
@@ -178,19 +248,36 @@ public sealed class PeerConnection(Stream wire, PeerHandshake introduction, int 
                     //
                     // Taken as it comes until there is something to check it
                     // against. What a peer has cannot be acted on before the
-                    // metadata anyway: there are no pieces to ask it for.
-                    Has = pieces > 0
-                        ? Bitfield.Read(message.Payload, pieces)
-                        : Bitfield.Read(message.Payload, message.Payload.Length * 8);
+                    // metadata anyway: there are no pieces to ask it for. It
+                    // is checked, and cut to the torrent's own length, the
+                    // moment the count is known (Sized).
+                    lock (_having)
+                    {
+                        Has = pieces > 0
+                            ? Bitfield.Read(message.Payload, pieces)
+                            : Bitfield.Read(message.Payload, message.Payload.Length * 8);
+                    }
 
                     return message;
 
                 case PeerMessageId.Have:
-                    // The same rule: a have naming a piece past the end of a
-                    // bitfield nobody could size yet is not a peer misbehaving.
-                    if (pieces > 0 || message.AsHave() < Has.Count)
+                    lock (_having)
                     {
-                        Has.Set(message.AsHave());
+                        if (pieces > 0)
+                        {
+                            Has.Set(message.AsHave());
+                        }
+                        else if (_early.Count < MostEarlyHaves)
+                        {
+                            // The same rule: a have for a torrent nobody can
+                            // size yet is not a peer misbehaving, and it is
+                            // not thrown away either. It was set only when its
+                            // number was below how many pieces the peer already
+                            // had, which is no rule at all: a peer with ten
+                            // pieces that finished its five-hundredth was
+                            // never asked for it.
+                            _early.Add(message.AsHave());
+                        }
                     }
 
                     return message;

@@ -353,6 +353,51 @@ public class DownloadsViewTests
 
     /// <remarks>
     /// <para>
+    /// <strong>The swarm is never smaller than the part of it this client is
+    /// talking to.</strong> The right-hand number is what the trackers said at
+    /// their last announce, and the left-hand one is counted now. A peer found
+    /// through the DHT or a peer exchange is in no tracker's count, and a
+    /// tracker's count is minutes old, so the left can pass the right: "5 of 1"
+    /// on the owner's page on 19 November 2026, which reads as five out of one.
+    /// </para>
+    /// <para>
+    /// Five connected is a swarm of at least five. The larger of the two is
+    /// drawn, and a count the trackers have right is left as they said it.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public void TheSwarmIsNeverDrawnSmallerThanWhatIsConnected()
+    {
+        PluginView view = DownloadsView.Render(
+        [
+            new(
+                Grab(),
+                new(
+                    Hash,
+                    "Silo S03E06 1080p",
+                    TorrentState.Downloading,
+                    BytesDone: 1_000_000_000,
+                    BytesTotal: 4_000_000_000,
+                    DownloadRateBytesPerSecond: 0,
+                    Peers: 7,
+                    Seeds: 2,
+                    Ratio: 0,
+                    Eta: null,
+                    Error: null,
+                    SwarmSeeds: 7,
+                    SwarmPeers: 1,
+                    Leechers: 5)),
+        ]);
+
+        IReadOnlyList<string> cells = [.. Rendered.EveryValue(view)];
+
+        Assert.Contains("2 of 7", cells);
+        Assert.Contains("5 of 5", cells);
+        Assert.DoesNotContain("5 of 1", cells);
+    }
+
+    /// <remarks>
+    /// <para>
     /// <strong>How long it has left, which was worked out and never drawn.</strong>
     /// <c>docs/08-ui.md</c> § 46 specifies this table with a <c>Duration</c>
     /// cell, and <c>TorrentStatus.Eta</c> is the only value on the page a

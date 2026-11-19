@@ -245,6 +245,94 @@ public class TorrentRunTests : IDisposable
 
     /// <remarks>
     /// <para>
+    /// <strong>A seed met while the torrent was still a magnet is a seed, and a
+    /// peer that has said nothing is not one.</strong> A peer sends its bitfield
+    /// the moment the handshake is done, and for a magnet that is before anybody
+    /// on this side knows how many pieces there are. It was kept as it came: as
+    /// many pieces as its bytes have bits, which is the piece count rounded up
+    /// to eight. A seed of 379 pieces then had 379 out of 384 for the rest of
+    /// its connection and was counted as a leecher, while a peer that had sent
+    /// no bitfield at all had nought out of nought, which is all of it, and was
+    /// counted as a seed.
+    /// </para>
+    /// <para>
+    /// The owner's Downloads page on 19 November 2026: "0 of 7" seeds beside
+    /// "5 of 1" peers on an episode arriving at seventy megabytes a second.
+    /// Nearly every grab is a magnet, and the peers met in its first seconds
+    /// are the ones it keeps.
+    /// </para>
+    /// <para>
+    /// Two seeds here and not one: the peer that serves the metadata never says
+    /// what it has, so with one seed the two mistakes cancelled and the count
+    /// read one seed and one leecher either way.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task SeedsMetBeforeTheMetadataAreCountedAsSeedsAndASilentPeerIsNot()
+    {
+        // Two minutes, not thirty seconds: a loaded CI runner cut a transfer short at
+        // thirty. See TorrentSessionTests.ASessionSaysSoItselfWhenTheLastPieceIsVerified.
+        using CancellationTokenSource stopping = new(TimeSpan.FromMinutes(2));
+
+        ScriptedPeer serving = new(ArchiveHash, ArchiveInfo());
+
+        using TorrentRun run = Run(new AnsweringTrackers(), serving);
+
+        // What a seed says first: every one of the 379 pieces, in forty-eight
+        // bytes whose last five bits are spare.
+        const int pieces = 379;
+        Bitfield whole = new(pieces);
+
+        for (int piece = 0; piece < pieces; piece++)
+        {
+            whole.Set(piece);
+        }
+
+        // A seed that dialled in while this was a magnet: nought pieces on our
+        // side of the connection, because nothing knows the count yet.
+        async Task<PeerConnection> SeedAsync(string id, string ours)
+        {
+            PeerWire wire = new();
+
+            PeerConnection?[] introduced = await Task.WhenAll(
+                PeerConnection.IntroduceAsync(wire.Receiver, ArchiveHash, Id(id), 0, dialling: false, stopping.Token),
+                PeerConnection.IntroduceAsync(wire.Initiator, ArchiveHash, Id(ours), 0, dialling: true, stopping.Token));
+
+            run.Take(introduced[1]!, stopping.Token);
+
+            await introduced[0]!.SendAsync(new(PeerMessageId.Bitfield, whole.Write()), stopping.Token);
+            await introduced[0]!.SendAsync(Offering(), stopping.Token);
+
+            return introduced[0]!;
+        }
+
+        PeerConnection[] seeds = [await SeedAsync("SEED01", "NM0002"), await SeedAsync("SEED02", "NM0003")];
+
+        // The metadata arrives from the third peer, which never says what it has.
+        await run.OnceAsync(stopping.Token);
+        await serving.ServeAsync(stopping.Token);
+        await run.Metadata.WaitAsync(stopping.Token);
+
+        Assert.Equal(pieces, Assert.IsType<TorrentMetadata>(run.Torrent).PieceCount);
+
+        // Interested is the session's word: hearing it is a seed being in the
+        // session with what it has counted.
+        foreach (PeerConnection seed in seeds)
+        {
+            while (await seed.NextAsync(stopping.Token) is PeerMessage message
+                   && message.Id != PeerMessageId.Interested)
+            {
+            }
+        }
+
+        RunProgress seen = run.Progress();
+
+        Assert.Equal(2, seen.Seeds);
+        Assert.Equal(seen.Peers - 2, seen.Leechers);
+    }
+
+    /// <remarks>
+    /// <para>
     /// Every address gets a turn. A pass dials at most fifty, and the book is
     /// walked in the order the addresses arrived — so with more than fifty
     /// known, the same first fifty were offered on every pass and the rest were
