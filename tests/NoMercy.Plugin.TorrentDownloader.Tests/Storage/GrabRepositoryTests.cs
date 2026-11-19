@@ -226,6 +226,44 @@ public class GrabRepositoryTests : IDisposable
     }
 
     /// <remarks>
+    /// <para>
+    /// <strong>The owner's question of 19 November 2026: why are they suddenly gone?</strong> Two downloads
+    /// of The Ark sat on "fetching metadata" and then left the Downloads page. The client had dropped each
+    /// after five minutes without metadata, and the only place that said so was the server's log: the
+    /// History page had a line for a download cancelled by hand and none for one the client gave up on.
+    /// </para>
+    /// <para>
+    /// A failed download is a line in the history with the client's own reason, once.
+    /// </para>
+    /// </remarks>
+    [Fact]
+    public async Task ADownloadTheClientGaveUpOnIsInTheHistoryWithItsReason()
+    {
+        GrabRepository grabs = Repository();
+
+        await Record(grabs, Hash, [Episode(1)]);
+
+        await grabs.FailedAsync(
+            Hash,
+            "No peer sent its metadata within 5 minutes.",
+            When.AddMinutes(5),
+            When.AddHours(6),
+            CancellationToken.None);
+
+        HistoryRow line = Assert.Single(await grabs.HistoryAsync(CancellationToken.None), one => one.Event == "failed");
+
+        Assert.Equal("Silo S03 COMPLETE 1080p", line.ReleaseTitle);
+        Assert.Equal("No peer sent its metadata within 5 minutes.", line.Detail);
+        Assert.Equal(When.AddMinutes(5), line.At);
+        Assert.Equal(Episode(1), new EpisodeKey(line.ShowId ?? 0, line.Season ?? 0, line.Number ?? 0));
+
+        // Failed already: saying so again changes the refusal's reason and adds no second line.
+        await grabs.FailedAsync(Hash, "again", When.AddMinutes(6), null, CancellationToken.None);
+
+        Assert.Single(await grabs.HistoryAsync(CancellationToken.None), one => one.Event == "failed");
+    }
+
+    /// <remarks>
     /// The same hash failing twice is one blacklist row with the newer reason,
     /// not two rows and not a crash on the primary key.
     /// </remarks>

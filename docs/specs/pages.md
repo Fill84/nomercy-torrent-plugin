@@ -66,6 +66,9 @@
   the rows. On a page with tabs the lines stand under the chosen tab's table. On the overview they stand
   above the paging line. On the Downloads page they stand under the field that takes a magnet, which
   stays directly under the table.
+- The History page is the exception: nothing stands under its table. It holds hundreds of rows, and the
+  whole texts under it left the table no room on the page. A cell drawn short there ends in "…" and its
+  whole text is in the log.
 - A text that fits and holds no web address is the cell as it is, with no line under the table.
 - The Activity page counts the downloads of the Download stage by their state, without the client's
   error.
@@ -112,6 +115,8 @@
 - The Downloads, History and Sources pages show what they show, unchanged by the show list.
 - The History page holds what became of a grab — decided, grabbed, dispatched, failed — and no
   refusals.
+- A download the torrent client gave up on is a failed line on the History page with the client's own
+  reason, such as "No peer sent its metadata within 5 minutes.", like a download cancelled by hand.
 - The Downloads table has no column for where a download lands.
 - A download's progress is the percentage of its size, as in "45.3% of 23.4 GB", with nothing beside it.
 - A download's rate is the rate it downloads at. The rate it uploads at is not drawn.

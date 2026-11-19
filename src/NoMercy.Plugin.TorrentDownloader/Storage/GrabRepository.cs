@@ -547,19 +547,51 @@ public sealed class GrabRepository(Store database)
             async session =>
             {
                 List<EpisodeKey> covered = [];
+                string? release = null;
+                bool fails = false;
 
                 foreach (StoredRow row in await session.QueryAsync(
-                             "SELECT covers FROM grabs WHERE info_hash = $hash;",
+                             "SELECT covers, release_title, state FROM grabs WHERE info_hash = $hash;",
                              new Dictionary<string, object?> { ["$hash"] = hash },
                              ct))
                 {
                     covered.AddRange(Covered(row.Text("covers")));
+                    release ??= row.Text("release_title");
+
+                    // Only a grab this call turns: one that failed already has
+                    // its line, and one that is done is not failing.
+                    fails |= row.Text("state") is not ("failed" or "done");
                 }
 
                 await session.ExecuteAsync(
                     "UPDATE grabs SET state = 'failed' WHERE info_hash = $hash AND state <> 'done';",
                     new Dictionary<string, object?> { ["$hash"] = hash },
                     ct);
+
+                // Said in the history, with the reason. A download the client
+                // gave up on left the Downloads page and nothing on any page
+                // said why: on 19 November 2026 two of The Ark went after five
+                // minutes without metadata, and only the server's log knew.
+                if (release is not null && fails)
+                {
+                    EpisodeKey first = covered.Count > 0 ? covered[0] : new(0, 0, 0);
+
+                    await session.ExecuteAsync(
+                        """
+                        INSERT INTO history (at, event, show_id, season, episode, show_title, release_title, source, detail)
+                        VALUES ($at, 'failed', $show, $season, $episode, NULL, $release, NULL, $detail);
+                        """,
+                        new Dictionary<string, object?>
+                        {
+                            ["$at"] = at.ToString("O", CultureInfo.InvariantCulture),
+                            ["$show"] = first.ShowId,
+                            ["$season"] = first.Season,
+                            ["$episode"] = first.Number,
+                            ["$release"] = release,
+                            ["$detail"] = reason,
+                        },
+                        ct);
+                }
 
                 // The hash, not the title: another release of the same episode is
                 // still worth having, and it is this torrent that would not
