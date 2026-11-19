@@ -479,7 +479,13 @@ public static class HistoryView
                         // and the reason 717 at its 77 characters: 60 are left.
                         new("subject", 60, Cut.AtWord),
                         new("detail"),
-                    ]),
+                    ],
+
+                    // Nothing under this table, the owner's choice of 19 November 2026. It holds
+                    // hundreds of rows, and the 71 whole texts under it took the whole page: the
+                    // client left the table no height, and the page was those lines alone, with no
+                    // time and no event beside any of them. The whole text is in the log.
+                    wholeTextsUnder: false),
             ],
         };
     }

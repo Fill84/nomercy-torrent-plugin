@@ -67,6 +67,8 @@ public static class TableRows
     /// It ignores <c>page</c> and <c>pageSize</c>: it has no paging of its own, and a page of it would
     /// hide the other rows with nothing on the page to reach them by. <c>longColumns</c> names the columns
     /// whose text can be longer than the table has room for, as <see cref="Answer"/> takes them.
+    /// <c>wholeTextsUnder</c> is false for a table with too many rows to put a line under: the client
+    /// gives a table what is left of the page, so enough lines under one leave it no height at all.
     /// </remarks>
     public static IReadOnlyList<PluginComponent> Table<T>(
         string id,
@@ -76,7 +78,8 @@ public static class TableRows
         string emptyMessage,
         TableQuery? query,
         IReadOnlyDictionary<string, Func<T, IComparable?>>? values = null,
-        IReadOnlyList<LongColumn>? longColumns = null)
+        IReadOnlyList<LongColumn>? longColumns = null,
+        bool wholeTextsUnder = true)
     {
         ShownRows shown = Answer(
             items,
@@ -87,7 +90,7 @@ public static class TableRows
             emptyMessage,
             longColumns: longColumns);
 
-        return [Ui.Table(id, columns, shown.Rows, shown.EmptyMessage), .. shown.Lines];
+        return [Ui.Table(id, columns, shown.Rows, shown.EmptyMessage), .. wholeTextsUnder ? shown.Lines : []];
     }
 
     /// <param name="items">What the table is drawn from, in the table's own order.</param>

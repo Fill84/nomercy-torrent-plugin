@@ -149,11 +149,19 @@ public sealed class NoTableScrollsSidewaysTests
     }
 
     /// <remarks>
+    /// <para>
     /// The encode reason has no full stop before the cap, so the first sentence is longer than the cell
     /// holds and is cut at the last whole word that fits.
+    /// </para>
+    /// <para>
+    /// <strong>And nothing stands under the History table</strong>, the owner's choice of 19 November 2026.
+    /// The client gives a table what is left of the page, and 71 whole texts under this one left it no
+    /// height at all: the page was a list of release names and reasons with no time and no event beside
+    /// them, and "History says nothing". The whole text is in the log.
+    /// </para>
     /// </remarks>
     [Fact]
-    public void ALongHistoryReasonIsCutAtAWordAndStandsWholeUnderTheTable()
+    public void ALongHistoryReasonIsCutAtAWordAndNothingStandsUnderTheTable()
     {
         PluginView view = HistoryView.Render(
             [
@@ -166,7 +174,10 @@ public sealed class NoTableScrollsSidewaysTests
         Assert.Equal("cancelled by hand", cells[0]);
         Assert.Equal("the server's last attempt at the encode failed (S02E08: the server said no…", cells[1]);
         Assert.True(cells[1].Length <= LongCells.CellCharacters, $"{cells[1].Length} characters");
-        Assert.Equal([EncodeFailing], Under(view, HistoryView.TableId));
+        Assert.Empty(Under(view, HistoryView.TableId));
+
+        // The heading and the table, and nothing else on the page to take the table's room.
+        Assert.Equal(2, view.Components?.Count);
     }
 
     [Fact]
@@ -473,13 +484,13 @@ public sealed class NoTableScrollsSidewaysTests
     /// 81 characters in the captures (Lucky S01E04). It is cut at the last dot that fits.
     /// </remarks>
     [Fact]
-    public void AReleaseNameInHistoryIsCutAtADotAndStandsWholeUnderTheTable()
+    public void AReleaseNameInHistoryIsCutAtADotAndNothingStandsUnderTheTable()
     {
         PluginView view = HistoryView.Render([new("failed", Now.AddHours(-1), LongRelease, "cancelled by hand")]);
 
         Assert.Equal(["Lucky.S01E04.Too.Close.to.See.It.2160p.ATVP.WEB-DL.ITA.ENG…"], Cells(view, HistoryView.TableId, "subject"));
         Assert.Equal(["cancelled by hand"], Cells(view, HistoryView.TableId, "detail"));
-        Assert.Equal([LongRelease], Under(view, HistoryView.TableId));
+        Assert.Empty(Under(view, HistoryView.TableId));
     }
 
     /// <remarks>
